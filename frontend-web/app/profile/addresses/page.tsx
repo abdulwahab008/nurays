@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { loginUrlHere } from '@/lib/auth-redirect';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
@@ -47,7 +47,6 @@ import {
   Navigation,
   Map as MapIcon,
   Tag,
-  Truck,
   Star,
   Trash2,
   Mail,
@@ -91,9 +90,15 @@ const getAreasForCity = (city: string): string[] => {
   return popularAreasByCity[city] || [];
 };
 
-// Cities for dropdown
+/** Where to go once an address is saved: only a page of this app (`/checkout`), never another site. */
+function safeNext(value: string | null): string | null {
+  return value && value.startsWith('/') && !value.startsWith('//') ? value : null;
+}
 
-/** The address form with what the map said about a pin filled in; whatever it did not say stays as the person had it. */
+/**
+ * The address form with what the map said about a pin filled in; whatever it did not say stays as the person had it.
+ * The postal code belongs to the pin, so a new answer replaces it, blank when the map gave none.
+ */
 function withPlace<T extends { city: string; area: string; addressLine1: string; houseNumber: string; postalCode: string; latitude: string; longitude: string }>(
   form: T,
   place: GeocodedPlace,
@@ -108,7 +113,7 @@ function withPlace<T extends { city: string; area: string; addressLine1: string;
     area: place.area || form.area,
     addressLine1: place.street || form.addressLine1,
     houseNumber: place.houseNumber || form.houseNumber,
-    postalCode: place.postalCode || form.postalCode,
+    postalCode: place.fromService ? place.postalCode : form.postalCode,
   };
 }
 
@@ -135,6 +140,12 @@ export default function AddressesPage() {
   const [mapCoords, setMapCoords] = useState({ lat: 24.8607, lng: 67.0011 }); // Karachi default
   const [searchSuggestions, setSearchSuggestions] = useState<string[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [pinMissing, setPinMissing] = useState(false);
+  const pinRef = useRef<HTMLDivElement>(null);
+  // Set when another screen (checkout) sent the person here to add or fix an address and wants them back after.
+  const [nextPath, setNextPath] = useState<string | null>(null);
+  // What the link asked for (a new address, or one to fix), done once the list is in.
+  const requestedRef = useRef<{ open: boolean; editId: string | null } | null>(null);
 
   const [formData, setFormData] = useState({
     label: 'home',
@@ -146,7 +157,6 @@ export default function AddressesPage() {
     postalCode: '',
     landmark: '',
     isDefault: false,
-    deliveryInstructions: '',
     latitude: '',
     longitude: '',
   });
@@ -159,6 +169,15 @@ export default function AddressesPage() {
     try {
       const response = await userProfileService.getAddresses();
       setAddresses(response.data);
+      const requested = requestedRef.current;
+      requestedRef.current = null;
+      const toEdit = requested?.editId ? response.data.find((a) => a.id === requested.editId) : undefined;
+      if (toEdit) {
+        handleEditAddress(toEdit);
+        if (!toEdit.coordinates) setShowMap(true);
+      } else if (requested?.open) {
+        openNewForm(response.data.length === 0);
+      }
     } catch (error) {
       console.error('Failed to load addresses:', error);
       setLoadError(error);
@@ -168,6 +187,12 @@ export default function AddressesPage() {
   };
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    setNextPath(safeNext(params.get('next')));
+    requestedRef.current = { open: params.get('new') === '1', editId: params.get('edit') };
+  }, []);
+
+  useEffect(() => {
     // The saved session loads a moment after the page; a stored token means "signed in".
     if (!isAuthenticated && !apiClient.getAccessToken()) {
       router.replace(loginUrlHere());
@@ -175,6 +200,7 @@ export default function AddressesPage() {
     }
     loadAddresses();
   }, [isAuthenticated]);
+
 
   // Detect current location using GPS
   const detectCurrentLocation = useCallback(() => {
@@ -196,6 +222,7 @@ export default function AddressesPage() {
         // What the map says is at the pin; with no answer, the city the pin itself is in (or nothing)
         const place = await reverseGeocode(latitude, longitude);
         setFormData((prev) => withPlace(prev, place, latitude, longitude));
+        setPinMissing(false);
         if (place.fromService) {
           showToast(place.city ? t('locationDetectedCity', { city: place.city }) : t('locationDetectedFill'), 'success');
         } else {
@@ -250,7 +277,9 @@ export default function AddressesPage() {
     e.preventDefault();
     // Without a pin the rider only gets words, and the address cannot be matched to a community.
     if (!formData.latitude || !formData.longitude) {
-      showToast(t('pinRequired'), 'error');
+      setPinMissing(true);
+      setShowMap(true);
+      pinRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       return;
     }
     try {
@@ -278,7 +307,11 @@ export default function AddressesPage() {
         await userProfileService.addAddress(addressData);
         showToast(t('addressAdded'), 'success');
       }
-      
+
+      if (nextPath) {
+        router.replace(nextPath);
+        return;
+      }
       resetForm();
       loadAddresses();
     } catch (error) {
@@ -319,7 +352,6 @@ export default function AddressesPage() {
       postalCode: address.postalCode || '',
       landmark: address.landmark || '',
       isDefault: address.isDefault || false,
-      deliveryInstructions: '',
       latitude: address.coordinates ? String(address.coordinates.latitude) : '',
       longitude: address.coordinates ? String(address.coordinates.longitude) : '',
     });
@@ -327,10 +359,19 @@ export default function AddressesPage() {
     setShowAddForm(true);
   };
 
+  /** A fresh form; the first address someone saves is their default, so checkout picks it. */
+  const openNewForm = (isFirst = addresses.length === 0) => {
+    resetForm();
+    setFormData((prev) => ({ ...prev, isDefault: isFirst }));
+    setShowMap(true);
+    setShowAddForm(true);
+  };
+
   const resetForm = () => {
     setShowAddForm(false);
     setEditingAddress(null);
     setShowMap(false);
+    setPinMissing(false);
     setFormData({
       label: 'home',
       addressLine1: '',
@@ -341,7 +382,6 @@ export default function AddressesPage() {
       postalCode: '',
       landmark: '',
       isDefault: false,
-      deliveryInstructions: '',
       latitude: '',
       longitude: '',
     });
@@ -365,9 +405,6 @@ export default function AddressesPage() {
     );
   }
 
-  // The addresses could not be read: the two counters would say "0" and "None" about a list nobody has seen.
-  const couldNotRead = !loading && Boolean(loadError) && addresses.length === 0;
-
   return (
     <DashboardLayout
       title={t('myAddresses')}
@@ -375,50 +412,14 @@ export default function AddressesPage() {
       sidebarItems={sidebarItems}
       userType="customer"
     >
-      {/* Header with Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-        <div className="bg-surface rounded-[20px] p-5 border border-line">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-brand-soft text-brand-soft-ink rounded-xl flex items-center justify-center">
-              <MapPin className="w-6 h-6" />
-            </div>
-            <div>
-              <p className="text-2xl font-extrabold text-ink">{couldNotRead ? '–' : addresses.length}</p>
-              <p className="text-sm text-muted">{t('savedAddresses')}</p>
-            </div>
-          </div>
+      {!showAddForm && addresses.length > 0 && (
+        <div className="flex justify-end mb-4">
+          <Button onClick={() => openNewForm()} className="min-h-11 rounded-xl">
+            <Plus className="w-4 h-4" />
+            {t('addNewAddress')}
+          </Button>
         </div>
-        
-        <div className="bg-surface rounded-[20px] p-5 border border-line">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-accent-soft text-accent-soft-ink rounded-xl flex items-center justify-center">
-              <Check className="w-6 h-6" />
-            </div>
-            <div>
-              <p className="text-2xl font-extrabold text-ink">
-                {couldNotRead ? '–' : addressLabel(addresses.find(a => a.isDefault)?.label) || t('none')}
-              </p>
-              <p className="text-sm text-muted">{t('defaultAddress')}</p>
-            </div>
-          </div>
-        </div>
-        
-        <div className="bg-brand rounded-[20px] p-5">
-          <div className="flex items-center justify-between">
-            <div className="text-on-brand">
-              <p className="font-bold text-lg">{t('addNewAddress')}</p>
-              <p className="text-sm text-on-brand/80">{t('gpsOrManual')}</p>
-            </div>
-            <button
-              onClick={() => { resetForm(); setShowAddForm(true); }}
-              aria-label={t('addNewAddress')}
-              className="w-12 h-12 bg-on-brand text-brand hover:opacity-90 rounded-xl flex items-center justify-center transition-all hover:scale-105"
-            >
-              <Plus className="w-6 h-6" />
-            </button>
-          </div>
-        </div>
-      </div>
+      )}
 
       {/* Add/Edit Address Form */}
       {showAddForm && (
@@ -448,10 +449,18 @@ export default function AddressesPage() {
           <div className="p-6">
             {/* Quick Location Options */}
             <div className="mb-6">
-              <p className="text-sm font-semibold text-ink mb-3 flex items-center gap-1.5">
-                <Navigation className="w-4 h-4 text-brand-ink" />
-                {t('quickLocationOptions')}
-              </p>
+              <div ref={pinRef} className="mb-3">
+                <p className="text-sm font-semibold text-ink flex items-center gap-1.5">
+                  <MapPin className="w-4 h-4 text-brand-ink" />
+                  {t('pinStepTitle')} <span className="text-red-700" aria-hidden>*</span>
+                </p>
+                <p className="text-xs text-muted mt-0.5">{t('pinStepHint')}</p>
+                {pinMissing && !formData.latitude && (
+                  <p role="alert" className="mt-2 text-sm font-medium text-red-700" data-testid="pin-error">
+                    {t('pinRequired')}
+                  </p>
+                )}
+              </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <button
                   type="button"
@@ -500,6 +509,7 @@ export default function AddressesPage() {
                       latitude: coords.lat.toString(),
                       longitude: coords.lng.toString(),
                     }));
+                    setPinMissing(false);
                     setMapCoords({ lat: coords.lat, lng: coords.lng });
                     
                     const place = await reverseGeocode(coords.lat, coords.lng);
@@ -689,21 +699,6 @@ export default function AddressesPage() {
                 </div>
               </div>
 
-              {/* Delivery Instructions */}
-              <div>
-                <label className="block text-sm font-semibold text-ink mb-2 flex items-center gap-1.5">
-                  <Truck className="w-4 h-4 text-muted" />
-                  {t('deliveryInstructions')}
-                </label>
-                <textarea
-                  value={formData.deliveryInstructions}
-                  onChange={(e) => setFormData({ ...formData, deliveryInstructions: e.target.value })}
-                  placeholder={t('deliveryInstructionsPlaceholder')}
-                  rows={3}
-                  className="w-full px-4 py-3 border border-line rounded-xl focus:ring-2 focus:ring-brand focus:border-brand transition-all resize-none"
-                />
-              </div>
-
               {/* Set as Default */}
               <div className="flex items-center p-4 bg-raised rounded-2xl">
                 <input
@@ -745,6 +740,7 @@ export default function AddressesPage() {
       {loadError && addresses.length === 0 ? (
         <LoadError error={loadError} onRetry={loadAddresses} title={t('addressesLoadFailed')} />
       ) : addresses.length === 0 ? (
+        showAddForm ? null : (
         <div className="bg-surface rounded-[24px] border border-dashed border-line-strong p-10 sm:p-12 text-center">
           <div className="w-20 h-20 bg-brand-soft rounded-3xl flex items-center justify-center mx-auto mb-5 text-brand-soft-ink">
             <MapPin className="w-10 h-10" />
@@ -754,12 +750,13 @@ export default function AddressesPage() {
             {t('noAddressesDesc')}
           </p>
           <Button 
-            onClick={() => setShowAddForm(true)} 
+            onClick={() => openNewForm()}
             className="bg-brand hover:bg-brand-500 text-on-brand h-12 px-6 font-extrabold flex items-center gap-2 mx-auto"
           >
             <Plus className="w-4 h-4" /> {t('addFirstAddress')}
           </Button>
         </div>
+        )
       ) : (
         <div className="space-y-4">
           <div className="flex items-center justify-between mb-2">
@@ -796,30 +793,33 @@ export default function AddressesPage() {
                     </div>
                     
                     {!address.coordinates && (
-                      <span className="text-[11px] bg-accent-soft text-accent-soft-ink px-2 py-0.5 rounded-full font-semibold" data-testid="address-no-pin">{t('noPinBadge')}</span>
+                      <button type="button" onClick={() => { handleEditAddress(address); setShowMap(true); }} className="min-h-11 text-xs bg-accent-soft text-accent-soft-ink px-3 rounded-full font-semibold" data-testid="address-no-pin">{t('noPinBadge')}</button>
                     )}
                     {/* Action Buttons */}
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="flex items-center gap-1">
                       {!address.isDefault && (
                         <button 
                           onClick={() => handleSetDefault(address.id)}
-                          className="p-2 text-muted hover:text-brand-ink hover:bg-brand-50 rounded-lg transition-colors"
+                          className="w-11 h-11 flex items-center justify-center text-muted hover:text-brand-ink hover:bg-raised rounded-xl transition-colors"
                           title={t('setAsDefault')}
+                          aria-label={t('setAsDefault')}
                         >
                           <Star className="w-4 h-4 text-accent" />
                         </button>
                       )}
                       <button 
                         onClick={() => handleEditAddress(address)}
-                        className="w-10 h-10 flex items-center justify-center text-muted hover:text-ink hover:bg-raised rounded-xl transition-colors"
+                        className="w-11 h-11 flex items-center justify-center text-muted hover:text-ink hover:bg-raised rounded-xl transition-colors"
                         title={tc('edit')}
+                        aria-label={tc('edit')}
                       >
                         <Pencil className="w-4 h-4 text-muted" />
                       </button>
                       <button 
                         onClick={() => handleDeleteAddress(address.id)}
-                        className="p-2 text-muted hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                        className="w-11 h-11 flex items-center justify-center text-muted hover:text-red-700 hover:bg-red-50 rounded-xl transition-colors"
                         title={tc('delete')}
+                        aria-label={tc('delete')}
                       >
                         <Trash2 className="w-4 h-4 text-red-600" />
                       </button>

@@ -250,7 +250,7 @@ describe('the two routes a kitchen can use', () => {
   it('GET /orders/:id still gives the customer their own full order', async () => {
     db.user.findUnique.mockReset().mockResolvedValue({ userType: 'customer', email: 'c@example.com' });
     db.seller.findUnique.mockResolvedValue(null);
-    db.order.findFirst.mockResolvedValue({ ...(hostileRow() as any), customerId: 'cust-1', items: [{ sellerId: 's1' }], delivery: null, hub: null });
+    db.order.findFirst.mockResolvedValue({ ...(hostileRow() as any), customerId: 'cust-1', items: [{ sellerId: 's1', seller: { id: 's1', businessName: 'Kitchen', businessNameUrdu: null, pickupAddress: 'House 4, Street 9', pickupLandmark: 'Green gate', pickupPhone: null, user: { phone: '+923001112233' } } }], delivery: null, hub: null });
     db.order.findUnique.mockResolvedValue({ handoverCode: '482913' });
     const view: any = await orderService.getOrderDetails('o1', 'cust-1');
     expect(view.customerId).toBe('cust-1');
@@ -261,7 +261,7 @@ describe('the two routes a kitchen can use', () => {
   it('GET /orders/:id gives an admin the full order', async () => {
     db.user.findUnique.mockReset().mockResolvedValue({ userType: 'admin', email: 'a@example.com' });
     db.seller.findUnique.mockResolvedValue(null);
-    db.order.findFirst.mockResolvedValue({ ...(hostileRow() as any), customerId: 'cust-1', items: [{ sellerId: 's1' }], delivery: null, hub: null });
+    db.order.findFirst.mockResolvedValue({ ...(hostileRow() as any), customerId: 'cust-1', items: [{ sellerId: 's1', seller: { id: 's1', businessName: 'Kitchen', businessNameUrdu: null, pickupAddress: 'House 4, Street 9', pickupLandmark: 'Green gate', pickupPhone: null, user: { phone: '+923001112233' } } }], delivery: null, hub: null });
     const view: any = await orderService.getOrderDetails('o1', 'admin-1');
     expect(view.customerId).toBe('cust-1');
   });

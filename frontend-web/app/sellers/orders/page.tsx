@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { loginUrlHere } from '@/lib/auth-redirect';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Loader2, MessageCircle, RefreshCw, X } from 'lucide-react';
+import { Loader2, MessageCircle, RefreshCw } from 'lucide-react';
 import { DashboardLayout, SELLER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
@@ -19,18 +19,10 @@ import { useT } from '@/lib/i18n';
 import { commonMessages } from '@/lib/i18n/messages/common';
 import { kitchenOrderMessages, kitchenStatusLabel, paymentMethodLabel, paymentStatusLabel } from '@/lib/i18n/messages/kitchen-orders';
 import { ExternalLink } from '@/components/ExternalLink';
+import { RejectOrderDialog } from '@/components/sellers/RejectOrderDialog';
 import { useShallow } from 'zustand/react/shallow';
 
 const sidebarItems = SELLER_SIDEBAR_ITEMS;
-
-// `label` is what the API receives (kept in English for support/admin); `key` is what the kitchen sees.
-const REJECTION_REASONS = [
-  { id: 'item_unavailable', label: 'Item unavailable', key: 'reason.item_unavailable' },
-  { id: 'too_busy', label: 'Too busy / High kitchen load', key: 'reason.too_busy' },
-  { id: 'unable_to_prepare', label: 'Unable to prepare in time', key: 'reason.unable_to_prepare' },
-  { id: 'temporary_issue', label: 'Temporary kitchen or utility issue', key: 'reason.temporary_issue' },
-  { id: 'other', label: 'Other reason', key: 'reason.other' },
-] as const;
 
 interface OrderProduct {
   id: string;
@@ -57,6 +49,10 @@ interface OrderTicket {
     paymentStatus: string;
     paymentMethod: string;
     totalAmount: number;
+    /** This kitchen's dishes in the order, before Nuray's fee. */
+    dishesTotal?: number;
+    /** What the kitchen keeps of the order: its dishes less Nuray's fee and any rider fee it pays. */
+    kitchenEarns?: number;
     createdAt: string;
     estimatedDeliveryAt?: string;
     deliveryInstructions?: string;
@@ -100,11 +96,7 @@ export default function SellerOrdersPage() {
   const [totalPages, setTotalPages] = useState(1);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
 
-  // Reject Modal State
   const [rejectingOrder, setRejectingOrder] = useState<OrderTicket | null>(null);
-  const [selectedReason, setSelectedReason] = useState<string>(REJECTION_REASONS[0].id);
-  const [customReasonText, setCustomReasonText] = useState('');
-  const [isSubmittingReject, setIsSubmittingReject] = useState(false);
 
   // Chat with Customer Modal State
   const [chatTicket, setChatTicket] = useState<OrderTicket | null>(null);
@@ -232,46 +224,6 @@ export default function SellerOrdersPage() {
     }
   };
 
-  const openRejectModal = (ticket: OrderTicket) => {
-    setRejectingOrder(ticket);
-    setSelectedReason(REJECTION_REASONS[0].id);
-    setCustomReasonText('');
-  };
-
-  const closeRejectModal = () => {
-    setRejectingOrder(null);
-    setSelectedReason(REJECTION_REASONS[0].id);
-    setCustomReasonText('');
-  };
-
-  const handleConfirmReject = async () => {
-    if (!rejectingOrder) return;
-    const targetOrderId = rejectingOrder.order.id;
-    try {
-      setIsSubmittingReject(true);
-      const reasonObj = REJECTION_REASONS.find(r => r.id === selectedReason);
-      const finalReason = selectedReason === 'other'
-        ? (customReasonText.trim() || 'Other reason')
-        : (reasonObj ? reasonObj.label : selectedReason) + (customReasonText.trim() ? `: ${customReasonText.trim()}` : '');
-
-      const res = await apiClient.post(`/seller/orders/${targetOrderId}/reject`, {
-        reason: finalReason,
-      });
-      if (res.data.success) {
-        showToast(t('list.rejected'), 'info');
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('seller-order-status-changed', { detail: { orderId: targetOrderId, status: 'rejected' } }));
-        }
-        closeRejectModal();
-        loadOrders(true);
-      }
-    } catch (error) {
-      showToast(apiErrorMessage(error, t('rejectFailed')), 'error');
-    } finally {
-      setIsSubmittingReject(false);
-    }
-  };
-
   const statusTone = (status: string) => {
     switch (status) {
       case 'pending':
@@ -384,7 +336,12 @@ export default function SellerOrdersPage() {
                       <Link href={`/sellers/orders/${ord.id}`} className="min-w-0 text-[15px] font-semibold text-ink hover:underline">
                         {t('orderLabel')} <span data-ltr className="break-all">#{ord.orderNumber || ord.id.slice(0, 8)}</span>
                       </Link>
-                      <p className="shrink-0 text-lg font-semibold text-ink tabular-nums">{formatPrice(ord.totalAmount)}</p>
+                      <div className="shrink-0 text-end">
+                        <p className="text-lg font-semibold text-ink tabular-nums">{formatPrice(ord.dishesTotal ?? ord.totalAmount)}</p>
+                        {ord.kitchenEarns != null && (
+                          <p className="text-sm text-muted tabular-nums">{t('list.youEarn', { amount: formatPrice(ord.kitchenEarns) })}</p>
+                        )}
+                      </div>
                     </div>
                     <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted">
                       <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusTone(ord.orderStatus)}`}>{kitchenStatusLabel(ord.orderStatus, t, tc)}</span>
@@ -497,7 +454,7 @@ export default function SellerOrdersPage() {
                           <Button
                             id={`reject-order-btn-${ord.id}`}
                             variant="outline"
-                            onClick={() => openRejectModal(ticket)}
+                            onClick={() => setRejectingOrder(ticket)}
                             disabled={isActionBusy}
                             className="text-red-700 border-line-strong hover:bg-red-50"
                           >
@@ -569,89 +526,12 @@ export default function SellerOrdersPage() {
         )}
 
         {rejectingOrder && (
-          <div className="fixed inset-0 z-50 bg-black/50 flex items-end sm:items-center justify-center p-4">
-            <div
-              id="reject-order-modal"
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="reject-order-title"
-              className="bg-surface text-ink rounded-[20px] max-w-md w-full p-5 sm:p-6 shadow-xl border border-line space-y-5"
-            >
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <h3 id="reject-order-title" className="text-lg font-semibold text-ink">
-                    {t('list.rejectTitle')} <span data-ltr>#{rejectingOrder.order.orderNumber}</span>
-                  </h3>
-                  <p className="text-sm text-muted mt-0.5">{t('list.rejectHint')}</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={closeRejectModal}
-                  aria-label={tc('close')}
-                  className="-me-2 -mt-1 w-11 h-11 shrink-0 rounded-full text-muted hover:bg-raised flex items-center justify-center focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-brand/40"
-                >
-                  <X className="w-5 h-5" aria-hidden="true" />
-                </button>
-              </div>
-
-              <fieldset className="space-y-2">
-                <legend className="sr-only">{t('list.rejectHint')}</legend>
-                {REJECTION_REASONS.map((r) => (
-                  <label
-                    key={r.id}
-                    className={`flex items-center gap-3 min-h-11 px-3.5 py-2.5 rounded-xl border cursor-pointer text-sm transition-colors ${
-                      selectedReason === r.id
-                        ? 'border-red-300 bg-red-50 text-red-700 font-medium'
-                        : 'border-line text-ink hover:bg-raised'
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="rejectReason"
-                      value={r.id}
-                      checked={selectedReason === r.id}
-                      onChange={() => setSelectedReason(r.id)}
-                      className="h-4 w-4 accent-red-700"
-                    />
-                    <span>{t(r.key)}</span>
-                  </label>
-                ))}
-              </fieldset>
-
-              <div>
-                <label htmlFor="reject-order-note" className="block text-sm text-muted mb-1.5">
-                  {t('list.additionalNote')}
-                </label>
-                <textarea
-                  id="reject-order-note"
-                  value={customReasonText}
-                  onChange={(e) => setCustomReasonText(e.target.value)}
-                  placeholder={t('list.notePlaceholder')}
-                  rows={2}
-                  className="w-full text-sm p-3 rounded-xl bg-surface text-ink border border-line-strong focus:outline-none focus:ring-3 focus:ring-brand/40"
-                />
-              </div>
-
-              <div className="flex items-center gap-2">
-                <Button
-                  id="confirm-reject-btn"
-                  variant="destructive"
-                  onClick={handleConfirmReject}
-                  disabled={isSubmittingReject}
-                  className="flex-1"
-                >
-                  {isSubmittingReject ? t('list.rejecting') : t('list.confirmReject')}
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={closeRejectModal}
-                  disabled={isSubmittingReject}
-                >
-                  {tc('back')}
-                </Button>
-              </div>
-            </div>
-          </div>
+          <RejectOrderDialog
+            orderId={rejectingOrder.order.id}
+            orderNumber={rejectingOrder.order.orderNumber}
+            onClose={() => setRejectingOrder(null)}
+            onRejected={() => loadOrders(true)}
+          />
         )}
 
         {chatTicket && (

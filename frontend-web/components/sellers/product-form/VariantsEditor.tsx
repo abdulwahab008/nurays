@@ -1,8 +1,8 @@
 'use client';
 
 import { Button } from '@/components/ui/button';
-import { MAX_VARIANTS, VariantDraft, profitOf } from '@/lib/product-form';
-import { fieldClass } from './fields';
+import { MAX_VARIANTS, PRODUCT_FIELD, VariantDraft, profitOf } from '@/lib/product-form';
+import { FieldError, fieldClass, useFieldError } from './fields';
 
 const input = `${fieldClass} tabular-nums`;
 
@@ -34,6 +34,22 @@ function MoneyInput({
         />
       </span>
     </label>
+  );
+}
+
+function VariantNameInput({ index, value, onChange }: { index: number; value: string; onChange: (name: string) => void }) {
+  const id = PRODUCT_FIELD.variantName(index);
+  const { inputProps, errorClass } = useFieldError(id);
+  return (
+    <input
+      type="text"
+      id={id}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder="e.g. Small pack (6 pieces)"
+      {...inputProps}
+      className={`${fieldClass} ${errorClass}`}
+    />
   );
 }
 
@@ -107,16 +123,13 @@ export default function VariantsEditor({
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
-                  <label className="col-span-2 block">
-                    <Label>Name</Label>
-                    <input
-                      type="text"
-                      value={variant.name}
-                      onChange={(e) => onUpdate(index, { name: e.target.value })}
-                      placeholder="e.g. Small pack (6 pieces)"
-                      className={fieldClass}
-                    />
-                  </label>
+                  <div className="col-span-2">
+                    <label className="block">
+                      <Label>Name</Label>
+                      <VariantNameInput index={index} value={variant.name} onChange={(name) => onUpdate(index, { name })} />
+                    </label>
+                    <FieldError id={PRODUCT_FIELD.variantName(index)} />
+                  </div>
                   <label className="col-span-2 block">
                     <Label>Name in Urdu (optional)</Label>
                     <input

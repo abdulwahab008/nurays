@@ -10,11 +10,9 @@ import { DashboardLayout, SELLER_SIDEBAR_ITEMS } from '@/components/layout/Dashb
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { LoadError } from '@/components/ui/LoadError';
-import { useDialogs } from '@/components/ui/Dialogs';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient, apiErrorMessage, apiErrorStatus } from '@/lib/api-client';
 import { formatPrice } from '@/lib/utils';
-import { SellerOnboardingModal } from '@/components/SellerOnboardingModal';
 import { useLocale, useT } from '@/lib/i18n';
 import { commonMessages } from '@/lib/i18n/messages/common';
 import { kitchenOrderMessages, kitchenStatusLabel } from '@/lib/i18n/messages/kitchen-orders';
@@ -28,6 +26,9 @@ interface SellerDashboard {
   rejectionReason?: string | null;
   isStoreOpen?: boolean;
   primaryCommunityName?: string | null;
+  /** What a pending application still lacks (empty when it is complete and waiting for Nuray). */
+  applicationMissing?: string[];
+  hasPayoutAccount?: boolean;
   overview: {
     totalProducts: number;
     activeOrders: number;
@@ -44,12 +45,15 @@ interface SellerDashboard {
     netEarnings?: number;
     pendingSettlement?: number;
     paidSettlement?: number;
+    awaitingRiderCash?: number;
   };
   recentOrders: Array<{
     orderId: string;
     orderNumber: string;
+    /** "1 × Biryani, 2 × Samosa": the kitchen's dishes in the order. */
     productName: string;
     quantity: number;
+    /** The kitchen's dishes in the order, not the whole order. */
     totalPrice: number;
     orderStatus: string;
     createdAt: string;
@@ -81,6 +85,13 @@ function shortWhen(iso: string, locale: string, yesterday: (time: string) => str
   return new Intl.DateTimeFormat(loc, { day: 'numeric', month: 'short' }).format(d);
 }
 
+// What the server calls each missing part of an application (utils/kitchenApplication.ts), in the kitchen's words.
+const GAP_KEYS = {
+  community: 'dash.gap.community',
+  'kitchen location': 'dash.gap.location',
+  'CNIC photos (both sides)': 'dash.gap.cnic',
+} as const;
+
 function Spinner({ label }: { label: string }) {
   return (
     <div className="py-24 text-center" role="status">
@@ -103,7 +114,6 @@ function SellerDashboardContent() {
   const searchParams = useSearchParams();
   const { isAuthenticated, user } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated, user: s.user })));
   const { showToast } = useToast();
-  const { confirm: confirmDialog } = useDialogs();
   const t = useT(kitchenOrderMessages);
   const tc = useT(commonMessages);
   const { locale } = useLocale();
@@ -112,8 +122,8 @@ function SellerDashboardContent() {
   // that has to register, which is what the page said.
   const [loadError, setLoadError] = useState<unknown>(null);
   const [dashboard, setDashboard] = useState<SellerDashboard | null>(null);
-  const [showOnboarding, setShowOnboarding] = useState(false);
-  const [needsOnboarding, setNeedsOnboarding] = useState(false);
+  // No kitchen yet (the server answered 404): the one application form is where it is made.
+  const [noKitchen, setNoKitchen] = useState(false);
 
   const sidebarItems = SELLER_SIDEBAR_ITEMS;
 
@@ -123,16 +133,14 @@ function SellerDashboardContent() {
       const response = await apiClient.get('/sellers/me/dashboard');
       if (response.data.success) {
         setDashboard(response.data.data);
-        setNeedsOnboarding(false);
+        setNoKitchen(false);
       }
       setLoadError(null);
     } catch (error) {
       console.error('Failed to load seller dashboard:', error);
 
-      // If seller profile doesn't exist (404), show onboarding modal
       if (apiErrorStatus(error) === 404) {
-        setNeedsOnboarding(true);
-        setShowOnboarding(true);
+        setNoKitchen(true);
         setLoadError(null);
         return;
       }
@@ -157,12 +165,10 @@ function SellerDashboardContent() {
       return;
     }
 
-    // Check if onboarding modal should be shown
-    const onboardingParam = searchParams.get('onboarding');
-    if (onboardingParam === 'true') {
-      setShowOnboarding(true);
-      // Clean URL
-      window.history.replaceState({}, '', '/sellers/dashboard');
+    // Sign-up used to open a second, shorter form here: the kitchen application is the one place a kitchen is set up.
+    if (searchParams.get('onboarding') === 'true') {
+      router.replace('/sellers/register');
+      return;
     }
 
     loadDashboard();
@@ -189,24 +195,6 @@ function SellerDashboardContent() {
     }
   };
 
-  const handleOnboardingComplete = () => {
-    setShowOnboarding(false);
-    setNeedsOnboarding(false);
-    loadDashboard();
-    showToast(t('dash.onboardingDone'), 'success');
-  };
-
-  const handleOnboardingClose = async () => {
-    if (needsOnboarding) {
-      if ((await confirmDialog({ message: t('dash.onboardingCloseConfirm'), variant: 'warning' }))) {
-        setShowOnboarding(false);
-        router.push('/products');
-      }
-    } else {
-      setShowOnboarding(false);
-    }
-  };
-
   if (!isAuthenticated) {
     return null;
   }
@@ -229,16 +217,17 @@ function SellerDashboardContent() {
 
   if (!dashboard) {
     return (
-      <>
-        <SellerOnboardingModal isOpen={showOnboarding} onClose={handleOnboardingClose} onComplete={handleOnboardingComplete} />
-        <DashboardLayout title={t('dash.title')} subtitle={t('dash.registerSubtitle')} sidebarItems={sidebarItems} userType="seller">
+      <DashboardLayout title={t('dash.title')} subtitle={t('dash.registerSubtitle')} sidebarItems={sidebarItems} userType="seller">
+        {noKitchen && (
           <div className="max-w-md py-10">
             <h2 className="text-lg font-semibold text-ink">{t('dash.completeProfileTitle')}</h2>
             <p className="text-sm text-muted mt-1 mb-5">{t('dash.completeProfileBody')}</p>
-            <Button onClick={() => setShowOnboarding(true)}>{t('dash.startRegistration')}</Button>
+            <Link href="/sellers/register">
+              <Button>{t('dash.startRegistration')}</Button>
+            </Link>
           </div>
-        </DashboardLayout>
-      </>
+        )}
+      </DashboardLayout>
     );
   }
 
@@ -246,13 +235,14 @@ function SellerDashboardContent() {
   const waitingCount = overview.pendingOrders ?? 0;
   const activeCount = overview.activeOrders ?? 0;
   const approved = dashboard.verificationStatus === 'approved';
+  const missing = dashboard.applicationMissing ?? [];
+  const missingWords = missing.map((gap) => (gap in GAP_KEYS ? t(GAP_KEYS[gap as keyof typeof GAP_KEYS]) : gap)).join(', ');
+  const awaitingRiderCash = overview.awaitingRiderCash ?? 0;
   const kitchenName = `${dashboard.businessName}${dashboard.businessNameUrdu ? ` (${dashboard.businessNameUrdu})` : ''}`;
   const subtitle = [kitchenName, dashboard.primaryCommunityName].filter(Boolean).join(', ');
 
   return (
     <>
-      <SellerOnboardingModal isOpen={showOnboarding} onClose={handleOnboardingClose} onComplete={handleOnboardingComplete} />
-
       <DashboardLayout title={t('dash.title')} subtitle={subtitle} sidebarItems={sidebarItems} userType="seller">
         <div className="max-w-6xl">
           {approved && <PushPrompt text={t('dash.pushText')} />}
@@ -274,11 +264,39 @@ function SellerDashboardContent() {
             </div>
           )}
 
-          {dashboard.verificationStatus === 'pending' && (
+          {dashboard.verificationStatus === 'pending' && missing.length > 0 && (
+            <div className="mb-6 rounded-xl bg-accent-soft text-accent-soft-ink px-4 py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold">{t('dash.incompleteTitle')}</p>
+                <p className="text-sm mt-0.5">{t('dash.incompleteBody', { items: missingWords })}</p>
+              </div>
+              <Link href="/sellers/register" className="shrink-0">
+                <Button className="w-full sm:w-auto">{t('dash.finishApplication')}</Button>
+              </Link>
+            </div>
+          )}
+
+          {dashboard.verificationStatus === 'pending' && missing.length === 0 && (
             <div className="mb-6 rounded-xl bg-accent-soft text-accent-soft-ink px-4 py-3.5">
               <p className="text-sm font-semibold">{t('dash.reviewTitle')}</p>
               <p className="text-sm mt-0.5">{t('dash.reviewBody')}</p>
             </div>
+          )}
+
+          {!approved && (
+            <section className="max-w-xl space-y-2 text-sm text-muted">
+              <p>{t('dash.notLiveYet')}</p>
+              <p>{t('dash.addDishesMeanwhile')}</p>
+              <div className="flex flex-wrap gap-x-5 pt-1">
+                <Link href="/sellers/products/new" className="inline-flex items-center gap-1.5 min-h-11 font-semibold text-brand-ink hover:underline">
+                  <Plus className="w-4 h-4" aria-hidden="true" />
+                  {t('dash.addFoodItem')}
+                </Link>
+                <Link href="/sellers/products" className="inline-flex items-center min-h-11 font-semibold text-brand-ink hover:underline">
+                  {t('dash.manage')}
+                </Link>
+              </div>
+            </section>
           )}
 
           {approved && (
@@ -306,6 +324,7 @@ function SellerDashboardContent() {
             </section>
           )}
 
+          {approved && (
           <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_300px] gap-x-10 gap-y-8">
             {/* What needs the cook now: the one raised surface on this screen */}
             <article className="min-w-0 self-start rounded-[20px] bg-surface border border-line shadow-[var(--shadow-card)] overflow-hidden">
@@ -339,16 +358,14 @@ function SellerDashboardContent() {
                   <p className="px-5 pt-2 pb-6 text-sm text-muted">{t('dash.noOrders')}</p>
                 ) : (
                   <ul className="divide-y divide-line">
-                    {dashboard.recentOrders.map((order, index) => (
-                      <li key={index}>
+                    {dashboard.recentOrders.map((order) => (
+                      <li key={order.orderId}>
                         <Link
                           href={`/sellers/orders/${order.orderId}`}
                           className="flex items-center gap-3 sm:gap-4 px-5 py-3.5 min-h-11 hover:bg-raised focus-visible:outline-none focus-visible:bg-raised"
                         >
                           <div className="min-w-0 flex-1">
-                            <p className="text-[15px] text-ink truncate">
-                              {order.quantity} × {order.productName}
-                            </p>
+                            <p className="text-[15px] text-ink truncate">{order.productName}</p>
                             <p className="text-sm text-muted truncate">
                               {shortWhen(order.createdAt, locale, (time) => t('dash.yesterday', { time }))}, <span data-ltr>#{order.orderNumber}</span>
                             </p>
@@ -389,7 +406,20 @@ function SellerDashboardContent() {
                   <dt className="text-sm text-muted">{t('dash.totalEarnings')}</dt>
                   <dd className="text-2xl font-semibold text-ink tabular-nums">{formatPrice(overview.totalEarnings ?? 0)}</dd>
                 </dl>
-                <p className="text-sm text-muted mt-2">{t('dash.pendingAmount', { amount: formatPrice(overview.pendingPayout ?? 0) })}</p>
+                <p className="text-sm text-muted mt-2">
+                  {t('dash.comingToYou', { amount: formatPrice((overview.pendingPayout ?? 0) + awaitingRiderCash) })}
+                </p>
+                {awaitingRiderCash > 0 && (
+                  <p className="text-sm text-muted">{t('dash.afterRiderCash', { amount: formatPrice(awaitingRiderCash) })}</p>
+                )}
+                {dashboard.hasPayoutAccount === false && (
+                  <p className="mt-3 rounded-lg bg-accent-soft px-3 py-2 text-sm text-accent-soft-ink">
+                    {t('dash.noPayoutAccount')}{' '}
+                    <Link href="/sellers/settings#payout-heading" className="font-semibold underline underline-offset-2">
+                      {t('dash.addPayoutAccount')}
+                    </Link>
+                  </p>
+                )}
                 <Link href="/sellers/earnings" className="inline-flex items-center min-h-11 text-sm font-semibold text-brand-ink hover:underline">
                   {t('dash.earningsLink')}
                 </Link>
@@ -398,7 +428,7 @@ function SellerDashboardContent() {
               <section className="pt-6 border-t border-line">
                 <div className="flex items-baseline justify-between gap-3">
                   <h3 className="text-sm font-semibold text-ink">{t('dash.menu')}</h3>
-                  <Link href="/sellers/products" className="text-sm font-semibold text-brand-ink hover:underline">
+                  <Link href="/sellers/products" className="inline-flex items-center min-h-11 text-sm font-semibold text-brand-ink hover:underline">
                     {t('dash.manage')}
                   </Link>
                 </div>
@@ -432,6 +462,7 @@ function SellerDashboardContent() {
               </section>
             </aside>
           </div>
+          )}
         </div>
       </DashboardLayout>
     </>

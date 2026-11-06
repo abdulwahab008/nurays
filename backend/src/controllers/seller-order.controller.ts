@@ -78,7 +78,8 @@ export const acceptOrder = async (req: Request, res: Response) => {
   }
 
   const { id } = req.params;
-  const result = await sellerOrderService.acceptOrder(id, req.user.userId);
+  const preparationTime = (req.body as { preparationTime?: number } | undefined)?.preparationTime;
+  const result = await sellerOrderService.acceptOrder(id, req.user.userId, preparationTime);
 
   res.status(200).json({
     success: true,

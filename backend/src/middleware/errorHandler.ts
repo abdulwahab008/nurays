@@ -140,7 +140,8 @@ export const errorHandler = (
         code: err.code || 'INTERNAL_ERROR',
         message: err.message || 'Internal Server Error',
         ...(err.details ? { details: err.details } : {}),
-        ...(isDev && err.stack && { stack: err.stack }),
+        // A stack helps with a fault while developing; a client mistake (a 4xx) or a known state has nothing to debug.
+        ...(isDev && !expected && err.stack && { stack: err.stack }),
       },
       requestId,
       timestamp: new Date().toISOString(),

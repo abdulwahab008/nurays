@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { loginUrlHere } from '@/lib/auth-redirect';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -13,45 +13,96 @@ import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient, apiErrorDetails, apiErrorMessage } from '@/lib/api-client';
 import { DatePicker } from '@/components/ui/DatePicker';
+import LocationMap from '@/components/ui/LocationMap';
 import { bankAccountIsWrong, walletNumberIsWrong } from '@/lib/payout-account';
 import { sendAskingForPassword } from '@/lib/send-asking-for-password';
 import { useShallow } from 'zustand/react/shallow';
+import { useT } from '@/lib/i18n';
+import { kitchenSettingsMessages } from '@/lib/i18n/messages/kitchen-settings';
 
 const MEAL_CATEGORIES = [
-  { value: 'breakfast', label: 'Breakfast' },
-  { value: 'brunch', label: 'Brunch' },
-  { value: 'lunch', label: 'Lunch' },
-  { value: 'evening_snacks', label: 'Evening snacks' },
-  { value: 'dinner', label: 'Dinner' },
-  { value: 'late_night', label: 'Late night' },
-  { value: 'desserts', label: 'Desserts' },
-  { value: 'beverages', label: 'Beverages' },
-];
+  { value: 'breakfast', label: 'meal.breakfast' },
+  { value: 'brunch', label: 'meal.brunch' },
+  { value: 'lunch', label: 'meal.lunch' },
+  { value: 'evening_snacks', label: 'meal.evening_snacks' },
+  { value: 'dinner', label: 'meal.dinner' },
+  { value: 'late_night', label: 'meal.late_night' },
+  { value: 'desserts', label: 'meal.desserts' },
+  { value: 'beverages', label: 'meal.beverages' },
+] as const;
 
 const BUSINESS_TYPES = [
-  { value: 'home_kitchen', label: 'Home kitchen' },
-  { value: 'restaurant', label: 'Restaurant' },
-  { value: 'bakery', label: 'Bakery' },
-  { value: 'cafe', label: 'Café' },
-  { value: 'cloud_kitchen', label: 'Cloud kitchen' },
-];
+  { value: 'home_kitchen', label: 'type.home_kitchen' },
+  { value: 'restaurant', label: 'type.restaurant' },
+  { value: 'bakery', label: 'type.bakery' },
+  { value: 'cafe', label: 'type.cafe' },
+  { value: 'cloud_kitchen', label: 'type.cloud_kitchen' },
+] as const;
 
-const WALLET_NUMBER_PROBLEM = 'Enter a Pakistani mobile number such as 03001234567.';
-const BANK_ACCOUNT_PROBLEM = 'Enter an IBAN such as PK36SCBL0000001123456702, or an account number of 8 to 20 digits.';
+
+type ScheduleMode = '24_7' | 'fixed_daily' | 'per_day';
+
+const SCHEDULE_MODES = [
+  { value: '24_7', label: 'mode.24_7', hint: 'mode.24_7.hint' },
+  { value: 'fixed_daily', label: 'mode.fixed_daily', hint: 'mode.fixed_daily.hint' },
+  { value: 'per_day', label: 'mode.per_day', hint: 'mode.per_day.hint' },
+] as const;
+
+const WEEK_DAYS = [
+  { key: 'monday', label: 'day.monday' },
+  { key: 'tuesday', label: 'day.tuesday' },
+  { key: 'wednesday', label: 'day.wednesday' },
+  { key: 'thursday', label: 'day.thursday' },
+  { key: 'friday', label: 'day.friday' },
+  { key: 'saturday', label: 'day.saturday' },
+  { key: 'sunday', label: 'day.sunday' },
+] as const;
+type WeekDay = (typeof WEEK_DAYS)[number]['key'];
+type Session = { name: string; open: string; close: string };
+// One row per day on the form. A day saved earlier with more than one session keeps the others as they were (`more`).
+type DayHours = { closed: boolean; open: string; close: string; more: Session[] };
+type WeekHours = Record<WeekDay, DayHours>;
+
+const toMinutes = (hhmm: string) => {
+  const [h, m] = hhmm.split(':').map(Number);
+  return h * 60 + m;
+};
+
+/** Is `time` inside the open hours `open`–`close`? Closing at or before opening means the kitchen stays open past midnight. */
+const insideHours = (time: string, open: string, close: string) => {
+  const t = toMinutes(time);
+  const o = toMinutes(open);
+  const c = toMinutes(close);
+  return c > o ? t >= o && t <= c : t >= o || t <= c;
+};
+
+function weekFromSaved(weekly: unknown, fallbackOpen: string, fallbackClose: string): WeekHours {
+  const saved = (weekly && typeof weekly === 'object' ? weekly : {}) as Partial<Record<WeekDay, { closed?: boolean; sessions?: Session[] }>>;
+  const week = {} as WeekHours;
+  for (const { key } of WEEK_DAYS) {
+    const day = saved[key];
+    const sessions = Array.isArray(day?.sessions) ? day.sessions : [];
+    week[key] = day
+      ? { closed: Boolean(day.closed) || sessions.length === 0, open: sessions[0]?.open ?? '', close: sessions[0]?.close ?? '', more: sessions.slice(1) }
+      : { closed: false, open: fallbackOpen, close: fallbackClose, more: [] };
+  }
+  return week;
+}
 
 const AVAILABILITY_OVERRIDES = [
-  { value: '', label: 'Normal hours' },
-  { value: 'open', label: 'Open, whatever the hours' },
-  { value: 'closed', label: 'Closed for now' },
-  { value: 'busy', label: 'Too busy for new orders' },
-  { value: 'vacation', label: 'On holiday' },
-];
+  { value: '', label: 'override.none' },
+  { value: 'open', label: 'override.open' },
+  { value: 'closed', label: 'override.closed' },
+  { value: 'busy', label: 'override.busy' },
+  { value: 'vacation', label: 'override.vacation' },
+] as const;
 
 export default function SellerSettingsPage() {
   const router = useRouter();
   const { isAuthenticated, user } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated, user: s.user })));
   const { showToast } = useToast();
   const { ask: askDialog } = useDialogs();
+  const t = useT(kitchenSettingsMessages);
   const [loading, setLoading] = useState(false);
   // Why the kitchen's settings could not be read. Until they were read there is no form: it would hold blanks and made-up defaults,
   // and saving them would replace the kitchen's real profile, payout accounts, delivery terms and hours.
@@ -62,6 +113,11 @@ export default function SellerSettingsPage() {
   // The numbers the server holds (as loaded, or as last saved). One the kitchen has not touched is not checked again: it may have been
   // saved before the numbers were checked, and it must not stop the rest of the settings from being saved.
   const [heldNumbers, setHeldNumbers] = useState({ jazzcashNumber: '', easypaisaNumber: '', bankAccountNumber: '' });
+
+  // What is wrong with the hours typed in the form, by field (open-time, close-time, cutoff-time, or a day's key).
+  const [hoursErrors, setHoursErrors] = useState<Record<string, string>>({});
+  // Where the map opens when the kitchen has no pin yet: the middle of its community.
+  const [communityCentre, setCommunityCentre] = useState<{ lat: number; lng: number } | null>(null);
 
   const [deliveryModel, setDeliveryModel] = useState<'model_a' | 'model_b'>('model_b');
   const [newAreaInput, setNewAreaInput] = useState('');
@@ -85,8 +141,11 @@ export default function SellerSettingsPage() {
     // Delivery fields
     freeDeliveryAreas: [] as string[],
     freeDeliveryRadiusKm: null as number | null,
-    latitude: 31.4720 as number | null,
-    longitude: 74.4530 as number | null,
+    latitude: null as number | null,
+    longitude: null as number | null,
+    pickupAddress: '',
+    pickupLandmark: '',
+    pickupPhone: '',
     deliveryFeeType: 'fixed' as '' | 'fixed' | 'distance',
     deliveryFeeFixed: 50 as number | null,
     deliveryFeeBase: 40 as number | null,
@@ -100,9 +159,10 @@ export default function SellerSettingsPage() {
     mealCategories: [] as string[],
     storeNotice: '',
 
-    scheduleMode: 'fixed_daily' as '24_7' | 'fixed_daily' | 'per_day',
-    fixedDailyOpen: '09:00',
-    fixedDailyClose: '22:00',
+    scheduleMode: '24_7' as ScheduleMode,
+    fixedDailyOpen: '',
+    fixedDailyClose: '',
+    weekly: weekFromSaved(null, '', ''),
 
     availabilityOverride: '' as string,
     availabilityOverrideUntil: '' as string,
@@ -126,7 +186,6 @@ export default function SellerSettingsPage() {
       const response = await apiClient.get('/sellers/me');
       if (response.data.success) {
         const seller = response.data.data;
-        const feeType = seller.deliveryFeeType || '';
 
         // deliveryProvider is the source of truth for who delivers; fee fields no longer imply it.
         setDeliveryModel(seller.deliveryProvider === 'self' ? 'model_b' : 'model_a');
@@ -154,8 +213,12 @@ export default function SellerSettingsPage() {
 
           freeDeliveryAreas: Array.isArray(seller.freeDeliveryAreas) ? seller.freeDeliveryAreas : [],
           freeDeliveryRadiusKm: seller.freeDeliveryRadiusKm ?? 2.5,
-          latitude: seller.latitude != null ? parseFloat(String(seller.latitude)) : 31.4720,
-          longitude: seller.longitude != null ? parseFloat(String(seller.longitude)) : 74.4530,
+          // No pin is no pin: a made-up one would send riders to the wrong street.
+          latitude: seller.latitude != null ? parseFloat(String(seller.latitude)) : null,
+          longitude: seller.longitude != null ? parseFloat(String(seller.longitude)) : null,
+          pickupAddress: seller.pickupAddress || '',
+          pickupLandmark: seller.pickupLandmark || '',
+          pickupPhone: seller.pickupPhone || '',
           deliveryFeeType: (seller.deliveryFeeType as '' | 'fixed' | 'distance') || 'fixed',
           deliveryFeeFixed: seller.deliveryFeeFixed ?? 50,
           deliveryFeeBase: seller.deliveryFeeBase ?? 40,
@@ -170,9 +233,15 @@ export default function SellerSettingsPage() {
           mealCategories: Array.isArray(seller.mealCategories) ? seller.mealCategories : [],
           storeNotice: seller.storeNotice || '',
 
-          scheduleMode: (seller.scheduleMode as '24_7' | 'fixed_daily' | 'per_day') || 'fixed_daily',
-          fixedDailyOpen: seller.operatingHours?.fixedDaily?.open || '09:00',
-          fixedDailyClose: seller.operatingHours?.fixedDaily?.close || '22:00',
+          // The server's default is always open; times are only shown when the kitchen saved some.
+          scheduleMode: SCHEDULE_MODES.some((m) => m.value === seller.scheduleMode) ? seller.scheduleMode : '24_7',
+          fixedDailyOpen: seller.operatingHours?.fixedDaily?.open || '',
+          fixedDailyClose: seller.operatingHours?.fixedDaily?.close || '',
+          weekly: weekFromSaved(
+            seller.operatingHours?.weekly,
+            seller.operatingHours?.fixedDaily?.open || '',
+            seller.operatingHours?.fixedDaily?.close || ''
+          ),
 
           availabilityOverride: seller.availabilityOverride || '',
           availabilityOverrideUntil: seller.availabilityOverrideUntil
@@ -190,6 +259,15 @@ export default function SellerSettingsPage() {
         setFormData(loaded);
         setSavedForm(loaded);
         setSettingsRead(true);
+        if (loaded.latitude == null && seller.communityId) {
+          apiClient
+            .get('/communities')
+            .then((res) => {
+              const c = (res.data.data || []).find((x: { id: string }) => x.id === seller.communityId);
+              if (c?.centerLatitude != null && c?.centerLongitude != null) setCommunityCentre({ lat: Number(c.centerLatitude), lng: Number(c.centerLongitude) });
+            })
+            .catch(() => undefined);
+        }
       } else {
         throw new Error('The settings were not in the answer');
       }
@@ -209,7 +287,7 @@ export default function SellerSettingsPage() {
 
     if (user?.userType !== 'seller' && user?.user_type !== 'seller') {
       router.push('/dashboard');
-      showToast('This page is for kitchens.', 'error');
+      showToast(t('accessDenied'), 'error');
       return;
     }
 
@@ -255,18 +333,93 @@ export default function SellerSettingsPage() {
     }));
   };
 
+  /** What is wrong with the hours, keyed by the field to mark: the times must make sense before customers are shown them. */
+  const hoursProblems = () => {
+    const problems: Record<string, string> = {};
+    const { scheduleMode, fixedDailyOpen, fixedDailyClose, orderCutoffTime, weekly } = formData;
+    if (scheduleMode === 'fixed_daily') {
+      if (!fixedDailyOpen) problems['open-time'] = t('err.openTime');
+      if (!fixedDailyClose) problems['close-time'] = t('err.closeTime');
+      else if (fixedDailyOpen && fixedDailyOpen === fixedDailyClose) problems['close-time'] = t('err.sameTimes');
+      if (!problems['open-time'] && !problems['close-time'] && orderCutoffTime && !insideHours(orderCutoffTime, fixedDailyOpen, fixedDailyClose)) {
+        problems['cutoff-time'] = t('err.cutoffOutside');
+      }
+    }
+    if (scheduleMode === 'per_day') {
+      for (const { key } of WEEK_DAYS) {
+        const day = weekly[key];
+        if (day.closed) continue;
+        if (!day.open || !day.close) problems[key] = t('err.dayTimes');
+        else if (toMinutes(day.close) <= toMinutes(day.open)) problems[key] = t('err.dayOrder');
+      }
+      if (WEEK_DAYS.every(({ key }) => weekly[key].closed)) problems[WEEK_DAYS[0].key] = t('err.noDays');
+      const openDays = WEEK_DAYS.map(({ key }) => weekly[key]).filter((d) => !d.closed && d.open && d.close);
+      if (orderCutoffTime && openDays.length > 0 && !openDays.some((d) => insideHours(orderCutoffTime, d.open, d.close))) {
+        problems['cutoff-time'] = t('err.cutoffOutside');
+      }
+    }
+    return problems;
+  };
+
+  const clearHoursError = (field: string) =>
+    setHoursErrors((prev) => {
+      if (!(field in prev)) return prev;
+      const next = { ...prev };
+      delete next[field];
+      return next;
+    });
+
+  const setDay = (key: WeekDay, change: Partial<DayHours>) => {
+    setFormData((prev) => ({ ...prev, weekly: { ...prev.weekly, [key]: { ...prev.weekly[key], ...change } } }));
+    clearHoursError(key);
+  };
+
+  const chooseScheduleMode = (mode: ScheduleMode) => {
+    setFormData((prev) => {
+      // Moving to per-day hours from the same-every-day ones starts each unset day from those times.
+      if (mode !== 'per_day' || !prev.fixedDailyOpen || !prev.fixedDailyClose) return { ...prev, scheduleMode: mode };
+      const weekly = { ...prev.weekly };
+      for (const { key } of WEEK_DAYS) {
+        if (!weekly[key].closed && !weekly[key].open && !weekly[key].close) weekly[key] = { ...weekly[key], open: prev.fixedDailyOpen, close: prev.fixedDailyClose };
+      }
+      return { ...prev, scheduleMode: mode, weekly };
+    });
+    setHoursErrors({});
+  };
+
+  const pin = useMemo(
+    () => (formData.latitude != null && formData.longitude != null ? { lat: formData.latitude, lng: formData.longitude } : null),
+    [formData.latitude, formData.longitude]
+  );
+  const mapCentre = useMemo(() => pin ?? communityCentre ?? { lat: 31.5204, lng: 74.3587 }, [pin, communityCentre]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!settingsRead) return;
 
     const problems: Record<string, string> = {};
     const numberChanged = (field: keyof typeof heldNumbers) => formData[field].trim() !== heldNumbers[field];
-    if (numberChanged('jazzcashNumber') && walletNumberIsWrong(formData.jazzcashNumber)) problems.jazzcashNumber = WALLET_NUMBER_PROBLEM;
-    if (numberChanged('easypaisaNumber') && walletNumberIsWrong(formData.easypaisaNumber)) problems.easypaisaNumber = WALLET_NUMBER_PROBLEM;
-    if (numberChanged('bankAccountNumber') && bankAccountIsWrong(formData.bankAccountNumber)) problems.bankAccountNumber = BANK_ACCOUNT_PROBLEM;
+    if (numberChanged('jazzcashNumber') && walletNumberIsWrong(formData.jazzcashNumber)) problems.jazzcashNumber = t('walletProblem');
+    if (numberChanged('easypaisaNumber') && walletNumberIsWrong(formData.easypaisaNumber)) problems.easypaisaNumber = t('walletProblem');
+    if (numberChanged('bankAccountNumber') && bankAccountIsWrong(formData.bankAccountNumber)) problems.bankAccountNumber = t('bankProblem');
     setPayoutErrors(problems);
+
+    const hourProblems = hoursProblems();
+    setHoursErrors(hourProblems);
+    const firstHourProblem = Object.keys(hourProblems)[0];
+    if (firstHourProblem) {
+      showToast(t('err.hoursToast'), 'error');
+      document.getElementById(firstHourProblem.endsWith('-time') ? firstHourProblem : `day-${firstHourProblem}-open`)?.focus();
+      return;
+    }
     if (Object.keys(problems).length > 0) {
-      showToast('Check the account numbers marked in red.', 'error');
+      showToast(t('err.accountsToast'), 'error');
+      return;
+    }
+    // Nuray's riders collect from the pin, so a kitchen they deliver for cannot be saved without one.
+    if (deliveryModel === 'model_a' && !pin) {
+      showToast(t('needPin'), 'error');
+      document.getElementById('location-heading')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       return;
     }
 
@@ -278,6 +431,9 @@ export default function SellerSettingsPage() {
         freeDeliveryRadiusKm,
         latitude,
         longitude,
+        pickupAddress,
+        pickupLandmark,
+        pickupPhone,
         deliveryFeeType,
         deliveryFeeFixed,
         deliveryFeeBase,
@@ -292,6 +448,7 @@ export default function SellerSettingsPage() {
         scheduleMode,
         fixedDailyOpen,
         fixedDailyClose,
+        weekly,
         availabilityOverride,
         availabilityOverrideUntil,
         availabilityNote,
@@ -304,16 +461,35 @@ export default function SellerSettingsPage() {
         ...rest
       } = formData;
 
+      // Always open leaves the saved hours alone, so switching back to them later finds them again.
       const operatingHours =
         scheduleMode === 'fixed_daily'
           ? { fixedDaily: { open: fixedDailyOpen, close: fixedDailyClose } }
-          : null;
+          : scheduleMode === 'per_day'
+            ? {
+                ...(fixedDailyOpen && fixedDailyClose ? { fixedDaily: { open: fixedDailyOpen, close: fixedDailyClose } } : {}),
+                weekly: Object.fromEntries(
+                  WEEK_DAYS.map(({ key }) => {
+                    const day = weekly[key];
+                    return [
+                      key,
+                      day.closed
+                        ? { closed: true, sessions: [] }
+                        : { closed: false, sessions: [{ name: 'Open', open: day.open, close: day.close }, ...day.more] },
+                    ];
+                  })
+                ),
+              }
+            : undefined;
 
       let deliveryPayload: Record<string, unknown> = {
         deliveryModes: deliveryModes && deliveryModes.length ? deliveryModes : ['delivery'],
         deliveryProvider: deliveryModel === 'model_b' ? 'self' : 'platform',
         latitude: latitude ?? undefined,
         longitude: longitude ?? undefined,
+        pickupAddress: pickupAddress.trim() || null,
+        pickupLandmark: pickupLandmark.trim() || null,
+        pickupPhone: pickupPhone.trim() || null,
       };
 
       // Platform fleet: the rider pool delivers, so there is no self-delivery
@@ -359,7 +535,7 @@ export default function SellerSettingsPage() {
       }
 
       if (!rest.businessName || !rest.businessName.trim()) {
-        showToast('Enter your kitchen name.', 'error');
+        showToast(t('err.name'), 'error');
         setLoading(false);
         return;
       }
@@ -406,16 +582,18 @@ export default function SellerSettingsPage() {
             advanceBookingMaxDays: advanceBookingMaxDays ?? undefined,
             ...(currentPassword ? { currentPassword } : {}),
           }),
-        () =>
+        (wrongBefore) =>
           askDialog({
-            title: 'Enter your password',
-            message: 'You are changing the accounts customers pay into. Enter your password to save.',
+            title: t('pw.title'),
+            message: wrongBefore
+              ? t('pw.wrong')
+              : t('pw.message'),
             type: 'password',
-            confirmText: 'Save',
+            confirmText: t('pw.confirm'),
           })
       );
       if (!saved) {
-        showToast('Nothing was saved: your password was not entered.', 'info');
+        showToast(t('notSaved'), 'info');
         return;
       }
 
@@ -429,10 +607,10 @@ export default function SellerSettingsPage() {
       } else {
         setSavedForm(formData);
       }
-      showToast('Settings saved.', 'success');
+      showToast(t('saved'), 'success');
     } catch (error) {
       const firstIssue = (apiErrorDetails(error) as Array<{ message?: string }> | undefined)?.[0]?.message;
-      showToast(firstIssue || apiErrorMessage(error, 'Could not save your settings'), 'error');
+      showToast(firstIssue || apiErrorMessage(error, t('saveFailed')), 'error');
     } finally {
       setLoading(false);
     }
@@ -454,18 +632,18 @@ export default function SellerSettingsPage() {
   if (!settingsRead) {
     return (
       <DashboardLayout
-        title="Settings"
-        subtitle="Your kitchen, hours, delivery and payout accounts"
+        title={t('title')}
+        subtitle={t('subtitle')}
         sidebarItems={SELLER_SIDEBAR_ITEMS}
         userType="seller"
       >
         <div className="max-w-3xl pb-16">
           {loadError ? (
-            <LoadError error={loadError} onRetry={loadSettings} title="We couldn't load your kitchen settings" />
+            <LoadError error={loadError} onRetry={loadSettings} title={t('loadFailed')} />
           ) : (
             <div className="flex items-center gap-3 py-10 text-sm text-muted" role="status">
               <span className="h-5 w-5 rounded-full border-2 border-line-strong border-t-brand-600 motion-safe:animate-spin" aria-hidden="true" />
-              Loading your settings…
+              {t('loading')}
             </div>
           )}
         </div>
@@ -475,20 +653,20 @@ export default function SellerSettingsPage() {
 
   return (
     <DashboardLayout
-      title="Settings"
-      subtitle="Your kitchen, hours, delivery and payout accounts"
+      title={t('title')}
+      subtitle={t('subtitle')}
       sidebarItems={SELLER_SIDEBAR_ITEMS}
       userType="seller"
     >
       <form onSubmit={handleSubmit} className="max-w-3xl pb-16">
         <section aria-labelledby="hours-heading" className={sectionClass}>
-          <h2 id="hours-heading" className={headingClass}>Hours</h2>
-          <p className="text-sm text-muted mt-1">When customers can order from you.</p>
+          <h2 id="hours-heading" className={headingClass}>{t('hours')}</h2>
+          <p className="text-sm text-muted mt-1">{t('hoursHint')}</p>
 
           <div className="mt-5 space-y-5">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
               <div>
-                <label htmlFor="availability-override" className={labelClass}>Right now</label>
+                <label htmlFor="availability-override" className={labelClass}>{t('rightNow')}</label>
                 <select
                   id="availability-override"
                   value={formData.availabilityOverride}
@@ -497,7 +675,7 @@ export default function SellerSettingsPage() {
                 >
                   {AVAILABILITY_OVERRIDES.map((o) => (
                     <option key={o.value} value={o.value}>
-                      {o.label}
+                      {t(o.label)}
                     </option>
                   ))}
                 </select>
@@ -505,60 +683,157 @@ export default function SellerSettingsPage() {
 
               {formData.availabilityOverride && (
                 <div>
-                  <label htmlFor="availability-override-until" className={labelClass}>Until</label>
+                  <label htmlFor="availability-override-until" className={labelClass}>{t('until')}</label>
                   <DatePicker
                     id="availability-override-until"
                     value={formData.availabilityOverrideUntil}
                     onChange={(date) => setFormData({ ...formData, availabilityOverrideUntil: date })}
                     min={new Date().toISOString().split('T')[0]}
-                    placeholder="Pick a date"
+                    placeholder={t('pickDate')}
                   />
                 </div>
               )}
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-              <div>
-                <label htmlFor="open-time" className={labelClass}>Opens at</label>
-                <input
-                  id="open-time"
-                  type="time"
-                  value={formData.fixedDailyOpen}
-                  onChange={(e) => setFormData({ ...formData, fixedDailyOpen: e.target.value })}
-                  className={fieldClass}
-                />
+            <fieldset>
+              <legend className={labelClass}>{t('whenOpen')}</legend>
+              <div className="grid gap-2 sm:grid-cols-3">
+                {SCHEDULE_MODES.map((m) => {
+                  const on = formData.scheduleMode === m.value;
+                  return (
+                    <label
+                      key={m.value}
+                      className={`flex min-h-11 cursor-pointer gap-3 rounded-xl border px-3 py-2.5 transition-colors has-[:focus-visible]:ring-3 has-[:focus-visible]:ring-brand/40 ${
+                        on ? 'border-brand-600 bg-brand-soft' : 'border-line-strong bg-surface hover:bg-raised'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="schedule-mode"
+                        value={m.value}
+                        checked={on}
+                        onChange={() => chooseScheduleMode(m.value)}
+                        className="mt-0.5 h-4 w-4 shrink-0 accent-brand-700"
+                      />
+                      <span>
+                        <span className={`block text-sm font-medium ${on ? 'text-brand-soft-ink' : 'text-ink'}`}>{t(m.label)}</span>
+                        <span className="block text-sm text-muted">{t(m.hint)}</span>
+                      </span>
+                    </label>
+                  );
+                })}
               </div>
-              <div>
-                <label htmlFor="close-time" className={labelClass}>Closes at</label>
-                <input
-                  id="close-time"
-                  type="time"
-                  value={formData.fixedDailyClose}
-                  onChange={(e) => setFormData({ ...formData, fixedDailyClose: e.target.value })}
-                  className={fieldClass}
-                />
+            </fieldset>
+
+            {formData.scheduleMode === 'fixed_daily' && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                {([
+                  ['open-time', t('opensAt'), 'fixedDailyOpen'],
+                  ['close-time', t('closesAt'), 'fixedDailyClose'],
+                ] as const).map(([id, label, field]) => (
+                  <div key={id}>
+                    <label htmlFor={id} className={labelClass}>{label}</label>
+                    <input
+                      id={id}
+                      type="time"
+                      value={formData[field]}
+                      onChange={(e) => {
+                        setFormData({ ...formData, [field]: e.target.value });
+                        clearHoursError(id);
+                      }}
+                      aria-invalid={Boolean(hoursErrors[id])}
+                      aria-describedby={hoursErrors[id] ? `${id}-error` : undefined}
+                      className={`${fieldClass} ${hoursErrors[id] ? 'border-red-700' : ''}`}
+                    />
+                    {hoursErrors[id] && <p id={`${id}-error`} role="alert" className="text-sm text-red-700 mt-1.5">{hoursErrors[id]}</p>}
+                  </div>
+                ))}
+                {formData.fixedDailyOpen && formData.fixedDailyClose && toMinutes(formData.fixedDailyClose) < toMinutes(formData.fixedDailyOpen) && (
+                  <p className="sm:col-span-2 -mt-2 text-sm text-muted">{t('pastMidnight')}</p>
+                )}
               </div>
-            </div>
+            )}
+
+            {formData.scheduleMode === 'per_day' && (
+              <ul className="divide-y divide-line rounded-xl border border-line bg-surface">
+                {WEEK_DAYS.map(({ key, label }) => {
+                  const day = formData.weekly[key];
+                  const problem = hoursErrors[key];
+                  return (
+                    <li key={key} className="px-3 py-3">
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                        <span id={`day-${key}-label`} className="w-24 text-sm font-medium text-ink">{t(label)}</span>
+                        <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 text-sm text-ink">
+                          <input
+                            type="checkbox"
+                            checked={!day.closed}
+                            onChange={(e) => setDay(key, { closed: !e.target.checked })}
+                            className="h-4 w-4 accent-brand-700"
+                          />
+                          {day.closed ? t('dayClosed') : t('dayOpen')}
+                        </label>
+                        {!day.closed && (
+                          <div className="flex flex-1 items-center gap-2 min-w-[14rem]">
+                            <input
+                              id={`day-${key}-open`}
+                              type="time"
+                              aria-label={t('dayOpensAt', { day: t(label) })}
+                              value={day.open}
+                              onChange={(e) => setDay(key, { open: e.target.value })}
+                              aria-invalid={Boolean(problem)}
+                              aria-describedby={problem ? `day-${key}-error` : undefined}
+                              className={`${fieldClass} flex-1 min-w-0 ${problem ? 'border-red-700' : ''}`}
+                            />
+                            <span className="text-sm text-muted">{t('to')}</span>
+                            <input
+                              id={`day-${key}-close`}
+                              type="time"
+                              aria-label={t('dayClosesAt', { day: t(label) })}
+                              value={day.close}
+                              onChange={(e) => setDay(key, { close: e.target.value })}
+                              aria-invalid={Boolean(problem)}
+                              aria-describedby={problem ? `day-${key}-error` : undefined}
+                              className={`${fieldClass} flex-1 min-w-0 ${problem ? 'border-red-700' : ''}`}
+                            />
+                          </div>
+                        )}
+                      </div>
+                      {problem && <p id={`day-${key}-error`} role="alert" className="text-sm text-red-700 mt-1.5">{problem}</p>}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
               <div>
-                <label htmlFor="cutoff-time" className={labelClass}>Last order of the day</label>
+                <label htmlFor="cutoff-time" className={labelClass}>{t('lastOrder')}</label>
                 <input
                   id="cutoff-time"
                   type="time"
                   value={formData.orderCutoffTime}
-                  onChange={(e) => setFormData({ ...formData, orderCutoffTime: e.target.value })}
-                  className={fieldClass}
+                  onChange={(e) => {
+                    setFormData({ ...formData, orderCutoffTime: e.target.value });
+                    clearHoursError('cutoff-time');
+                  }}
+                  aria-invalid={Boolean(hoursErrors['cutoff-time'])}
+                  aria-describedby={hoursErrors['cutoff-time'] ? 'cutoff-time-error' : 'cutoff-time-hint'}
+                  className={`${fieldClass} ${hoursErrors['cutoff-time'] ? 'border-red-700' : ''}`}
                 />
+                {hoursErrors['cutoff-time'] ? (
+                  <p id="cutoff-time-error" role="alert" className="text-sm text-red-700 mt-1.5">{hoursErrors['cutoff-time']}</p>
+                ) : (
+                  <p id="cutoff-time-hint" className="text-sm text-muted mt-1.5">{t('lastOrderHint')}</p>
+                )}
               </div>
               <div>
-                <label htmlFor="max-orders" className={labelClass}>Most orders in a day</label>
+                <label htmlFor="max-orders" className={labelClass}>{t('maxOrders')}</label>
                 <input
                   id="max-orders"
                   type="number"
                   inputMode="numeric"
                   min={1}
-                  placeholder="No limit"
+                  placeholder={t('noLimit')}
                   value={formData.maxDailyOrders ?? ''}
                   onChange={(e) =>
                     setFormData({
@@ -574,13 +849,13 @@ export default function SellerSettingsPage() {
         </section>
 
         <section aria-labelledby="kitchen-heading" className={sectionClass}>
-          <h2 id="kitchen-heading" className={headingClass}>Your kitchen</h2>
-          <p className="text-sm text-muted mt-1">What customers see on your kitchen page.</p>
+          <h2 id="kitchen-heading" className={headingClass}>{t('kitchen')}</h2>
+          <p className="text-sm text-muted mt-1">{t('kitchenHint')}</p>
 
           <div className="mt-5 space-y-5">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
               <div>
-                <label htmlFor="business-name" className={labelClass}>Kitchen name</label>
+                <label htmlFor="business-name" className={labelClass}>{t('kitchenName')}</label>
                 <input
                   id="business-name"
                   type="text"
@@ -591,7 +866,7 @@ export default function SellerSettingsPage() {
                 />
               </div>
               <div>
-                <label htmlFor="business-name-urdu" className={labelClass}>Kitchen name in Urdu</label>
+                <label htmlFor="business-name-urdu" className={labelClass}>{t('kitchenNameUrdu')}</label>
                 <input
                   id="business-name-urdu"
                   type="text"
@@ -605,48 +880,48 @@ export default function SellerSettingsPage() {
             </div>
 
             <div>
-              <label htmlFor="description" className={labelClass}>About your kitchen</label>
+              <label htmlFor="description" className={labelClass}>{t('about')}</label>
               <textarea
                 id="description"
                 value={formData.description}
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                 rows={3}
-                placeholder="What you cook and what you are known for"
+                placeholder={t('aboutPh')}
                 className={`${fieldClass} py-2.5`}
               />
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
               <div>
-                <label htmlFor="business-type" className={labelClass}>Kind of kitchen</label>
+                <label htmlFor="business-type" className={labelClass}>{t('kind')}</label>
                 <select
                   id="business-type"
                   value={formData.businessType}
                   onChange={(e) => setFormData({ ...formData, businessType: e.target.value })}
                   className={fieldClass}
                 >
-                  {BUSINESS_TYPES.map((t) => (
-                    <option key={t.value} value={t.value}>
-                      {t.label}
+                  {BUSINESS_TYPES.map((b) => (
+                    <option key={b.value} value={b.value}>
+                      {t(b.label)}
                     </option>
                   ))}
                 </select>
               </div>
               <div>
-                <label htmlFor="store-notice" className={labelClass}>Notice on your page</label>
+                <label htmlFor="store-notice" className={labelClass}>{t('notice')}</label>
                 <input
                   id="store-notice"
                   type="text"
                   value={formData.storeNotice}
                   onChange={(e) => setFormData({ ...formData, storeNotice: e.target.value })}
-                  placeholder="Biryani this weekend only"
+                  placeholder={t('noticePh')}
                   className={fieldClass}
                 />
               </div>
             </div>
 
             <fieldset>
-              <legend className={labelClass}>Meals you cook</legend>
+              <legend className={labelClass}>{t('meals')}</legend>
               <div className="flex flex-wrap gap-2">
                 {MEAL_CATEGORIES.map((c) => {
                   const on = formData.mealCategories.includes(c.value);
@@ -658,7 +933,7 @@ export default function SellerSettingsPage() {
                       onClick={() => toggleMealCategory(c.value)}
                       className={chipClass(on)}
                     >
-                      {c.label}
+                      {t(c.label)}
                     </button>
                   );
                 })}
@@ -669,7 +944,7 @@ export default function SellerSettingsPage() {
                       key={cat}
                       type="button"
                       aria-pressed={true}
-                      aria-label={`Remove ${cat}`}
+                      aria-label={t('remove', { name: cat })}
                       onClick={() => toggleMealCategory(cat)}
                       className={chipClass(true)}
                     >
@@ -682,17 +957,94 @@ export default function SellerSettingsPage() {
           </div>
         </section>
 
+        <section aria-labelledby="location-heading" className={sectionClass}>
+          <h2 id="location-heading" className={headingClass}>{t('location')}</h2>
+          <p className="text-sm text-muted mt-1">
+            {t('locationHint')}
+          </p>
+          <div className="mt-5 space-y-5">
+            <div>
+              <label htmlFor="pickup-address" className={labelClass}>{t('pickupAddress')}</label>
+              <input
+                id="pickup-address"
+                type="text"
+                maxLength={300}
+                autoComplete="street-address"
+                value={formData.pickupAddress}
+                onChange={(e) => setFormData({ ...formData, pickupAddress: e.target.value })}
+                placeholder={t('pickupAddressPh')}
+                className={fieldClass}
+              />
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+              <div>
+                <label htmlFor="pickup-landmark" className={labelClass}>{t('pickupLandmark')}</label>
+                <input
+                  id="pickup-landmark"
+                  type="text"
+                  maxLength={200}
+                  value={formData.pickupLandmark}
+                  onChange={(e) => setFormData({ ...formData, pickupLandmark: e.target.value })}
+                  placeholder={t('pickupLandmarkPh')}
+                  className={fieldClass}
+                />
+              </div>
+              <div>
+                <label htmlFor="pickup-phone" className={labelClass}>{t('pickupPhone')}</label>
+                <input
+                  id="pickup-phone"
+                  type="tel"
+                  dir="ltr"
+                  inputMode="tel"
+                  maxLength={20}
+                  value={formData.pickupPhone}
+                  onChange={(e) => setFormData({ ...formData, pickupPhone: e.target.value })}
+                  placeholder={t('pickupPhonePh')}
+                  aria-describedby="pickup-phone-hint"
+                  className={fieldClass}
+                />
+                <p id="pickup-phone-hint" className="text-sm text-muted mt-1.5">{t('pickupPhoneHint')}</p>
+              </div>
+            </div>
+            <div>
+            <div className="flex items-baseline justify-between gap-3 mb-1.5">
+              <span className="text-sm font-medium text-ink">{t('onMap')}</span>
+              <span className="text-sm text-muted tabular-nums" data-ltr>
+                {pin ? `${pin.lat.toFixed(5)}, ${pin.lng.toFixed(5)}` : t('noPin')}
+              </span>
+            </div>
+            <div className={`rounded-xl overflow-hidden ${pin ? '' : 'ring-2 ring-accent'}`}>
+              <LocationMap
+                center={mapCentre}
+                markerPosition={pin}
+                height="280px"
+                onLocationSelect={(coords) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    latitude: Number(coords.lat.toFixed(6)),
+                    longitude: Number(coords.lng.toFixed(6)),
+                  }))
+                }
+              />
+            </div>
+            <p className={`text-sm mt-1.5 ${pin ? 'text-muted' : 'text-accent-soft-ink'}`}>
+              {pin ? t('movePin') : t('needPin')}
+            </p>
+            </div>
+          </div>
+        </section>
+
         <section aria-labelledby="delivery-heading" className={sectionClass}>
-          <h2 id="delivery-heading" className={headingClass}>Delivery</h2>
+          <h2 id="delivery-heading" className={headingClass}>{t('delivery')}</h2>
           <div className="mt-1 flex flex-wrap items-center justify-between gap-x-4">
             <p className="text-sm text-muted">
-              {deliveryModel === 'model_a' ? 'Nuray riders deliver your orders.' : 'You deliver your orders yourself.'}
+              {deliveryModel === 'model_a' ? t('nurayDelivers') : t('selfDelivers')}
             </p>
             <Link
               href="/sellers/delivery"
               className="inline-flex items-center min-h-11 text-sm font-medium text-brand-ink hover:underline underline-offset-4 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-brand/40 rounded"
             >
-              Change
+              {t('change')}
             </Link>
           </div>
 
@@ -700,7 +1052,7 @@ export default function SellerSettingsPage() {
             <div className="mt-6 space-y-5">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                 <div>
-                  <label htmlFor="delivery-fee" className={labelClass}>Delivery fee</label>
+                  <label htmlFor="delivery-fee" className={labelClass}>{t('deliveryFee')}</label>
                   <div className="relative">
                     <input
                       id="delivery-fee"
@@ -721,7 +1073,7 @@ export default function SellerSettingsPage() {
                   </div>
                 </div>
                 <div>
-                  <label htmlFor="free-radius" className={labelClass}>Free delivery within</label>
+                  <label htmlFor="free-radius" className={labelClass}>{t('freeWithin')}</label>
                   <div className="relative">
                     <input
                       id="free-radius"
@@ -744,7 +1096,7 @@ export default function SellerSettingsPage() {
               </div>
 
               <div>
-                <label htmlFor="free-area" className={labelClass}>Free delivery to these areas</label>
+                <label htmlFor="free-area" className={labelClass}>{t('freeAreas')}</label>
                 <div className="flex gap-2">
                   <input
                     id="free-area"
@@ -755,7 +1107,7 @@ export default function SellerSettingsPage() {
                     className={`${fieldClass} flex-1 min-w-0`}
                   />
                   <Button type="button" onClick={handleAddArea} variant="outline">
-                    Add
+                    {t('add')}
                   </Button>
                 </div>
 
@@ -770,7 +1122,7 @@ export default function SellerSettingsPage() {
                         <button
                           type="button"
                           onClick={() => handleRemoveArea(area)}
-                          aria-label={`Remove ${area}`}
+                          aria-label={t('remove', { name: area })}
                           className="inline-flex h-11 w-11 items-center justify-center rounded-full text-muted hover:text-ink hover:bg-line focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-brand/40"
                         >
                           <X className="w-4 h-4" aria-hidden="true" />
@@ -785,10 +1137,9 @@ export default function SellerSettingsPage() {
         </section>
 
         <section aria-labelledby="payout-heading" className={sectionClass}>
-          <h2 id="payout-heading" className={headingClass}>Where customers pay you</h2>
+          <h2 id="payout-heading" className={`${headingClass} scroll-mt-24`}>{t('accounts')}</h2>
           <p className="text-sm text-muted mt-1">
-            Customers who pay by JazzCash, Easypaisa or bank transfer send the money here. Check every digit: a wrong number sends their
-            money to someone else. Changing an account asks for your password.
+            {t('accountsHint')}
           </p>
 
           <div className="mt-6 space-y-7">
@@ -796,7 +1147,7 @@ export default function SellerSettingsPage() {
               <legend className="text-sm font-medium text-ink mb-3">JazzCash</legend>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                 <div>
-                  <label htmlFor="jazzcash-number" className={labelClass}>Mobile number</label>
+                  <label htmlFor="jazzcash-number" className={labelClass}>{t('mobileNumber')}</label>
                   <input
                     id="jazzcash-number"
                     type="tel"
@@ -814,11 +1165,11 @@ export default function SellerSettingsPage() {
                   {payoutErrors.jazzcashNumber && <p id="jazzcash-number-error" role="alert" className="text-sm text-red-700 mt-1.5">{payoutErrors.jazzcashNumber}</p>}
                 </div>
                 <div>
-                  <label htmlFor="jazzcash-title" className={labelClass}>Name on the account</label>
+                  <label htmlFor="jazzcash-title" className={labelClass}>{t('accountName')}</label>
                   <input
                     id="jazzcash-title"
                     type="text"
-                    placeholder="As written on the account"
+                    placeholder={t('accountNamePh')}
                     value={formData.jazzcashAccountTitle}
                     onChange={(e) => setFormData({ ...formData, jazzcashAccountTitle: e.target.value })}
                     className={fieldClass}
@@ -831,7 +1182,7 @@ export default function SellerSettingsPage() {
               <legend className="text-sm font-medium text-ink mb-3">Easypaisa</legend>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                 <div>
-                  <label htmlFor="easypaisa-number" className={labelClass}>Mobile number</label>
+                  <label htmlFor="easypaisa-number" className={labelClass}>{t('mobileNumber')}</label>
                   <input
                     id="easypaisa-number"
                     type="tel"
@@ -849,11 +1200,11 @@ export default function SellerSettingsPage() {
                   {payoutErrors.easypaisaNumber && <p id="easypaisa-number-error" role="alert" className="text-sm text-red-700 mt-1.5">{payoutErrors.easypaisaNumber}</p>}
                 </div>
                 <div>
-                  <label htmlFor="easypaisa-title" className={labelClass}>Name on the account</label>
+                  <label htmlFor="easypaisa-title" className={labelClass}>{t('accountName')}</label>
                   <input
                     id="easypaisa-title"
                     type="text"
-                    placeholder="As written on the account"
+                    placeholder={t('accountNamePh')}
                     value={formData.easypaisaAccountTitle}
                     onChange={(e) => setFormData({ ...formData, easypaisaAccountTitle: e.target.value })}
                     className={fieldClass}
@@ -863,37 +1214,37 @@ export default function SellerSettingsPage() {
             </fieldset>
 
             <fieldset className="space-y-4">
-              <legend className="text-sm font-medium text-ink mb-3">Bank transfer or Raast</legend>
+              <legend className="text-sm font-medium text-ink mb-3">{t('bankTransfer')}</legend>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                 <div>
-                  <label htmlFor="bank-name" className={labelClass}>Bank</label>
+                  <label htmlFor="bank-name" className={labelClass}>{t('bank')}</label>
                   <input
                     id="bank-name"
                     type="text"
-                    placeholder="Bank name"
+                    placeholder={t('bankPh')}
                     value={formData.bankName}
                     onChange={(e) => setFormData({ ...formData, bankName: e.target.value })}
                     className={fieldClass}
                   />
                 </div>
                 <div>
-                  <label htmlFor="bank-title" className={labelClass}>Name on the account</label>
+                  <label htmlFor="bank-title" className={labelClass}>{t('accountName')}</label>
                   <input
                     id="bank-title"
                     type="text"
-                    placeholder="As written on the account"
+                    placeholder={t('accountNamePh')}
                     value={formData.bankAccountName}
                     onChange={(e) => setFormData({ ...formData, bankAccountName: e.target.value })}
                     className={fieldClass}
                   />
                 </div>
                 <div className="sm:col-span-2">
-                  <label htmlFor="bank-number" className={labelClass}>IBAN or account number</label>
+                  <label htmlFor="bank-number" className={labelClass}>{t('iban')}</label>
                   <input
                     id="bank-number"
                     type="text"
                     dir="ltr"
-                    placeholder="PK.. or account number"
+                    placeholder={t('ibanPh')}
                     value={formData.bankAccountNumber}
                     onChange={(e) => {
                       setFormData({ ...formData, bankAccountNumber: e.target.value });
@@ -911,9 +1262,9 @@ export default function SellerSettingsPage() {
         </section>
 
         <section aria-labelledby="stock-heading" className={sectionClass}>
-          <h2 id="stock-heading" className={headingClass}>Running low</h2>
+          <h2 id="stock-heading" className={headingClass}>{t('runningLow')}</h2>
           <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2">
-            <label htmlFor="low-stock" className="text-[15px] text-ink">Tell me when a dish has this many portions left</label>
+            <label htmlFor="low-stock" className="text-[15px] text-ink">{t('lowStockLabel')}</label>
             <input
               id="low-stock"
               type="number"
@@ -928,7 +1279,7 @@ export default function SellerSettingsPage() {
 
         <div className="sticky bottom-0 z-10 mt-8 flex justify-end border-t border-line bg-page/95 py-4 pb-[calc(1rem+var(--safe-bottom,0px))] backdrop-blur">
           <Button type="submit" disabled={loading || !changed} className="min-h-11 w-full px-6 sm:w-auto">
-            {loading ? 'Saving…' : 'Save changes'}
+            {loading ? t('saving') : t('saveChanges')}
           </Button>
         </div>
       </form>

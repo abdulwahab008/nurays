@@ -57,6 +57,16 @@ describe('delivery time shown to a buyer', () => {
     expect(info.delivery?.distanceKm).toBeGreaterThan(900);
   });
 
+  it('is none for a community fee quoted from a pin in another city', async () => {
+    // The kitchen's area is Gulshan-e-Iqbal, Karachi, but its pin is in Lahore: the same-community fee still applies,
+    // and a time from that pin would be "3,095 min".
+    const pricing = await jest.requireMock('../src/services/delivery-pricing.service').getPlatformDeliveryPricing();
+    pricing.communities.set('gulshan', { centerLat: 24.92, centerLng: 67.09, sameCommunityFee: 100, crossCommunityBaseFee: 150 });
+    jest.requireMock('../src/services/delivery-pricing.service').getPlatformDeliveryPricing.mockResolvedValueOnce(pricing);
+    const info = await computeCustomerFacingSellerInfo({ ...LAHORE_KITCHEN, communityId: 'gulshan' }, 24.918, 67.0971, 'gulshan');
+    expect(info.delivery).toMatchObject({ deliverable: true, estimatedMinMinutes: null, estimatedMaxMinutes: null });
+  });
+
   it('is not worked out at all when the buyer has no address', async () => {
     const info = await computeCustomerFacingSellerInfo(LAHORE_KITCHEN, null, null);
     expect(info.delivery).toBeNull();

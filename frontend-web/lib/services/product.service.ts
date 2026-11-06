@@ -117,10 +117,12 @@ export const productService = {
     return response.data;
   },
 
-  getProduct: async (idOrSlug: string, customerLat?: number, customerLng?: number) => {
+  /** With the customer's address (lat/lng) or chosen area (communityId), the dish carries the kitchen's delivery fee and time. */
+  getProduct: async (idOrSlug: string, customerLat?: number, customerLng?: number, communityId?: string | null) => {
     const params = new URLSearchParams();
     if (customerLat != null) params.append('customerLat', String(customerLat));
     if (customerLng != null) params.append('customerLng', String(customerLng));
+    if (communityId) params.append('communityId', communityId);
     const query = params.toString();
     const response = await apiClient.get<ApiResponse<Product>>(`/products/${idOrSlug}${query ? `?${query}` : ''}`);
     return response.data;

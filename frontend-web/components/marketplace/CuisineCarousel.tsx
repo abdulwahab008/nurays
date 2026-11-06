@@ -11,7 +11,6 @@ export interface CuisineCategory {
   label: string;
   query: string;
   image: string;
-  badge?: string;
   isColdChain?: boolean;
 }
 
@@ -36,7 +35,7 @@ export const PLATFORM_CUISINES: CuisineCategory[] = [
   {
     label: 'Charcoal Kebabs',
     query: 'kebab',
-    image: 'https://images.unsplash.com/photo-1599488615731-7e5c2823ff28?w=300&q=80&auto=format&fit=crop',
+    image: 'https://images.unsplash.com/photo-1603360946369-dc9bb6258143?w=300&q=80&auto=format&fit=crop',
   },
   {
     label: 'Halwa Puri',
@@ -52,7 +51,6 @@ export const PLATFORM_CUISINES: CuisineCategory[] = [
     label: 'Frozen',
     query: 'frozen',
     image: 'https://images.unsplash.com/photo-1601050690597-df0568f70950?w=300&q=80&auto=format&fit=crop',
-    badge: 'Frozen',
     isColdChain: true,
   },
   {
@@ -148,11 +146,6 @@ export function CuisineCarousel({ selectedCuisine, onSelectCuisine }: CuisineCar
                 <span className={`block text-xs truncate ${isSelected ? 'font-extrabold text-ink' : 'font-semibold text-ink'}`}>
                   {cuisineLabel(item)}
                 </span>
-                {item.badge && (
-                  <span className="inline-block mt-0.5 text-[11px] font-bold text-frozen-ink bg-frozen-soft px-1.5 py-0.5 rounded-full">
-                    {t('badgeFrozen')}
-                  </span>
-                )}
               </div>
             </Link>
           );

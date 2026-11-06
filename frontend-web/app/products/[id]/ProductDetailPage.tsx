@@ -8,12 +8,12 @@ import Link from 'next/link';
 import { productService } from '@/lib/services/product.service';
 import { cartService } from '@/lib/services/cart.service';
 import { addressService } from '@/lib/services/address.service';
-import { formatPrice } from '@/lib/utils';
+import { displayRating, formatPrice } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
-import { useCartStore } from '@/lib/store/cart-store';
+import { useCartStore, type CartItem } from '@/lib/store/cart-store';
 import { useAuthStore } from '@/lib/store/auth-store';
-import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
+import { useCommunityStore } from '@/lib/store/community-store';
 import { SiteHeader } from '@/components/layout/SiteHeader';
 import { CoverImage } from '@/components/ui/CoverImage';
 import { apiClient, apiErrorCode, apiErrorStatus, apiErrorDetails, errorMessage, type CartConflictDetails } from '@/lib/api-client';
@@ -21,9 +21,8 @@ import { LoadError } from '@/components/ui/LoadError';
 import ProductReviews from '@/components/products/ProductReviews';
 import { favoriteService } from '@/lib/services/favorite.service';
 import CartConflictModal, { CartConflictInfo } from '@/components/cart/CartConflictModal';
-import { Heart } from 'lucide-react';
+import { ChefHat, Heart, MapPin, ShieldCheck } from 'lucide-react';
 import { useT } from '@/lib/i18n';
-import { commonMessages } from '@/lib/i18n/messages/common';
 import { browseMessages, availabilityKey, type BrowseT } from '@/lib/i18n/messages/browse';
 import { useShallow } from 'zustand/react/shallow';
 
@@ -53,6 +52,7 @@ export type RawProduct = Omit<ProductDetail, 'images' | 'stock' | 'seller' | 'va
     is_verified?: boolean;
     rating?: number | string;
     ratingAverage?: number | string;
+    totalReviews?: number | string;
   };
 };
 
@@ -73,6 +73,8 @@ interface ProductDetail {
     id: string;
     businessName: string;
     rating: number;
+    /** Reviews behind the rating; with none the kitchen is "New", whatever the stored average says. */
+    totalReviews: number;
     isVerified: boolean;
     mealCategories?: string[];
     businessType?: string;
@@ -135,6 +137,7 @@ function normalizeProduct(data: RawProduct, sellerFallback: string): ProductDeta
         id: data.seller.id ?? '',
         businessName: data.seller.businessName ?? data.seller.business_name ?? sellerFallback,
         rating: Number(data.seller.rating ?? data.seller.ratingAverage ?? 0),
+        totalReviews: Number(data.seller.totalReviews ?? 0) || 0,
         isVerified: Boolean(data.seller.isVerified ?? data.seller.is_verified),
         mealCategories: Array.isArray(data.seller.mealCategories) ? data.seller.mealCategories : [],
         businessType: data.seller.businessType,
@@ -143,7 +146,7 @@ function normalizeProduct(data: RawProduct, sellerFallback: string): ProductDeta
         acceptingOrdersReason: data.seller.acceptingOrdersReason ?? null,
         availability: data.seller.availability,
       }
-    : { id: '', businessName: sellerFallback, rating: 0, isVerified: false, mealCategories: [], preOrderOnly: false, isAcceptingOrders: false, acceptingOrdersReason: null, availability: undefined };
+    : { id: '', businessName: sellerFallback, rating: 0, totalReviews: 0, isVerified: false, mealCategories: [], preOrderOnly: false, isAcceptingOrders: false, acceptingOrdersReason: null, availability: undefined };
   // Normalize images: API may return imageUrl, frontend uses url
   const images = Array.isArray(data.images)
     ? data.images.map((img: { url?: string; imageUrl?: string; isPrimary?: boolean }) => ({
@@ -181,7 +184,6 @@ export default function ProductDetailPage({ initial }: { initial?: RawProduct })
   const { isAuthenticated } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated })));
   const { showToast } = useToast();
   const t = useT(browseMessages);
-  const tc = useT(commonMessages);
   const { addItem } = useCartStore(useShallow((s) => ({ addItem: s.addItem })));
   const [first] = useState(() => (initial ? normalizeProduct(initial, t('seller')) : null));
   const [product, setProduct] = useState<ProductDetail | null>(first);
@@ -199,8 +201,10 @@ export default function ProductDetailPage({ initial }: { initial?: RawProduct })
   const [isFavorite, setIsFavorite] = useState(false);
   const [cartConflict, setCartConflict] = useState<CartConflictInfo | null>(null);
   const [specialInstructions, setSpecialInstructions] = useState('');
-
-  const sidebarItems = CUSTOMER_SIDEBAR_ITEMS;
+  const { selectedCommunity, openSelectorModal } = useCommunityStore(
+    useShallow((st) => ({ selectedCommunity: st.selectedCommunity, openSelectorModal: st.openSelectorModal })),
+  );
+  const communityId = selectedCommunity?.id ?? null;
 
   // The product is fetched twice on load: once immediately, and again with the saved
   // address's coordinates for a precise delivery estimate. Without care the second
@@ -217,7 +221,7 @@ export default function ProductDetailPage({ initial }: { initial?: RawProduct })
     const isRefresh = loadedProductRef.current === requestedId; // same product already on screen
     if (!isRefresh) setLoading(true);
     try {
-      const response = await productService.getProduct(requestedId, customerLat, customerLng);
+      const response = await productService.getProduct(requestedId, customerLat, customerLng, communityId);
       // Apply unless something newer has already been applied. (Not "unless a newer one is
       // merely in flight": if that one then fails, nothing would ever be shown.)
       if (seq < appliedSeqRef.current) return;
@@ -291,7 +295,7 @@ export default function ProductDetailPage({ initial }: { initial?: RawProduct })
         })
         .catch(() => {});
     }
-  }, [params?.id, isAuthenticated]);
+  }, [params?.id, isAuthenticated, communityId]);
 
   const handleToggleFavorite = async () => {
     if (!isAuthenticated) {
@@ -315,11 +319,6 @@ export default function ProductDetailPage({ initial }: { initial?: RawProduct })
   };
 
   const handleAddToCart = async () => {
-    if (!isAuthenticated) {
-      router.push(loginUrlHere());
-      return;
-    }
-
     if (!product) return;
 
     // A kitchen that is closed, busy or away takes no orders. Say so now, as the kitchen's own page does, instead of letting the
@@ -345,6 +344,61 @@ export default function ProductDetailPage({ initial }: { initial?: RawProduct })
         ? getStackedDiscountedPrice(product.price, catalogPromotions)
         : product.price;
 
+    const trayLine = (): CartItem => ({
+      id: `${product.id}-${selectedVariant?.id ?? stockType}-${Date.now()}`,
+      productId: product.id,
+      productName: selectedVariant ? `${product.name} — ${selectedVariant.name}` : product.name,
+      productImage: product.images[0]?.url,
+      sellerId: product.seller.id,
+      sellerName: product.seller.businessName,
+      quantity,
+      unitPrice,
+      stockType,
+      hubId: stockType === 'hub' ? selectedHub : undefined,
+      subtotal: unitPrice * quantity,
+    });
+
+    const replaceTray = async () => {
+      try {
+        if (isAuthenticated) {
+          await cartService.addToCart({
+            productId: product.id,
+            variantId: selectedVariant?.id,
+            quantity,
+            stockType,
+            hubId: stockType === 'hub' && selectedHub ? selectedHub : undefined,
+            clearAndAdd: true,
+          });
+        }
+        useCartStore.getState().clearCart();
+        addItem(trayLine());
+        setCartConflict(null);
+        setJustAddedToCart(true);
+        showToast(t('toastCartReplaced', { kitchen: product.seller.businessName }), 'success');
+      } catch {
+        showToast(t('toastReplaceCartFailed'), 'error');
+      }
+    };
+
+    // One kitchen per order: ask before the server has to refuse it (the 409 below stays as the fallback).
+    const otherKitchen = useCartStore.getState().items.find((i) => i.sellerId !== product.seller.id);
+    if (otherKitchen) {
+      setCartConflict({
+        existingSellerName: otherKitchen.sellerName || t('previousKitchen'),
+        newSellerName: product.seller.businessName || t('newKitchen'),
+        onConfirmClearAndAdd: replaceTray,
+        onCancel: () => setCartConflict(null),
+      });
+      return;
+    }
+
+    if (!isAuthenticated) {
+      addItem(trayLine());
+      setJustAddedToCart(true);
+      showToast(t('toastAddedLong'), 'success');
+      return;
+    }
+
     setAddToCartLoading(true);
     setJustAddedToCart(false);
     try {
@@ -355,19 +409,7 @@ export default function ProductDetailPage({ initial }: { initial?: RawProduct })
         stockType,
         hubId: stockType === 'hub' && selectedHub ? selectedHub : undefined,
       });
-      addItem({
-        id: `${product.id}-${selectedVariant?.id ?? stockType}-${Date.now()}`,
-        productId: product.id,
-        productName: selectedVariant ? `${product.name} — ${selectedVariant.name}` : product.name,
-        productImage: product.images[0]?.url,
-        sellerId: product.seller.id,
-        sellerName: product.seller.businessName,
-        quantity,
-        unitPrice,
-        stockType,
-        hubId: stockType === 'hub' ? selectedHub : undefined,
-        subtotal: unitPrice * quantity,
-      });
+      addItem(trayLine());
       setJustAddedToCart(true);
       showToast(t('toastAddedLong'), 'success');
     } catch (err) {
@@ -376,36 +418,7 @@ export default function ProductDetailPage({ initial }: { initial?: RawProduct })
         setCartConflict({
           existingSellerName: details?.existingSeller?.name || t('previousKitchen'),
           newSellerName: details?.newSeller?.name || product.seller.businessName || t('newKitchen'),
-          onConfirmClearAndAdd: async () => {
-            try {
-              await cartService.addToCart({
-                productId: product.id,
-                variantId: selectedVariant?.id,
-                quantity,
-                stockType,
-                hubId: stockType === 'hub' && selectedHub ? selectedHub : undefined,
-                clearAndAdd: true,
-              });
-              addItem({
-                id: `${product.id}-${selectedVariant?.id ?? stockType}-${Date.now()}`,
-                productId: product.id,
-                productName: selectedVariant ? `${product.name} — ${selectedVariant.name}` : product.name,
-                productImage: product.images[0]?.url,
-                sellerId: product.seller.id,
-                sellerName: product.seller.businessName,
-                quantity,
-                unitPrice,
-                stockType,
-                hubId: stockType === 'hub' ? selectedHub : undefined,
-                subtotal: unitPrice * quantity,
-              });
-              setCartConflict(null);
-              setJustAddedToCart(true);
-              showToast(t('toastCartReplaced', { kitchen: product.seller.businessName }), 'success');
-            } catch {
-              showToast(t('toastReplaceCartFailed'), 'error');
-            }
-          },
+          onConfirmClearAndAdd: replaceTray,
           onCancel: () => setCartConflict(null),
         });
       } else {
@@ -472,80 +485,41 @@ export default function ProductDetailPage({ initial }: { initial?: RawProduct })
     }
   };
 
+  // Every state of the page sits under the same header as the rest of browsing.
+  const shell = (body: React.ReactNode) => (
+    <div className="min-h-screen bg-page text-ink">
+      <SiteHeader />
+      <div className="max-w-[1280px] mx-auto px-4 sm:px-8 py-6 md:py-10">{body}</div>
+      <CartConflictModal isOpen={!!cartConflict} conflict={cartConflict} />
+    </div>
+  );
+
   if (loading) {
-    if (isAuthenticated) {
-      return (
-        <DashboardLayout
-          title={t('loadingTitle')}
-          subtitle={t('pleaseWait')}
-          sidebarItems={sidebarItems}
-          userType="customer"
-        >
-          <div className="flex items-center justify-center h-64">
-            <div className="text-center">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-brand mx-auto mb-4"></div>
-              <p className="text-muted">{t('loadingProduct')}</p>
-            </div>
-          </div>
-        </DashboardLayout>
-      );
-    }
-    return (
-      <div className="min-h-screen bg-page flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-brand mx-auto mb-4"></div>
-          <p className="text-muted">{t('loadingProduct')}</p>
-        </div>
-      </div>
+    return shell(
+      <div role="status" className="flex items-center justify-center gap-2 py-24 text-sm text-muted">
+        <span className="w-4 h-4 border-2 border-brand border-t-transparent rounded-full animate-spin" aria-hidden />
+        {t('loadingProduct')}
+      </div>,
     );
   }
 
   if (!product && loadError) {
-    const failed = <LoadError error={loadError} onRetry={() => void loadProduct()} />;
-    return isAuthenticated ? (
-      <DashboardLayout title={tc('loadFailedTitle')} subtitle="" sidebarItems={sidebarItems} userType="customer">
-        {failed}
-      </DashboardLayout>
-    ) : (
-      <div className="min-h-screen bg-page flex items-center justify-center p-6">
-        <div className="w-full max-w-lg">{failed}</div>
-      </div>
+    return shell(
+      <div className="w-full max-w-lg mx-auto">
+        <LoadError error={loadError} onRetry={() => void loadProduct()} />
+      </div>,
     );
   }
 
   if (!product) {
-    if (isAuthenticated) {
-      return (
-        <DashboardLayout
-          title={t('notFoundTitle')}
-          subtitle={t('notFoundSubtitle')}
-          sidebarItems={sidebarItems}
-          userType="customer"
-        >
-          <div className="bg-surface rounded-[20px] border border-dashed border-line-strong p-12 text-center">
-            <div className="w-20 h-20 bg-raised rounded-full flex items-center justify-center mx-auto mb-6">
-              <span className="text-4xl">🔍</span>
-            </div>
-            <h2 className="text-2xl font-bold text-ink mb-3">{t('notFoundTitle')}</h2>
-            <p className="text-muted mb-6">{t('notFoundBody')}</p>
-            <Link href="/products">
-              <Button>
-                <span className="me-2">🛍️</span> {t('browseProducts')}
-              </Button>
-            </Link>
-          </div>
-        </DashboardLayout>
-      );
-    }
-    return (
-      <div className="min-h-screen bg-page flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-muted mb-4">{t('notFoundShort')}</p>
-          <Link href="/products">
-            <Button>{t('backToProducts')}</Button>
-          </Link>
-        </div>
-      </div>
+    return shell(
+      <div className="max-w-md mx-auto my-12 bg-surface rounded-[20px] border border-dashed border-line-strong p-8 text-center">
+        <h1 className="text-lg font-bold text-ink mb-2">{t('notFoundTitle')}</h1>
+        <p className="text-sm text-muted mb-5">{t('notFoundBody')}</p>
+        <Link href="/products" className="inline-flex items-center h-11 px-4 rounded-xl border border-line text-sm font-semibold text-ink hover:bg-raised">
+          {t('browseProducts')}
+        </Link>
+      </div>,
     );
   }
 
@@ -684,7 +658,7 @@ export default function ProductDetailPage({ initial }: { initial?: RawProduct })
           <div className="space-y-3 rounded-[20px] bg-accent-soft p-4 sm:p-5">
             {product.allergens && (
               <div>
-                <h3 className="text-xs font-extrabold text-accent-soft-ink uppercase tracking-wider mb-1">
+                <h3 className="text-xs font-extrabold text-accent-soft-ink mb-1">
                   {t('allergens')}
                 </h3>
                 <p className="text-sm text-accent-soft-ink">{product.allergens}</p>
@@ -704,7 +678,7 @@ export default function ProductDetailPage({ initial }: { initial?: RawProduct })
             )}
             {product.ingredients && (
               <div>
-                <h3 className="text-xs font-extrabold text-accent-soft-ink uppercase tracking-wider mb-1">
+                <h3 className="text-xs font-extrabold text-accent-soft-ink mb-1">
                   {t('ingredients')}
                 </h3>
                 <p className="text-sm text-accent-soft-ink">{product.ingredients}</p>
@@ -712,7 +686,7 @@ export default function ProductDetailPage({ initial }: { initial?: RawProduct })
             )}
             {product.heatingInstructions && (
               <div>
-                <h3 className="text-xs font-extrabold text-accent-soft-ink uppercase tracking-wider mb-1">
+                <h3 className="text-xs font-extrabold text-accent-soft-ink mb-1">
                   {t('heating')}
                 </h3>
                 <p className="text-sm text-accent-soft-ink">{product.heatingInstructions}</p>
@@ -724,73 +698,49 @@ export default function ProductDetailPage({ initial }: { initial?: RawProduct })
           </div>
         )}
 
-        {/* Seller & Community Card */}
-        <div className="rounded-[20px] border border-line bg-surface p-4 space-y-2">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-11 h-11 rounded-2xl bg-brand-soft text-brand-soft-ink flex items-center justify-center font-black text-base" aria-hidden>
-                👩‍🍳
+        {/* The kitchen */}
+        <div className="rounded-[20px] border border-line bg-surface p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-11 h-11 shrink-0 rounded-2xl bg-brand-soft text-brand-soft-ink flex items-center justify-center" aria-hidden>
+                <ChefHat className="w-5 h-5" />
               </div>
-              <div>
-                <p className="text-[11px] font-bold text-muted uppercase tracking-wider mb-0.5">
-                  {t('homeKitchen')}
-                </p>
-                <p className="font-bold text-ink flex items-center gap-2">
+              <div className="min-w-0">
+                <p className="text-xs text-muted">{t('homeKitchen')}</p>
+                <p className="font-bold text-ink flex items-center gap-1.5 min-w-0">
                   {product.seller?.id ? (
-                    <Link href={`/kitchens/${product.seller.id}`} className="hover:underline">
+                    <Link href={`/kitchens/${product.seller.id}`} className="truncate hover:underline">
                       {product.seller.businessName}
                     </Link>
                   ) : (
-                    <span>{product.seller?.businessName ?? t('seller')}</span>
+                    <span className="truncate">{product.seller?.businessName ?? t('seller')}</span>
                   )}
-                  {product.seller?.isVerified && (
-                    <span className="text-[11px] font-extrabold text-brand-soft-ink bg-brand-soft px-2 py-0.5 rounded-full">
-                      {t('verifiedChef')}
-                    </span>
-                  )}
+                  {product.seller?.isVerified && <ShieldCheck className="w-4 h-4 shrink-0 text-brand-ink" aria-label={t('verifiedChef')} />}
+                </p>
+                <p className="text-sm text-muted">
+                  {(() => {
+                    const rating = displayRating(product.seller.rating, product.seller.totalReviews);
+                    return rating ? `★ ${rating} · ${t('reviewsCount', { count: product.seller.totalReviews })}` : t('new');
+                  })()}
                 </p>
               </div>
             </div>
-
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={handleToggleFavorite}
-                className="w-10 h-10 flex items-center justify-center rounded-full border border-line bg-surface hover:bg-raised transition-colors"
-                title={t('saveKitchenFav')}
-                aria-label={t('saveKitchenFav')}
-                aria-pressed={isFavorite}
-              >
-                <Heart
-                  className={`w-4 h-4 transition-colors ${
-                    isFavorite ? 'fill-red-500 text-red-500' : 'text-muted hover:text-red-500'
-                  }`}
-                />
-              </button>
-              <div className="text-end">
-                <p className="text-[11px] text-muted font-bold uppercase">{t('rating')}</p>
-                <p className="font-black text-sm text-ink">{product.seller?.rating ? `★ ${product.seller.rating.toFixed(1)}` : t('new')}</p>
-              </div>
-            </div>
+            <button
+              type="button"
+              onClick={handleToggleFavorite}
+              className="w-11 h-11 shrink-0 flex items-center justify-center rounded-full border border-line bg-surface hover:bg-raised transition-colors"
+              aria-label={t('saveKitchenFav')}
+              aria-pressed={isFavorite}
+            >
+              <Heart className={`w-5 h-5 ${isFavorite ? 'fill-red-500 text-red-500' : 'text-muted'}`} aria-hidden />
+            </button>
           </div>
 
-          {/* Proximity / Community Badge */}
           {(product.isSameCommunity || product.communityBadge || product.community?.name) && (
-            <div className="pt-2 flex items-center gap-2">
-              {product.isSameCommunity ? (
-                <span className="px-2.5 py-1 rounded-full bg-brand-soft text-brand-soft-ink text-xs font-extrabold flex items-center gap-1.5">
-                  <span>🏡</span> {t('inYourCommunity')}
-                </span>
-              ) : product.communityBadge ? (
-                <span className="px-2.5 py-1 rounded-full bg-brand-soft text-brand-soft-ink text-xs font-extrabold flex items-center gap-1.5">
-                  <span>📍</span> {product.communityBadge}
-                </span>
-              ) : (
-                <span className="px-2.5 py-1 rounded-full bg-raised text-ink text-xs font-bold flex items-center gap-1.5">
-                  <span>📍</span> {product.community?.name}
-                </span>
-              )}
-            </div>
+            <p className="mt-3 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-brand-soft text-brand-soft-ink text-xs font-medium">
+              <MapPin className="w-3.5 h-3.5" aria-hidden />
+              {product.isSameCommunity ? t('inYourCommunity') : product.communityBadge || product.community?.name}
+            </p>
           )}
         </div>
 
@@ -846,15 +796,12 @@ export default function ProductDetailPage({ initial }: { initial?: RawProduct })
           </div>
         )}
 
-        {/* Delivery to you — real fee/distance/ETA once we know an address; an
-            honest prompt instead of a guess when we don't. */}
+        {/* Delivery to you: the real fee and time once the address or area is known, else a way to tell us */}
         <div className="rounded-2xl bg-raised px-4 py-3">
-          <h3 className="text-xs font-semibold text-muted uppercase tracking-wider mb-1.5">
-            {t('deliveryToYou')}
-          </h3>
+          <h3 className="text-sm font-semibold text-muted mb-1">{t('deliveryToYou')}</h3>
           {product.delivery ? (
             <>
-              <p className="text-sm text-ink">
+              <p className="text-base font-semibold text-ink">
                 {product.delivery.deliverable
                   ? `${product.delivery.fee === 0 ? t('freeDelivery') : t('deliveryFeeAmount', { amount: formatPrice(product.delivery.fee) })}${
                       product.estimatedDeliveryMinMinutes != null
@@ -863,22 +810,17 @@ export default function ProductDetailPage({ initial }: { initial?: RawProduct })
                     }${product.delivery.distanceKm != null ? ` · ${t('kmAway', { km: product.delivery.distanceKm })}` : ''}`
                   : product.delivery.reason || t('notDeliverable')}
               </p>
+              {selectedCommunity && product.delivery.distanceKm == null && (
+                <p className="text-xs text-muted mt-0.5">{t('toArea', { area: selectedCommunity.name })}</p>
+              )}
               {product.minOrderAmountForDelivery ? (
                 <p className="text-xs text-muted mt-0.5">{t('minOrder', { amount: formatPrice(product.minOrderAmountForDelivery) })}</p>
               ) : null}
             </>
           ) : (
-            <p className="text-sm text-muted">
-              {isAuthenticated ? (
-                <>
-                  {t('addAddressBefore')}
-                  <Link href="/profile/addresses" className="underline hover:no-underline">{t('addAddressLink')}</Link>
-                  {t('addAddressAfter')}
-                </>
-              ) : (
-                t('signInAddAddress')
-              )}
-            </p>
+            <button type="button" onClick={openSelectorModal} className="min-h-11 text-start text-sm font-semibold text-brand-ink hover:underline">
+              {t('chooseAreaForFee')}
+            </button>
           )}
         </div>
 
@@ -942,7 +884,7 @@ export default function ProductDetailPage({ initial }: { initial?: RawProduct })
                     ? t('deliveryNotHere')
                     : product.estimatedDeliveryMinMinutes != null
                       ? t('etaMin', { min: product.estimatedDeliveryMinMinutes, max: product.estimatedDeliveryMaxMinutes })
-                      : t('addAddressEta')}
+                      : t('chooseAreaEta')}
                 </p>
                 <p className="text-xs text-muted mt-1">{t('available', { count: product.stock.hub })}</p>
               </button>
@@ -1054,31 +996,5 @@ export default function ProductDetailPage({ initial }: { initial?: RawProduct })
     </>
   );
 
-  // For authenticated users, wrap in DashboardLayout
-  if (isAuthenticated) {
-    return (
-      <DashboardLayout
-        title={product.name}
-        subtitle={t('productDetails')}
-        sidebarItems={sidebarItems}
-        userType="customer"
-      >
-        {productContent}
-        <CartConflictModal isOpen={!!cartConflict} conflict={cartConflict} />
-      </DashboardLayout>
-    );
-  }
-
-  // For public users, show a simple layout
-  return (
-    <div className="min-h-screen bg-page text-ink pb-24">
-      <SiteHeader />
-
-      <div className="max-w-[1280px] mx-auto px-4 sm:px-8 py-6 md:py-10">
-        {productContent}
-      </div>
-      <CartConflictModal isOpen={!!cartConflict} conflict={cartConflict} />
-    </div>
-  );
+  return shell(productContent);
 }
-

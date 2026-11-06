@@ -25,6 +25,39 @@ import { debitWallet } from './wallet.service';
 import { logger } from '../utils/logger';
 import { thrownMessage, thrown } from '../utils/thrown';
 
+/** When each delivery window closes, in minutes after midnight Pakistan time (the windows checkout offers). */
+export const SLOT_END_MINUTES = { morning: 12 * 60, afternoon: 17 * 60, evening: 21 * 60 + 30 } as const;
+export type SlotTime = keyof typeof SLOT_END_MINUTES;
+
+const PKT_OFFSET_MS = 5 * 60 * 60 * 1000;
+
+/**
+ * Why a delivery slot can't be booked, or null when it can: a day before today, or today's window once it has closed
+ * (all in Pakistan time). A slot with no date is today's.
+ */
+export function slotProblem(slotTime: SlotTime | undefined, slotDate: string | undefined, now: Date = new Date()): string | null {
+  const pktNow = new Date(now.getTime() + PKT_OFFSET_MS);
+  const today = pktNow.toISOString().slice(0, 10);
+  const day = slotDate ? new Date(slotDate).toISOString().slice(0, 10) : today;
+  if (day < today) return 'The delivery day has already passed. Please choose another day.';
+  if (day === today && slotTime) {
+    const minutes = pktNow.getUTCHours() * 60 + pktNow.getUTCMinutes();
+    if (minutes >= SLOT_END_MINUTES[slotTime]) return 'That delivery window has already passed today. Please choose a later one.';
+  }
+  return null;
+}
+
+/** A transfer straight to the kitchen needs the kitchen's account for that method. */
+export function transferAccountMissing(
+  paymentMethod: string,
+  seller: Pick<Seller, 'bankAccountNumber' | 'jazzcashNumber' | 'easypaisaNumber'>
+): boolean {
+  if (paymentMethod === 'bank') return !seller.bankAccountNumber?.trim();
+  if (paymentMethod === 'jazzcash') return !seller.jazzcashNumber?.trim();
+  if (paymentMethod === 'easypaisa') return !seller.easypaisaNumber?.trim();
+  return false;
+}
+
 /** Placing an order: the cart's items priced, discounted, split by kitchen and written in one transaction. */
 export class OrderPlacement {
   /**
@@ -84,7 +117,7 @@ export class OrderPlacement {
       deliveryAddressId?: string;
       hubId?: string;
       deliverySlotDate?: string;
-      deliverySlotTime?: string;
+      deliverySlotTime?: SlotTime;
       paymentMethod: string;
       promotionCode?: string;
       deliveryInstructions?: string;
@@ -304,8 +337,22 @@ export class OrderPlacement {
       }
       const accepting = await isAcceptingOrders(seller, new Date(), data.deliverySlotDate);
       if (!accepting.accepting) {
-        throw new AppError(`${seller.businessName}: ${accepting.reason}`, 400, 'SELLER_NOT_ACCEPTING_ORDERS');
+        throw new AppError(`${seller.businessName}: ${accepting.reason}`, 400, accepting.code, {
+          nextOpenAt: accepting.nextOpenAt?.toISOString() ?? null,
+        });
       }
+      if (transferAccountMissing(data.paymentMethod, seller)) {
+        throw new AppError(
+          `${seller.businessName} has not added an account for this payment method. Please choose another way to pay.`,
+          400,
+          'PAYMENT_METHOD_UNAVAILABLE'
+        );
+      }
+    }
+
+    const slotIssue = slotProblem(data.deliverySlotTime, data.deliverySlotDate);
+    if (slotIssue) {
+      throw new AppError(slotIssue, 400, 'DELIVERY_SLOT_PASSED');
     }
 
     // Apply seller-wide catalog/deal promotions to the actual charged unit price —

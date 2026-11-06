@@ -31,7 +31,7 @@ export default function HomeHero({ dishes }: { dishes: HomeDish[] }) {
               {t('heroFind')}
               <ChevronRight className="rtl:-scale-x-100 w-4 h-4" aria-hidden />
             </a>
-            <Link href="/products" className="inline-flex items-center h-12 px-5 rounded-xl border border-line-strong text-ink text-[15px] font-bold hover:bg-raised transition-colors">
+            <Link href="/products?view=dishes" className="inline-flex items-center h-12 px-5 rounded-xl border border-line-strong text-ink text-[15px] font-bold hover:bg-raised transition-colors">
               {t('heroDishes')}
             </Link>
           </div>

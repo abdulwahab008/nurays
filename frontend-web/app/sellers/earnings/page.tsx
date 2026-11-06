@@ -3,6 +3,7 @@
 import { useState, useEffect, type ReactNode } from 'react';
 import { loginUrlHere } from '@/lib/auth-redirect';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { DashboardLayout, SELLER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { Button } from '@/components/ui/button';
 import { LoadError } from '@/components/ui/LoadError';
@@ -42,6 +43,8 @@ interface EarningsData {
   availableBalance: number;
   codCommissionOwed: number;
   awaitingRiderCash: number;
+  /** Whether Nuray has an account to send the weekly payout to. */
+  hasPayoutAccount: boolean;
   /** What is still owed to Nuray after netting, and the cash pause (kitchen-owing.service.ts). */
   owing: { amount: number; since: string | null; cashPausesAt: string | null; cashPaused: boolean };
   payouts: Array<{
@@ -102,6 +105,7 @@ export default function SellerEarningsPage() {
           availableBalance: ov.availableForPayout ?? 0,
           codCommissionOwed: ov.codCommissionOwed ?? 0,
           awaitingRiderCash: ov.awaitingRiderCash ?? 0,
+          hasPayoutAccount: dashboard.hasPayoutAccount !== false,
           owing: ov.owing ?? { amount: 0, since: null, cashPausesAt: null, cashPaused: false },
           payouts: payoutsRes.data.success ? payoutsRes.data.data : [],
         });
@@ -155,7 +159,8 @@ export default function SellerEarningsPage() {
             accountNumber: accountNumber.trim(),
             ...(currentPassword ? { currentPassword } : {}),
           }),
-        () => askDialog({ title: t('passwordTitle'), message: t('payoutPasswordPrompt'), type: 'password' })
+        (wrongBefore) =>
+          askDialog({ title: t('passwordTitle'), message: wrongBefore ? t('passwordWrong') : t('payoutPasswordPrompt'), type: 'password' })
       );
       if (response?.data.success) {
         showToast(t('payoutSubmitted'), 'success');
@@ -231,7 +236,16 @@ export default function SellerEarningsPage() {
                     </div>
                   )}
                 </div>
-                <p className="mt-3 text-sm text-muted leading-relaxed">{t('availableHint')}</p>
+                {earnings.hasPayoutAccount ? (
+                  <p className="mt-3 text-sm text-muted leading-relaxed">{t('availableHint')}</p>
+                ) : (
+                  <p className="mt-3 rounded-lg bg-accent-soft px-3 py-2.5 text-sm text-accent-soft-ink leading-relaxed">
+                    {t('noPayoutAccount')}{' '}
+                    <Link href="/sellers/settings#payout-heading" className="font-semibold underline underline-offset-2">
+                      {t('addPayoutAccount')}
+                    </Link>
+                  </p>
+                )}
                 {earnings.awaitingRiderCash > 0 && (
                   <p className="mt-2 text-sm font-medium text-accent-soft-ink">
                     {t('awaitingRiderCash', { amount: formatPrice(earnings.awaitingRiderCash) })}

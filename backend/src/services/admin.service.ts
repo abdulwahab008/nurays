@@ -8,6 +8,42 @@ import { presentFile } from '../storage';
 import { notify, notifySeller } from './notify.service';
 import { DELIVERY_SETTING_DEFAULTS, invalidateDeliveryPricing } from './delivery-pricing.service';
 import socketManager from '../config/socket';
+import { realPhoneOrNull } from '../utils/otp';
+import { computeSellerAvailability } from './availability.service';
+
+const DAY_NAMES = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'] as const;
+
+/** The kitchen's opening hours in a few lines an admin can read at a glance. */
+function hoursSummary(scheduleMode: string, operatingHours: unknown): string[] {
+  const hours = (operatingHours ?? {}) as {
+    fixedDaily?: { open?: string; close?: string };
+    weekly?: Partial<Record<(typeof DAY_NAMES)[number], { closed?: boolean; sessions?: Array<{ open?: string; close?: string }> }>>;
+  };
+  if (scheduleMode === 'fixed_daily' && hours.fixedDaily?.open && hours.fixedDaily.close) {
+    return [`Every day, ${hours.fixedDaily.open} to ${hours.fixedDaily.close}`];
+  }
+  if (scheduleMode === 'per_day' && hours.weekly) {
+    return DAY_NAMES.map((day) => {
+      const d = hours.weekly?.[day];
+      const label = day.charAt(0).toUpperCase() + day.slice(1, 3);
+      const sessions = (d?.sessions ?? []).filter((x) => x.open && x.close);
+      if (!d || d.closed || sessions.length === 0) return `${label}: closed`;
+      return `${label}: ${sessions.map((x) => `${x.open} to ${x.close}`).join(', ')}`;
+    });
+  }
+  return ['Open all day, every day'];
+}
+
+/** The last four digits of an account number: enough to recognise it, not enough to use it. */
+const maskAccount = (value: string | null | undefined): string | null => {
+  const digits = (value ?? '').replace(/\s+/g, '');
+  if (!digits) return null;
+  return digits.length <= 4 ? digits : `•••• ${digits.slice(-4)}`;
+};
+
+/** The community a kitchen is in: the linked record when there is one, else the name the kitchen typed. */
+const communityLabel = (seller: { community?: { name: string; city: string } | null; primaryCommunityName: string | null }) =>
+  seller.community ? `${seller.community.name}, ${seller.community.city}` : seller.primaryCommunityName;
 
 /** Verification documents with short-lived links an admin can open. */
 async function presentDocuments(docs: Array<{ id: string; documentType: string; documentUrl: string; createdAt?: Date; uploadedAt?: Date }>) {
@@ -44,6 +80,7 @@ export class AdminService {
       },
       include: {
         documents: true,
+        community: { select: { name: true, city: true } },
         user: {
           include: {
             profile: {
@@ -67,6 +104,9 @@ export class AdminService {
       coverImageUrl: seller.coverImageUrl,
       communityId: seller.communityId,
       primaryCommunityName: seller.primaryCommunityName,
+      // The same community the "missing" check looks at (communityId), named.
+      communityName: communityLabel(seller),
+      verificationStatus: seller.verificationStatus,
       latitude: seller.latitude != null ? Number(seller.latitude) : null,
       longitude: seller.longitude != null ? Number(seller.longitude) : null,
       // What the application still lacks (nothing: complete); the screen disables Approve while this is not empty.
@@ -74,7 +114,7 @@ export class AdminService {
       documents: await presentDocuments(seller.documents),
       user: {
         id: seller.user.id,
-        phone: seller.user.phone,
+        phone: realPhoneOrNull(seller.user.phone),
         email: seller.user.email,
         profile: seller.user.profile
           ? {
@@ -171,6 +211,7 @@ export class AdminService {
       where: { id: sellerId },
       include: {
         documents: true,
+        community: { select: { name: true, city: true } },
         user: {
           include: {
             profile: {
@@ -189,9 +230,40 @@ export class AdminService {
       throw new AppError('Seller not found', 404, 'SELLER_NOT_FOUND');
     }
 
-    const productCount = await prisma.product.count({
-      where: { sellerId: seller.id },
-    });
+    const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const [productCount, liveDishes, dishes, recentOrders, sales30d] = await Promise.all([
+      prisma.product.count({ where: { sellerId: seller.id } }),
+      prisma.product.count({ where: { sellerId: seller.id, approvalStatus: 'approved', isActive: true } }),
+      prisma.product.findMany({
+        where: { sellerId: seller.id },
+        orderBy: [{ approvalStatus: 'asc' }, { createdAt: 'desc' }],
+        take: 8,
+        select: { id: true, name: true, price: true, isActive: true, approvalStatus: true },
+      }),
+      prisma.order.findMany({
+        where: { items: { some: { sellerId: seller.id } } },
+        orderBy: { createdAt: 'desc' },
+        take: 5,
+        select: {
+          id: true,
+          orderNumber: true,
+          orderStatus: true,
+          createdAt: true,
+          items: { where: { sellerId: seller.id }, select: { totalPrice: true } },
+        },
+      }),
+      // What this kitchen sold in the last 30 days: its own items on orders that were not cancelled.
+      prisma.$queryRaw<Array<{ orders: bigint; sales: Prisma.Decimal | null }>>`
+        SELECT COUNT(DISTINCT oi.order_id) AS orders, SUM(oi.total_price) AS sales
+        FROM order_items oi
+        JOIN orders o ON o.id = oi.order_id
+        WHERE oi.seller_id = ${seller.id}
+          AND o.created_at >= ${since}
+          AND o.order_status <> 'cancelled'
+      `,
+    ]);
+
+    const availability = computeSellerAvailability(seller);
 
     return {
       id: seller.id,
@@ -209,12 +281,55 @@ export class AdminService {
       productCount,
       communityId: seller.communityId,
       primaryCommunityName: seller.primaryCommunityName,
+      communityName: communityLabel(seller),
       missing: kitchenApplicationGaps(seller, seller.documents.map((d) => d.documentType)),
       documents: await presentDocuments(seller.documents),
+      figures: {
+        orders30d: Number(sales30d[0]?.orders ?? 0),
+        sales30d: Number(sales30d[0]?.sales ?? 0),
+        ratingAverage: Number(seller.ratingAverage),
+        totalReviews: seller.totalReviews,
+        liveDishes,
+        totalDishes: productCount,
+      },
+      kitchen: {
+        isOpen: availability.isOpen,
+        availability: availability.status,
+        availabilityNote: availability.isManualOverride ? availability.reason : null,
+        hours: hoursSummary(seller.scheduleMode, seller.operatingHours),
+        deliveryModes: seller.deliveryModes,
+        deliveryProvider: seller.deliveryProvider,
+        pickupAddress: seller.pickupAddress,
+        pickupLandmark: seller.pickupLandmark,
+        pickupPhone: realPhoneOrNull(seller.pickupPhone),
+        latitude: seller.latitude != null ? Number(seller.latitude) : null,
+        longitude: seller.longitude != null ? Number(seller.longitude) : null,
+      },
+      dishes: dishes.map((d) => ({
+        id: d.id,
+        name: d.name,
+        price: Number(d.price),
+        isActive: d.isActive,
+        moderationStatus: d.approvalStatus,
+      })),
+      recentOrders: recentOrders.map((o) => ({
+        id: o.id,
+        orderNumber: o.orderNumber,
+        orderStatus: o.orderStatus,
+        createdAt: o.createdAt,
+        kitchenTotal: o.items.reduce((sum, i) => sum + Number(i.totalPrice), 0),
+      })),
+      payoutAccount: {
+        bankName: seller.bankName,
+        bankAccountName: seller.bankAccountName,
+        bankAccountNumber: maskAccount(seller.bankAccountNumber),
+        jazzcashNumber: maskAccount(seller.jazzcashNumber),
+        easypaisaNumber: maskAccount(seller.easypaisaNumber),
+      },
       user: {
         id: seller.user.id,
         email: seller.user.email,
-        phone: seller.user.phone,
+        phone: realPhoneOrNull(seller.user.phone),
         profile: seller.user.profile
           ? {
               fullName: seller.user.profile.fullName,
@@ -232,6 +347,7 @@ export class AdminService {
   async getAllSellers(filters: {
     status?: string;
     verificationStatus?: string;
+    search?: string;
     page?: number;
     limit?: number;
   }) {
@@ -247,12 +363,26 @@ export class AdminService {
       where.verificationStatus = filters.verificationStatus;
     }
 
-    const [sellers, total] = await Promise.all([
+    const search = filters.search?.trim().slice(0, 100);
+    if (search) {
+      where.OR = [
+        { businessName: { contains: search, mode: 'insensitive' } },
+        { primaryCommunityName: { contains: search, mode: 'insensitive' } },
+        { user: { email: { contains: search, mode: 'insensitive' } } },
+        { user: { phone: { contains: search } } },
+        { user: { profile: { fullName: { contains: search, mode: 'insensitive' } } } },
+      ];
+    }
+
+    // Counts for the tabs, under the same search: every kitchen, by verification, and the suspended ones.
+    const searchOnly: Prisma.SellerWhereInput = search ? { OR: where.OR } : {};
+    const [sellers, total, byVerification, suspended] = await Promise.all([
       prisma.seller.findMany({
         where,
         skip,
         take: limit,
         include: {
+          community: { select: { name: true, city: true } },
           user: {
             select: {
               id: true,
@@ -269,7 +399,35 @@ export class AdminService {
         orderBy: { createdAt: 'desc' },
       }),
       prisma.seller.count({ where }),
+      prisma.seller.groupBy({ by: ['verificationStatus'], where: searchOnly, _count: { _all: true } }),
+      prisma.seller.count({ where: { ...searchOnly, status: 'suspended' } }),
     ]);
+
+    const ids = sellers.map((s) => s.id);
+    const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const [dishCounts, liveCounts, orderCounts] = ids.length
+      ? await Promise.all([
+          prisma.product.groupBy({ by: ['sellerId'], where: { sellerId: { in: ids } }, _count: { _all: true } }),
+          prisma.product.groupBy({
+            by: ['sellerId'],
+            where: { sellerId: { in: ids }, approvalStatus: 'approved', isActive: true },
+            _count: { _all: true },
+          }),
+          prisma.$queryRaw<Array<{ seller_id: string; orders: bigint }>>`
+            SELECT oi.seller_id, COUNT(DISTINCT oi.order_id) AS orders
+            FROM order_items oi
+            JOIN orders o ON o.id = oi.order_id
+            WHERE oi.seller_id IN (${Prisma.join(ids)})
+              AND o.created_at >= ${since}
+              AND o.order_status <> 'cancelled'
+            GROUP BY oi.seller_id
+          `,
+        ])
+      : [[], [], []];
+    const dishesBy = new Map(dishCounts.map((d) => [d.sellerId, d._count._all]));
+    const liveBy = new Map(liveCounts.map((d) => [d.sellerId, d._count._all]));
+    const ordersBy = new Map(orderCounts.map((o) => [o.seller_id, Number(o.orders)]));
+    const countOf = (v: string) => byVerification.find((b) => b.verificationStatus === v)?._count._all ?? 0;
 
     return {
       sellers: sellers.map((seller) => ({
@@ -279,9 +437,16 @@ export class AdminService {
         verificationStatus: seller.verificationStatus,
         status: seller.status,
         createdAt: seller.createdAt,
+        communityName: communityLabel(seller),
+        isOpen: computeSellerAvailability(seller).isOpen,
+        ratingAverage: Number(seller.ratingAverage),
+        totalReviews: seller.totalReviews,
+        totalDishes: dishesBy.get(seller.id) ?? 0,
+        liveDishes: liveBy.get(seller.id) ?? 0,
+        orders30d: ordersBy.get(seller.id) ?? 0,
         user: {
           email: seller.user.email,
-          phone: seller.user.phone,
+          phone: realPhoneOrNull(seller.user.phone),
           profile: seller.user.profile
             ? {
                 fullName: seller.user.profile.fullName,
@@ -289,6 +454,13 @@ export class AdminService {
             : null,
         },
       })),
+      counts: {
+        all: byVerification.reduce((n, b) => n + b._count._all, 0),
+        approved: countOf('approved'),
+        pending: countOf('pending'),
+        rejected: countOf('rejected'),
+        suspended,
+      },
       pagination: {
         page,
         limit,
@@ -376,7 +548,7 @@ export class AdminService {
         user: user
           ? {
               id: user.id,
-              phone: user.phone,
+              phone: realPhoneOrNull(user.phone),
               email: user.email,
               profile: user.profile
                 ? { fullName: user.profile.fullName, city: user.profile.city }
@@ -482,29 +654,45 @@ export class AdminService {
    */
   async getProductsForModeration(filters: {
     status?: string;
+    search?: string;
+    sellerId?: string;
     page?: number;
     limit?: number;
   }) {
     const { page, limit, skip } = pageArgs(filters.page, filters.limit);
 
-    const where: Prisma.ProductWhereInput = {};
+    const scope: Prisma.ProductWhereInput = {};
+    if (filters.sellerId) scope.sellerId = filters.sellerId;
+    const search = filters.search?.trim().slice(0, 100);
+    if (search) {
+      scope.OR = [
+        { name: { contains: search, mode: 'insensitive' } },
+        { seller: { businessName: { contains: search, mode: 'insensitive' } } },
+      ];
+    }
+    const where: Prisma.ProductWhereInput = { ...scope };
     if (filters.status) {
       where.approvalStatus = filters.status;
     }
 
-    const [products, total] = await Promise.all([
+    const [products, total, byStatus] = await Promise.all([
       prisma.product.findMany({
         where,
         skip,
         take: limit,
-        orderBy: { createdAt: 'desc' },
+        // The oldest waiting dish first when reviewing; newest first otherwise.
+        orderBy: { createdAt: filters.status === 'pending' ? 'asc' : 'desc' },
         include: {
-          seller: { select: { businessName: true } },
-          images: { where: { isPrimary: true }, take: 1 },
+          seller: { select: { id: true, businessName: true } },
+          category: { select: { name: true } },
+          images: { orderBy: [{ isPrimary: 'desc' }, { sortOrder: 'asc' }] },
+          variants: { where: { isActive: true }, orderBy: { sortOrder: 'asc' }, select: { id: true, name: true, price: true, weightGrams: true } },
         },
       }),
       prisma.product.count({ where }),
+      prisma.product.groupBy({ by: ['approvalStatus'], where: scope, _count: { _all: true } }),
     ]);
+    const countOf = (v: string) => byStatus.find((b) => b.approvalStatus === v)?._count._all ?? 0;
 
     return {
       products: products.map((p) => ({
@@ -513,9 +701,28 @@ export class AdminService {
         price: Number(p.price),
         isActive: p.isActive,
         moderationStatus: p.approvalStatus,
-        seller: { businessName: p.seller.businessName },
+        rejectionReason: p.rejectionReason,
+        description: p.description,
+        category: p.category?.name ?? null,
+        productType: p.productType,
+        unit: p.unit,
+        weightGrams: p.weightGrams,
+        preparationTime: p.preparationTime,
+        ingredients: p.ingredients,
+        allergens: p.allergens,
+        dietaryInfo: p.dietaryInfo,
+        createdAt: p.createdAt,
+        updatedAt: p.updatedAt,
+        seller: { id: p.seller.id, businessName: p.seller.businessName },
         images: p.images.map((img) => ({ imageUrl: img.imageUrl, isPrimary: img.isPrimary })),
+        variants: p.variants.map((v) => ({ id: v.id, name: v.name, price: Number(v.price), weightGrams: v.weightGrams })),
       })),
+      counts: {
+        all: byStatus.reduce((n, b) => n + b._count._all, 0),
+        pending: countOf('pending'),
+        approved: countOf('approved'),
+        rejected: countOf('rejected'),
+      },
       pagination: {
         page,
         limit,

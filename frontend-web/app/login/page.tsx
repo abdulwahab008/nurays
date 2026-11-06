@@ -13,10 +13,13 @@ import { useToast } from '@/components/ui/toast';
 import { authService } from '@/lib/services/auth.service';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient, apiErrorCode } from '@/lib/api-client';
-import { BrandLockup } from '@/components/ui/Mark';
+import { AuthLogo, AuthSocial, PasswordInput, authColumn, authHeading, authHelper, authInput, authLabel, authLede, authLink, authSegment, authShell, authSubmit, focusNextOnEnter } from '@/components/auth/AuthLayout';
 import { useT } from '@/lib/i18n';
 import { useRequestErrorMessage } from '@/components/ui/LoadError';
 import { authMessages } from '@/lib/i18n/messages/auth';
+import { shellMessages } from '@/lib/i18n/messages/shell';
+import { ConfirmModal } from '@/components/ui/ConfirmModal';
+import { mergeGuestTray, type GuestTrayMerge } from '@/lib/store/cart-store';
 import { useShallow } from 'zustand/react/shallow';
 
 // The one-click demo accounts live in their own file, which only a build that switches them on loads (next.config.ts sets
@@ -27,6 +30,9 @@ const demo: typeof import('@/components/auth/DemoLoginPanel') | null =
   process.env.NEXT_PUBLIC_DEMO_LOGIN === 'true' ? require('@/components/auth/DemoLoginPanel') : null;
 /* eslint-enable @typescript-eslint/no-require-imports */
 const SHOW_DEMO_LOGIN = demo !== null;
+const LOOKS_LIKE_EMAIL = /^\S+@\S+\.\S+$/;
+
+type LoginField = 'email' | 'password' | 'phone' | 'otp';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -41,12 +47,38 @@ export default function LoginPage() {
   const [step, setStep] = useState<'input' | 'verify'>('input');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  // The field an error is about; with none, a refused sign-in marks every field of the form.
+  const [errorField, setErrorField] = useState<LoginField | null>(null);
   // A staff account's password was right and its second step is next (SEC-3).
   const [staffStep, setStaffStep] = useState<{ mode: 'code' | 'setup'; challengeToken: string } | null>(null);
+  const ts = useT(shellMessages);
+  // A tray filled before signing in that clashes with the account's tray: the customer picks one before going on.
+  const [trayChoice, setTrayChoice] = useState<(Extract<GuestTrayMerge, { kind: 'conflict' }> & { dest: string }) | null>(null);
+  const [trayBusy, setTrayBusy] = useState(false);
+
+  // A customer's dishes added while signed out go into their account's tray before they move on (to checkout, often).
+  const goAfterSignIn = async (dest: string, userType?: string) => {
+    if (!userType || userType === 'customer') {
+      const merge = await mergeGuestTray();
+      if (merge.kind === 'conflict') {
+        setTrayChoice({ ...merge, dest });
+        return;
+      }
+    }
+    router.push(dest);
+  };
+  const chooseTray = async (keepGuest: boolean) => {
+    if (!trayChoice) return;
+    setTrayBusy(true);
+    if (keepGuest) await trayChoice.keepGuest();
+    else trayChoice.keepAccount();
+    setTrayBusy(false);
+    router.push(trayChoice.dest);
+  };
 
   const handleGoogleSuccess = async (proof: SocialProof) => {
     setLoading(true);
-    setError('');
+    clearError();
     
     try {
       const response = await authService.loginWithSocial(proof);
@@ -66,7 +98,7 @@ export default function LoginPage() {
           router.push('/verify-email-pending');
         } else {
           const userType = response.data.user?.userType || response.data.user?.user_type;
-          router.push(landingAfterLogin(homeFor(userType)));
+          await goAfterSignIn(landingAfterLogin(homeFor(userType)), userType);
         }
       }
     } catch (err) {
@@ -77,9 +109,20 @@ export default function LoginPage() {
     }
   };
 
+  const showError = (message: string, field: LoginField | null = null) => {
+    setError(message);
+    setErrorField(field);
+    if (field) document.getElementById(field)?.focus();
+  };
+  const clearError = () => {
+    setError('');
+    setErrorField(null);
+  };
+
   const handleSendOtp = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
+    clearError();
+    if (!phoneOrEmail.trim()) return showError(t('errEnterPhone'), 'phone');
     setLoading(true);
 
     try {
@@ -101,7 +144,8 @@ export default function LoginPage() {
 
   const handleVerifyOtp = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
+    clearError();
+    if (!otp.trim()) return showError(t('errEnterCode'), 'otp');
     setLoading(true);
 
     try {
@@ -110,7 +154,7 @@ export default function LoginPage() {
       setUser(response.data.user);
       
       const userType = response.data.user?.userType || response.data.user?.user_type;
-      router.push(landingAfterLogin(homeFor(userType)));
+      await goAfterSignIn(landingAfterLogin(homeFor(userType)), userType);
     } catch (err) {
       const errorMessage = requestError(err, t('errOtpFailed'));
       const errorCode = apiErrorCode(err);
@@ -129,13 +173,13 @@ export default function LoginPage() {
     }
   };
 
-  const handleEmailLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
+  // Password sign-in, shared by the form and (in development) the demo accounts. `target` overrides where the role
+  // normally lands. A staff account goes on to the two-step check before it gets tokens.
+  const signInWithPassword = async (email: string, pw: string, target?: string) => {
+    clearError();
     setLoading(true);
-
     try {
-      const response = await authService.loginWithEmail(phoneOrEmail, password);
+      const response = await authService.loginWithEmail(email, pw);
       const step = response.data as typeof response.data & { challengeToken?: string; twoFactorSetupRequired?: boolean };
       if (step.challengeToken) {
         setStaffStep({ mode: step.twoFactorSetupRequired ? 'setup' : 'code', challengeToken: step.challengeToken });
@@ -143,20 +187,20 @@ export default function LoginPage() {
       }
       apiClient.setTokens(response.data.tokens.access_token, response.data.tokens.refresh_token);
       setUser(response.data.user);
-      
+
       if (response.data.requiresEmailVerification) {
         router.push('/verify-email-pending');
       } else {
         const userType = response.data.user?.userType || response.data.user?.user_type;
-        router.push(landingAfterLogin(homeFor(userType)));
+        await goAfterSignIn(target ?? landingAfterLogin(homeFor(userType)), userType);
       }
     } catch (err) {
       const errorMessage = requestError(err, t('errLoginFailed'));
       const errorCode = apiErrorCode(err);
-      
+
       if (errorCode === 'ACCOUNT_SUSPENDED') {
         setError(t('errAccountSuspended'));
-      } else if (errorCode === 'INVALID_CREDENTIALS' || errorMessage.includes('Invalid email or password')) {
+      } else if (errorCode === 'INVALID_CREDENTIALS' || errorCode === 'VALIDATION_ERROR' || errorMessage.includes('Invalid email or password')) {
         setError(t('errInvalidCredentials'));
       } else if (errorCode === 'USER_NOT_FOUND') {
         setError(t('errNoAccountEmail'));
@@ -170,120 +214,104 @@ export default function LoginPage() {
     }
   };
 
-  const tabClass = (on: boolean) =>
-    `flex-1 h-11 rounded-[11px] text-sm transition-all ${on ? 'bg-surface text-ink font-extrabold shadow-xs' : 'text-muted font-bold hover:text-ink'}`;
-  const inputClass = 'nuray-input';
-  const inputStyle: React.CSSProperties = {};
-  const labelClass = 'text-sm font-bold text-ink block mb-1.5';
+  const handleEmailLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    clearError();
+    if (!phoneOrEmail.trim()) return showError(t('errEnterEmail'), 'email');
+    if (!LOOKS_LIKE_EMAIL.test(phoneOrEmail.trim())) return showError(t('errEmailInvalid'), 'email');
+    if (!password) return showError(t('errEnterPassword'), 'password');
+    await signInWithPassword(phoneOrEmail, password);
+  };
+
+  const errorLine = error ? (
+    <p id="login-error" role="alert" className="text-sm text-red-700">
+      {error}
+    </p>
+  ) : null;
+  const invalid = (field: LoginField) =>
+    error && (errorField === null || errorField === field) ? { 'aria-invalid': true, 'aria-describedby': 'login-error' } : {};
 
   if (staffStep) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-raised px-4 pt-[calc(3rem+var(--safe-top))] pb-12">
-        <div className="max-w-md w-full bg-surface rounded-xl shadow-lg p-8">
-          <StaffSecondStep
-            mode={staffStep.mode}
-            challengeToken={staffStep.challengeToken}
-            onDone={(result) => {
-              apiClient.setTokens(result.tokens.access_token, result.tokens.refresh_token);
-              setUser(result.user);
-              router.push(landingAfterLogin(homeFor(result.user.userType || result.user.user_type)));
-            }}
-            onRestart={(message) => {
-              setStaffStep(null);
-              setPassword('');
-              setError(message);
-            }}
-          />
+      <main className={authShell}>
+        <div className={authColumn}>
+          <AuthLogo />
+          <div className="mt-8">
+            <StaffSecondStep
+              mode={staffStep.mode}
+              challengeToken={staffStep.challengeToken}
+              onDone={(result) => {
+                apiClient.setTokens(result.tokens.access_token, result.tokens.refresh_token);
+                setUser(result.user);
+                router.push(landingAfterLogin(homeFor(result.user.userType || result.user.user_type)));
+              }}
+              onRestart={(message) => {
+                setStaffStep(null);
+                setPassword('');
+                setError(message);
+              }}
+            />
+          </div>
         </div>
-      </div>
+      </main>
     );
   }
 
   return (
-    <div className="min-h-screen pt-[calc(2rem+var(--safe-top))] pb-8 sm:pt-[calc(3rem+var(--safe-top))] sm:pb-12 px-4 bg-page flex flex-col items-center justify-center">
-      <div className={`w-full ${SHOW_DEMO_LOGIN ? 'max-w-5xl' : 'max-w-md'} sm:bg-surface sm:rounded-[24px] sm:p-10 sm:border sm:border-line`}>
-        
-        {/* Top Header */}
-        <div className="flex items-center justify-between pb-6 mb-6 border-b border-line gap-4">
-          <Link href="/" className="inline-block">
-            <BrandLockup markSize={36} wordSize={26} />
-          </Link>
-          <div className="flex items-center gap-3">
-            {demo && <demo.DemoDevLink />}
-            <Link
-              href="/register"
-              className="inline-flex items-center gap-1.5 h-10 px-4 rounded-xl border border-line-strong hover:bg-raised text-ink text-sm font-bold transition-colors"
-            >
-              <span>{t('newAccountSignUp')}</span>
-            </Link>
-          </div>
+    <main className={authShell}>
+      <div className={SHOW_DEMO_LOGIN ? 'mx-auto w-full max-w-sm lg:max-w-5xl' : authColumn}>
+        <div className="flex items-center justify-between gap-4">
+          <AuthLogo />
+          {demo && <demo.DemoDevLink />}
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-start">
-          
-          {/* Left Column: Quick Role Login Area (development only) */}
+        <div className={SHOW_DEMO_LOGIN ? 'grid grid-cols-1 items-start gap-10 lg:mt-8 lg:grid-cols-12' : ''}>
+          {/* Development builds only (see the require above). */}
           {demo && (
             <demo.DemoLoginPanel
               busy={loading}
-              onError={setError}
-              onAutofill={(email, pw) => {
+              onFill={(email, pw) => {
                 setLoginMethod('email');
                 setPhoneOrEmail(email);
                 setPassword(pw);
               }}
+              onSignIn={(email, pw, target) => {
+                setLoginMethod('email');
+                setPhoneOrEmail(email);
+                setPassword(pw);
+                return signInWithPassword(email, pw, target);
+              }}
             />
           )}
 
-          {/* Right Column: Standard Login Form */}
-          <div className={SHOW_DEMO_LOGIN ? 'lg:col-span-5 flex flex-col justify-center' : 'lg:col-span-12 max-w-md mx-auto w-full flex flex-col justify-center'}>
-            <div className="mb-6">
-              <h1 className="text-[28px] sm:text-[32px] leading-tight font-extrabold text-ink tracking-tight">
-                {t('welcomeBack')}
-              </h1>
-              <p className="mt-1.5 text-[15px] text-muted">
-                {t('loginSubtitle')}
-              </p>
-            </div>
+          {/* On a phone the form comes before the demo cards; on a wide screen the cards sit on the left. */}
+          <div className={SHOW_DEMO_LOGIN ? 'order-first lg:order-none lg:col-span-5' : ''}>
+            <h1 className={`${SHOW_DEMO_LOGIN ? 'lg:mt-0 ' : ''}mt-8 ${authHeading}`}>{t('welcomeBack')}</h1>
+            <p className={authLede}>{t('loginSubtitle')}</p>
 
-            {/* Login Method Toggle */}
-            <div role="group" className="grid grid-cols-2 gap-1 mb-6 p-1 rounded-[14px] bg-raised">
-              <button
-                type="button"
-                onClick={() => {
-                  setLoginMethod('otp');
-                  setStep('input');
-                  setError('');
-                }}
-                aria-pressed={loginMethod === 'otp'}
-                className={tabClass(loginMethod === 'otp')}
-              >
-                {t('tabOtp')}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setLoginMethod('email');
-                  setStep('input');
-                  setError('');
-                }}
-                aria-pressed={loginMethod === 'email'}
-                className={tabClass(loginMethod === 'email')}
-              >
-                {t('tabEmail')}
-              </button>
+            <div role="group" aria-label={t('signInWith')} className="mt-7 grid grid-cols-2 gap-1 rounded-xl bg-raised p-1">
+              {(['email', 'otp'] as const).map((method) => (
+                <button
+                  key={method}
+                  type="button"
+                  onClick={() => {
+                    setLoginMethod(method);
+                    setStep('input');
+                    clearError();
+                  }}
+                  aria-pressed={loginMethod === method}
+                  className={authSegment(loginMethod === method)}
+                >
+                  {method === 'email' ? t('tabEmail') : t('tabOtp')}
+                </button>
+              ))}
             </div>
-
-            {error && (
-              <div role="alert" className="mb-4 p-3 rounded-xl text-sm bg-red-50 border border-red-200 text-red-700 font-medium">
-                {error}
-              </div>
-            )}
 
             {loginMethod === 'otp' ? (
               step === 'input' ? (
-                <form onSubmit={handleSendOtp}>
-                  <div className="mb-4">
-                    <label htmlFor="phone" className={labelClass}>
+                <form onSubmit={handleSendOtp} noValidate className="mt-6 space-y-5">
+                  <div>
+                    <label htmlFor="phone" className={authLabel}>
                       {t('phoneNumber')}
                     </label>
                     <input
@@ -291,21 +319,25 @@ export default function LoginPage() {
                       id="phone"
                       value={phoneOrEmail}
                       onChange={(e) => setPhoneOrEmail(e.target.value)}
-                      placeholder="+923001234567"
+                      placeholder="03xx xxxxxxx"
+                      autoComplete="tel"
+                      inputMode="tel"
+                      enterKeyHint="send"
                       dir="ltr"
                       required
-                      className={inputClass}
-                      style={inputStyle}
+                      className={authInput}
+                      {...invalid('phone')}
                     />
                   </div>
-                  <Button variant="primary" type="submit" className="w-full h-12 text-[15px] font-extrabold" disabled={loading}>
-                    {loading ? t('sending') : t('sendOtp')}
+                  {errorLine}
+                  <Button type="submit" className={authSubmit} disabled={loading}>
+                    {loading ? t('sendingEllipsis') : t('sendOtp')}
                   </Button>
                 </form>
               ) : (
-                <form onSubmit={handleVerifyOtp}>
-                  <div className="mb-4">
-                    <label htmlFor="otp" className={labelClass}>
+                <form onSubmit={handleVerifyOtp} noValidate className="mt-6 space-y-5">
+                  <div>
+                    <label htmlFor="otp" className={authLabel}>
                       {t('enterOtp')}
                     </label>
                     <input
@@ -313,33 +345,35 @@ export default function LoginPage() {
                       id="otp"
                       value={otp}
                       onChange={(e) => setOtp(e.target.value)}
-                      placeholder="123456"
+                      placeholder="000000"
+                      autoComplete="one-time-code"
+                      inputMode="numeric"
+                      enterKeyHint="go"
                       dir="ltr"
                       maxLength={6}
                       required
-                      className={`${inputClass} text-center text-2xl tracking-widest font-mono`}
-                      style={inputStyle}
+                      autoFocus
+                      aria-invalid={invalid('otp')['aria-invalid']}
+                      aria-describedby={error ? 'login-error otp-sent' : 'otp-sent'}
+                      className={`${authInput} font-mono text-lg tracking-[0.3em]`}
                     />
-                    <p className="text-xs text-muted mt-2">
-                      {t('otpSentTo', { phone: '\u2066' + phoneOrEmail + '\u2069' })}
+                    <p id="otp-sent" className={authHelper}>
+                      {t('otpSentTo', { phone: '⁦' + phoneOrEmail + '⁩' })}
                     </p>
                   </div>
-                  <Button variant="primary" type="submit" className="w-full h-12 text-[15px] font-extrabold" disabled={loading}>
-                    {loading ? t('verifying') : t('verifyAndLogin')}
+                  {errorLine}
+                  <Button type="submit" className={authSubmit} disabled={loading}>
+                    {loading ? t('verifying') : t('login')}
                   </Button>
-                  <button
-                    type="button"
-                    onClick={() => setStep('input')}
-                    className="w-full mt-3 h-10 text-sm font-bold text-brand-ink hover:underline"
-                  >
+                  <button type="button" onClick={() => setStep('input')} className={`${authLink} inline-flex min-h-11 items-center text-sm`}>
                     {t('changePhone')}
                   </button>
                 </form>
               )
             ) : (
-              <form onSubmit={handleEmailLogin}>
-                <div className="mb-4">
-                  <label htmlFor="email" className={labelClass}>
+              <form onSubmit={handleEmailLogin} noValidate className="mt-6 space-y-5">
+                <div>
+                  <label htmlFor="email" className={authLabel}>
                     {t('emailAddress')}
                   </label>
                   <input
@@ -347,66 +381,78 @@ export default function LoginPage() {
                     id="email"
                     value={phoneOrEmail}
                     onChange={(e) => setPhoneOrEmail(e.target.value)}
-                    placeholder="your@email.com"
+                    placeholder="you@example.com"
+                    autoComplete="username"
+                    inputMode="email"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    enterKeyHint="next"
                     dir="ltr"
                     required
-                    className={inputClass}
-                    style={inputStyle}
+                    className={authInput}
+                    {...invalid('email')}
+                    {...focusNextOnEnter('password')}
                   />
                 </div>
-                <div className="mb-5">
-                  <div className="flex items-center justify-between mb-1">
-                    <label htmlFor="password" className={labelClass}>
+                <div>
+                  <div className="mb-1.5 flex items-center justify-between gap-3">
+                    <label htmlFor="password" className="text-sm font-medium text-ink">
                       {t('password')}
                     </label>
-                    {demo && <demo.DemoPasswordHint />}
-                  </div>
-                  <input
-                    type="password"
-                    id="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder={t('enterPassword')}
-                    required
-                    className={inputClass}
-                    style={inputStyle}
-                  />
-                  <div className="mt-1.5 text-end">
-                    <Link href="/forgot-password" className="text-sm font-bold text-brand-ink hover:underline">
+                    {/* The link keeps a 44px target without making the label row taller. */}
+                    <Link href="/forgot-password" className={`${authLink} -my-3 inline-flex min-h-11 items-center text-sm`}>
                       {t('forgotPassword')}
                     </Link>
                   </div>
+                  <PasswordInput
+                    id="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    autoComplete="current-password"
+                    enterKeyHint="go"
+                    required
+                    showLabel={t('showPassword')}
+                    hideLabel={t('hidePassword')}
+                    {...invalid('password')}
+                  />
+                  {demo && (
+                    <div className="mt-1.5">
+                      <demo.DemoPasswordHint />
+                    </div>
+                  )}
                 </div>
-                <Button variant="primary" type="submit" className="w-full h-12 text-[15px] font-extrabold" disabled={loading}>
+                {errorLine}
+                <Button type="submit" className={authSubmit} disabled={loading}>
                   {loading ? t('loggingIn') : t('login')}
                 </Button>
-
-                <div className="relative my-6">
-                  <div className="absolute inset-0 flex items-center">
-                    <div className="w-full border-t border-line" />
-                  </div>
-                  <div className="relative flex justify-center">
-                    <span className="px-3 text-xs font-semibold text-muted bg-page sm:bg-surface">
-                      {t('orContinueWith')}
-                    </span>
-                  </div>
-                </div>
-
-                <GoogleSignInButton onSuccess={handleGoogleSuccess} text={t('continueWithGoogle')} />
               </form>
             )}
 
-            <div className="mt-6 text-center">
-              <p className="text-sm text-muted">
-                {t('noAccount')}{' '}
-                <Link href="/register" className="font-bold text-brand-ink hover:underline">
-                  {t('signUpLink')}
-                </Link>
-              </p>
-            </div>
+            <AuthSocial label={t('orContinueWith')}>
+              <GoogleSignInButton onSuccess={handleGoogleSuccess} text={t('continueWithGoogle')} />
+            </AuthSocial>
+
+            <p className="mt-8 text-sm text-muted">
+              {t('noAccount')}{' '}
+              <Link href="/register" className={authLink}>
+                {t('signUpLink')}
+              </Link>
+            </p>
           </div>
         </div>
       </div>
-    </div>
+      <ConfirmModal
+        isOpen={!!trayChoice}
+        title={ts('trayMergeTitle')}
+        message={trayChoice ? ts('trayMergeBody', { guest: trayChoice.guestKitchen, account: trayChoice.accountKitchen }) : ''}
+        confirmText={trayChoice ? ts('trayMergeUseNew', { guest: trayChoice.guestKitchen }) : ''}
+        cancelText={trayChoice ? ts('trayMergeKeepOld', { account: trayChoice.accountKitchen }) : ''}
+        variant="info"
+        loading={trayBusy}
+        onConfirm={() => void chooseTray(true)}
+        onCancel={() => void chooseTray(false)}
+      />
+    </main>
   );
 }

@@ -10,12 +10,25 @@ import { useToast } from '@/components/ui/toast';
 import { authService } from '@/lib/services/auth.service';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient, apiErrorCode, apiErrorDetails } from '@/lib/api-client';
-import { BrandLockup } from '@/components/ui/Mark';
+import { AuthLogo, AuthSocial, PasswordInput, authColumn, authFieldError, authHeading, authHelper, authInput, authLabel, authLede, authLink, authSegment, authShell, authSubmit, focusNextOnEnter } from '@/components/auth/AuthLayout';
 import { useT } from '@/lib/i18n';
 import { useRequestErrorMessage } from '@/components/ui/LoadError';
 import { authMessages } from '@/lib/i18n/messages/auth';
 import { weakPasswordMessage } from '@/lib/password-errors';
 import { useShallow } from 'zustand/react/shallow';
+import { longEnough, usesPersonalDetails } from './password-hints';
+
+type Field = 'full_name' | 'email' | 'password' | 'confirmPassword' | 'business_name' | 'phone' | 'termsAccepted';
+
+const ROLES = [
+  { value: 'customer', label: 'orderFood' },
+  { value: 'seller', label: 'cookAndSell' },
+  { value: 'rider', label: 'deliverRide' },
+] as const;
+
+const LOOKS_LIKE_EMAIL = /^\S+@\S+\.\S+$/;
+// iOS's strong-password suggestion follows this; the browser's own length check is off (noValidate) so the errors stay ours.
+const PASSWORD_RULES = { passwordrules: 'minlength: 8;' };
 
 function RegisterForm() {
   const router = useRouter();
@@ -39,9 +52,20 @@ function RegisterForm() {
   const [phoneOtp, setPhoneOtp] = useState('');
   const [phoneOtpSent, setPhoneOtpSent] = useState(false);
   const [sendingPhoneOtp, setSendingPhoneOtp] = useState(false);
-  const [phoneOtpMessage, setPhoneOtpMessage] = useState('');
+  const [phoneOtpError, setPhoneOtpError] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState<Partial<Record<Field, string>>>({});
+
+  const fail = (field: Field, message: string) => {
+    setFieldErrors({ [field]: message });
+    document.getElementById(field)?.focus();
+  };
+  const owner = { name: formData.full_name, email: formData.email, phone: formData.phone };
+  const update = (field: keyof typeof formData, value: string | boolean) => {
+    setFormData((prev) => ({ ...prev, [field]: value }));
+    if (fieldErrors[field as Field]) setFieldErrors((prev) => ({ ...prev, [field]: undefined }));
+  };
 
   // Check URL params for user_type (e.g., ?user_type=seller, ?user_type=rider)
   useEffect(() => {
@@ -82,7 +106,7 @@ function RegisterForm() {
           } else if (uType === 'admin') {
             router.push('/admin/dashboard');
           } else {
-            router.push('/dashboard');
+            router.push('/');
           }
         }
       }
@@ -97,26 +121,21 @@ function RegisterForm() {
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setFieldErrors({});
 
-    // Validation
-    if (formData.password !== formData.confirmPassword) {
-      setError(t('passwordsNoMatch'));
-      return;
-    }
-
-    if (formData.password.length < 8) {
-      setError(t('passwordMin6'));
-      return;
-    }
-
-    // Validate business name for sellers
-    if (formData.user_type === 'seller' && !formData.business_name.trim()) {
-      setError(t('errBusinessName'));
-      return;
-    }
-
-    if (!formData.termsAccepted) {
-      setError(t('errTerms'));
+    // Every problem at once, in the order of the form; the first one gets the focus.
+    const problems: Array<[Field, string]> = [];
+    if (!formData.full_name.trim()) problems.push(['full_name', t('errEnterName')]);
+    if (formData.user_type === 'seller' && !formData.business_name.trim()) problems.push(['business_name', t('errBusinessName')]);
+    if (!formData.email.trim()) problems.push(['email', t('errEnterEmail')]);
+    else if (!LOOKS_LIKE_EMAIL.test(formData.email.trim())) problems.push(['email', t('errEmailInvalid')]);
+    if (!longEnough(formData.password)) problems.push(['password', t('passwordMin6')]);
+    else if (usesPersonalDetails(formData.password, owner)) problems.push(['password', t('weakPasswordPersonal')]);
+    if (formData.password !== formData.confirmPassword) problems.push(['confirmPassword', t('passwordsNoMatch')]);
+    if (!formData.termsAccepted) problems.push(['termsAccepted', t('errTerms')]);
+    if (problems.length > 0) {
+      setFieldErrors(Object.fromEntries(problems));
+      document.getElementById(problems[0][0])?.focus();
       return;
     }
 
@@ -162,8 +181,8 @@ function RegisterForm() {
 
         // Redirect based on user type
         const dashboardByType: Record<string, string> = {
-          customer: '/dashboard',
-          seller: '/sellers/dashboard?onboarding=true',
+          customer: '/',
+          seller: '/sellers/register',
           rider: '/riders/dashboard',
         };
         if (response.data.requiresEmailVerification) {
@@ -175,8 +194,7 @@ function RegisterForm() {
         } else if (dashboardByType[formData.user_type]) {
           router.push(dashboardByType[formData.user_type]);
         } else {
-          // Default to customer dashboard
-          router.push('/dashboard');
+          router.push('/');
         }
       } else {
         throw new Error(t('errInvalidResponse'));
@@ -188,11 +206,11 @@ function RegisterForm() {
       // Provide more specific error messages
       const weak = weakPasswordMessage(err, t);
       if (weak) {
-        setError(weak);
+        fail('password', weak);
       } else if (errorCode === 'EMAIL_EXISTS' || errorMessage.includes('already registered')) {
-        setError(t('errEmailExists'));
+        fail('email', t('errEmailExists'));
       } else if (errorCode === 'PHONE_EXISTS' || errorMessage.includes('Phone number already')) {
-        setError(t('errPhoneExists'));
+        fail('phone', t('errPhoneExists'));
       } else if (errorCode === 'VALIDATION_ERROR') {
         const validationErrors = apiErrorDetails(err);
         if (validationErrors && Array.isArray(validationErrors)) {
@@ -208,210 +226,181 @@ function RegisterForm() {
     }
   };
 
-  const inputClass = 'nuray-input';
-  const inputStyle: React.CSSProperties = {};
-  const labelClass = 'text-sm font-bold text-ink block mb-1.5';
-  const helperClass = 'text-xs mt-1.5 text-muted';
-  const helperStyle = {} as const;
+  const fieldError = (field: Field) =>
+    fieldErrors[field] ? (
+      <p id={`${field}-error`} role="alert" className={authFieldError}>
+        {fieldErrors[field]}
+      </p>
+    ) : null;
+  const invalid = (field: Field, describedBy?: string) => ({
+    'aria-invalid': fieldErrors[field] ? true : undefined,
+    'aria-describedby': [fieldErrors[field] ? `${field}-error` : '', describedBy ?? ''].filter(Boolean).join(' ') || undefined,
+  });
+  const passwordLongEnough = longEnough(formData.password);
+  const passwordPersonal = usesPersonalDetails(formData.password, owner);
+  const roleNote = formData.user_type === 'seller' ? t('sellerNote') : formData.user_type === 'rider' ? t('riderNote') : '';
 
   return (
-    <div className="min-h-screen flex items-center justify-center pt-[calc(2rem+var(--safe-top))] pb-8 sm:pt-[calc(3rem+var(--safe-top))] sm:pb-12 px-4 bg-page">
-      <div className="nuray-w-card-md sm:bg-surface sm:rounded-[24px] sm:p-10 sm:border sm:border-line">
-        <div className="text-center mb-8">
-          <Link href="/" className="inline-block">
-            <BrandLockup markSize={36} wordSize={26} />
-          </Link>
-          <h1 className="text-[28px] sm:text-[32px] leading-tight font-extrabold text-ink mt-6 tracking-tight">
-            {t('createYourAccount')}
-          </h1>
-          <p className="mt-1.5 text-[15px] text-muted">
-            {t('registerSubtitle')}
+    <main className={authShell}>
+      <div className={authColumn}>
+        <AuthLogo />
+        <h1 className={`mt-8 ${authHeading}`}>{t('createYourAccount')}</h1>
+        <p className={authLede}>{t('registerSubtitle')}</p>
+
+        <div className="mt-7">
+          <p id="role-label" className={authLabel}>
+            {t('iWantTo')}
           </p>
+          <div role="group" aria-labelledby="role-label" className="grid grid-cols-3 gap-1 rounded-xl bg-raised p-1">
+            {ROLES.map((role) => (
+              <button
+                key={role.value}
+                type="button"
+                onClick={() => setFormData({ ...formData, user_type: role.value })}
+                aria-pressed={formData.user_type === role.value}
+                className={authSegment(formData.user_type === role.value)}
+              >
+                {t(role.label)}
+              </button>
+            ))}
+          </div>
+          {roleNote && <p className={authHelper}>{roleNote}</p>}
         </div>
 
-        {/* User Type Selection */}
-        <div className="mb-6">
-          <label className={labelClass}>{t('iWantTo')}</label>
-          <div role="group" className="grid grid-cols-3 gap-1 p-1 rounded-[14px] bg-raised">
-            <button
-              type="button"
-              onClick={() => setFormData({ ...formData, user_type: 'customer' })}
-              aria-pressed={formData.user_type === 'customer'}
-              className={`h-11 rounded-[11px] text-sm transition-all ${
-                formData.user_type === 'customer'
-                  ? 'bg-surface text-ink font-extrabold shadow-xs'
-                  : 'text-muted font-bold hover:text-ink'
-              }`}
-            >
-              {t('orderFood')}
-            </button>
-            <button
-              type="button"
-              onClick={() => setFormData({ ...formData, user_type: 'seller' })}
-              aria-pressed={formData.user_type === 'seller'}
-              className={`h-11 rounded-[11px] text-sm transition-all ${
-                formData.user_type === 'seller'
-                  ? 'bg-surface text-ink font-extrabold shadow-xs'
-                  : 'text-muted font-bold hover:text-ink'
-              }`}
-            >
-              {t('cookAndSell')}
-            </button>
-            <button
-              type="button"
-              onClick={() => setFormData({ ...formData, user_type: 'rider' })}
-              aria-pressed={formData.user_type === 'rider'}
-              className={`h-11 rounded-[11px] text-sm transition-all ${
-                formData.user_type === 'rider'
-                  ? 'bg-surface text-ink font-extrabold shadow-xs'
-                  : 'text-muted font-bold hover:text-ink'
-              }`}
-            >
-              {t('deliverRide')}
-            </button>
-          </div>
-          {formData.user_type === 'seller' && (
-            <div className="mt-3 p-4 rounded-2xl bg-accent-soft text-accent-soft-ink">
-              <p className="text-sm">
-                <strong className="font-semibold">{t('sellerRegistration')}</strong> {t('sellerRegistrationBody')}
-              </p>
-              <ul className="text-sm mt-2 ms-4 list-disc">
-                <li>{t('sellerStep1')}</li>
-                <li>{t('sellerStep2')}</li>
-                <li>{t('sellerStep3')}</li>
-              </ul>
-            </div>
-          )}
-          {formData.user_type === 'rider' && (
-            <div className="mt-3 p-4 rounded-2xl bg-accent-soft text-accent-soft-ink">
-              <p className="text-sm">
-                <strong className="font-semibold">{t('riderApplication')}</strong> {t('riderApplicationBody')}
-              </p>
-              <ul className="text-sm mt-2 ms-4 list-disc">
-                <li>{t('riderStep1')}</li>
-                <li>{t('riderStep2')}</li>
-                <li>{t('riderStep3')}</li>
-              </ul>
-            </div>
-          )}
-        </div>
-
-        {error && (
-          <div role="alert" className="mb-4 p-3 rounded-xl text-sm bg-red-50 border border-red-200 text-red-700 font-medium">
-            {error}
-          </div>
-        )}
-
-        <form onSubmit={handleRegister}>
-          <div className="mb-4">
-            <label htmlFor="email" className={labelClass}>
-              {t('emailRequired')}
-            </label>
-            <input
-              type="email"
-              id="email"
-              value={formData.email}
-              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-              placeholder="your@email.com"
-              dir="ltr"
-              required
-              className={inputClass}
-              style={inputStyle}
-            />
-            <p className={helperClass} style={helperStyle}>
-              {t('emailHelper')}
-            </p>
-          </div>
-
-          <div className="mb-4">
-            <label htmlFor="password" className={labelClass}>
-              {t('passwordRequired')}
-            </label>
-            <input
-              type="password"
-              id="password"
-              value={formData.password}
-              onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-              placeholder={t('atLeast6')}
-              required
-              minLength={8}
-              className={inputClass}
-              style={inputStyle}
-            />
-            <div className="mt-1 flex items-center gap-2">
-              <div
-                className="h-1 flex-1 rounded-full transition-colors"
-                style={{
-                  background:
-                    formData.password.length >= 8
-                      ? '#41DAC7'
-                      : formData.password.length > 0
-                      ? '#FFC83D'
-                      : 'var(--border-rule)',
-                }}
-              />
-              <span className={helperClass} style={helperStyle}>{formData.password.length}/8</span>
-            </div>
-          </div>
-
-          <div className="mb-4">
-            <label htmlFor="confirmPassword" className={labelClass}>
-              {t('confirmPasswordRequired')}
-            </label>
-            <input
-              type="password"
-              id="confirmPassword"
-              value={formData.confirmPassword}
-              onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-              placeholder={t('confirmYourPassword')}
-              required
-              minLength={8}
-              className={inputClass}
-              style={inputStyle}
-            />
-          </div>
-
-          <div className="mb-4">
-            <label htmlFor="full_name" className={labelClass}>
-              {t('fullNameRequired')}
+        <form onSubmit={handleRegister} noValidate className="mt-6 space-y-5">
+          <div>
+            <label htmlFor="full_name" className={authLabel}>
+              {t('fullName')}
             </label>
             <input
               type="text"
               id="full_name"
               value={formData.full_name}
-              onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
-              placeholder="Ahmed Khan"
+              onChange={(e) => update('full_name', e.target.value)}
+              placeholder={t('namePlaceholder')}
+              autoComplete="name"
+              autoCapitalize="words"
+              autoCorrect="off"
+              spellCheck={false}
+              enterKeyHint="next"
               required
-              className={inputClass}
-              style={inputStyle}
+              className={authInput}
+              {...invalid('full_name')}
+              {...focusNextOnEnter(formData.user_type === 'seller' ? 'business_name' : 'email')}
             />
+            {fieldError('full_name')}
           </div>
 
-          {/* Business Name - Only for Sellers */}
           {formData.user_type === 'seller' && (
-            <div className="mb-4">
-              <label htmlFor="business_name" className={labelClass}>
-                {t('businessNameRequired')}
+            <div>
+              <label htmlFor="business_name" className={authLabel}>
+                {t('businessName')}
               </label>
               <input
                 type="text"
                 id="business_name"
                 value={formData.business_name}
-                onChange={(e) => setFormData({ ...formData, business_name: e.target.value })}
-                placeholder={t('businessNamePlaceholder')}
+                onChange={(e) => update('business_name', e.target.value)}
+                autoComplete="organization"
+                autoCapitalize="words"
+                autoCorrect="off"
+                spellCheck={false}
+                enterKeyHint="next"
                 required
-                className={inputClass}
-              style={inputStyle}
+                className={authInput}
+                {...invalid('business_name', 'business_name-help')}
+                {...focusNextOnEnter('email')}
               />
-              <p className={helperClass} style={helperStyle}>
-                {t('businessNameHelper')}
-              </p>
+              {fieldError('business_name') ?? (
+                <p id="business_name-help" className={authHelper}>
+                  {t('businessNameHelper')}
+                </p>
+              )}
             </div>
           )}
 
-          <div className="mb-4">
-            <label htmlFor="phone" className={labelClass}>
-              {t('phoneNumber')} <span className="text-muted text-xs">{t('optionalRecommended')}</span>
+          <div>
+            <label htmlFor="email" className={authLabel}>
+              {t('emailAddress')}
+            </label>
+            <input
+              type="email"
+              id="email"
+              value={formData.email}
+              onChange={(e) => update('email', e.target.value)}
+              placeholder="you@example.com"
+              autoComplete="email"
+              inputMode="email"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              enterKeyHint="next"
+              dir="ltr"
+              required
+              className={authInput}
+              {...invalid('email')}
+              {...focusNextOnEnter('password')}
+            />
+            {fieldError('email')}
+          </div>
+
+          <div>
+            <label htmlFor="password" className={authLabel}>
+              {t('password')}
+            </label>
+            <PasswordInput
+              id="password"
+              value={formData.password}
+              onChange={(e) => update('password', e.target.value)}
+              autoComplete="new-password"
+              enterKeyHint="next"
+              required
+              showLabel={t('showPassword')}
+              hideLabel={t('hidePassword')}
+              {...PASSWORD_RULES}
+              {...invalid('password', 'password-rule')}
+              {...focusNextOnEnter('confirmPassword')}
+            />
+            {fieldError('password') ?? (
+              <ul id="password-rule" className={`${authHelper} space-y-1`}>
+                {[
+                  { ok: passwordLongEnough, text: t('passwordRule'), bad: false },
+                  { ok: formData.password.length > 0 && !passwordPersonal, text: t('passwordNotPersonal'), bad: passwordPersonal },
+                ].map(({ ok, text, bad }) => (
+                  <li key={text} className={`flex items-center gap-1.5 ${ok ? 'text-brand-ink' : bad ? 'text-red-700' : ''}`}>
+                    <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={ok ? '' : 'opacity-40'}>
+                      {bad ? <path d="M18 6 6 18M6 6l12 12" /> : <polyline points="20 6 9 17 4 12" />}
+                    </svg>
+                    {text}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          <div>
+            <label htmlFor="confirmPassword" className={authLabel}>
+              {t('confirmPassword')}
+            </label>
+            <input
+              type="password"
+              id="confirmPassword"
+              value={formData.confirmPassword}
+              onChange={(e) => update('confirmPassword', e.target.value)}
+              autoComplete="new-password"
+              enterKeyHint="next"
+              required
+              className={authInput}
+              {...PASSWORD_RULES}
+              {...invalid('confirmPassword')}
+              {...focusNextOnEnter('phone')}
+            />
+            {fieldError('confirmPassword')}
+          </div>
+
+          <div>
+            <label htmlFor="phone" className={authLabel}>
+              {t('phoneNumber')} <span className="font-normal text-muted">{t('optional')}</span>
             </label>
             <input
               type="tel"
@@ -419,167 +408,161 @@ function RegisterForm() {
               value={formData.phone}
               onChange={(e) => {
                 // A code was issued for the old number: it means nothing for the new one.
-                setFormData({ ...formData, phone: e.target.value });
-                if (phoneOtpSent || phoneOtp || phoneOtpMessage) {
+                update('phone', e.target.value);
+                if (phoneOtpSent || phoneOtp || phoneOtpError) {
                   setPhoneOtp('');
                   setPhoneOtpSent(false);
-                  setPhoneOtpMessage('');
+                  setPhoneOtpError('');
                 }
               }}
-              placeholder="+923001234567"
+              placeholder="03xx xxxxxxx"
+              autoComplete="tel"
+              inputMode="tel"
+              enterKeyHint="next"
               dir="ltr"
-              className={inputClass}
-              style={inputStyle}
+              className={authInput}
+              {...invalid('phone', phoneOtpError ? 'phone-otp-error' : 'phone-help')}
+              {...focusNextOnEnter('city')}
             />
-            <p className={helperClass} style={helperStyle}>
-              {t('phoneHelper')}
-            </p>
+            {fieldError('phone') ??
+              (phoneOtpError ? (
+                <p id="phone-otp-error" role="alert" className={authFieldError}>
+                  {phoneOtpError}
+                </p>
+              ) : (
+                <p id="phone-help" className={authHelper}>
+                  {phoneOtpSent ? t('codeSent') : t('phoneHelper')}
+                </p>
+              ))}
             {formData.phone.trim().length >= 10 && (
-              <div className="mt-2 flex flex-wrap items-center gap-2">
-                <button
+              <div className="mt-3 flex items-center gap-2">
+                <Button
                   type="button"
+                  variant="outline"
                   disabled={sendingPhoneOtp}
                   onClick={async () => {
                     setSendingPhoneOtp(true);
-                    setPhoneOtpMessage('');
+                    setPhoneOtpError('');
                     try {
                       await authService.registerSendPhoneOtp(formData.phone.trim());
                       setPhoneOtpSent(true);
-                      setPhoneOtpMessage(t('codeSent'));
                     } catch (err) {
-                      setPhoneOtpMessage(requestError(err, t('codeSendFailed')));
+                      setPhoneOtpError(requestError(err, t('codeSendFailed')));
                     } finally {
                       setSendingPhoneOtp(false);
                     }
                   }}
-                  className="px-3 py-1.5 text-xs font-bold rounded-lg border border-line-strong hover:bg-raised disabled:opacity-50"
+                  className="h-11 shrink-0 px-4"
                 >
-                  {sendingPhoneOtp ? t('sendingEllipsis') : phoneOtpSent ? t('resendCode') : t('sendVerificationCode')}
-                </button>
+                  {sendingPhoneOtp ? t('sendingEllipsis') : phoneOtpSent ? t('resendCode') : t('sendOtp')}
+                </Button>
                 {phoneOtpSent && (
                   <input
                     type="text"
                     inputMode="numeric"
+                    autoComplete="one-time-code"
+                    enterKeyHint="next"
                     maxLength={6}
                     value={phoneOtp}
                     onChange={(e) => setPhoneOtp(e.target.value.replace(/\D/g, ''))}
                     placeholder={t('sixDigitCode')}
+                    aria-label={t('sixDigitCode')}
                     dir="ltr"
-                    className="w-32 px-3 py-1.5 text-sm border border-line-strong rounded-lg"
+                    className={`${authInput} min-w-0 flex-1`}
                   />
                 )}
               </div>
             )}
-            {phoneOtpMessage && (
-              <p className={helperClass} style={helperStyle}>
-                {phoneOtpMessage}
-              </p>
-            )}
           </div>
 
-          <div className="mb-4">
-            <label htmlFor="city" className={labelClass}>
-              {t('city')}
+          <div>
+            <label htmlFor="city" className={authLabel}>
+              {t('city')} <span className="font-normal text-muted">{t('optional')}</span>
             </label>
             <input
               type="text"
               id="city"
               value={formData.city}
-              onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-              placeholder="Karachi"
-              className={inputClass}
-              style={inputStyle}
+              onChange={(e) => update('city', e.target.value)}
+              placeholder={t('cityPlaceholder')}
+              autoComplete="address-level2"
+              autoCapitalize="words"
+              autoCorrect="off"
+              spellCheck={false}
+              enterKeyHint="done"
+              className={authInput}
             />
           </div>
 
-          <div className="mb-6">
-            <label className="flex items-start gap-3 cursor-pointer">
-              <input
-                type="checkbox"
-                id="termsAccepted"
-                checked={formData.termsAccepted}
-                onChange={(e) => setFormData({ ...formData, termsAccepted: e.target.checked })}
-                className="mt-1 h-4 w-4 rounded border-line-strong text-brand-ink focus:ring-brand"
-                required
-              />
-              <span className="text-xs text-muted leading-relaxed">
+          <div>
+            <label className="flex min-h-11 cursor-pointer items-center gap-3 py-1">
+              <span className="relative grid shrink-0 place-items-center">
+                <input
+                  type="checkbox"
+                  id="termsAccepted"
+                  checked={formData.termsAccepted}
+                  onChange={(e) => update('termsAccepted', e.target.checked)}
+                  className="peer h-5 w-5 cursor-pointer appearance-none rounded-md border border-line-strong bg-surface transition-colors checked:border-brand checked:bg-brand focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-brand/40 aria-invalid:border-red-600 [:root[data-theme=dark]_&]:aria-invalid:border-[#FFB4AC]"
+                  required
+                  {...invalid('termsAccepted')}
+                />
+                <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="pointer-events-none absolute hidden text-on-brand peer-checked:block">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+              </span>
+              <span className="text-sm leading-snug text-muted">
                 {t('agreeTo')}{' '}
-                <Link href="/terms" className="text-brand-ink font-semibold hover:underline">
+                <Link href="/terms" className={authLink}>
                   {t('termsOfService')}
                 </Link>
-                {t('comma')}{' '}
-                <Link href="/privacy" className="text-brand-ink font-semibold hover:underline">
+                {t('andWord')}{' '}
+                <Link href="/privacy" className={authLink}>
                   {t('privacyPolicy')}
                 </Link>
-                {t('andWord')}{' '}
-                <span className="text-ink font-semibold">
-                  {t('foodSafetyGuidelines')}
-                </span>
                 {t('agreeSuffix')}
               </span>
             </label>
+            {fieldError('termsAccepted')}
           </div>
 
-          <Button variant="primary" type="submit" className="w-full" size="lg" disabled={loading}>
-            {loading ? (
-              <span className="flex items-center gap-2">
-                <span className="animate-spin">⏳</span>
-                {t('creatingAccount')}
-              </span>
-            ) : (
-              t('createAccount')
-            )}
+          {error && (
+            <p role="alert" className="text-sm text-red-700">
+              {error}
+            </p>
+          )}
+
+          <Button type="submit" className={authSubmit} disabled={loading}>
+            {loading ? t('creatingAccount') : t('createAccount')}
           </Button>
-
-          <div className="relative my-6">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-line" />
-            </div>
-            <div className="relative flex justify-center">
-              <span
-                className="px-3 text-xs font-semibold text-muted bg-page sm:bg-surface"
-              >
-                {t('orContinueWith')}
-              </span>
-            </div>
-          </div>
-
-          <GoogleSignInButton onSuccess={handleGoogleSuccess} text={t('continueWithGoogle')} />
-
-          <p className="text-xs text-center mt-4 text-muted">
-            {t('byCreating')}
-          </p>
         </form>
 
-        <div className="mt-6 text-center">
-          <p className="text-sm text-muted">
-            {t('haveAccount')}{' '}
-            <Link href="/login" className="font-bold text-brand-ink hover:underline">
-              {t('signInLink')}
-            </Link>
-          </p>
-        </div>
+        <AuthSocial label={t('orContinueWith')}>
+          <GoogleSignInButton onSuccess={handleGoogleSuccess} text={t('continueWithGoogle')} />
+        </AuthSocial>
+
+        <p className="mt-8 text-sm text-muted">
+          {t('haveAccount')}{' '}
+          <Link href="/login" className={authLink}>
+            {t('signInLink')}
+          </Link>
+        </p>
       </div>
-    </div>
+    </main>
   );
 }
 
 function RegisterFallback() {
   const t = useT(authMessages);
-  return <p className="text-muted">{t('loading')}</p>;
+  return <p className="text-sm text-muted">{t('loading')}</p>;
 }
 
 export default function RegisterPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen flex items-center justify-center bg-page">
-          <div className="text-center">
-            <div
-              className="animate-spin rounded-full h-16 w-16 border-b-2 border-brand mx-auto mb-4"
-            />
-            <RegisterFallback />
-          </div>
+        <div className="flex min-h-dvh items-center justify-center gap-3 bg-page">
+          <div className="h-5 w-5 animate-spin rounded-full border-2 border-line-strong border-t-brand" />
+          <RegisterFallback />
         </div>
       }
     >

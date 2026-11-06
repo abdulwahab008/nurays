@@ -2,18 +2,23 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { AdminShell } from '@/components/layout/AdminShell';
+import { ChevronRight, X } from 'lucide-react';
+import { DashboardLayout, adminSidebarFor } from '@/components/layout/DashboardShell';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { LoadError } from '@/components/ui/LoadError';
 import { useDialogs } from '@/components/ui/Dialogs';
+import { AdminFilterTabs } from '@/components/admin/AdminFilterTabs';
+import { LoadingLine, Pager, PhoneText, SearchForm, StatusPill } from '@/components/admin/AdminListParts';
+import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient, apiErrorMessage } from '@/lib/api-client';
 import { formatDate, formatDateTime } from '@/lib/utils';
+import { useShallow } from 'zustand/react/shallow';
 
 interface AdminUser {
   id: string;
   name: string | null;
-  phone: string;
+  phone: string | null;
   email: string | null;
   userType: string;
   status: string;
@@ -28,14 +33,15 @@ interface AdminUser {
   managedHubs: Array<{ id: string; name: string }>;
 }
 
-const TYPES = [
-  ['', 'Everyone'],
-  ['customer', 'Customers'],
-  ['seller', 'Kitchens'],
-  ['rider', 'Riders'],
-  ['hub_manager', 'Hub managers'],
-  ['admin', 'Admins'],
-] as const;
+type TypeFilter = 'all' | 'customer' | 'seller' | 'rider' | 'hub_manager' | 'admin';
+const TYPES: ReadonlyArray<{ id: TypeFilter; label: string }> = [
+  { id: 'all', label: 'Everyone' },
+  { id: 'customer', label: 'Customers' },
+  { id: 'seller', label: 'Kitchens' },
+  { id: 'rider', label: 'Riders' },
+  { id: 'hub_manager', label: 'Hub managers' },
+  { id: 'admin', label: 'Admins' },
+];
 
 const TYPE_LABEL: Record<string, string> = {
   customer: 'Customer',
@@ -45,28 +51,34 @@ const TYPE_LABEL: Record<string, string> = {
   admin: 'Admin',
 };
 
+const STATUS_LABEL: Record<string, string> = { active: 'Active', suspended: 'Suspended', banned: 'Banned', deleted: 'Deleted' };
+
+const contactLine = (u: AdminUser) => [u.phone, u.email].filter(Boolean).join(' · ') || 'No contact given';
+const identify = (u: AdminUser) => `${u.name || 'This account'}${u.email || u.phone ? ` (${u.email || u.phone})` : ''}`;
+
 /** Every account: find someone, see what they are, suspend or reactivate them. */
 export default function AdminUsersPage() {
+  const { user: me } = useAuthStore(useShallow((s) => ({ user: s.user })));
   const { showToast } = useToast();
   const { confirm: confirmDialog } = useDialogs();
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [page, setPage] = useState(1);
-  const [type, setType] = useState('');
+  const [type, setType] = useState<TypeFilter>('all');
   const [status, setStatus] = useState('');
-  const [search, setSearch] = useState('');
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(true);
   // Why the accounts could not be read; shown instead of "No accounts match", which would be untrue.
   const [loadError, setLoadError] = useState<unknown>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [open, setOpen] = useState<AdminUser | null>(null);
 
   const load = useCallback(async () => {
     try {
       setLoading(true);
       const res = await apiClient.get('/admin/users', {
-        params: { search: query || undefined, type: type || undefined, status: status || undefined, page },
+        params: { search: query || undefined, type: type === 'all' ? undefined : type, status: status || undefined, page },
       });
       setUsers(res.data.data.users);
       setTotal(res.data.data.pagination.total);
@@ -82,17 +94,27 @@ export default function AdminUsersPage() {
   }, [query, type, status, page]);
 
   useEffect(() => {
-    load();
+    void load();
   }, [load]);
 
   const changeStatus = async (u: AdminUser, next: 'active' | 'suspended') => {
     const extra = u.seller ? ' Their kitchen stops taking orders too.' : u.rider ? ' Their rider account is suspended too.' : '';
-    if (next === 'suspended' && !(await confirmDialog({ title: 'Suspend this account?', message: `Suspend ${u.name || u.phone}? They are signed out everywhere and can't sign in.${extra}`, confirmText: 'Suspend', variant: 'warning' }))) return;
+    if (
+      next === 'suspended' &&
+      !(await confirmDialog({
+        title: 'Suspend this account?',
+        message: `Suspend ${identify(u)}? They are signed out everywhere and can't sign in.${extra}`,
+        confirmText: 'Suspend',
+        variant: 'danger',
+      }))
+    )
+      return;
     try {
       setBusyId(u.id);
       await apiClient.post(`/admin/users/${u.id}/status`, { status: next });
       showToast(next === 'suspended' ? 'Account suspended' : 'Account reactivated', 'success');
       setUsers((prev) => prev.map((x) => (x.id === u.id ? { ...x, status: next } : x)));
+      setOpen((cur) => (cur && cur.id === u.id ? { ...cur, status: next } : cur));
     } catch (error) {
       showToast(apiErrorMessage(error, 'That did not go through'), 'error');
     } finally {
@@ -101,152 +123,219 @@ export default function AdminUsersPage() {
   };
 
   return (
-    <AdminShell>
-      <div className="max-w-6xl mx-auto space-y-5">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">People</h1>
-          <p className="text-gray-600 mt-1">Every account on Nuray. Suspending someone signs them out everywhere.</p>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          {TYPES.map(([id, label]) => (
-            <button
-              key={id || 'all'}
-              type="button"
-              onClick={() => {
-                setType(id);
-                setPage(1);
-              }}
-              className={`px-3 py-1.5 rounded-lg text-sm border ${type === id ? 'border-gray-900 bg-gray-900 text-white' : 'border-gray-200 bg-white text-gray-700'}`}
-            >
-              {label}
-            </button>
-          ))}
+    <DashboardLayout
+      title="People"
+      subtitle="Every account on Nuray. Open someone to suspend or reactivate them."
+      sidebarItems={adminSidebarFor(me?.permissions)}
+      userType="admin"
+    >
+      <div className="max-w-6xl space-y-4">
+        <AdminFilterTabs
+          label="Kind of account"
+          value={type}
+          onChange={(next) => {
+            setType(next);
+            setPage(1);
+          }}
+          tabs={TYPES}
+        />
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <select
             value={status}
             onChange={(e) => {
               setStatus(e.target.value);
               setPage(1);
             }}
-            className="px-3 py-1.5 rounded-lg border border-gray-200 text-sm bg-white"
+            className="min-h-11 rounded-xl border border-line-strong bg-surface px-3 text-sm text-ink"
             aria-label="Account status"
           >
             <option value="">Any status</option>
             <option value="active">Active</option>
             <option value="suspended">Suspended</option>
           </select>
-          <form
-            className="ms-auto flex gap-2 w-full sm:w-auto [&>input]:min-w-0 [&>input]:flex-1"
-            onSubmit={(e) => {
-              e.preventDefault();
-              setQuery(search.trim());
-              setPage(1);
-            }}
-          >
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
+          <div className="sm:ms-auto">
+            <SearchForm
               placeholder="Name, phone, email or kitchen"
-              className="px-3 py-1.5 rounded-lg border border-gray-200 text-sm w-64"
-              aria-label="Search accounts"
+              label="Search accounts"
+              onSearch={(q) => {
+                setQuery(q);
+                setPage(1);
+              }}
             />
-            <Button type="submit" variant="outline" size="sm">
-              Search
-            </Button>
-          </form>
+          </div>
         </div>
 
-        <div className="bg-white rounded-lg border border-gray-200 overflow-x-auto">
-          {loading && users.length === 0 ? (
-            <p className="p-10 text-center text-gray-500">Loading…</p>
-          ) : loadError ? (
-            <LoadError error={loadError} onRetry={load} title="We couldn't load the accounts" className="m-4" />
-          ) : users.length === 0 ? (
-            <p className="p-10 text-center text-gray-500">No accounts match.</p>
-          ) : (
-            <table className="w-full text-sm" data-testid="users-table">
-              <thead className="bg-gray-50 text-start text-xs uppercase tracking-wide text-gray-500">
-                <tr>
-                  <th className="px-4 py-3">Person</th>
-                  <th className="px-4 py-3">Account</th>
-                  <th className="px-4 py-3">Orders</th>
-                  <th className="px-4 py-3">Joined / last sign-in</th>
-                  <th className="px-4 py-3" />
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {users.map((u) => (
-                  <tr key={u.id} className="align-top">
-                    <td className="px-4 py-3">
-                      <p className="font-semibold text-gray-900">{u.name || 'Name not set'}</p>
-                      <p className="text-xs text-gray-500">
-                        {u.phone}
-                        {u.phoneVerified ? ' ✓' : ''}
-                        {u.email ? ` · ${u.email}${u.emailVerified ? ' ✓' : ''}` : ''}
-                      </p>
-                      {u.city && <p className="text-xs text-gray-500">{u.city}</p>}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="inline-block px-2 py-0.5 rounded text-xs font-semibold bg-gray-100 text-gray-700">{TYPE_LABEL[u.userType] ?? u.userType}</span>{' '}
-                      <span className={`inline-block px-2 py-0.5 rounded text-xs font-semibold ${u.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{u.status}</span>
-                      {u.seller && (
-                        <p className="text-xs text-gray-600 mt-1">
-                          Kitchen:{' '}
-                          <Link href={`/admin/sellers/${u.seller.id}`} className="underline">
-                            {u.seller.businessName}
-                          </Link>{' '}
-                          ({u.seller.verificationStatus}, {u.seller.status})
-                        </p>
-                      )}
-                      {u.rider && (
-                        <p className="text-xs text-gray-600 mt-1">
-                          Rider:{' '}
-                          <Link href={`/admin/riders/${u.rider.id}`} className="underline">
-                            {u.rider.verificationStatus}, {u.rider.status}
-                          </Link>
-                        </p>
-                      )}
-                      {u.managedHubs.length > 0 && <p className="text-xs text-gray-600 mt-1">Runs: {u.managedHubs.map((h) => h.name).join(', ')}</p>}
-                    </td>
-                    <td className="px-4 py-3 text-gray-700">{u.orderCount}</td>
-                    <td className="px-4 py-3 text-xs text-gray-500">
-                      {formatDate(u.createdAt)}
-                      <br />
-                      {u.lastLoginAt ? formatDateTime(u.lastLoginAt) : 'Never signed in'}
-                    </td>
-                    <td className="px-4 py-3 text-end">
-                      {u.userType === 'admin' ? null : u.status === 'active' ? (
-                        <Button variant="outline" size="sm" disabled={busyId === u.id} onClick={() => changeStatus(u, 'suspended')} className="border-red-200 text-red-700">
-                          Suspend
-                        </Button>
-                      ) : u.status === 'suspended' ? (
-                        <Button variant="outline" size="sm" disabled={busyId === u.id} onClick={() => changeStatus(u, 'active')}>
-                          Reactivate
-                        </Button>
-                      ) : null}
-                    </td>
+        {loading && users.length === 0 ? (
+          <LoadingLine text="Loading accounts" />
+        ) : loadError ? (
+          <LoadError error={loadError} onRetry={() => void load()} title="We couldn't load the accounts" />
+        ) : users.length === 0 ? (
+          <p className="py-6 text-sm text-muted">No accounts match.</p>
+        ) : (
+          <>
+            {/* Phones: one short row per person; the row opens their details. */}
+            <ul className="divide-y divide-line border-y border-line md:hidden" data-testid="users-list">
+              {users.map((u) => (
+                <li key={u.id}>
+                  <button type="button" onClick={() => setOpen(u)} className="flex min-h-[72px] w-full items-center gap-3 py-3 text-start hover:bg-raised">
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-start justify-between gap-2">
+                        <span className="text-sm font-semibold text-ink">{u.name || 'Name not set'}</span>
+                        <span className="flex shrink-0 gap-1">
+                          <StatusPill>{TYPE_LABEL[u.userType] ?? u.userType}</StatusPill>
+                          {u.status !== 'active' && <StatusPill tone="problem">{STATUS_LABEL[u.status] ?? u.status}</StatusPill>}
+                        </span>
+                      </span>
+                      <span className="block truncate text-xs text-muted">{contactLine(u)}</span>
+                      <span className="block truncate text-xs text-muted">
+                        {u.seller ? `${u.seller.businessName} · ` : ''}
+                        {u.orderCount} orders · joined {formatDate(u.createdAt)}
+                      </span>
+                    </span>
+                    <ChevronRight aria-hidden="true" className="h-4 w-4 shrink-0 text-muted rtl:rotate-180" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+
+            <div className="hidden overflow-x-auto rounded-2xl border border-line bg-surface md:block">
+              <table className="w-full text-sm [&_th]:text-start" data-testid="users-table">
+                <thead className="border-b border-line text-xs text-muted">
+                  <tr>
+                    <th className="px-4 py-3 font-medium">Person</th>
+                    <th className="px-4 py-3 font-medium">Account</th>
+                    <th className="px-4 py-3 font-medium">Orders</th>
+                    <th className="px-4 py-3 font-medium">Joined</th>
+                    <th className="px-4 py-3 font-medium">Last sign-in</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100 text-sm">
-              <span className="text-gray-500">
-                {total} accounts · page {page} of {totalPages}
-              </span>
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage(page - 1)}>
-                  Previous
-                </Button>
-                <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage(page + 1)}>
-                  Next
-                </Button>
-              </div>
+                </thead>
+                <tbody className="divide-y divide-line">
+                  {users.map((u) => (
+                    <tr key={u.id} className="align-top hover:bg-raised">
+                      <td className="px-4 py-3">
+                        <button type="button" onClick={() => setOpen(u)} className="min-h-11 text-start font-semibold text-ink hover:text-brand-ink hover:underline">
+                          {u.name || 'Name not set'}
+                        </button>
+                        <p className="text-xs text-muted">{contactLine(u)}</p>
+                        {u.city && <p className="text-xs text-muted">{u.city}</p>}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-wrap gap-1">
+                          <StatusPill>{TYPE_LABEL[u.userType] ?? u.userType}</StatusPill>
+                          <StatusPill tone={u.status === 'active' ? 'good' : 'problem'}>{STATUS_LABEL[u.status] ?? u.status}</StatusPill>
+                        </div>
+                        {u.seller && (
+                          <Link href={`/admin/sellers/${u.seller.id}`} className="mt-1 flex min-h-11 items-center text-xs text-brand-ink hover:underline">
+                            {u.seller.businessName}
+                          </Link>
+                        )}
+                        {u.managedHubs.length > 0 && <p className="mt-1 text-xs text-muted">Runs {u.managedHubs.map((h) => h.name).join(', ')}</p>}
+                      </td>
+                      <td className="px-4 py-3 tabular-nums text-ink">{u.orderCount}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-muted">{formatDate(u.createdAt)}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-muted">{u.lastLoginAt ? formatDateTime(u.lastLoginAt) : 'Never'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
+            <Pager page={page} totalPages={totalPages} total={total} noun="accounts" onChange={setPage} />
+          </>
+        )}
+      </div>
+
+      {open && <PersonSheet person={open} busy={busyId === open.id} onClose={() => setOpen(null)} onChangeStatus={(next) => changeStatus(open, next)} />}
+    </DashboardLayout>
+  );
+}
+
+function PersonSheet({
+  person: u,
+  busy,
+  onClose,
+  onChangeStatus,
+}: {
+  person: AdminUser;
+  busy: boolean;
+  onClose: () => void;
+  onChangeStatus: (next: 'active' | 'suspended') => void;
+}) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    document.addEventListener('keydown', onKey);
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = overflow;
+    };
+  }, [onClose]);
+
+  const rows: Array<[string, React.ReactNode]> = [
+    ['Account', `${TYPE_LABEL[u.userType] ?? u.userType}, ${(STATUS_LABEL[u.status] ?? u.status).toLowerCase()}`],
+    ['Phone', <span key="p"><PhoneText phone={u.phone} />{u.phone && u.phoneVerified ? <span className="text-muted"> (verified)</span> : null}</span>],
+    ['Email', u.email ? <span key="e" className="break-all">{u.email}{u.emailVerified ? <span className="text-muted"> (verified)</span> : null}</span> : <span className="text-muted">Not given</span>],
+    ['City', u.city || <span className="text-muted">Not given</span>],
+    ['Orders', String(u.orderCount)],
+    ['Joined', formatDate(u.createdAt)],
+    ['Last sign-in', u.lastLoginAt ? formatDateTime(u.lastLoginAt) : 'Never signed in'],
+  ];
+
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end" role="dialog" aria-modal="true" aria-labelledby="person-sheet-title">
+      <div className="absolute inset-0 bg-[rgba(6,20,18,0.55)]" onClick={onClose} aria-hidden="true" />
+      <div className="relative flex h-full w-full flex-col bg-surface shadow-xl md:max-w-md" data-testid="person-sheet">
+        <div className="flex items-start gap-3 border-b border-line px-4 pb-3 pt-[calc(env(safe-area-inset-top)+12px)]">
+          <h2 id="person-sheet-title" className="min-w-0 flex-1 text-lg font-semibold text-ink">
+            {u.name || 'Name not set'}
+          </h2>
+          <Button variant="ghost" className="h-11 w-11 shrink-0 px-0 text-ink" onClick={onClose} aria-label="Close">
+            <X className="h-5 w-5" aria-hidden="true" />
+          </Button>
+        </div>
+        <div className="flex-1 space-y-5 overflow-y-auto px-4 py-4">
+          <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
+            {rows.map(([label, value]) => (
+              <div key={label} className="contents">
+                <dt className="text-muted">{label}</dt>
+                <dd className="min-w-0 text-ink">{value}</dd>
+              </div>
+            ))}
+          </dl>
+          {(u.seller || u.rider || u.managedHubs.length > 0) && (
+            <ul className="space-y-1 border-t border-line pt-4 text-sm">
+              {u.seller && (
+                <li>
+                  <Link href={`/admin/sellers/${u.seller.id}`} className="inline-flex min-h-11 items-center font-medium text-brand-ink hover:underline">
+                    Kitchen: {u.seller.businessName}
+                  </Link>
+                </li>
+              )}
+              {u.rider && (
+                <li>
+                  <Link href={`/admin/riders/${u.rider.id}`} className="inline-flex min-h-11 items-center font-medium text-brand-ink hover:underline">
+                    Rider account
+                  </Link>
+                </li>
+              )}
+              {u.managedHubs.length > 0 && <li className="text-muted">Runs {u.managedHubs.map((h) => h.name).join(', ')}</li>}
+            </ul>
           )}
         </div>
+        {u.userType !== 'admin' && (u.status === 'active' || u.status === 'suspended') && (
+          <div className="border-t border-line px-4 pb-[calc(env(safe-area-inset-bottom)+12px)] pt-3">
+            {u.status === 'active' ? (
+              <Button variant="outline" className="min-h-11 w-full border-red-200 text-red-700 hover:bg-red-50" disabled={busy} onClick={() => onChangeStatus('suspended')}>
+                Suspend account
+              </Button>
+            ) : (
+              <Button className="min-h-11 w-full" disabled={busy} onClick={() => onChangeStatus('active')}>
+                Reactivate account
+              </Button>
+            )}
+          </div>
+        )}
       </div>
-    </AdminShell>
+    </div>
   );
 }

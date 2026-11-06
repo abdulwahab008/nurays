@@ -9,6 +9,8 @@ import { riderMessages } from '@/lib/i18n/messages/rider';
 import { Button } from '@/components/ui/button';
 import { fieldClass as field, labelClass as label } from '@/components/sellers/product-form/fields';
 import { Clock } from 'lucide-react';
+import { useAuthStore } from '@/lib/store/auth-store';
+import { authService } from '@/lib/services/auth.service';
 
 interface Application {
   verificationStatus: 'pending' | 'approved' | 'rejected';
@@ -48,6 +50,8 @@ export default function RiderApplicationForm() {
   const [cnicFront, setCnicFront] = useState<string | null>(null);
   const [cnicBack, setCnicBack] = useState<string | null>(null);
   const [license, setLicense] = useState<string | null>(null);
+  const user = useAuthStore((s) => s.user);
+  const [resending, setResending] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -104,8 +108,31 @@ export default function RiderApplicationForm() {
     }
   };
 
+  // An applicant reaches this form from the verify-email page without having confirmed the address yet.
+  const unverifiedEmail = user?.email && user.emailVerified === false ? user.email : null;
+  const resendEmail = async () => {
+    try {
+      setResending(true);
+      await authService.resendVerificationEmail();
+      showToast(t('app.resendSent'), 'success');
+    } catch (error) {
+      showToast(apiErrorMessage(error, t('app.resendFailed')), 'error');
+    } finally {
+      setResending(false);
+    }
+  };
+
   return (
     <div className="bg-surface rounded-[20px] shadow-[var(--shadow-card)] border border-line p-5 sm:p-8 max-w-2xl mx-auto" data-testid="rider-application">
+      {unverifiedEmail && (
+        <div className="mb-5 rounded-xl bg-accent-soft text-accent-soft-ink p-4 text-sm" data-testid="rider-verify-email">
+          <p>{t('app.verifyEmail', { email: unverifiedEmail })}</p>
+          <Button type="button" variant="outline" onClick={resendEmail} disabled={resending} className="mt-3 min-h-11 bg-surface">
+            {resending ? t('app.sending') : t('app.resendEmail')}
+          </Button>
+        </div>
+      )}
+
       {app.verificationStatus === 'rejected' && (
         <div className="mb-5 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
           <strong>{t('app.rejectedTitle')}</strong> {app.rejectionReason ? t('app.rejectedReason', { reason: app.rejectionReason }) : ''}{t('app.rejectedFix')}

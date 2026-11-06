@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
 import { AdminShell } from '@/components/layout/AdminShell';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
@@ -10,7 +9,6 @@ import { useDialogs } from '@/components/ui/Dialogs';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient, apiErrorMessage } from '@/lib/api-client';
 import { formatPrice, formatDate } from '@/lib/utils';
-import { useShallow } from 'zustand/react/shallow';
 import { PayoutStatement } from '@/components/payouts/PayoutStatement';
 
 interface Payout {
@@ -42,8 +40,7 @@ interface OwingKitchen {
 const FILTERS = ['pending', 'completed', 'failed', 'all'] as const;
 
 export default function AdminPayoutsPage() {
-  const router = useRouter();
-  const { isAuthenticated, user } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated, user: s.user })));
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const { showToast } = useToast();
   const { ask: askDialog } = useDialogs();
   const [loading, setLoading] = useState(true);
@@ -122,18 +119,10 @@ export default function AdminPayoutsPage() {
   };
 
   useEffect(() => {
-    if (!isAuthenticated) {
-      router.push('/admin/login');
-      return;
-    }
-    if (user?.user_type !== 'admin' && user?.userType !== 'admin') {
-      router.push('/products');
-      showToast('Access denied. Admin privileges required.', 'error');
-      return;
-    }
+    if (!isAuthenticated) return;
     loadPayouts();
     loadOwing();
-  }, [isAuthenticated, user, router, filter]);
+  }, [isAuthenticated, filter]);
 
   const handleComplete = async (payout: Payout) => {
     // Marking a payout as sent is final and the kitchen is told it has been paid: ask first, and keep the transfer reference.
@@ -179,27 +168,24 @@ export default function AdminPayoutsPage() {
 
   const statusColor = (status: string) => {
     const map: Record<string, string> = {
-      pending: 'bg-amber-100 text-amber-800',
-      completed: 'bg-green-100 text-green-800',
-      failed: 'bg-red-100 text-red-800',
+      pending: 'bg-accent-soft text-accent-soft-ink',
+      completed: 'bg-brand-soft text-brand-soft-ink',
+      failed: 'bg-red-50 text-red-700',
     };
-    return map[status] || 'bg-gray-100 text-gray-800';
+    return map[status] || 'bg-raised text-muted';
   };
-
-  if (!isAuthenticated || (user?.user_type !== 'admin' && user?.userType !== 'admin')) {
-    return null;
-  }
+  const statusWord = (status: string) => ({ pending: 'To send', completed: 'Sent', failed: 'Failed' })[status] ?? status;
 
   return (
     <AdminShell>
       <div className="max-w-7xl mx-auto">
-        <div className="mb-6 flex items-center justify-between">
+        <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Seller Payouts</h1>
-            <p className="text-gray-600 mt-1">Review and process seller payout requests</p>
+            <h1 className="text-2xl font-semibold text-ink">Kitchen payouts</h1>
+            <p className="text-sm text-muted mt-1">Money owed to kitchens, and what kitchens owe Nuray.</p>
           </div>
           <Button variant="outline" onClick={loadPayouts} disabled={loading}>
-            {loading ? 'Loading...' : 'Refresh'}
+            {loading ? 'Loading…' : 'Refresh'}
           </Button>
         </div>
 
@@ -207,20 +193,20 @@ export default function AdminPayoutsPage() {
         {owingError ? (
           <div className="mb-6"><LoadError compact error={owingError} onRetry={loadOwing} title="We couldn't load the kitchens that owe Nuray" /></div>
         ) : owing.length > 0 ? (
-          <div className="mb-6 bg-amber-50 border border-amber-200 rounded-lg p-4" data-testid="owing-kitchens">
-            <h2 className="font-semibold text-gray-900">Kitchens that owe Nuray</h2>
-            <p className="text-sm text-gray-700 mb-3">Commission on cash they collected themselves, after netting against their online earnings. After two weeks owing, their new cash orders pause until they pay.</p>
-            <ul className="divide-y divide-amber-200">
+          <div className="mb-6 bg-accent-soft rounded-2xl p-4" data-testid="owing-kitchens">
+            <h2 className="font-semibold text-ink">Kitchens that owe Nuray</h2>
+            <p className="text-sm text-ink mb-3">Commission on cash they collected themselves, after netting against their online earnings. After two weeks owing, their new cash orders pause until they pay.</p>
+            <ul className="divide-y divide-line">
               {owing.map((k) => (
                 <li key={k.sellerId} className="flex flex-wrap items-center justify-between gap-3 py-2">
                   <div className="min-w-0">
-                    <p className="font-medium text-gray-900">{k.businessName} <span className="font-bold">{formatPrice(k.owed)}</span></p>
-                    <p className="text-xs text-gray-700">
+                    <p className="font-medium text-ink">{k.businessName} <span className="font-semibold tabular-nums">{formatPrice(k.owed)}</span></p>
+                    <p className="text-xs text-muted">
                       {k.owesSince ? `Owing since ${formatDate(k.owesSince)}` : ''}
                       {k.cashPaused ? ' · cash orders paused' : k.cashPausesAt ? ` · cash pauses ${formatDate(k.cashPausesAt)}` : ''}
                     </p>
                   </div>
-                  <Button size="sm" variant="outline" disabled={recordingFor === k.sellerId} onClick={() => recordPayment(k)} data-testid="record-kitchen-payment">
+                  <Button variant="outline" disabled={recordingFor === k.sellerId} onClick={() => recordPayment(k)} data-testid="record-kitchen-payment">
                     {recordingFor === k.sellerId ? 'Saving…' : 'Record payment'}
                   </Button>
                 </li>
@@ -229,86 +215,83 @@ export default function AdminPayoutsPage() {
           </div>
         ) : null}
 
-        <div className="flex gap-2 mb-6">
+        <div className="flex gap-2 mb-6 overflow-x-auto no-scrollbar">
           {FILTERS.map((f) => (
             <button
               key={f}
+              type="button"
+              aria-pressed={filter === f}
               onClick={() => setFilter(f)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium capitalize transition-colors ${
-                filter === f ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              className={`shrink-0 min-h-11 px-4 rounded-full text-sm font-medium border transition-colors ${
+                filter === f ? 'border-ink bg-ink text-page' : 'border-line bg-surface text-ink hover:bg-raised'
               }`}
             >
-              {f}
+              {f === 'all' ? 'All' : statusWord(f)}
             </button>
           ))}
         </div>
 
         {loading ? (
-          <div className="text-center py-12">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto mb-4"></div>
-            <p className="text-gray-600">Loading payouts...</p>
+          <div className="flex items-center justify-center gap-3 py-12 text-sm text-muted" role="status">
+            <span className="h-5 w-5 animate-spin rounded-full border-2 border-line-strong border-t-brand-ink" aria-hidden="true" />
+            Loading payouts…
           </div>
         ) : loadError ? (
           <LoadError error={loadError} onRetry={loadPayouts} title="We couldn't load the payouts" />
         ) : payouts.length === 0 ? (
-          <div className="bg-white rounded-lg shadow-sm p-12 text-center">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">No {filter !== 'all' ? filter : ''} payouts</h3>
-            <p className="text-gray-600">Nothing to show here right now.</p>
-          </div>
+          <p className="py-12 text-center text-sm text-muted">
+            {filter === 'pending' ? 'No payouts to send. Weekly payouts appear here when they are due.' : 'No payouts here yet.'}
+          </p>
         ) : (
           <div className="space-y-4">
             {payouts.map((payout) => (
-              <div key={payout.id} className="bg-white border border-gray-200 rounded-lg p-6">
+              <div key={payout.id} className="bg-surface border border-line rounded-2xl p-4 sm:p-6">
                 <div className="flex items-start justify-between flex-wrap gap-4">
                   <div className="flex-1 min-w-[240px]">
-                    <div className="flex items-center gap-3 mb-2">
-                      <h3 className="text-lg font-semibold text-gray-900">{payout.seller.businessName}</h3>
-                      <span className={`px-2 py-1 text-xs font-medium rounded ${statusColor(payout.status)}`}>
-                        {payout.status}
+                    <div className="flex flex-wrap items-center gap-2 mb-2">
+                      <h3 className="text-base font-semibold text-ink">{payout.seller.businessName}</h3>
+                      <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${statusColor(payout.status)}`}>
+                        {statusWord(payout.status)}
                       </span>
-                      {payout.automatic && <span className="px-2 py-1 text-xs font-medium rounded bg-blue-100 text-blue-800">weekly</span>}
-                      {payout.payoutMethod === 'paid_to_nuray' && <span className="px-2 py-1 text-xs font-medium rounded bg-gray-100 text-gray-800">kitchen paid Nuray</span>}
+                      {payout.automatic && <span className="rounded-full px-2 py-0.5 text-xs font-medium bg-raised text-muted">Weekly</span>}
+                      {payout.payoutMethod === 'paid_to_nuray' && <span className="rounded-full px-2 py-0.5 text-xs font-medium bg-raised text-muted">Kitchen paid Nuray</span>}
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
-                      <div><span className="text-gray-500">Requested:</span> <span className="font-medium">{formatPrice(payout.amount)}</span></div>
-                      <div><span className="text-gray-500">Net payout:</span> <span className="font-medium">{formatPrice(payout.netAmount)}</span></div>
-                      <div><span className="text-gray-500">Method:</span> <span className="font-medium capitalize">{payout.payoutMethod.replace('_', ' ')}</span></div>
-                      <div><span className="text-gray-500">Account:</span> <span className="font-medium">{payout.accountDetails?.accountNumber || '—'}</span></div>
-                      <div><span className="text-gray-500">Requested at:</span> <span className="font-medium">{formatDate(payout.requestedAt)}</span></div>
+                      <div><span className="text-muted">Requested:</span> <span className="font-medium">{formatPrice(payout.amount)}</span></div>
+                      <div><span className="text-muted">Net payout:</span> <span className="font-medium">{formatPrice(payout.netAmount)}</span></div>
+                      <div><span className="text-muted">Method:</span> <span className="font-medium capitalize">{payout.payoutMethod.replace('_', ' ')}</span></div>
+                      <div><span className="text-muted">Account:</span> <span className="font-medium">{payout.accountDetails?.accountNumber || '—'}</span></div>
+                      <div><span className="text-muted">Requested at:</span> <span className="font-medium">{formatDate(payout.requestedAt)}</span></div>
                       {payout.periodStart && payout.periodEnd && payout.payoutMethod !== 'paid_to_nuray' && (
-                        <div><span className="text-gray-500">Covers:</span> <span className="font-medium">{payout.periodStart} to {payout.periodEnd}</span></div>
+                        <div><span className="text-muted">Covers:</span> <span className="font-medium">{payout.periodStart} to {payout.periodEnd}</span></div>
                       )}
                       {payout.processedAt && (
-                        <div><span className="text-gray-500">Processed at:</span> <span className="font-medium">{formatDate(payout.processedAt)}</span></div>
+                        <div><span className="text-muted">Processed at:</span> <span className="font-medium">{formatDate(payout.processedAt)}</span></div>
                       )}
                       {payout.failedReason && (
-                        <div className="md:col-span-2"><span className="text-gray-500">Failure reason:</span> <span className="font-medium text-red-600">{payout.failedReason}</span></div>
+                        <div className="md:col-span-2"><span className="text-muted">Failure reason:</span> <span className="font-medium text-red-700">{payout.failedReason}</span></div>
                       )}
                     </div>
                   </div>
 
                   {payout.payoutMethod !== 'paid_to_nuray' && (
-                    <Button variant="outline" size="sm" onClick={() => setStatementFor(payout.id)} data-testid="open-statement">
+                    <Button variant="outline" onClick={() => setStatementFor(payout.id)} data-testid="open-statement">
                       Statement
                     </Button>
                   )}
                   {payout.status === 'pending' && (
                     <div className="flex flex-col gap-2 items-end">
                       <div className="flex gap-2">
-                        <Button
-                          onClick={() => handleComplete(payout)}
-                          disabled={processingId === payout.id}
-                          className="bg-green-600 hover:bg-green-700 text-white"
-                        >
-                          {processingId === payout.id ? 'Processing...' : 'Mark Completed'}
+                        <Button onClick={() => handleComplete(payout)} disabled={processingId === payout.id}>
+                          {processingId === payout.id ? 'Saving…' : 'Mark as sent'}
                         </Button>
                         <Button
                           variant="outline"
                           onClick={() => setFailReasonFor(failReasonFor === payout.id ? null : payout.id)}
                           disabled={processingId === payout.id}
-                          className="border-red-300 text-red-600 hover:bg-red-50"
+                          className="border-red-200 text-red-700 hover:bg-red-50"
                         >
-                          Mark Failed
+                          Mark as failed
                         </Button>
                       </div>
                       {failReasonFor === payout.id && (
@@ -317,15 +300,13 @@ export default function AdminPayoutsPage() {
                             type="text"
                             value={failReason}
                             onChange={(e) => setFailReason(e.target.value)}
-                            placeholder="Reason for failure"
-                            className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm"
+                            placeholder="Why it failed"
+                            aria-label="Why the payout failed"
+                            className="nuray-input text-sm"
                           />
-                          <button
-                            onClick={() => handleFail(payout.id)}
-                            className="px-3 py-1.5 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700"
-                          >
+                          <Button variant="destructive" onClick={() => handleFail(payout.id)} disabled={processingId === payout.id}>
                             Confirm
-                          </button>
+                          </Button>
                         </div>
                       )}
                     </div>

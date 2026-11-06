@@ -53,9 +53,15 @@ interface AnalyticsData {
   topProducts: Array<{
     name: string;
     quantity: number;
+    /** What the kitchen earned on the dish, after Nuray's fee. */
     revenue: number;
+    /** What customers paid for it. */
+    sales?: number;
   }>;
 }
+
+/** A day's key as the server writes it (YYYY-MM-DD, Pakistan day), from the phone's own calendar. */
+const dayKey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
 export default function SellerAnalyticsPage() {
   const router = useRouter();
@@ -161,7 +167,7 @@ export default function SellerAnalyticsPage() {
 
     for (let i = days - 1; i >= 0; i -= step) {
       const d = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
-      const isoDate = d.toISOString().split('T')[0];
+      const isoDate = dayKey(d);
       const label = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
       
       let rev = 0;
@@ -170,7 +176,7 @@ export default function SellerAnalyticsPage() {
       } else {
         // Sum window
         for (let s = 0; s < step; s++) {
-          const windowDate = new Date(d.getTime() + s * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+          const windowDate = dayKey(new Date(d.getTime() + s * 24 * 60 * 60 * 1000));
           rev += dateMap.get(windowDate) || 0;
         }
       }
@@ -202,8 +208,8 @@ export default function SellerAnalyticsPage() {
   const cancelledShare = totalOrders > 0 ? ((cancelledOrders / totalOrders) * 100).toFixed(1) : '0';
   const stepX = 920 / Math.max(1, chartData.length);
   const xAt = (i: number) => 55 + i * stepX + stepX / 2;
-  const showTooltip = (d: { date: string; revenue: number }, cx: number, y: number) =>
-    setActiveTooltip({ date: d.date, revenue: d.revenue, x: ((cx - 40) / 940) * 100, y: y * (288 / 300) - 10 });
+  const showTooltip = (d: { label: string; revenue: number }, cx: number, y: number) =>
+    setActiveTooltip({ date: d.label, revenue: d.revenue, x: ((cx - 40) / 940) * 100, y: y * (288 / 300) - 10 });
 
   return (
     <DashboardLayout
@@ -287,9 +293,9 @@ export default function SellerAnalyticsPage() {
                 </dd>
               </div>
               <div>
-                <dt className="text-sm text-muted">Average order</dt>
+                <dt className="text-sm text-muted">Average you earn per order</dt>
                 <dd className="text-2xl font-semibold text-ink tabular-nums mt-0.5">{formatPrice(averageOrderValue)}</dd>
-                <dd className="text-xs text-muted mt-1">Dishes only, per delivered order</dd>
+                <dd className="text-xs text-muted mt-1">From your dishes, after Nuray&apos;s fee</dd>
               </div>
             </dl>
 
@@ -506,7 +512,7 @@ export default function SellerAnalyticsPage() {
                     {analytics.topProducts.map((product, idx) => {
                       const productRevenue = Number(product.revenue);
                       const revenueShare = dishRevenue > 0 ? Math.round((productRevenue / dishRevenue) * 100) : 0;
-                      const avgPrice = product.quantity > 0 ? Math.round(productRevenue / product.quantity) : 0;
+                      const sales = product.sales != null ? Number(product.sales) : null;
                       return (
                         <li key={idx} className="py-3">
                           <div className="flex items-baseline justify-between gap-3">
@@ -520,7 +526,7 @@ export default function SellerAnalyticsPage() {
                             <div style={{ width: `${revenueShare}%` }} className="h-full bg-brand-600 rounded-full" />
                           </div>
                           <p className="ms-5 mt-1.5 text-xs text-muted tabular-nums">
-                            {product.quantity} sold at {formatPrice(avgPrice)} each, {revenueShare}% of dish sales
+                            {product.quantity} sold{sales != null ? `, ${formatPrice(sales)} in sales` : ''}, {formatPrice(productRevenue)} to you ({revenueShare}% of what your dishes earned)
                           </p>
                         </li>
                       );

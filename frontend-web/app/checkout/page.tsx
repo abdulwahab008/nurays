@@ -22,6 +22,8 @@ import {
   Store,
   ChevronRight,
   Trash2,
+  Truck,
+  ShoppingBasket,
 } from 'lucide-react';
 import { cartService, CartResponse } from '@/lib/services/cart.service';
 import { addressService, Address } from '@/lib/services/address.service';
@@ -33,18 +35,41 @@ import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { useCartStore } from '@/lib/store/cart-store';
 import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
-import { DatePicker } from '@/components/ui/DatePicker';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
-import { apiClient, apiErrorMessage, apiErrorCode, errorMessage, apiErrorStatus } from '@/lib/api-client';
+import { apiClient, apiErrorMessage, apiErrorCode, apiErrorDetails, apiErrorStatus } from '@/lib/api-client';
+import { sellerService, type PublicSellerAvailability } from '@/lib/services/seller.service';
 import { paymentService } from '@/lib/services/payment.service';
-import { useT } from '@/lib/i18n';
+import { useLocale, useT } from '@/lib/i18n';
 import { commonMessages } from '@/lib/i18n/messages/common';
 import { checkoutMessages, richText } from '@/lib/i18n/messages/checkout';
 import { ExternalLink } from '@/components/ExternalLink';
 import { useDeliveryEstimate } from '@/lib/hooks/use-delivery-estimate';
 import { useShallow } from 'zustand/react/shallow';
+import { SLOT_TIMES, openSlotsToday, pktDateString, slotDays, type SlotTime } from './delivery-slots';
 
 type CopyField = 'iban' | 'jazzcash' | 'easypaisa';
+type PaymentMethod = 'cod' | 'safepay' | 'wallet' | 'bank' | 'jazzcash' | 'easypaisa';
+type Fulfilment = 'delivery' | 'pickup';
+
+/** What the tray says about its kitchen, plus the ordering rules a newer server adds (older ones leave them out). */
+type CheckoutSeller = NonNullable<CartResponse['activeSeller']> & {
+  deliveryModes?: string[] | null;
+  pickupAddress?: string | null;
+  preOrderOnly?: boolean | null;
+  advanceBookingMinDays?: number | null;
+  advanceBookingMaxDays?: number | null;
+};
+
+/** The refusals the server gives when the kitchen can't take this order, each with its own sentence for the customer. */
+const KITCHEN_REFUSALS = ['KITCHEN_CLOSED', 'KITCHEN_PREORDER_ONLY', 'KITCHEN_ORDER_CUTOFF', 'KITCHEN_DAILY_LIMIT', 'ORDER_TIMING_INVALID'] as const;
+type KitchenRefusal = (typeof KITCHEN_REFUSALS)[number];
+const isKitchenRefusal = (code: string | undefined): code is KitchenRefusal => KITCHEN_REFUSALS.some((c) => c === code);
+
+/** How far ahead a delivery day can be chosen when the kitchen sets no limit of its own. */
+const DEFAULT_MAX_DAYS_AHEAD = 6;
+
+/** Adding an address from checkout opens the form straight away and comes back here once it is saved. */
+const ADD_ADDRESS_HREF = `/profile/addresses?new=1&next=${encodeURIComponent('/checkout')}`;
 
 interface CatalogPromotion {
   id: string;
@@ -57,20 +82,25 @@ export default function CheckoutPage() {
   const router = useRouter();
   const t = useT(checkoutMessages);
   const tc = useT(commonMessages);
+  const { locale } = useLocale();
   const { isAuthenticated } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated })));
   const { showToast } = useToast();
 
   const [cart, setCart] = useState<CartResponse | null>(null);
   const [addresses, setAddresses] = useState<Address[]>([]);
   const [selectedAddress, setSelectedAddress] = useState<string>('');
-  const [paymentMethod, setPaymentMethod] = useState<'cod' | 'safepay' | 'wallet' | 'bank' | 'jazzcash' | 'easypaisa'>('cod');
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cod');
+  const [fulfilment, setFulfilment] = useState<Fulfilment>('delivery');
   const [onlineAvailable, setOnlineAvailable] = useState(false);
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
   const [transactionRef, setTransactionRef] = useState<string>('');
   // The kitchen owes Nuray and its cash orders are paused (CASH_UNAVAILABLE): cash comes off the list.
   const [cashUnavailable, setCashUnavailable] = useState(false);
   const [deliveryInstructions, setDeliveryInstructions] = useState<string>('');
-  const [deliverySlot, setDeliverySlot] = useState({ date: '', time: 'evening' as 'morning' | 'afternoon' | 'evening' });
+  const [deliverySlot, setDeliverySlot] = useState<{ offset: number; time: SlotTime }>(() => {
+    const today = openSlotsToday(new Date());
+    return today.length ? { offset: 0, time: today[0] } : { offset: 1, time: 'morning' };
+  });
   const [promoCode, setPromoCode] = useState('');
   const [appliedPromo, setAppliedPromo] = useState<{ code: string; discountAmount: number } | null>(null);
   const [promoValidating, setPromoValidating] = useState(false);
@@ -86,13 +116,15 @@ export default function CheckoutPage() {
   // Bumped whenever the tray changed on the server, so the delivery estimate is asked for again.
   const [trayVersion, setTrayVersion] = useState(0);
   const [promotionsByProductId, setPromotionsByProductId] = useState<Record<string, CatalogPromotion[]>>({});
+  // The kitchen's hours as its storefront shows them; null until known, and nothing is blocked on a guess.
+  const [kitchenAvailability, setKitchenAvailability] = useState<PublicSellerAvailability | null>(null);
 
   const sidebarItems = CUSTOMER_SIDEBAR_ITEMS;
 
   // What delivery to the chosen address costs is the server's to say (the kitchen, the address and the order's amount
   // decide it); nothing is assumed while it is not known.
   const { estimate: deliveryEstimate, pending: estimatePending } = useDeliveryEstimate({
-    enabled: !loading && !!cart?.items?.length,
+    enabled: !loading && !!cart?.items?.length && fulfilment === 'delivery',
     addressId: selectedAddress || null,
     version: trayVersion,
   });
@@ -105,25 +137,7 @@ export default function CheckoutPage() {
         cartService.getCart(),
         addressService.getAddresses(),
       ]);
-      let cartData = cartResponse.data;
-      const localStoreItems = useCartStore.getState().items || [];
-      if ((!cartData?.items || cartData.items.length === 0) && localStoreItems.length > 0) {
-        for (const item of localStoreItems) {
-          try {
-            await cartService.addToCart({
-              productId: item.productId,
-              quantity: item.quantity,
-              stockType: item.stockType || 'direct',
-            });
-          } catch (err) {
-            console.warn('Syncing local cart item to server in checkout:', errorMessage(err, ''));
-          }
-        }
-        const fresh = await cartService.getCart();
-        if (fresh.data?.items?.length) {
-          cartData = fresh.data;
-        }
-      }
+      const cartData = cartResponse.data;
       setCart(cartData);
       setAddresses(addressesResponse.data || []);
       const defaultAddress = addressesResponse.data?.find((addr) => addr.isDefault) || addressesResponse.data?.[0];
@@ -284,15 +298,85 @@ export default function CheckoutPage() {
     }
   };
 
+  const kitchen = (cart?.activeSeller || cart?.items[0]?.seller) as CheckoutSeller | undefined;
+  const deliveryModes = kitchen?.deliveryModes?.length ? kitchen.deliveryModes : ['delivery'];
+  const offersPickup = deliveryModes.includes('pickup');
+  const offersDelivery = deliveryModes.includes('delivery');
+  const isPickup = offersPickup && (fulfilment === 'pickup' || !offersDelivery);
+  const kitchenId = kitchen?.id;
+  useEffect(() => {
+    if (!kitchenId) return;
+    let cancelled = false;
+    sellerService.getPublicSeller(kitchenId).then((s) => {
+      if (!cancelled) setKitchenAvailability(s?.availability ?? null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [kitchenId]);
+  // The storefront's rule: a closed kitchen takes no order unless it takes pre-orders, and then only for a later day.
+  const takesPreOrders = !!kitchen?.preOrderOnly || kitchenAvailability?.status === 'preorder_only';
+  const kitchenClosed = !!kitchenAvailability && !kitchenAvailability.isOpen && !takesPreOrders;
+  const minDaysAhead = kitchen?.advanceBookingMinDays ?? (takesPreOrders ? 1 : 0);
+  const maxDaysAhead = kitchen?.advanceBookingMaxDays ?? Math.max(minDaysAhead, DEFAULT_MAX_DAYS_AHEAD);
+  const days = slotDays(new Date(), minDaysAhead, maxDaysAhead);
+  const chosenDay = days.find((d) => d.offset === deliverySlot.offset) ?? days[0];
+  const chosenTime = chosenDay ? (chosenDay.slots.includes(deliverySlot.time) ? deliverySlot.time : chosenDay.slots[0]) : undefined;
+  // A transfer straight to the kitchen is offered only when the kitchen has given the account to send it to.
+  const transferAccount = {
+    bank: kitchen?.bankAccountNumber || null,
+    jazzcash: kitchen?.jazzcashNumber || null,
+    easypaisa: kitchen?.easypaisaNumber || null,
+  };
+  const methodUsable = (m: PaymentMethod) => (m === 'bank' || m === 'jazzcash' || m === 'easypaisa' ? !!transferAccount[m] : true);
+
+  const dayLabel = (offset: number, date: string) => {
+    if (offset === 0) return t('day.today');
+    if (offset === 1) return t('day.tomorrow');
+    return new Intl.DateTimeFormat(locale === 'ur' ? 'ur-PK' : 'en-PK', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }).format(
+      new Date(`${date}T00:00:00Z`)
+    );
+  };
+
+  const opensLabel = (iso: string | null | undefined) => {
+    if (!iso) return null;
+    const opens = new Date(iso);
+    if (Number.isNaN(opens.getTime())) return null;
+    const now = new Date();
+    const day = pktDateString(opens);
+    const intlLocale = locale === 'ur' ? 'ur-PK' : 'en-PK';
+    const dayText =
+      day === pktDateString(now)
+        ? t('day.today').toLocaleLowerCase(intlLocale)
+        : day === pktDateString(now, 1)
+          ? t('day.tomorrow').toLocaleLowerCase(intlLocale)
+          : new Intl.DateTimeFormat(intlLocale, { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'Asia/Karachi' }).format(opens);
+    const time = new Intl.DateTimeFormat(intlLocale, { hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Karachi' }).format(opens);
+    return t('kitchenOpensAt', { day: dayText, time });
+  };
+
   const handleCreateOrder = async () => {
-    if (!selectedAddress) {
-      showToast(t('selectAddress'), 'warning');
+    if (kitchenClosed) return;
+    if (!isPickup) {
+      if (!selectedAddress) {
+        showToast(t('selectAddress'), 'warning');
+        return;
+      }
+
+      // A pin is how the rider finds the door; older addresses saved without one must get it first.
+      if (!addresses.find((a) => a.id === selectedAddress)?.coordinates) {
+        showToast(t('addressNeedsPin'), 'warning');
+        return;
+      }
+    }
+
+    if (!chosenDay || !chosenTime) {
+      showToast(t('noSlotLeft'), 'warning');
       return;
     }
 
-    // A pin is how the rider finds the door; older addresses saved without one must get it first.
-    if (!addresses.find((a) => a.id === selectedAddress)?.coordinates) {
-      showToast(t('addressNeedsPin'), 'warning');
+    if (!methodUsable(paymentMethod)) {
+      showToast(t('methodUnavailable'), 'warning');
       return;
     }
 
@@ -327,10 +411,11 @@ export default function CheckoutPage() {
 
       const orderData = {
         items: orderItems,
-        deliveryType: 'home_delivery' as const,
-        deliveryAddressId: selectedAddress,
-        deliverySlotDate: deliverySlot.date || undefined,
-        deliverySlotTime: deliverySlot.time,
+        deliveryType: isPickup ? ('self_pickup' as const) : ('home_delivery' as const),
+        deliveryAddressId: isPickup ? undefined : selectedAddress,
+        // Today is sent without a date, as before: the kitchen's same-day rules apply to it.
+        deliverySlotDate: chosenDay.offset > 0 ? chosenDay.date : undefined,
+        deliverySlotTime: chosenTime,
         paymentMethod: paymentMethod,
         promotionCode: appliedPromo?.code || undefined,
         deliveryInstructions: finalInstructions || undefined,
@@ -382,7 +467,6 @@ export default function CheckoutPage() {
         }
       }
 
-      showToast(paymentMethod === 'wallet' ? t('placedWallet') : t('placedSuccess'), 'success');
       router.push(`/orders/${orderId}?placed=1`);
     } catch (error) {
       if (apiErrorStatus(error) === undefined) {
@@ -398,12 +482,31 @@ export default function CheckoutPage() {
           setOnlineAvailable(false);
           setPaymentMethod('cod');
         }
+        if (code === 'KITCHEN_CLOSED') {
+          const details = apiErrorDetails(error);
+          const nextOpenAt =
+            details && typeof details === 'object' && 'nextOpenAt' in details && typeof details.nextOpenAt === 'string' ? details.nextOpenAt : null;
+          setKitchenAvailability({ status: 'closed', isOpen: false, nextOpenAt });
+        }
         if (code === 'CASH_UNAVAILABLE') {
           setCashUnavailable(true);
-          setPaymentMethod(onlineAvailable ? 'safepay' : 'bank');
+          const fallback = (['safepay', 'bank', 'jazzcash', 'easypaisa'] as const).find((m) =>
+            m === 'safepay' ? onlineAvailable : methodUsable(m)
+          );
+          if (fallback) setPaymentMethod(fallback);
         }
         showToast(
-          code === 'GATEWAY_UNAVAILABLE' ? t('onlineUnavailable') : code === 'CASH_UNAVAILABLE' ? t('cashUnavailable') : apiErrorMessage(error, t('placeFailed')),
+          code === 'GATEWAY_UNAVAILABLE'
+            ? t('onlineUnavailable')
+            : code === 'CASH_UNAVAILABLE'
+              ? t('cashUnavailable')
+              : code === 'PAYMENT_METHOD_UNAVAILABLE'
+                ? t('paymentMethodUnavailable', { kitchen: kitchen?.businessName || t('verifiedKitchen') })
+                : code === 'DELIVERY_SLOT_PASSED'
+                  ? t('deliverySlotPassed')
+                  : isKitchenRefusal(code)
+                ? t(`refused.${code}`, { kitchen: kitchen?.businessName || t('verifiedKitchen') })
+                : apiErrorMessage(error, t('placeFailed')),
           'error'
         );
       }
@@ -452,16 +555,16 @@ export default function CheckoutPage() {
     );
   }
 
-  // Active seller details for direct payment display
-  const activeSeller = cart.activeSeller || cart.items[0]?.seller;
-  const sellerTitle = activeSeller?.businessName || t('verifiedKitchen');
-  const sellerBankName = activeSeller?.bankName;
-  const sellerAccountTitle = activeSeller?.bankAccountName || activeSeller?.businessName;
-  const sellerAccountNumber = activeSeller?.bankAccountNumber;
-  const sellerJazzCash = activeSeller?.jazzcashNumber;
-  const sellerJazzCashTitle = activeSeller?.jazzcashAccountTitle || activeSeller?.businessName;
-  const sellerEasyPaisa = activeSeller?.easypaisaNumber;
-  const sellerEasyPaisaTitle = activeSeller?.easypaisaAccountTitle || activeSeller?.businessName;
+  const sellerTitle = kitchen?.businessName || t('verifiedKitchen');
+  const sellerBankName = kitchen?.bankName;
+  const sellerAccountTitle = kitchen?.bankAccountName || kitchen?.businessName;
+  const sellerAccountNumber = transferAccount.bank;
+  const sellerJazzCash = transferAccount.jazzcash;
+  const sellerJazzCashTitle = kitchen?.jazzcashAccountTitle || kitchen?.businessName;
+  const sellerEasyPaisa = transferAccount.easypaisa;
+  const sellerEasyPaisaTitle = kitchen?.easypaisaAccountTitle || kitchen?.businessName;
+  const kitchenArea = kitchen?.community?.name;
+  const closedOpensText = kitchenClosed ? opensLabel(kitchenAvailability?.opensAt || kitchenAvailability?.nextOpenAt) : null;
 
   // Subtotals with promotions
   const discountedSubtotal = cart.items.reduce((sum, item) => {
@@ -472,9 +575,10 @@ export default function CheckoutPage() {
   }, 0);
   const promotionSavings = Math.max(0, cart.summary.subtotal - discountedSubtotal);
   // Delivery is added to the total only once the server has said what it costs to the chosen address.
-  const deliveryKnown = !!deliveryEstimate && deliveryEstimate.isDeliverable !== false;
-  const notDeliverable = !!deliveryEstimate && deliveryEstimate.isDeliverable === false;
-  const effectiveDeliveryFee = deliveryKnown && !deliveryEstimate.isFree ? deliveryEstimate.deliveryFee : 0;
+  // Collecting from the kitchen costs nothing to deliver, so the total is known straight away.
+  const deliveryKnown = isPickup || (!!deliveryEstimate && deliveryEstimate.isDeliverable !== false);
+  const notDeliverable = !isPickup && !!deliveryEstimate && deliveryEstimate.isDeliverable === false;
+  const effectiveDeliveryFee = !isPickup && deliveryEstimate && deliveryKnown && !deliveryEstimate.isFree ? deliveryEstimate.deliveryFee : 0;
   const promoDiscountAmount = appliedPromo?.discountAmount || 0;
   // Exactly what the server charges (priceOrder in order.service.ts): GST on the goods after
   // all discounts, the total in whole rupees, so this is the amount the rider collects.
@@ -492,7 +596,7 @@ export default function CheckoutPage() {
             <div>
               <div className="flex items-center gap-2">
                 <span className="text-[15px] font-bold text-ink">{sellerTitle}</span>
-                <span className="px-2 py-0.5 rounded-full text-[11px] font-extrabold bg-brand-soft text-brand-soft-ink">
+                <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-brand-soft text-brand-soft-ink">
                   {t('singleKitchenBatch')}
                 </span>
               </div>
@@ -502,56 +606,120 @@ export default function CheckoutPage() {
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => setShowClearModal(true)}
-              className="text-sm font-bold text-muted hover:text-red-600 hover:bg-raised h-10 px-3 rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-              <span>{t('clearTray')}</span>
-            </button>
             <Link
               href="/cart"
-              className="text-sm font-bold text-brand-ink hover:underline inline-flex items-center gap-1"
+              className="min-h-11 text-sm font-semibold text-brand-ink hover:underline inline-flex items-center gap-1"
             >
-              <span>{t('editTray', { count: cart.summary.totalItems })}</span>
+              <span>{t(cart.summary.totalItems === 1 ? 'editTrayOne' : 'editTray', { count: cart.summary.totalItems })}</span>
               <ChevronRight className="rtl:-scale-x-100 w-3.5 h-3.5" />
             </Link>
           </div>
         </div>
 
+        {kitchenClosed && (
+          <div role="status" className="mb-6 p-4 rounded-[20px] bg-accent-soft border border-accent/50 flex items-start gap-3" data-testid="kitchen-closed">
+            <div className="w-10 h-10 rounded-xl bg-surface text-ink flex items-center justify-center shrink-0">
+              <Clock className="w-5 h-5" aria-hidden />
+            </div>
+            <div className="min-w-0">
+              <p className="text-[15px] font-bold text-accent-soft-ink">{t('kitchenClosedTitle', { kitchen: sellerTitle })}</p>
+              <p className="text-sm text-accent-soft-ink mt-0.5">
+                {closedOpensText ? t('kitchenClosedOpens', { when: closedOpensText }) : t('kitchenClosedNoTime')}
+              </p>
+            </div>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
           {/* Main Checkout Columns (7 of 12) */}
           <div className="lg:col-span-7 space-y-6">
-            {/* 1. Delivery Address */}
-            <div className="bg-surface rounded-[20px] p-4 sm:p-6 border border-line space-y-4">
-              <div className="flex items-center justify-between">
+            {offersPickup && offersDelivery && (
+              <div role="radiogroup" aria-label={t('fulfilmentLabel')} className="grid grid-cols-2 gap-1 p-1 rounded-2xl bg-raised" data-testid="fulfilment-toggle">
+                {(['delivery', 'pickup'] as const).map((mode) => {
+                  const active = (mode === 'pickup') === isPickup;
+                  const Icon = mode === 'pickup' ? ShoppingBasket : Truck;
+                  return (
+                    <button
+                      key={mode}
+                      type="button"
+                      role="radio"
+                      aria-checked={active}
+                      onClick={() => setFulfilment(mode)}
+                      className={`min-h-11 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-colors ${
+                        active ? 'bg-surface text-ink shadow-[var(--shadow-card)]' : 'text-muted hover:text-ink'
+                      }`}
+                    >
+                      <Icon className="w-4 h-4" aria-hidden />
+                      {t(mode === 'pickup' ? 'fulfilment.pickup' : 'fulfilment.delivery')}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* 1. Where: the delivery address, or the kitchen to collect from */}
+            {isPickup ? (
+              <div className="bg-surface rounded-[20px] p-4 sm:p-6 border border-line space-y-3" data-testid="pickup-card">
                 <div className="flex items-center gap-2.5">
                   <div className="w-9 h-9 rounded-xl bg-brand-soft text-brand-soft-ink flex items-center justify-center">
-                    <MapPin className="w-4 h-4" />
+                    <ShoppingBasket className="w-4 h-4" />
                   </div>
                   <div>
-                    <h2 className="text-base font-extrabold text-ink tracking-tight">{t('addressHeading')}</h2>
+                    <h2 className="text-base font-bold text-ink">{t('pickupHeading')}</h2>
+                    <p className="text-xs text-muted">{t('pickupHint')}</p>
+                  </div>
+                </div>
+                <div className="p-3.5 rounded-2xl bg-raised">
+                  <p className="text-[15px] font-semibold text-ink">{sellerTitle}</p>
+                  <p className="text-xs text-muted">
+                    {[kitchen?.pickupAddress, kitchenArea].filter(Boolean).join(', ') || t('pickupAddressLater')}
+                  </p>
+                </div>
+              </div>
+            ) : (
+            <div className="bg-surface rounded-[20px] p-4 sm:p-6 border border-line space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                <div className="flex items-center gap-2.5 flex-1 min-w-[13rem]">
+                  <div className="w-9 h-9 rounded-xl bg-brand-soft text-brand-soft-ink flex items-center justify-center shrink-0">
+                    <MapPin className="w-4 h-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <h2 className="text-base font-bold text-ink">{t('addressHeading')}</h2>
                     <p className="text-xs text-muted">{t('addressHint')}</p>
                   </div>
                 </div>
-                <Link
-                  href="/profile/addresses"
-                  className="text-sm font-bold text-brand-ink hover:underline inline-flex items-center gap-1"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>{t('addAddress')}</span>
-                </Link>
+                {addresses.length > 0 && (
+                  <Link
+                    href={ADD_ADDRESS_HREF}
+                    className="shrink-0 min-h-11 text-sm font-semibold text-brand-ink hover:underline inline-flex items-center gap-1"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>{t('addAddress')}</span>
+                  </Link>
+                )}
               </div>
+
+              {notDeliverable && (
+                <div role="status" className="p-3 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700 space-y-2" data-testid="not-deliverable">
+                  <p className="font-semibold">{t('notDeliverableTitle')}</p>
+                  {deliveryEstimate?.reason && <p>{deliveryEstimate.reason}</p>}
+                  {offersPickup && (
+                    <Button type="button" variant="outline" size="sm" className="min-h-11" onClick={() => setFulfilment('pickup')}>
+                      {t('pickupInstead')}
+                    </Button>
+                  )}
+                </div>
+              )}
 
               {addresses.length === 0 ? (
                 <div className="text-center py-6 px-4 bg-raised rounded-2xl border border-dashed border-line">
                   <MapPin className="w-8 h-8 text-line-strong mx-auto mb-2" />
-                  <p className="text-xs font-semibold text-ink mb-1">{t('noAddress')}</p>
+                  <p className="text-sm font-semibold text-ink mb-1">{t('noAddress')}</p>
                   <p className="text-xs text-muted mb-3">{t('noAddressHint')}</p>
-                  <Link href="/profile/addresses">
-                    <Button size="sm" className="bg-brand hover:bg-brand-500 text-xs font-bold text-on-brand rounded-xl">
-                      {t('addAddressPlus')}
+                  <Link href={ADD_ADDRESS_HREF}>
+                    <Button className="min-h-11 rounded-xl">
+                      <Plus className="w-4 h-4" />
+                      {t('addAddress')}
                     </Button>
                   </Link>
                 </div>
@@ -585,7 +753,7 @@ export default function CheckoutPage() {
                               </span>
                             )}
                             {!address.coordinates && (
-                              <Link href="/profile/addresses" className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-accent-soft text-accent-soft-ink border border-accent/50" data-testid="address-no-pin">
+                              <Link href={`/profile/addresses?edit=${address.id}&next=${encodeURIComponent('/checkout')}`} className="px-2 py-0.5 rounded-full text-xs font-medium bg-accent-soft text-accent-soft-ink border border-accent/50" data-testid="address-no-pin">
                                 {t('addressNoPin')}
                               </Link>
                             )}
@@ -607,53 +775,78 @@ export default function CheckoutPage() {
                 </div>
               )}
             </div>
+            )}
 
-            {/* 2. Schedule Delivery Slot */}
+            {/* 2. When */}
             <div className="bg-surface rounded-[20px] p-4 sm:p-6 border border-line space-y-4">
               <div className="flex items-center gap-2.5">
                 <div className="w-9 h-9 rounded-xl bg-brand-soft text-brand-soft-ink flex items-center justify-center">
                   <Clock className="w-4 h-4" />
                 </div>
                 <div>
-                  <h2 className="text-base font-extrabold text-ink tracking-tight">{t('slotHeading')}</h2>
-                  <p className="text-xs text-muted">{t('slotHint')}</p>
+                  <h2 className="text-base font-bold text-ink">{t(isPickup ? 'pickupSlotHeading' : 'slotHeading')}</h2>
+                  <p className="text-xs text-muted">{t(isPickup ? 'pickupSlotHint' : 'slotHint')}</p>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                <div>
-                  <label className="text-xs font-bold text-muted block mb-1.5">{t('deliveryDate')}</label>
-                  <DatePicker
-                    value={deliverySlot.date}
-                    onChange={(date) => setDeliverySlot({ ...deliverySlot, date })}
-                    min={new Date().toISOString().split('T')[0]}
-                    placeholder={t('datePlaceholder')}
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-bold text-muted block mb-1.5">{t('timeWindow')}</label>
-                  <select
-                    value={deliverySlot.time}
-                    onChange={(e) =>
-                      setDeliverySlot({
-                        ...deliverySlot,
-                        time: e.target.value as 'morning' | 'afternoon' | 'evening',
-                      })
-                    }
-                    className="w-full h-11 px-3 text-sm font-medium text-ink border border-line-strong rounded-xl bg-surface outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand"
-                  >
-                    <option value="morning">{t('slot.morning')}</option>
-                    <option value="afternoon">{t('slot.afternoon')}</option>
-                    <option value="evening">{t('slot.evening')}</option>
-                  </select>
-                </div>
-              </div>
+              {days.length === 0 ? (
+                <p className="text-sm text-muted">{t('noSlotLeft')}</p>
+              ) : (
+                <>
+                  <div role="radiogroup" aria-label={t('deliveryDate')} className="flex gap-2 overflow-x-auto -mx-1 px-1 pb-1 scrollbar-none" data-testid="slot-days">
+                    {days.map((d) => {
+                      const active = d.offset === chosenDay?.offset;
+                      return (
+                        <button
+                          key={d.date}
+                          type="button"
+                          role="radio"
+                          aria-checked={active}
+                          onClick={() => setDeliverySlot({ offset: d.offset, time: d.slots.includes(deliverySlot.time) ? deliverySlot.time : d.slots[0] })}
+                          className={`shrink-0 min-h-11 px-4 rounded-full border text-sm font-semibold transition-colors ${
+                            active ? 'border-brand bg-brand-soft text-brand-soft-ink' : 'border-line text-ink hover:border-line-strong'
+                          }`}
+                        >
+                          {dayLabel(d.offset, d.date)}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div role="radiogroup" aria-label={t('timeWindow')} className="grid grid-cols-3 gap-2" data-testid="slot-times">
+                    {SLOT_TIMES.map((time) => {
+                      const open = !!chosenDay?.slots.includes(time);
+                      const active = open && time === chosenTime;
+                      return (
+                        <button
+                          key={time}
+                          type="button"
+                          role="radio"
+                          aria-checked={active}
+                          disabled={!open}
+                          onClick={() => setDeliverySlot({ offset: chosenDay.offset, time })}
+                          className={`min-h-14 px-2 py-2 rounded-2xl border text-center transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+                            active ? 'border-brand bg-brand-soft text-brand-soft-ink' : 'border-line text-ink hover:border-line-strong'
+                          }`}
+                        >
+                          <span className="block text-sm font-semibold">{t(`slotName.${time}`)}</span>
+                          <span className="block text-xs text-muted" data-ltr>{t(`slotHours.${time}`)}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {chosenDay?.offset === 0 && chosenDay.slots.length < SLOT_TIMES.length && (
+                    <p className="text-xs text-muted">{t('slotsPassed')}</p>
+                  )}
+                </>
+              )}
 
+              {!isPickup && (
               <div>
-                <label className="text-xs font-bold text-muted block mb-1.5">
+                <label htmlFor="rider-instructions" className="text-xs font-semibold text-muted block mb-1.5">
                   {t('riderInstructions')}
                 </label>
                 <input
+                  id="rider-instructions"
                   type="text"
                   value={deliveryInstructions}
                   onChange={(e) => setDeliveryInstructions(e.target.value)}
@@ -661,6 +854,7 @@ export default function CheckoutPage() {
                   className="w-full h-11 px-3 text-sm text-ink placeholder:text-muted border border-line-strong rounded-xl bg-surface outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand"
                 />
               </div>
+              )}
             </div>
 
             {/* 3. Payment Method */}
@@ -670,7 +864,7 @@ export default function CheckoutPage() {
                   <Banknote className="w-4 h-4" />
                 </div>
                 <div>
-                  <h2 className="text-base font-extrabold text-ink tracking-tight">{t('paymentHeading')}</h2>
+                  <h2 className="text-base font-bold text-ink">{t('paymentHeading')}</h2>
                   <p className="text-xs text-muted">{t('paymentHint')}</p>
                 </div>
               </div>
@@ -709,7 +903,7 @@ export default function CheckoutPage() {
                           {t('recommended')}
                         </span>
                       </div>
-                      <p className="text-xs text-muted">{t('codHint')}</p>
+                      <p className="text-xs text-muted">{t(isPickup ? 'codHintPickup' : 'codHint')}</p>
                     </div>
                   </div>
                   {paymentMethod === 'cod' && (
@@ -787,7 +981,7 @@ export default function CheckoutPage() {
                           {walletBalance < totalPayable && (
                             <>
                               {t('walletNotEnough')}
-                              <Link href="/wallet" className="underline font-semibold">
+                              <Link href="/wallet" className="underline font-semibold inline-flex items-center min-h-11 px-1">
                                 {t('topUp')}
                               </Link>
                             </>
@@ -799,6 +993,7 @@ export default function CheckoutPage() {
                 )}
 
                 {/* Method 2: Bank Transfer / Raast (IBFT) */}
+                {sellerAccountNumber && (
                 <label
                   className={`block p-4 rounded-2xl border-2 cursor-pointer transition-all ${
                     paymentMethod === 'bank'
@@ -815,13 +1010,13 @@ export default function CheckoutPage() {
                       onChange={() => setPaymentMethod('bank')}
                       className="accent-brand w-4 h-4 cursor-pointer"
                     />
-                    <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-700 flex items-center justify-center shrink-0">
+                    <div className="w-8 h-8 rounded-xl bg-raised text-ink flex items-center justify-center shrink-0">
                       <Building2 className="w-4 h-4" />
                     </div>
                     <div className="flex-1">
                       <div className="flex items-center gap-2">
                         <span className="text-[15px] font-bold text-ink">{t('bankTitle')}</span>
-                        <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                        <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-raised text-muted">
                           {t('directToChef')}
                         </span>
                       </div>
@@ -831,7 +1026,6 @@ export default function CheckoutPage() {
 
                   {paymentMethod === 'bank' && (
                     <div className="mt-3.5 ms-7 pt-3.5 border-t border-line space-y-3">
-                      {sellerAccountNumber ? (
                         <div className="bg-raised rounded-2xl p-4 space-y-2.5">
                           {sellerBankName && (
                             <div className="flex items-center justify-between text-xs border-b border-line pb-2">
@@ -872,11 +1066,6 @@ export default function CheckoutPage() {
                             </button>
                           </div>
                         </div>
-                      ) : (
-                        <div className="p-3 bg-accent-soft rounded-xl border border-accent/50 text-accent-soft-ink text-xs">
-                          {t('bankMissing')}
-                        </div>
-                      )}
 
                       <div>
                         <label className="text-[11px] font-semibold text-ink block mb-1">
@@ -896,8 +1085,10 @@ export default function CheckoutPage() {
                     </div>
                   )}
                 </label>
+                )}
 
                 {/* Method 3: JazzCash Direct Transfer */}
+                {sellerJazzCash && (
                 <label
                   className={`block p-4 rounded-2xl border-2 cursor-pointer transition-all ${
                     paymentMethod === 'jazzcash'
@@ -914,7 +1105,7 @@ export default function CheckoutPage() {
                       onChange={() => setPaymentMethod('jazzcash')}
                       className="accent-brand w-4 h-4 cursor-pointer"
                     />
-                    <div className="w-8 h-8 rounded-xl bg-red-50 text-red-700 flex items-center justify-center shrink-0">
+                    <div className="w-8 h-8 rounded-xl bg-raised text-ink flex items-center justify-center shrink-0">
                       <Smartphone className="w-4 h-4" />
                     </div>
                     <div className="flex-1">
@@ -925,7 +1116,6 @@ export default function CheckoutPage() {
 
                   {paymentMethod === 'jazzcash' && (
                     <div className="mt-3.5 ms-7 pt-3.5 border-t border-line space-y-3">
-                      {sellerJazzCash ? (
                         <div className="bg-raised rounded-2xl p-4 space-y-2.5">
                           <div className="flex items-center justify-between text-xs border-b border-line pb-2">
                             <span className="text-muted text-xs">{t('chefTitle')}</span>
@@ -964,11 +1154,6 @@ export default function CheckoutPage() {
                             </button>
                           </div>
                         </div>
-                      ) : (
-                        <div className="p-3 bg-accent-soft rounded-xl border border-accent/50 text-accent-soft-ink text-xs">
-                          {t('jazzMissing')}
-                        </div>
-                      )}
 
                       <div>
                         <label className="text-[11px] font-semibold text-ink block mb-1">
@@ -986,8 +1171,10 @@ export default function CheckoutPage() {
                     </div>
                   )}
                 </label>
+                )}
 
                 {/* Method 4: EasyPaisa Direct Transfer */}
+                {sellerEasyPaisa && (
                 <label
                   className={`block p-4 rounded-2xl border-2 cursor-pointer transition-all ${
                     paymentMethod === 'easypaisa'
@@ -1015,7 +1202,6 @@ export default function CheckoutPage() {
 
                   {paymentMethod === 'easypaisa' && (
                     <div className="mt-3.5 ms-7 pt-3.5 border-t border-line space-y-3">
-                      {sellerEasyPaisa ? (
                         <div className="bg-raised rounded-2xl p-4 space-y-2.5">
                           <div className="flex items-center justify-between text-xs border-b border-line pb-2">
                             <span className="text-muted text-xs">{t('chefTitle')}</span>
@@ -1054,11 +1240,6 @@ export default function CheckoutPage() {
                             </button>
                           </div>
                         </div>
-                      ) : (
-                        <div className="p-3 bg-accent-soft rounded-xl border border-accent/50 text-accent-soft-ink text-xs">
-                          {t('easyMissing')}
-                        </div>
-                      )}
 
                       <div>
                         <label className="text-[11px] font-semibold text-ink block mb-1">
@@ -1076,6 +1257,7 @@ export default function CheckoutPage() {
                     </div>
                   )}
                 </label>
+                )}
               </div>
             </div>
           </div>
@@ -1084,7 +1266,7 @@ export default function CheckoutPage() {
           <div className="lg:col-span-5">
             <div className="bg-surface rounded-[24px] p-5 sm:p-6 border border-line sticky top-[calc(5rem+var(--safe-top))] space-y-5">
               <div className="flex items-center justify-between pb-3 border-b border-line">
-                <h3 className="text-base font-extrabold text-ink tracking-tight">{t('orderSummary')}</h3>
+                <h3 className="text-base font-bold text-ink">{t('orderSummary')}</h3>
                 <div className="flex items-center gap-3">
                   <span className="text-xs font-semibold text-muted">
                     {t(cart.summary.totalItems === 1 ? 'portionsOne' : 'portionsMany', { count: cart.summary.totalItems })}
@@ -1092,7 +1274,7 @@ export default function CheckoutPage() {
                   <button
                     type="button"
                     onClick={() => setShowClearModal(true)}
-                    className="text-xs font-bold text-muted hover:text-red-600 hover:bg-raised h-9 px-2.5 rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
+                    className="text-xs font-bold text-muted hover:text-red-600 hover:bg-raised h-11 px-2.5 rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
                     title={t('removeAllDishes')}
                   >
                     <Trash2 className="w-3 h-3" />
@@ -1140,12 +1322,12 @@ export default function CheckoutPage() {
                         <span className="text-xs text-muted font-medium">
                           {t('perPiece', { price: formatPrice(unitPrice) })}
                         </span>
-                        <div className="flex items-center h-9 bg-surface rounded-xl border border-line">
+                        <div className="flex items-center h-11 bg-surface rounded-xl border border-line">
                           <button
                             type="button"
                             disabled={updatingItemId === item.id}
                             onClick={() => handleUpdateItemQuantity(item.id, item.quantity - 1)}
-                            className="w-9 h-9 rounded-s-xl hover:bg-raised text-ink flex items-center justify-center transition-colors disabled:opacity-50"
+                            className="w-11 h-11 rounded-s-xl hover:bg-raised text-ink flex items-center justify-center transition-colors disabled:opacity-50"
                             title={t('decreasePortion')}
                             aria-label={t('decreasePortion')}
                           >
@@ -1158,7 +1340,7 @@ export default function CheckoutPage() {
                             type="button"
                             disabled={updatingItemId === item.id}
                             onClick={() => handleUpdateItemQuantity(item.id, item.quantity + 1)}
-                            className="w-9 h-9 rounded-e-xl hover:bg-raised text-brand-ink flex items-center justify-center transition-colors disabled:opacity-50"
+                            className="w-11 h-11 rounded-e-xl hover:bg-raised text-brand-ink flex items-center justify-center transition-colors disabled:opacity-50"
                             title={t('increasePortion')}
                             aria-label={t('increasePortion')}
                           >
@@ -1185,7 +1367,7 @@ export default function CheckoutPage() {
                     dir="ltr"
                     disabled={!!appliedPromo}
                     aria-label={t('voucherPlaceholder')}
-                    className="flex-1 min-w-0 h-11 px-3 text-sm font-semibold uppercase tracking-wider text-ink border border-line rounded-xl outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand bg-surface"
+                    className="flex-1 min-w-0 h-11 px-3 text-sm font-semibold uppercase tracking-wider placeholder:normal-case placeholder:tracking-normal text-ink border border-line rounded-xl outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand bg-surface"
                   />
                   {appliedPromo ? (
                     <Button
@@ -1272,7 +1454,9 @@ export default function CheckoutPage() {
                 <div className={`flex justify-between text-muted transition-opacity ${estimatePending && deliveryEstimate ? 'opacity-60' : ''}`}>
                   <span>{t('estimatedDelivery')}</span>
                   <span>
-                    {!selectedAddress ? (
+                    {isPickup ? (
+                      <span className="font-medium text-muted">{t('pickupNoFee')}</span>
+                    ) : !selectedAddress ? (
                       <span className="font-medium text-muted">{t('deliveryChooseAddress')}</span>
                     ) : notDeliverable ? (
                       <span className="font-bold text-red-600">{t('deliveryNotAvailable')}</span>
@@ -1285,9 +1469,6 @@ export default function CheckoutPage() {
                     )}
                   </span>
                 </div>
-                {notDeliverable && deliveryEstimate?.reason && (
-                  <p className="text-[11px] text-red-600 -mt-1">{deliveryEstimate.reason}</p>
-                )}
 
                 <div className="flex justify-between text-muted text-sm">
                   <span>{t('salesTax5')}</span>
@@ -1303,10 +1484,18 @@ export default function CheckoutPage() {
                 </div>
               </div>
 
-              {/* Place Order CTA Button */}
+              {kitchenClosed && (
+                <p className="text-sm font-semibold text-ink text-center">{t('kitchenClosedTitle', { kitchen: sellerTitle })}</p>
+              )}
               <Button
                 type="button"
-                disabled={processing || !selectedAddress || notDeliverable || (estimatePending && !deliveryEstimate)}
+                disabled={
+                  processing ||
+                  kitchenClosed ||
+                  !chosenTime ||
+                  !methodUsable(paymentMethod) ||
+                  (!isPickup && (!selectedAddress || notDeliverable || (estimatePending && !deliveryEstimate)))
+                }
                 onClick={handleCreateOrder}
                 className="w-full h-14 bg-brand hover:bg-brand-500 text-on-brand font-extrabold text-base rounded-2xl transition-all active:scale-[0.99] flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
               >
@@ -1326,12 +1515,12 @@ export default function CheckoutPage() {
               <p className="text-center text-xs leading-relaxed text-muted">
                 {richText(t('agreeTerms'), {
                   terms: (
-                    <ExternalLink href="/terms" className="font-semibold text-ink underline hover:text-brand-ink">
+                    <ExternalLink href="/terms" className="inline-flex items-center min-h-11 font-semibold text-ink underline hover:text-brand-ink">
                       {t('terms')}
                     </ExternalLink>
                   ),
                   refund: (
-                    <ExternalLink href="/refund-policy" className="font-semibold text-ink underline hover:text-brand-ink">
+                    <ExternalLink href="/refund-policy" className="inline-flex items-center min-h-11 font-semibold text-ink underline hover:text-brand-ink">
                       {t('refundPolicy')}
                     </ExternalLink>
                   ),

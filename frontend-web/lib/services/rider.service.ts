@@ -51,8 +51,10 @@ export interface Delivery {
   /** Only once the job is the rider's: who to call and the exact spot. */
   customer?: { name: string | null; phone: string | null } | null;
   dropoffDetails?: { houseNumber: string | null; addressLine2: string | null; landmark: string | null; instructions: string | null } | null;
-  pickupMapsUrl?: string;
-  dropoffMapsUrl?: string;
+  /** The kitchen: its name, street, area and landmark; its phone only once the job is the rider's. */
+  pickup?: { name: string | null; address: string | null; area: string | null; landmark: string | null; phone: string | null } | null;
+  pickupMapsUrl?: string | null;
+  dropoffMapsUrl?: string | null;
   /** "auto" when the system picked the rider, "claimed" when they took it from the pool. */
   assignmentMode?: 'auto' | 'claimed' | null;
 }
@@ -171,8 +173,8 @@ export const riderService = {
     return response.data;
   },
 
-  claimDelivery: async (deliveryId: string, askFee?: number) => {
-    const response = await apiClient.post<ApiResponse<Delivery>>(`/riders/deliveries/${deliveryId}/claim`, { askFee });
+  claimDelivery: async (deliveryId: string) => {
+    const response = await apiClient.post<ApiResponse<Delivery>>(`/riders/deliveries/${deliveryId}/claim`, {});
     return response.data;
   },
 

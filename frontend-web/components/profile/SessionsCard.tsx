@@ -12,6 +12,10 @@ import { useAuthStore } from '@/lib/store/auth-store';
 import { useLocale, useT } from '@/lib/i18n';
 import { accountMessages } from '@/lib/i18n/messages/account';
 import { describeDevice, sortDevices, type SignedInDevice } from '@/lib/sessions';
+import { isPrivateIp } from './private-ip';
+
+/** How many devices show before "See all": this one and the latest others. */
+const SHOWN_DEVICES = 3;
 
 /**
  * The profile's "Signed-in devices": every device the account is signed in on, from GET /auth/sessions. Signing one
@@ -29,6 +33,7 @@ export function SessionsCard() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [confirmAll, setConfirmAll] = useState(false);
   const [endingAll, setEndingAll] = useState(false);
+  const [showAll, setShowAll] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -86,7 +91,7 @@ export function SessionsCard() {
           <p className="font-medium text-ink">{t('devicesTitle')}</p>
           <p className="text-xs text-muted">{t('devicesDesc')}</p>
         </div>
-        <Button variant="outline" size="sm" className="shrink-0" onClick={() => setConfirmAll(true)} data-testid="sessions-sign-out-all">
+        <Button variant="outline" size="sm" className="shrink-0 min-h-11" onClick={() => setConfirmAll(true)} data-testid="sessions-sign-out-all">
           {t('devicesSignOutAll')}
         </Button>
       </div>
@@ -95,7 +100,7 @@ export function SessionsCard() {
 
       {devices && (
         <ul className="mt-3 divide-y divide-line" data-testid="sessions-list">
-          {devices.map((d) => {
+          {(showAll ? devices : devices.slice(0, SHOWN_DEVICES)).map((d) => {
             const mobile = /iPhone|Android|iPad/.test(d.userAgent ?? '');
             const Icon = mobile ? Smartphone : Laptop;
             return (
@@ -111,12 +116,12 @@ export function SessionsCard() {
                     </p>
                     <p className="text-xs text-muted">
                       {t('deviceLastActive', { when: when(d.lastActiveAt) })}
-                      {d.ipAddress ? <span dir="ltr"> · {d.ipAddress}</span> : null}
+                      {!isPrivateIp(d.ipAddress) ? <span dir="ltr"> · {d.ipAddress}</span> : null}
                     </p>
                   </div>
                 </div>
                 {!d.current && (
-                  <Button variant="outline" size="sm" className="shrink-0" disabled={busyId === d.id} onClick={() => signOut(d)} data-testid="session-sign-out">
+                  <Button variant="outline" size="sm" className="shrink-0 min-h-11" disabled={busyId === d.id} onClick={() => signOut(d)} data-testid="session-sign-out">
                     {t('deviceSignOut')}
                   </Button>
                 )}
@@ -125,6 +130,16 @@ export function SessionsCard() {
           })}
           {devices.every((d) => d.current) && <li className="py-3 text-xs text-muted">{t('devicesNone')}</li>}
         </ul>
+      )}
+      {devices && devices.length > SHOWN_DEVICES && (
+        <button
+          type="button"
+          onClick={() => setShowAll((v) => !v)}
+          className="min-h-11 text-sm font-semibold text-brand-ink hover:underline"
+          data-testid="sessions-see-all"
+        >
+          {showAll ? t('devicesShowFewer') : t('devicesSeeAll', { count: devices.length })}
+        </button>
       )}
 
       <ConfirmModal

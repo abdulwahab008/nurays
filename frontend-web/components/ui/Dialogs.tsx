@@ -7,6 +7,7 @@ import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { useT } from '@/lib/i18n';
 import { commonMessages } from '@/lib/i18n/messages/common';
 import { askProblem } from '@/lib/ask-validation';
+import { useToast } from '@/components/ui/toast';
 
 /**
  * Questions put to the person in the page's own windows instead of the browser's confirm() and prompt() boxes. Those boxes
@@ -78,6 +79,12 @@ export function DialogProvider({ children }: { children: ReactNode }) {
 
   const current = queue[0];
   const close = () => setQueue((q) => q.slice(1));
+
+  // Earlier messages would sit on top of the question (they are the topmost layer) and cover its buttons.
+  const { clearToasts } = useToast();
+  useEffect(() => {
+    if (current) clearToasts();
+  }, [current, clearToasts]);
 
   return (
     <DialogsContext.Provider value={value}>
@@ -182,7 +189,7 @@ function AskDialog({ options, onAnswer }: { options: AskOptions; onAnswer: (answ
         </div>
         {options.message && <p className="text-xs text-slate-600 leading-relaxed mb-4">{options.message}</p>}
 
-        <label htmlFor="ask-dialog-input" className="block text-xs font-bold uppercase tracking-wide text-slate-600">
+        <label htmlFor="ask-dialog-input" className="block text-sm font-medium text-ink">
           {options.label ?? options.title}
         </label>
         <input

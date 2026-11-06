@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, type ReactNode } from 'react';
-import { Check, ChevronLeft, Loader2 } from 'lucide-react';
+import { Check, ChevronLeft, Loader2, LogOut } from 'lucide-react';
 import { loginUrlHere } from '@/lib/auth-redirect';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -15,6 +15,7 @@ import LocationMap from '@/components/ui/LocationMap';
 import FileUploadField from '@/components/ui/FileUploadField';
 import { useT } from '@/lib/i18n';
 import { joinMessages, type JoinMessageKey } from '@/lib/i18n/messages/join';
+import { commonMessages } from '@/lib/i18n/messages/common';
 import { useShallow } from 'zustand/react/shallow';
 
 interface CommunityOption {
@@ -50,9 +51,10 @@ const FOOD_CATEGORIES: { value: string; key: JoinMessageKey }[] = [
 
 export default function SellerRegisterPage() {
   const router = useRouter();
-  const { isAuthenticated, user } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated, user: s.user })));
+  const { isAuthenticated, user, logout } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated, user: s.user, logout: s.logout })));
   const { showToast } = useToast();
   const t = useT(joinMessages);
+  const tc = useT(commonMessages);
   const [loading, setLoading] = useState(false);
   // The kitchen as GET /sellers/me/dashboard returns it; the page reads where its application stands.
   const [sellerInfo, setSellerInfo] = useState<{ verificationStatus?: string; applicationMissing?: string[]; rejectionReason?: string | null } | null>(null);
@@ -269,14 +271,32 @@ export default function SellerRegisterPage() {
   const showForm = !sellerInfo || isEditing || (!isApproved && !isPending) || needsCompleting;
   const showStatus = !!sellerInfo && (!isEditing || needsCompleting);
 
+  // As the account menu does: leave the page first, so its own sign-in redirect does not carry it as ?next=.
+  const handleLogout = () => {
+    router.replace('/login');
+    logout();
+  };
+
   const backLink = (
-    <Link
-      href="/dashboard"
-      className="inline-flex items-center gap-1 min-h-11 -ms-1 pe-2 text-sm font-medium text-muted hover:text-ink rounded-lg focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-brand/40"
-    >
-      <ChevronLeft className="w-4 h-4 rtl:rotate-180" aria-hidden />
-      {t('reg.back')}
-    </Link>
+    <div className="flex items-center justify-between gap-3">
+      <Link
+        href="/dashboard"
+        className="inline-flex items-center gap-1 min-h-11 -ms-1 pe-2 text-sm font-medium text-muted hover:text-ink rounded-lg focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-brand/40"
+      >
+        <ChevronLeft className="w-4 h-4 rtl:rotate-180" aria-hidden />
+        {t('reg.back')}
+      </Link>
+      {isAuthenticated && (
+        <button
+          type="button"
+          onClick={handleLogout}
+          className="inline-flex items-center gap-1.5 min-h-11 px-3 -me-3 text-sm font-medium text-red-700 hover:bg-red-50 rounded-lg focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-brand/40"
+        >
+          <LogOut className="w-4 h-4" aria-hidden />
+          {tc('signOut')}
+        </button>
+      )}
+    </div>
   );
 
   if (loadError && !sellerInfo) {

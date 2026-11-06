@@ -13,6 +13,7 @@ import { paymentService, WalletSummary, WalletTransaction } from '@/lib/services
 import { formatPrice, formatDateTime } from '@/lib/utils';
 import { useT } from '@/lib/i18n';
 import { paymentsMessages } from '@/lib/i18n/messages/payments';
+import { accountMessages } from '@/lib/i18n/messages/account';
 import { useShallow } from 'zustand/react/shallow';
 
 const PRESETS = [500, 1000, 2000, 5000];
@@ -33,6 +34,7 @@ export default function WalletPage() {
 
 function WalletContent() {
   const t = useT(paymentsMessages);
+  const ta = useT(accountMessages);
   const router = useRouter();
   const searchParams = useSearchParams();
   const { isAuthenticated } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated })));
@@ -85,6 +87,8 @@ function WalletContent() {
   const min = wallet?.topUp.min ?? 100;
   const max = wallet?.topUp.max ?? 50000;
   const validAmount = Number.isFinite(chosen) && chosen >= min && chosen <= max;
+  // A typed amount outside the limits says why the button is off, instead of only greying it.
+  const customOutOfRange = custom.trim() !== '' && !validAmount;
 
   const startTopUp = async () => {
     if (!validAmount) return;
@@ -160,7 +164,7 @@ function WalletContent() {
                           setAmount(p);
                           setCustom('');
                         }}
-                        className={`px-4 py-2 rounded-xl border text-sm font-semibold ${
+                        className={`min-h-11 px-4 rounded-xl border text-sm font-semibold ${
                           !custom && amount === p ? 'border-brand bg-brand-50 text-brand-ink' : 'border-line text-ink hover:border-line-strong'
                         }`}
                       >
@@ -176,15 +180,22 @@ function WalletContent() {
                       dir="ltr"
                       value={custom}
                       onChange={(e) => setCustom(e.target.value)}
-                      className="w-36 px-3 py-2 rounded-xl border border-line text-sm"
+                      className={`w-36 min-h-11 px-3 rounded-xl border bg-surface text-ink text-sm ${customOutOfRange ? 'border-red-700' : 'border-line'}`}
                       aria-label={t('otherAmountAria')}
+                      aria-invalid={customOutOfRange}
+                      aria-describedby={customOutOfRange ? 'topup-range-error' : undefined}
                     />
                   </div>
+                  {customOutOfRange && (
+                    <p id="topup-range-error" role="alert" className="mt-2 text-xs text-red-700" data-testid="topup-range-error">
+                      {ta('topUpRange', { min: formatPrice(min), max: formatPrice(max) })}
+                    </p>
+                  )}
                   <button
                     type="button"
                     disabled={!validAmount || starting}
                     onClick={startTopUp}
-                    className="mt-4 inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-brand text-on-brand text-sm font-bold hover:bg-brand-500 disabled:opacity-50"
+                    className="mt-4 inline-flex items-center gap-2 min-h-11 px-5 rounded-xl bg-brand text-on-brand text-sm font-bold hover:bg-brand-500 disabled:opacity-50"
                   >
                     <Plus className="w-4 h-4" />
                     {starting ? t('openingPayPage') : t('topUpButton', { amount: validAmount ? formatPrice(chosen) : '' })}

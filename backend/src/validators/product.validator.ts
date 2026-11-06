@@ -47,7 +47,7 @@ export const getProductQuerySchema = z.object({
   communityId: z.string().optional(),
 });
 
-export const createProductSchema = z.object({
+const productFields = z.object({
   name: z.string().min(2).max(255),
   nameUrdu: z.string().max(255).optional(),
   description: z.string().max(2000).optional(),
@@ -80,12 +80,19 @@ export const createProductSchema = z.object({
   menuDate: z.union([z.literal('today'), z.null(), calendarDay]).optional(),
 });
 
+// "Price before discount" is what customers see crossed out: at or below the price it would show a discount that is not one.
+const discountIsReal = (d: { price?: number; originalPrice?: number }) => d.originalPrice == null || d.price == null || d.originalPrice > d.price;
+const DISCOUNT_NOT_REAL = { message: 'The price before discount must be higher than the price', path: ['originalPrice'] };
+
+export const createProductSchema = productFields.refine(discountIsReal, DISCOUNT_NOT_REAL);
+
 // An update only changes what it sends: the create schema's default productType must not be applied. isActive is the kitchen
 // hiding a dish or showing it again (the list's "Hide from store" / "Publish to store"): it is dropped by the create schema,
 // where only an administrator's approval makes a new dish visible.
-export const updateProductSchema = createProductSchema
+export const updateProductSchema = productFields
   .extend({ productType: z.enum(['frozen', 'fresh', 'ready_to_eat', 'ready_to_cook']).optional(), isActive: z.boolean() })
-  .partial();
+  .partial()
+  .refine(discountIsReal, DISCOUNT_NOT_REAL);
 
 export const getSellerProductsQuerySchema = z.object({
   page: z.coerce.number().int().min(1).optional(),

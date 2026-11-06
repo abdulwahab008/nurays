@@ -6,21 +6,25 @@
  * kitchens and the signed-in lists just stay hidden when they fail.
  */
 import { useEffect, useState } from 'react';
-import type { PublicSeller } from '@/lib/services/seller.service';
 import { productService, type Product } from '@/lib/services/product.service';
 import { favoriteService } from '@/lib/services/favorite.service';
 import { apiClient, type ApiResponse } from '@/lib/api-client';
 import { parseStats, type LoadState, type PublicStats } from '@/lib/home-filters';
+import { kitchensForArea, quoteParams, type QuotedSeller } from '@/components/marketplace/delivery-quote';
 
 const NONE: never[] = [];
 
-export function useHomeFeed(isAuthenticated: boolean) {
-  const [sellers, setSellers] = useState<PublicSeller[]>([]);
+/**
+ * `communityId` is the customer's chosen area: with it the kitchens are those that deliver there (the area's own first),
+ * each with its delivery fee and time, and the dishes from that area come first.
+ */
+export function useHomeFeed(isAuthenticated: boolean, communityId: string | null) {
+  const [sellers, setSellers] = useState<QuotedSeller[]>([]);
   const [kitchensState, setKitchensState] = useState<LoadState>('loading');
   const [kitchensAttempt, setKitchensAttempt] = useState(0);
   const [products, setProducts] = useState<Product[]>([]);
   // Kitchens people are ordering from right now, and personal dish lists (signed in).
-  const [trendingSellers, setTrendingSellers] = useState<PublicSeller[]>([]);
+  const [trendingSellers, setTrendingSellers] = useState<QuotedSeller[]>([]);
   const [recommended, setRecommended] = useState<Array<Product & { recommendationReason?: string }>>([]);
   const [orderAgain, setOrderAgain] = useState<Product[]>([]);
   const [dishesState, setDishesState] = useState<LoadState>('loading');
@@ -32,11 +36,13 @@ export function useHomeFeed(isAuthenticated: boolean) {
   // which turns a failed request into an empty list — we need to tell "none yet" from "failed".
   useEffect(() => {
     let cancelled = false;
+    setKitchensState('loading');
+    // With an area, every kitchen is asked for so the ones that deliver there can be picked out.
     apiClient
-      .get<ApiResponse<PublicSeller[]>>('/sellers', { params: { limit: 12 } })
+      .get<ApiResponse<QuotedSeller[]>>('/sellers', { params: { limit: communityId ? 50 : 12, ...quoteParams(communityId) } })
       .then((res) => {
         if (cancelled) return;
-        setSellers(res.data?.data ?? []);
+        setSellers(kitchensForArea(res.data?.data ?? [], communityId));
         setKitchensState('ready');
       })
       .catch((err) => {
@@ -47,13 +53,13 @@ export function useHomeFeed(isAuthenticated: boolean) {
     return () => {
       cancelled = true;
     };
-  }, [kitchensAttempt]);
+  }, [kitchensAttempt, communityId]);
 
   // Approved dishes, most-ordered first.
   useEffect(() => {
     let cancelled = false;
     productService
-      .getProducts({ limit: 12, sort: 'popular' })
+      .getProducts({ limit: 12, sort: 'popular', communityId: communityId ?? undefined })
       .then((res) => {
         if (cancelled) return;
         setProducts(res?.data?.products ?? []);
@@ -67,7 +73,7 @@ export function useHomeFeed(isAuthenticated: boolean) {
     return () => {
       cancelled = true;
     };
-  }, [dishesAttempt]);
+  }, [dishesAttempt, communityId]);
 
   // Real platform numbers. If this fails the numbers are simply not shown.
   useEffect(() => {
@@ -106,9 +112,9 @@ export function useHomeFeed(isAuthenticated: boolean) {
   useEffect(() => {
     let cancelled = false;
     apiClient
-      .get<ApiResponse<PublicSeller[]>>('/sellers', { params: { sort: 'trending', limit: 10 } })
+      .get<ApiResponse<QuotedSeller[]>>('/sellers', { params: { sort: 'trending', limit: 10, ...quoteParams(communityId) } })
       .then((res) => {
-        if (!cancelled) setTrendingSellers(res.data?.data ?? []);
+        if (!cancelled) setTrendingSellers(kitchensForArea(res.data?.data ?? [], communityId));
       })
       .catch(() => {
         // The section just stays hidden.
@@ -116,7 +122,7 @@ export function useHomeFeed(isAuthenticated: boolean) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [communityId]);
 
   // "Order again" and "Recommended for you" for a signed-in customer (after signing out they are no longer shown: see below).
   useEffect(() => {

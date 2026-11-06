@@ -30,8 +30,9 @@ const config: CapacitorConfig = {
     useLegacyBridge: true,
   },
   ios: {
-    // Keeps the page clear of the notch and the home indicator.
-    contentInset: 'automatic',
+    // The page runs edge to edge and keeps clear of the notch and home indicator itself (viewport-fit=cover and the
+    // --safe-* padding); an inset would show the web view's white background below the page.
+    contentInset: 'never',
   },
   plugins: {
     // Native sign-in: Google and Apple only (no other provider SDK is bundled).

@@ -1,5 +1,30 @@
 'use client';
 
+import { createContext, useContext } from 'react';
+
+/** What stops the dish from being saved, by field id (lib/product-form.ts PRODUCT_FIELD); each field shows its own. */
+export const FieldErrorsContext = createContext<Record<string, string>>({});
+
+/** The attributes that tie a field to its message, and its red border. */
+export function useFieldError(id: string) {
+  const message = useContext(FieldErrorsContext)[id];
+  return {
+    message,
+    inputProps: { 'aria-invalid': Boolean(message), 'aria-describedby': message ? `${id}-error` : undefined },
+    errorClass: message ? 'border-red-700 focus:border-red-700' : '',
+  };
+}
+
+export function FieldError({ id }: { id: string }) {
+  const { message } = useFieldError(id);
+  if (!message) return null;
+  return (
+    <p id={`${id}-error`} className="mt-1.5 text-sm text-red-700">
+      {message}
+    </p>
+  );
+}
+
 export const fieldClass =
   'w-full min-h-11 rounded-xl border border-line-strong bg-surface px-3 text-[15px] text-ink placeholder:text-muted/70 focus:outline-none focus:ring-3 focus:ring-brand/30 focus:border-brand-600';
 export const textareaClass = `${fieldClass} py-2.5 resize-none`;

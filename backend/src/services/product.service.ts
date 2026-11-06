@@ -10,7 +10,8 @@ import { getPlatformDeliveryPricing } from './delivery-pricing.service';
 import { searchRankedProductIds } from './ranking.service';
 import { AppError } from '../middleware/errorHandler';
 import { computeSellerAvailability, isAcceptingOrders, type SellerAvailabilityInput } from './availability.service';
-import { getDeliveryFeeForSeller, haversineKm, type SellerDeliveryPolicy } from '../utils/deliveryFee';
+import { getDeliveryFeeForSeller, haversineKm, type PlatformDeliveryPricing, type SellerDeliveryPolicy } from '../utils/deliveryFee';
+import { splitDeliveryFees } from '../utils/orderPricing';
 import { isOnMenu, menuNote, normalizeMenuInput, onMenuWhere } from '../utils/menu';
 import { notifyApprovers } from './approvals.service';
 import { notifySeller } from './notify.service';
@@ -140,6 +141,9 @@ async function sellersPassingComputedFilters(
     maxDistanceKm?: number;
     customerLat?: number;
     customerLng?: number;
+    /** Only kitchens that deliver to the customer (their area and/or address) for no charge to the customer. */
+    freeDelivery?: boolean;
+    customerCommunityId?: string;
   }
 ): Promise<string[]> {
   const hasLocation = opts.customerLat != null && opts.customerLng != null;
@@ -159,12 +163,17 @@ async function sellersPassingComputedFilters(
 
   const sellers = await prisma.seller.findMany({
     where: box.length > 0 ? { AND: [sellerWhere, ...box] } : sellerWhere,
-    select: { id: true, latitude: true, longitude: true, minPrepTimeMinutes: true, ...SELLER_AVAILABILITY_SELECT },
+    select: { ...SELLER_ORDERING_SELECT, ...SELLER_AVAILABILITY_SELECT },
   });
+  const pricing = opts.freeDelivery ? await getPlatformDeliveryPricing() : null;
 
   return sellers
     .filter((seller) => {
       if (opts.openNow && !computeSellerAvailability(seller).isOpen) return false;
+      if (pricing) {
+        const quote = customerDeliveryQuote(seller, opts.customerLat, opts.customerLng, opts.customerCommunityId, pricing);
+        if (!quote.deliverable || quote.fee > 0) return false;
+      }
       const distanceKm =
         hasLocation && seller.latitude != null && seller.longitude != null
           ? haversineKm(opts.customerLat!, opts.customerLng!, Number(seller.latitude), Number(seller.longitude))
@@ -186,6 +195,32 @@ async function sellersPassingComputedFilters(
  * cutoff time and daily cap), and — only when we know where the customer is —
  * delivery fee, distance, eligibility, and an ETA.
  */
+/** The farthest a delivery can go: the most an admin can set as the Nuray rider range (admin.validator deliveryMaxKm). */
+export const MAX_PLAUSIBLE_TRIP_KM = 200;
+
+/**
+ * The kitchen's delivery to this customer, with `fee` the amount the customer pays for it: the rule the order charges by
+ * (splitDeliveryFees), where a Nuray rider's fee is the kitchen's to pay and only a kitchen's own fee is the customer's.
+ */
+function customerDeliveryQuote(
+  seller: SellerDeliveryPolicy & { id: string },
+  customerLat: number | null | undefined,
+  customerLng: number | null | undefined,
+  customerCommunityId: string | null | undefined,
+  pricing: PlatformDeliveryPricing
+) {
+  const result = getDeliveryFeeForSeller(
+    seller,
+    { latitude: customerLat, longitude: customerLng, communityId: customerCommunityId },
+    seller.latitude != null ? Number(seller.latitude) : null,
+    seller.longitude != null ? Number(seller.longitude) : null,
+    undefined,
+    { pricing }
+  );
+  const { deliveryFee } = splitDeliveryFees([{ sellerId: seller.id, fee: result.fee, pricedByPlatform: result.pricing != null }]);
+  return { ...result, fee: deliveryFee };
+}
+
 export async function computeCustomerFacingSellerInfo(
   seller: Parameters<typeof isAcceptingOrders>[0] &
     SellerDeliveryPolicy & {
@@ -201,15 +236,11 @@ export async function computeCustomerFacingSellerInfo(
   if ((customerLat == null || customerLng == null) && !customerCommunityId) {
     return { isAcceptingOrders: accepting.accepting, acceptingReason: accepting.reason, delivery: null };
   }
-  const feeResult = getDeliveryFeeForSeller(
-    seller,
-    { latitude: customerLat, longitude: customerLng, communityId: customerCommunityId },
-    seller.latitude != null ? Number(seller.latitude) : null,
-    seller.longitude != null ? Number(seller.longitude) : null,
-    undefined,
-    { pricing: await getPlatformDeliveryPricing() }
-  );
+  const feeResult = customerDeliveryQuote(seller, customerLat, customerLng, customerCommunityId, await getPlatformDeliveryPricing());
   const eta = estimateDeliveryMinutes(seller.minPrepTimeMinutes, feeResult.distanceKm);
+  // A community fee is quoted whatever the distance, so a kitchen pinned in the wrong city still quotes one; the trip
+  // time from that pin is not real, so none is given.
+  const plausibleTrip = feeResult.distanceKm == null || feeResult.distanceKm <= MAX_PLAUSIBLE_TRIP_KM;
   return {
     isAcceptingOrders: accepting.accepting,
     acceptingReason: accepting.reason,
@@ -219,8 +250,8 @@ export async function computeCustomerFacingSellerInfo(
       distanceKm: feeResult.distanceKm != null ? Math.round(feeResult.distanceKm * 10) / 10 : null,
       reason: feeResult.reason,
       // A time for a trip the kitchen will not make is worse than none: a buyer in another city was told "3,094 min".
-      estimatedMinMinutes: feeResult.deliverable ? eta.minMinutes : null,
-      estimatedMaxMinutes: feeResult.deliverable ? eta.maxMinutes : null,
+      estimatedMinMinutes: feeResult.deliverable && plausibleTrip ? eta.minMinutes : null,
+      estimatedMaxMinutes: feeResult.deliverable && plausibleTrip ? eta.maxMinutes : null,
     },
   };
 }
@@ -389,11 +420,6 @@ export class ProductService {
       const now = new Date();
       where.seller.promotions = { some: { isActive: true, validFrom: { lte: now }, validUntil: { gte: now } } };
     }
-    if (filters.freeDelivery) {
-      // Coarse "offers free delivery to somewhere" signal — a specific address's
-      // eligibility still needs the real per-address check in deliveryFee.ts.
-      where.seller.freeDeliveryRadiusKm = { not: null };
-    }
     if (filters.open247) {
       where.seller.scheduleMode = '24_7';
     }
@@ -428,11 +454,22 @@ export class ProductService {
         })
       : null;
 
-    // "Open now", "within X km" and "fast delivery" depend on opening hours, distance and
-    // the delivery-time estimate, which are worked out in code. They are worked out over the
+    // "Open now", "within X km", "fast delivery" and free delivery to the customer depend on opening hours, distance,
+    // the delivery-time estimate and the delivery fee, which are worked out in code. They are worked out over the
     // matching sellers (far fewer than their products), and the product query keeps only
     // the sellers that pass, so filtering, counting and paging all stay in the database.
-    if (filters.openNow || filters.fastDelivery || (filters.maxDistanceKm != null && hasCustomerLocation)) {
+    const freeDeliveryHere = !!filters.freeDelivery && (!!targetCommunity || hasCustomerLocation);
+    if (filters.freeDelivery && !freeDeliveryHere) {
+      // Without the customer's area or address: kitchens whose delivery costs the customer nothing somewhere. A Nuray
+      // rider's fee is always the kitchen's (splitDeliveryFees); a kitchen delivering itself has to waive its own fee.
+      where.seller.OR = [
+        { deliveryProvider: { not: 'self' } },
+        { freeDeliveryRadiusKm: { not: null } },
+        { deliveryFeeType: 'fixed', deliveryFeeFixed: 0 },
+        { AND: [{ freeDeliveryAreas: { not: Prisma.AnyNull } }, { NOT: { freeDeliveryAreas: { equals: [] } } }] },
+      ];
+    }
+    if (filters.openNow || filters.fastDelivery || freeDeliveryHere || (filters.maxDistanceKm != null && hasCustomerLocation)) {
       where.sellerId = {
         in: await sellersPassingComputedFilters(
           { ...where.seller, ...(filters.sellerId ? { id: filters.sellerId } : {}) },
@@ -442,6 +479,8 @@ export class ProductService {
             maxDistanceKm: hasCustomerLocation ? filters.maxDistanceKm : undefined,
             customerLat: filters.customerLat,
             customerLng: filters.customerLng,
+            freeDelivery: freeDeliveryHere,
+            customerCommunityId: targetCommunity?.id,
           }
         ),
       };

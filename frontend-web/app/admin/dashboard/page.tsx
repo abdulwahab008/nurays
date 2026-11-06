@@ -1,397 +1,242 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { DashboardLayout, ADMIN_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
-import { Button } from '@/components/ui/button';
-import { useToast } from '@/components/ui/toast';
+import { ChevronRight } from 'lucide-react';
+import { DashboardLayout, adminSidebarFor } from '@/components/layout/DashboardShell';
 import { LoadError } from '@/components/ui/LoadError';
+import { Figure, LoadingLine, StatusPill } from '@/components/admin/AdminListParts';
 import { useAuthStore } from '@/lib/store/auth-store';
-import { apiClient, apiErrorMessage } from '@/lib/api-client';
+import { apiClient } from '@/lib/api-client';
+import { useLiveRefresh } from '@/lib/hooks/use-live-refresh';
 import { formatPrice } from '@/lib/utils';
-import { RejectReasonModal } from '@/components/admin/RejectReasonModal';
 import { useShallow } from 'zustand/react/shallow';
 
-interface PendingSeller {
+interface Queue {
+  key: string;
+  label: string;
+  href: string;
+  count: number;
+  oldestWaitingSince: string | null;
+}
+
+interface PendingKitchen {
   id: string;
-  userId: string;
-  businessName: string;
-  businessNameUrdu?: string;
-  description?: string;
-  verificationStatus: string;
-  status: string;
-  createdAt: string;
-  /** What the application still lacks (the server works it out); empty when it is complete. */
   missing?: string[];
-  user: {
-    id: string;
-    email: string;
-    phone: string;
-    profile?: {
-      fullName?: string;
-    };
-  };
 }
 
 interface PlatformStats {
-  today: {
-    orders: number;
-    revenue: number;
-  };
+  today: { orders: number; cancelled?: number; revenue: number };
   pendingOrders: number;
+  waitingForKitchen?: number;
+  beingPrepared?: number;
   inTransitOrders: number;
-  cancelledOrdersLast7Days: number;
+  failedDeliveries?: number;
   averageOrderValue: number;
 }
 
+/** The problems first: a red count says something has gone wrong, the rest is work waiting. */
+const PROBLEM_QUEUES = new Set(['failedDeliveries', 'transfers', 'refunds', 'tickets']);
+
+function waitedFor(since: string | null): string | null {
+  if (!since) return null;
+  const mins = Math.max(0, Math.round((Date.now() - new Date(since).getTime()) / 60000));
+  if (mins < 60) return `${mins} min`;
+  const hours = Math.round(mins / 60);
+  return hours < 48 ? `${hours} h` : `${Math.round(hours / 24)} days`;
+}
+
+const SECTIONS = [
+  { href: '/admin/orders', label: 'Orders', note: 'Every order and its status' },
+  { href: '/admin/sellers', label: 'Kitchens', note: 'Find a kitchen, its dishes and sales' },
+  { href: '/admin/products', label: 'Dishes', note: 'Approve new and changed dishes' },
+  { href: '/admin/users', label: 'People', note: 'Find an account, suspend or reactivate it' },
+  { href: '/admin/riders', label: 'Riders', note: 'Cash riders hold and their pay' },
+  { href: '/admin/analytics', label: 'Analytics', note: 'Sales and orders over time' },
+] as const;
+
+/**
+ * What needs an admin now (approvals, refunds, problem orders) first, then today's figures, then the way into each
+ * section. The one raised surface is the list of things waiting.
+ */
 export default function AdminDashboardPage() {
   const router = useRouter();
   const { isAuthenticated, user } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated, user: s.user })));
-  const { showToast } = useToast();
+  const isAdmin = user?.user_type === 'admin' || user?.userType === 'admin';
   const [loading, setLoading] = useState(true);
-  const [pendingSellers, setPendingSellers] = useState<PendingSeller[]>([]);
+  const [queues, setQueues] = useState<Queue[] | null>(null);
   const [stats, setStats] = useState<PlatformStats | null>(null);
-  const [processingId, setProcessingId] = useState<string | null>(null);
-  const [rejecting, setRejecting] = useState<PendingSeller | null>(null);
-  // null: the count could not be read (not "0 waiting").
-  const [pendingCategoryRequests, setPendingCategoryRequests] = useState<number | null>(0);
-  // Why each part could not be read; each is said on its own, instead of "No Pending Applications" or figures left out.
-  const [sellersError, setSellersError] = useState<unknown>(null);
+  const [readyKitchens, setReadyKitchens] = useState<number | null>(null);
+  // Each part is said on its own when it could not be read, instead of "nothing waiting" or figures left out.
+  const [queuesError, setQueuesError] = useState<unknown>(null);
   const [statsError, setStatsError] = useState<unknown>(null);
 
-  const loadDashboardData = async () => {
-    setLoading(true);
-    // Three independent reads: one failing must not hide the other two, and none may be shown as "nothing" when it failed.
-    const [sellersRes, categoriesRes, statsRes] = await Promise.allSettled([
-      apiClient.get('/admin/pending-sellers'),
-      apiClient.get('/category-requests/pending-count'),
+  const load = useCallback(async () => {
+    const [queuesRes, statsRes, kitchensRes] = await Promise.allSettled([
+      apiClient.get('/admin/approvals'),
       apiClient.get('/admin/statistics'),
+      apiClient.get('/admin/pending-sellers'),
     ]);
-
-    if (sellersRes.status === 'fulfilled' && sellersRes.value.data.success) {
-      setPendingSellers(sellersRes.value.data.data || []);
-      setSellersError(null);
+    if (queuesRes.status === 'fulfilled' && queuesRes.value.data.success) {
+      setQueues(queuesRes.value.data.data.items);
+      setQueuesError(null);
     } else {
-      setSellersError(sellersRes.status === 'rejected' ? sellersRes.reason : new Error('The applications came back empty'));
+      setQueuesError(queuesRes.status === 'rejected' ? queuesRes.reason : new Error('The approvals came back empty'));
     }
-
-    if (categoriesRes.status === 'fulfilled' && categoriesRes.value.data.success) {
-      setPendingCategoryRequests(categoriesRes.value.data.data?.count || 0);
-    } else {
-      setPendingCategoryRequests(null);
-    }
-
     if (statsRes.status === 'fulfilled' && statsRes.value.data.success) {
       setStats(statsRes.value.data.data);
       setStatsError(null);
     } else {
       setStatsError(statsRes.status === 'rejected' ? statsRes.reason : new Error('The figures came back empty'));
     }
+    setReadyKitchens(
+      kitchensRes.status === 'fulfilled' && kitchensRes.value.data.success
+        ? (kitchensRes.value.data.data as PendingKitchen[]).filter((k) => (k.missing?.length ?? 0) === 0).length
+        : null
+    );
     setLoading(false);
-  };
+  }, []);
 
   useEffect(() => {
-    if (!isAuthenticated) {
-      router.push('/admin/login');
-      return;
-    }
-
-    // Check if user is admin
-    if (user?.user_type !== 'admin' && user?.userType !== 'admin') {
-      router.push('/products');
-      showToast('Access denied. Admin privileges required.', 'error');
-      return;
-    }
-
+    if (!isAuthenticated || !isAdmin) return;
     // The dashboard shows platform figures; staff without that access start at their approvals.
     if (user?.permissions && !user.permissions.includes('read.finance')) {
       router.replace('/admin/approvals');
       return;
     }
+    void load();
+  }, [isAuthenticated, isAdmin, user?.permissions, router, load]);
 
-    loadDashboardData();
-  }, [isAuthenticated, user, router]);
+  useLiveRefresh(() => void load(), {
+    events: ['order:new', 'order:status:update', 'notification:new', 'delivery:new'],
+    intervalMs: 60_000,
+    enabled: isAuthenticated && isAdmin,
+  });
 
-  const handleApproveReject = async (sellerId: string, action: 'approve' | 'reject', reason?: string) => {
-    try {
-      setProcessingId(sellerId);
-      const response = await apiClient.post(`/admin/sellers/${sellerId}/${action}`, {
-        approved: action === 'approve',
-        notes: action === 'reject' ? reason : undefined,
-      });
-      
-      if (response.data.success) {
-        showToast(`Seller ${action === 'approve' ? 'approved' : 'rejected'} successfully!`, 'success');
-        setRejecting(null);
-        loadDashboardData(); // Reload the list
-      }
-    } catch (error) {
-      const errorMessage = apiErrorMessage(error, `Failed to ${action} seller`);
-      showToast(errorMessage, 'error');
-    } finally {
-      setProcessingId(null);
-    }
-  };
+  if (!isAuthenticated || !isAdmin) return null;
 
-  if (!isAuthenticated || (user?.user_type !== 'admin' && user?.userType !== 'admin')) {
-    return null;
-  }
+  const waiting = (queues ?? []).filter((q) => q.count > 0).sort((a, b) => Number(PROBLEM_QUEUES.has(b.key)) - Number(PROBLEM_QUEUES.has(a.key)));
+  const total = waiting.reduce((n, q) => n + q.count, 0);
 
   return (
-    <DashboardLayout
-      title="Admin Dashboard"
-      subtitle="Platform overview and management"
-      sidebarItems={ADMIN_SIDEBAR_ITEMS}
-      userType="admin"
-    >
-      {/* Platform Stats */}
-      {Boolean(statsError) && (
-        <LoadError compact error={statsError} onRetry={loadDashboardData} title={stats ? "We couldn't refresh the platform figures: the ones below may be out of date" : "We couldn't load the platform figures"} className="mb-8" />
-      )}
-      {stats && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
-          <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600 mb-1">Today&apos;s Orders</p>
-                <p className="text-3xl font-bold text-gray-900">{stats.today.orders}</p>
-              </div>
-              <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
-                <span className="text-2xl">📦</span>
-              </div>
-            </div>
+    <DashboardLayout title="Overview" sidebarItems={adminSidebarFor(user?.permissions)} userType="admin">
+      <div className="max-w-5xl space-y-8">
+        <section aria-labelledby="waiting-heading">
+          <div className="mb-3 flex items-baseline justify-between gap-3">
+            <h2 id="waiting-heading" className="text-sm font-semibold text-ink">
+              Waiting for you
+            </h2>
+            <Link href="/admin/approvals" className="text-sm font-medium text-brand-ink hover:underline min-h-11 inline-flex items-center">
+              All approvals
+            </Link>
           </div>
-
-          <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600 mb-1">Today&apos;s Revenue</p>
-                <p className="text-2xl font-bold text-gray-900">{formatPrice(stats.today.revenue)}</p>
-              </div>
-              <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
-                <span className="text-2xl">💰</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600 mb-1">Pending Orders</p>
-                <p className="text-3xl font-bold text-gray-900">{stats.pendingOrders}</p>
-              </div>
-              <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
-                <span className="text-2xl">⏳</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600 mb-1">In Transit</p>
-                <p className="text-3xl font-bold text-gray-900">{stats.inTransitOrders}</p>
-              </div>
-              <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
-                <span className="text-2xl">🚚</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600 mb-1">Avg Order Value</p>
-                <p className="text-2xl font-bold text-gray-900">{formatPrice(stats.averageOrderValue)}</p>
-              </div>
-              <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
-                <span className="text-2xl">📊</span>
-              </div>
-            </div>
-          </div>
-
-          <Link href="/admin/category-requests" className="bg-white rounded-xl shadow-sm p-6 border border-gray-200 hover:shadow-md transition-shadow">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600 mb-1">Category Requests</p>
-                <p className="text-3xl font-bold text-gray-900">{pendingCategoryRequests ?? '—'}</p>
-                <p className="text-xs text-gray-500 mt-1">{pendingCategoryRequests === null ? "couldn't be read" : 'pending review'}</p>
-              </div>
-              <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
-                <span className="text-2xl">📝</span>
-              </div>
-            </div>
-          </Link>
-        </div>
-      )}
-
-      {/* Pending Sellers Section */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 mb-8">
-        <div className="p-6 border-b border-gray-200">
-          <div className="flex items-center justify-between">
-            <h2 className="text-xl font-bold text-gray-900">Pending Seller Applications</h2>
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={loadDashboardData}
-                disabled={loading}
-              >
-                {loading ? 'Loading...' : 'Refresh'}
-              </Button>
-              <Link href="/admin/pending-sellers">
-                <Button variant="outline" size="sm">
-                  View All
-                </Button>
-              </Link>
-            </div>
-          </div>
-        </div>
-
-        <div className="p-6">
-          {loading ? (
-            <div className="text-center py-12">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-600 mx-auto mb-4"></div>
-              <p className="text-gray-600">Loading pending applications...</p>
-            </div>
-          ) : sellersError && pendingSellers.length === 0 ? (
-            <LoadError error={sellersError} onRetry={loadDashboardData} title="We couldn't load the applications" />
-          ) : pendingSellers.length === 0 ? (
-            <div className="text-center py-12">
-              <div className="text-6xl mb-4">✅</div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">No Pending Applications</h3>
-              <p className="text-gray-600">All seller applications have been reviewed.</p>
-            </div>
+          {loading && !queues ? (
+            <LoadingLine text="Checking what is waiting" />
+          ) : queuesError && !queues ? (
+            <LoadError compact error={queuesError} onRetry={() => void load()} title="We couldn't check what is waiting" />
           ) : (
-            <div className="space-y-4">
-              {pendingSellers.slice(0, 5).map((seller) => (
-                <div
-                  key={seller.id}
-                  className="border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow"
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-2">
-                        <h3 className="text-lg font-semibold text-gray-900">
-                          {seller.businessName}
-                        </h3>
-                        {seller.businessNameUrdu && (
-                          <span className="text-sm text-gray-500">({seller.businessNameUrdu})</span>
-                        )}
-                        <span className="px-2 py-1 bg-gray-100 text-gray-800 text-xs font-medium rounded">
-                          {seller.verificationStatus}
-                        </span>
-                      </div>
-
-                      {seller.description && (
-                        <p className="text-gray-600 text-sm mb-3 line-clamp-2">
-                          {seller.description}
-                        </p>
-                      )}
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                        <div>
-                          <span className="text-gray-500">Seller:</span>{' '}
-                          <span className="font-medium">
-                            {seller.user.profile?.fullName || seller.user.email}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="text-gray-500">Email:</span>{' '}
-                          <span className="font-medium">{seller.user.email}</span>
-                        </div>
-                        <div>
-                          <span className="text-gray-500">Phone:</span>{' '}
-                          <span className="font-medium">{seller.user.phone}</span>
-                        </div>
-                        <div>
-                          <span className="text-gray-500">Applied:</span>{' '}
-                          <span className="font-medium">
-                            {new Date(seller.createdAt).toLocaleDateString()}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex gap-2 ms-4">
-                      <Button
-                        onClick={() => handleApproveReject(seller.id, 'approve')}
-                        disabled={processingId === seller.id || (seller.missing?.length ?? 0) > 0}
-                        title={(seller.missing?.length ?? 0) > 0 ? `Cannot be approved yet, missing: ${seller.missing!.join(', ')}` : undefined}
-                        className="bg-gray-700 hover:bg-gray-800 text-white"
-                        size="sm"
-                      >
-                        {processingId === seller.id ? 'Processing...' : 'Approve'}
-                      </Button>
-                      <Button
-                        onClick={() => setRejecting(seller)}
-                        disabled={processingId === seller.id}
-                        variant="outline"
-                        className="border-gray-300 text-gray-700 hover:bg-gray-50"
-                        size="sm"
-                      >
-                        Reject
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-              {pendingSellers.length > 5 && (
-                <div className="text-center pt-4">
-                  <Link href="/admin/pending-sellers">
-                    <Button variant="outline">
-                      View All {pendingSellers.length} Applications
-                    </Button>
-                  </Link>
-                </div>
+            <>
+              {Boolean(queuesError) && (
+                <LoadError compact error={queuesError} onRetry={() => void load()} title="We couldn't refresh this list: it may be out of date" className="mb-3" />
               )}
-            </div>
+              {waiting.length === 0 ? (
+                <p className="text-sm text-muted" data-testid="nothing-waiting">
+                  Nothing is waiting. New applications, dishes, refunds and complaints will show up here.
+                </p>
+              ) : (
+                <ul
+                  className="divide-y divide-line rounded-2xl border border-line bg-surface shadow-[var(--shadow-card)]"
+                  data-testid="waiting-list"
+                  aria-label={`${total} waiting`}
+                >
+                  {waiting.map((q) => {
+                    const problem = PROBLEM_QUEUES.has(q.key);
+                    const kitchenNote =
+                      q.key === 'sellers' && readyKitchens != null
+                        ? readyKitchens > 0
+                          ? `${readyKitchens} ready to approve`
+                          : 'None complete yet'
+                        : null;
+                    return (
+                      <li key={q.key}>
+                        <Link
+                          href={q.href}
+                          className="flex min-h-16 items-center gap-3 px-4 py-3 hover:bg-raised first:rounded-t-2xl last:rounded-b-2xl focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-brand/40"
+                          data-testid={`waiting-${q.key}`}
+                        >
+                          <div className="min-w-0 flex-1">
+                            <p className="text-[15px] font-semibold text-ink">{q.label}</p>
+                            <p className="text-xs text-muted">
+                              Oldest has waited {waitedFor(q.oldestWaitingSince)}
+                              {kitchenNote ? ` · ${kitchenNote}` : ''}
+                            </p>
+                          </div>
+                          <StatusPill tone={problem ? 'problem' : 'waiting'} className="min-w-8 justify-center text-sm tabular-nums">
+                            {q.count}
+                          </StatusPill>
+                          <ChevronRight aria-hidden="true" className="h-4 w-4 shrink-0 text-muted rtl:rotate-180" />
+                        </Link>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </>
           )}
-        </div>
-      </div>
+        </section>
 
-      {/* Quick Actions */}
-      <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
-        <h2 className="text-xl font-bold text-gray-900 mb-4">Quick Actions</h2>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <Link href="/admin/pending-sellers">
-            <Button className="w-full justify-start" variant="outline">
-              <span className="me-2">👥</span>
-              Review Sellers
-            </Button>
-          </Link>
-          <Link href="/admin/orders">
-            <Button className="w-full justify-start" variant="outline">
-              <span className="me-2">📋</span>
-              Manage Orders
-            </Button>
-          </Link>
-          <Link href="/admin/products">
-            <Button className="w-full justify-start" variant="outline">
-              <span className="me-2">🍽️</span>
-              Moderate Products
-            </Button>
-          </Link>
-          <Link href="/admin/analytics">
-            <Button className="w-full justify-start" variant="outline">
-              <span className="me-2">📈</span>
-              View Analytics
-            </Button>
-          </Link>
-        </div>
+        <section aria-labelledby="today-heading" className="border-t border-line pt-6">
+          <h2 id="today-heading" className="mb-4 text-sm font-semibold text-ink">
+            Today
+          </h2>
+          {statsError ? (
+            <LoadError
+              compact
+              error={statsError}
+              onRetry={() => void load()}
+              title={stats ? "We couldn't refresh today's figures: these may be out of date" : "We couldn't load today's figures"}
+              className="mb-4"
+            />
+          ) : null}
+          {!stats && loading ? (
+            <LoadingLine text="Loading today's figures" />
+          ) : stats ? (
+            <div className="grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-3" data-testid="today-figures">
+              <Figure
+                label="Orders"
+                value={stats.today.orders}
+                sub={stats.today.cancelled ? `Plus ${stats.today.cancelled} cancelled` : 'None cancelled'}
+                href="/admin/orders"
+              />
+              <Figure label="Paid sales" value={formatPrice(stats.today.revenue)} />
+              <Figure label="Waiting for a kitchen" value={stats.waitingForKitchen ?? stats.pendingOrders} sub="Not accepted yet" />
+              <Figure label="Being prepared" value={stats.beingPrepared ?? 0} sub="Accepted, cooking or ready" />
+              <Figure label="On the way" value={stats.inTransitOrders} sub="With a rider" />
+              <Figure label="Average order" value={formatPrice(stats.averageOrderValue)} sub="Last 30 days" />
+            </div>
+          ) : null}
+        </section>
+
+        <section aria-labelledby="sections-heading" className="border-t border-line pt-6">
+          <h2 id="sections-heading" className="mb-2 text-sm font-semibold text-ink">
+            Go to
+          </h2>
+          <ul className="grid grid-cols-1 sm:grid-cols-2 sm:gap-x-8">
+            {SECTIONS.map((s) => (
+              <li key={s.href} className="border-b border-line">
+                <Link href={s.href} className="flex min-h-14 items-center gap-3 py-2 hover:text-brand-ink">
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[15px] font-medium text-ink">{s.label}</span>
+                    <span className="block text-xs text-muted">{s.note}</span>
+                  </span>
+                  <ChevronRight aria-hidden="true" className="h-4 w-4 shrink-0 text-muted rtl:rotate-180" />
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
       </div>
-          <RejectReasonModal
-        isOpen={!!rejecting}
-        title={`Reject ${rejecting?.businessName ?? 'this kitchen'}?`}
-        description="The kitchen is told the reason. It can fix the application and send it again."
-        suggestions={['The photos of the CNIC are unclear', 'The kitchen photos are missing', 'The kitchen location does not match the address', 'The application is incomplete']}
-        confirmLabel="Reject application"
-        busy={!!rejecting && processingId === rejecting.id}
-        onConfirm={(reason) => rejecting && handleApproveReject(rejecting.id, 'reject', reason)}
-        onCancel={() => setRejecting(null)}
-      />
     </DashboardLayout>
   );
 }
-

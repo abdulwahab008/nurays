@@ -52,7 +52,25 @@ test('cancelling the question (or leaving it empty) sends nothing more and says 
   }
 });
 
-test('a wrong password is thrown for the page to report, and the person is asked only once', async () => {
+test('a wrong password asks again, saying so, and the right one is sent', async () => {
+  const sent: Array<string | undefined> = [];
+  const asks: boolean[] = [];
+  const answers = ['nope', 'secret'];
+  const result = await sendAskingForPassword(
+    async (password) => {
+      sent.push(password);
+      if (!password) throw apiError('PASSWORD_REQUIRED');
+      if (password !== 'secret') throw apiError('INVALID_PASSWORD');
+      return 'saved';
+    },
+    async (wrongBefore) => (asks.push(wrongBefore), answers.shift() ?? null)
+  );
+  assert.equal(result, 'saved');
+  assert.deepEqual(sent, [undefined, 'nope', 'secret']);
+  assert.deepEqual(asks, [false, true]);
+});
+
+test('after three wrong passwords the failure is thrown for the page to report', async () => {
   let asked = 0;
   await assert.rejects(
     sendAskingForPassword(
@@ -63,7 +81,7 @@ test('a wrong password is thrown for the page to report, and the person is asked
     ),
     (error: unknown) => (error as ReturnType<typeof apiError>).response.data.error.code === 'INVALID_PASSWORD'
   );
-  assert.equal(asked, 1);
+  assert.equal(asked, 3);
 });
 
 test('any other failure is thrown without asking for anything', async () => {

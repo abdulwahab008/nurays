@@ -287,6 +287,7 @@ html[dir="rtl"] {
 body {
   padding-left: var(--safe-left);
   padding-right: var(--safe-right);
+  padding-bottom: var(--safe-bottom);
 }
 
 /* ============================================================
@@ -657,41 +658,50 @@ h1, h2, h3, h4, h5, h6 {
     background: var(--bg-card);
     box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
   }
+  /* A labelled cell is two columns: the column name, then the cell's own lines stacked as they are on a desktop
+     (a cell holding a name, a phone and a city keeps them as three lines, not three side-by-side columns). */
   main table.stack-table td {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    gap: 1rem;
     padding: 0.4rem 0;
     border: 0;
-    text-align: end;
+    text-align: start;
     white-space: normal;
     overflow-wrap: anywhere;
   }
+  main table.stack-table td[data-label] {
+    display: grid;
+    grid-template-columns: minmax(0, 38%) minmax(0, 1fr);
+    column-gap: 0.75rem;
+    row-gap: 0;
+    justify-items: start;
+    align-items: start;
+  }
+  main table.stack-table td[data-label] > * {
+    grid-column: 2;
+  }
   main table.stack-table td[data-label]::before {
     content: attr(data-label);
-    flex-shrink: 0;
-    max-width: 45%;
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    color: var(--fg-subtle);
-    text-align: start;
+    grid-column: 1;
+    grid-row: 1 / span 12;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--color-muted);
   }
 }
 
-@media (pointer: coarse) {
-  button:not([class*="rounded-full"]),
-  [role="button"],
-  select,
-  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="hidden"]) {
-    min-height: 40px;
-  }
-  /* Menu and toggle controls inside the sidebar */
-  .nuray-drawer button {
-    min-width: 40px;
-    min-height: 40px;
+/* In the base layer so a utility such as min-h-11 can still raise a control above this floor. */
+@layer base {
+  @media (pointer: coarse) {
+    button:not([class*="rounded-full"]),
+    [role="button"],
+    select,
+    input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="hidden"]) {
+      min-height: 40px;
+    }
+    /* Menu and toggle controls inside the sidebar */
+    .nuray-drawer button {
+      min-width: 40px;
+      min-height: 40px;
+    }
   }
 }
 

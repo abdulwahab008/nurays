@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { useAuthStore } from '@/lib/store/auth-store';
@@ -16,6 +15,7 @@ import { productService, Product } from '@/lib/services/product.service';
 import { communityService, CommunityDetail } from '@/lib/services/community.service';
 import { cartService } from '@/lib/services/cart.service';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
+import { RoleGuard } from '@/components/RoleGuard';
 import { CoverImage } from '@/components/ui/CoverImage';
 import { LoadError } from '@/components/ui/LoadError';
 import { CuisineCarousel, PLATFORM_CUISINES } from '@/components/marketplace/CuisineCarousel';
@@ -164,31 +164,20 @@ function shuffleArray<T>(items: T[]): T[] {
 }
 
 export default function CustomerDashboardPage() {
-  const router = useRouter();
-  const { isAuthenticated, user } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated, user: s.user })));
+  return (
+    <RoleGuard allowedRoles={['customer']} redirectUnauthenticated="/login" allowGuests>
+      <CustomerDashboard />
+    </RoleGuard>
+  );
+}
+
+function CustomerDashboard() {
+  const { isAuthenticated } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated })));
   const { selectedCommunity } = useCommunityStore(useShallow((s) => ({ selectedCommunity: s.selectedCommunity })));
   const { addItem: addCartItem, appliedPromoCode, setAppliedPromoCode } = useCartStore(useShallow((s) => ({ addItem: s.addItem, appliedPromoCode: s.appliedPromoCode, setAppliedPromoCode: s.setAppliedPromoCode })));
   const { showToast } = useToast();
   const t = useT(dashboardMessages);
   const tc = useT(commonMessages);
-
-  // Strict RBAC: Route non-customer roles directly to their specialized dashboards
-  useEffect(() => {
-    if (!isAuthenticated || !user) return;
-    const role = user.userType || user.user_type;
-    if (role === 'seller') {
-      router.replace('/sellers/dashboard');
-      return;
-    }
-    if (role === 'rider') {
-      router.replace('/riders/dashboard');
-      return;
-    }
-    if (role === 'admin') {
-      router.replace('/admin/dashboard');
-      return;
-    }
-  }, [isAuthenticated, user, router]);
 
   const [loading, setLoading] = useState(true);
   const [activeOrder, setActiveOrder] = useState<Order | null>(null);

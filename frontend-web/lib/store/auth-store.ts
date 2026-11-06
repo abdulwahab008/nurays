@@ -4,6 +4,7 @@ import { useCartStore } from './cart-store';
 import { apiClient } from '../api-client';
 import { dropPushSubscription, pushEndpointHere } from '../push';
 import { tokenStore } from '../token-store';
+import { clearSignOut, noteSignOut } from '../auth-redirect';
 
 export interface User {
   id: string;
@@ -58,6 +59,7 @@ export const useAuthStore = create<AuthState>()(
             : undefined,
         };
         const hasToken = !!apiClient.getAccessToken();
+        if (hasToken) clearSignOut();
         set({ user: normalizedUser, isAuthenticated: hasToken });
       },
       logout: () => {
@@ -82,6 +84,7 @@ export const useAuthStore = create<AuthState>()(
         useCartStore.getState().clearCart();
         useCartStore.getState().setAppliedPromoCode(null);
         tokenStore().clear();
+        noteSignOut();
         set({ user: null, isAuthenticated: false });
       },
     }),

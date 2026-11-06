@@ -23,6 +23,38 @@ import { logger } from '../utils/logger';
 
 // The delivery status machine (which status follows which, and what the order must look like) is in utils/deliveryStatus.ts.
 
+// The kitchen a rider collects from: where it is, how to find the door and who to call there.
+const PICKUP_SELLER_SELECT = {
+  businessName: true,
+  pickupAddress: true,
+  pickupLandmark: true,
+  pickupPhone: true,
+  primaryCommunityName: true,
+  latitude: true,
+  longitude: true,
+  deliveryProvider: true,
+  user: { select: { phone: true } },
+} as const;
+
+type PickupSeller = Prisma.SellerGetPayload<{ select: typeof PICKUP_SELLER_SELECT }>;
+type PickupItem = { status: string; fulfillmentType: string | null; seller: PickupSeller | null };
+
+const text = (value: string | null | undefined) => (typeof value === 'string' && value.trim() !== '' ? value.trim() : null);
+
+/** The kitchen the rider collects from: the first live item that a platform rider delivers (as when the job was made). */
+function pickupSellerOf(items: PickupItem[] | undefined): PickupSeller | null {
+  if (!items?.length) return null;
+  return (items.find((i) => i.status !== 'cancelled' && (i.fulfillmentType === 'hub' || i.seller?.deliveryProvider !== 'self')) ?? items[0])?.seller ?? null;
+}
+
+/** The pickup line a job and its notifications carry: the kitchen's name, street address and area. */
+function pickupLineOf(seller: Pick<PickupSeller, 'businessName' | 'pickupAddress' | 'primaryCommunityName'> | null | undefined): string {
+  const address = text(seller?.pickupAddress);
+  const area = text(seller?.primaryCommunityName);
+  const areaIfNew = area && !address?.toLowerCase().includes(area.toLowerCase()) ? area : null;
+  return [text(seller?.businessName), address, areaIfNew].filter(Boolean).join(', ') || 'Seller pickup';
+}
+
 // What a job reads from its order. The customer's contact and address details are only handed to
 // the rider who has the job (see formatDelivery); the handover code is never part of it.
 const DELIVERY_INCLUDE = {
@@ -37,6 +69,7 @@ const DELIVERY_INCLUDE = {
       deliveryAddressSnapshot: true,
       customer: { select: { phone: true, profile: { select: { fullName: true } } } },
       deliveryAddress: { select: { area: true, city: true, houseNumber: true, landmark: true, addressLine2: true } },
+      items: { select: { status: true, fulfillmentType: true, seller: { select: PICKUP_SELLER_SELECT } } },
     },
   },
 } as const;
@@ -60,8 +93,8 @@ const GEOFENCE_KM = 0.15; // 150 m
 // A phone reporting every second is stored (and passed on to the customer) at most this often.
 const LOCATION_MIN_INTERVAL_MS = 3_000;
 
-function mapsUrl(lat: number | null, lng: number | null, text: string | null | undefined): string {
-  const destination = lat != null && lng != null ? `${lat},${lng}` : encodeURIComponent(text ?? '');
+function mapsUrl(lat: number | null, lng: number | null, place: string | null | undefined): string {
+  const destination = lat != null && lng != null ? `${lat},${lng}` : encodeURIComponent(place ?? '');
   // Google Maps URLs API (https://developers.google.com/maps/documentation/urls/get-started): only its documented
   // parameters. No travelmode: the Maps app keeps the mode the rider last used (two-wheeler on a motorbike).
   return `https://www.google.com/maps/dir/?api=1&destination=${destination}`;
@@ -85,11 +118,23 @@ function formatDelivery(delivery: DeliveryWithOrder & {
   riderAskFee?: number | null;
   exceedsCashLimit?: boolean;
 }) {
-  const { pickupLat, pickupLng, deliveryLat, deliveryLng } = endsOf(delivery);
-  const corridor = calculateDeliveryFeeCorridor(pickupLat, pickupLng, deliveryLat, deliveryLng);
+  const ends = endsOf(delivery);
+  const { deliveryLat, deliveryLng } = ends;
+  // The fee is priced from the points saved on the job, the same ones the claim fixes the pay from.
+  const corridor = calculateDeliveryFeeCorridor(ends.pickupLat, ends.pickupLng, deliveryLat, deliveryLng);
 
   // Who to call and where exactly: only for the rider who holds a job that is still running.
   const o = delivery.order;
+  // The kitchen as it is now: a job made before the kitchen saved its pin or street address still
+  // gets them, so the rider is never sent to a search for a home kitchen's name.
+  const kitchen = pickupSellerOf(o?.items);
+  const kitchenLat = finiteOrNull(kitchen?.latitude);
+  const kitchenLng = finiteOrNull(kitchen?.longitude);
+  const hasKitchenPin = kitchenLat != null && kitchenLng != null;
+  const pickupLat = hasKitchenPin ? kitchenLat : ends.pickupLat;
+  const pickupLng = hasKitchenPin ? kitchenLng : ends.pickupLng;
+  const pickupStreet = text(kitchen?.pickupAddress);
+  const pickupLine = kitchen ? pickupLineOf(kitchen) : delivery.pickupAddress;
   // The address as it was when the order was placed (older orders have no snapshot: the live one then).
   const door = (key: 'houseNumber' | 'addressLine2' | 'landmark' | 'area' | 'city') => {
     const value = doorField(o?.deliveryAddressSnapshot, o?.deliveryAddress, key);
@@ -111,7 +156,15 @@ function formatDelivery(delivery: DeliveryWithOrder & {
     totalAmount: delivery.order?.totalAmount ? Number(delivery.order.totalAmount) : 0,
     paymentMethod: delivery.order?.paymentMethod || 'cod',
     orderStatus: delivery.order?.orderStatus,
-    pickupAddress: delivery.pickupAddress,
+    pickupAddress: pickupLine,
+    // The kitchen's own details. Its phone, like the customer's, only goes to the rider holding the job.
+    pickup: {
+      name: text(kitchen?.businessName),
+      address: pickupStreet,
+      area: text(kitchen?.primaryCommunityName),
+      landmark: text(kitchen?.pickupLandmark),
+      phone: reveal ? realPhoneOrNull(text(kitchen?.pickupPhone) ?? kitchen?.user?.phone) : null,
+    },
     deliveryAddress: shownAddress,
     pickupLatitude: pickupLat,
     pickupLongitude: pickupLng,
@@ -152,7 +205,8 @@ function formatDelivery(delivery: DeliveryWithOrder & {
         }
       : null,
     // Pass the job on to Maps by its saved coordinates when there are some (more exact than text).
-    pickupMapsUrl: mapsUrl(pickupLat, pickupLng, delivery.pickupAddress),
+    // Without a pin, only a real street address is worth a maps search; a kitchen's name alone finds nothing.
+    pickupMapsUrl: pickupLat != null && pickupLng != null ? mapsUrl(pickupLat, pickupLng, null) : pickupStreet ? mapsUrl(null, null, pickupLine) : null,
     dropoffMapsUrl: reveal ? mapsUrl(deliveryLat, deliveryLng, delivery.deliveryAddress) : null,
   };
 }
@@ -167,7 +221,7 @@ export class RiderService {
     const order = await prisma.order.findUnique({
       where: { id: orderId },
       include: {
-        items: { include: { seller: { select: { businessName: true, latitude: true, longitude: true, deliveryProvider: true } } } },
+        items: { include: { seller: { select: PICKUP_SELLER_SELECT } } },
         deliveryAddress: true,
       },
     });
@@ -200,7 +254,7 @@ export class RiderService {
     await prisma.order.updateMany({ where: { id: orderId, handoverCode: null }, data: { handoverCode: newHandoverCode() } });
     const estimatedReadyAt = new Date(Date.now() + estimatedPrepMinutes * 60 * 1000);
 
-    const pickupSeller = (order.items.find((i) => i.status !== 'cancelled' && (i.fulfillmentType === 'hub' || i.seller?.deliveryProvider !== 'self')) ?? order.items[0])?.seller;
+    const pickupSeller = pickupSellerOf(order.items);
     // Unknown locations stay unknown (null): a guessed point would misprice the job.
     const pickupLat = finiteOrNull(pickupSeller?.latitude);
     const pickupLng = finiteOrNull(pickupSeller?.longitude);
@@ -211,7 +265,7 @@ export class RiderService {
       const created = await prisma.delivery.create({
         data: {
           orderId,
-          pickupAddress: pickupSeller?.businessName ?? 'Seller pickup',
+          pickupAddress: pickupLineOf(pickupSeller),
           deliveryAddress,
           pickupLatitude: pickupLat,
           pickupLongitude: pickupLng,
@@ -316,7 +370,7 @@ export class RiderService {
   }
 
   /**
-   * The rider's jobs, newest first: every job still going, and the `history` most recent finished ones (30 unless
+   * The rider's jobs: every job still going (furthest along first), and the `history` most recent finished ones (30 unless
    * asked, 0 for none, at most 200). The dashboard reloads this every 30 seconds for every rider on duty, so it
    * carries what the screen shows and not a rider's whole career; earnings has the full ledger.
    */
@@ -343,10 +397,14 @@ export class RiderService {
             take: finishedCount,
           }),
     ]);
-    return [...running, ...finished].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()).map(formatDelivery);
+    // The job the rider is furthest along with first (the one they are standing at the kitchen or door for), then the
+    // older one; a job handed to them a moment ago never pushes it down. Finished jobs follow, newest first.
+    const step = (status: string) => ACTIVE_DELIVERY_STATUSES.indexOf(status);
+    running.sort((a, b) => step(b.status) - step(a.status) || a.createdAt.getTime() - b.createdAt.getTime());
+    return [...running, ...finished].map(formatDelivery);
   }
 
-  async claimDelivery(userId: string, deliveryId: string, askFee?: number) {
+  async claimDelivery(userId: string, deliveryId: string) {
     const rider = await this.requireRider(userId);
     if (!rider.isAvailable) {
       throw new AppError('You are off duty. Switch to on duty to take new jobs.', 409, 'RIDER_OFF_DUTY');
@@ -357,22 +415,11 @@ export class RiderService {
       throw new AppError('Delivery not found', 404, 'DELIVERY_NOT_FOUND');
     }
 
-    // The rider's pay for this job: the standard fee, or their own ask within the allowed
-    // range (within the allowed range), fixed now so the job's price can't change under them.
+    // The rider's pay for this job: the standard fee, fixed now so the job's price can't change under them.
+    // An ask above it is not honoured: nobody approves asks yet, so taking a job at the rider's own price
+    // would just pay the highest fee on every job. Older apps still send one; it is ignored, not refused.
     const ends = endsOf(delivery);
     const corridor = calculateDeliveryFeeCorridor(ends.pickupLat, ends.pickupLng, ends.deliveryLat, ends.deliveryLng);
-    let validatedAskFee: number | undefined;
-    if (askFee != null && Number(askFee) > 0) {
-      const numericAsk = Number(askFee);
-      if (numericAsk < corridor.minFloor || numericAsk > corridor.maxCeiling) {
-        throw new AppError(
-          `Bid of Rs ${numericAsk} is out of bounds. The allowed corridor for this location is Rs ${corridor.minFloor} to Rs ${corridor.maxCeiling}.`,
-          400,
-          'BID_OUT_OF_BOUNDS'
-        );
-      }
-      validatedAskFee = numericAsk;
-    }
 
     // One claim at a time per rider (their row locked), so two quick claims can't both pass
     // the two-job and cash limits.
@@ -421,7 +468,7 @@ export class RiderService {
         data: {
           riderId: rider.id,
           status: 'assigned',
-          riderFee: validatedAskFee ?? corridor.standardFee,
+          riderFee: corridor.standardFee,
           riderBonus: bonus,
           assignmentMode: 'claimed',
         },
@@ -436,7 +483,7 @@ export class RiderService {
       where: { id: deliveryId },
       include: DELIVERY_INCLUDE,
     });
-    return formatDelivery({ ...updated, riderAskFee: validatedAskFee });
+    return formatDelivery(updated);
   }
 
   async updateDeliveryStatus(

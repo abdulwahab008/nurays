@@ -9,12 +9,14 @@ export function cn(...inputs: ClassValue[]) {
 export { GST_RATE, orderTotals } from './order-totals';
 
 export function formatPrice(price: number | string | undefined | null): string {
-  const num = Number(price ?? 0);
+  const raw = Number(price ?? 0);
+  const num = isNaN(raw) ? 0 : raw;
   return new Intl.NumberFormat('en-PK', {
     style: 'currency',
     currency: 'PKR',
-    minimumFractionDigits: 0,
-  }).format(isNaN(num) ? 0 : num);
+    minimumFractionDigits: Number.isInteger(num) ? 0 : 2,
+    maximumFractionDigits: 2,
+  }).format(num);
 }
 
 /** Dates follow the page's language (Urdu month names, Western digits as on Pakistani apps). */
@@ -104,6 +106,6 @@ export function homeFor(userType?: string | null): string {
     case 'hub_manager':
       return '/hub';
     default:
-      return '/dashboard';
+      return '/';
   }
 }

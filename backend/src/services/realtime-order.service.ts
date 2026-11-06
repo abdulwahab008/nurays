@@ -6,6 +6,7 @@ import type { DeliveryChannel } from '../jobs/notify.jobs';
 import { ONLINE_GATEWAY_METHODS } from '../utils/paymentCustody';
 import { logger } from '../utils/logger';
 import { cancelledNotice } from '../utils/cancellationText';
+import { roundMoney } from '../utils/pricing';
 
 // What each order status tells the customer, and which channels besides the app it is worth.
 const ORDER_STATUS_MESSAGES: Record<
@@ -252,27 +253,33 @@ export class RealtimeOrderService {
     // (see online-payment.service): a kitchen shouldn't start on an unpaid order.
     const awaitingOnlinePayment = ONLINE_GATEWAY_METHODS.includes(order.paymentMethod) && order.paymentStatus !== 'paid';
 
+    // A kitchen is told what its own dishes come to: the order total also holds other kitchens' dishes, tax and the delivery fee.
+    const dishesTotalOf = (items: Array<{ totalPrice: number }>) => roundMoney(items.reduce((sum, item) => sum + item.totalPrice, 0));
+
     // Emit to each seller and create a persistent notification for the Notifications page
     sellerOrders.forEach((items, sellerUserId) => {
       const payload = {
         orderId: order.id,
         orderNumber: order.orderNumber,
+        // The whole order, kept for older apps; `dishesTotal` is this kitchen's part.
         totalAmount: Number(order.totalAmount),
+        dishesTotal: dishesTotalOf(items),
         items,
         createdAt: order.createdAt.toISOString(),
       };
 
       socketManager.emitToUser(sellerUserId, 'order:new', payload);
     });
-    for (const sellerUserId of sellerOrders.keys()) {
+    for (const [sellerUserId, items] of sellerOrders) {
+      const dishesFormatted = `Rs ${dishesTotalOf(items).toLocaleString()}`;
       await notify({
         userId: sellerUserId,
         category: 'orders',
         type: 'order',
         title: awaitingOnlinePayment ? 'New order (awaiting payment)' : 'New order received',
         message: awaitingOnlinePayment
-          ? `Order #${order.orderNumber} (${totalAmountFormatted}) is waiting for the customer's online payment. Don't start it yet.`
-          : `New order #${order.orderNumber}: ${totalAmountFormatted}. Please accept it within 30 minutes.`,
+          ? `Order #${order.orderNumber} (${dishesFormatted} of your dishes) is waiting for the customer's online payment. Don't start it yet.`
+          : `New order #${order.orderNumber}: ${dishesFormatted} of your dishes. Please accept it within 30 minutes.`,
         actionUrl: `/sellers/orders/${order.id}`,
         data: { orderId: order.id, orderNumber: order.orderNumber },
         // A kitchen must act fast on a new order: push, email and a text message.

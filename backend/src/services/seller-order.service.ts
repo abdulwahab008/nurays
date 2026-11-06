@@ -14,6 +14,8 @@ import ledgerService from './ledger.service';
 import { releaseHubAllocations } from './hub-allocation.service';
 import { firstName, kitchenContactRule, kitchenOrderSelect, presentKitchenOrder, withoutDoor } from '../utils/kitchenOrderView';
 import { logger } from '../utils/logger';
+import { selfDeliveryFeeFor, sellerPaidDeliveryFor } from '../utils/deliveryEarnings';
+import { roundMoney } from '../utils/pricing';
 
 /**
  * Order items move forward through this pipeline only (or cancel before dispatch) — no skipping stages, no moving backward.
@@ -83,18 +85,17 @@ export class SellerOrderService {
       if (filters.dateTo) orderWhere.createdAt.lte = new Date(filters.dateTo);
     }
 
-    // Get order items with orders
+    // A page is a page of orders, not of dishes: paging the dishes split one order's dishes across pages and counted
+    // dishes as orders. The orders come first, then all of this kitchen's matching dishes on them.
+    const pageWhere: Prisma.OrderWhereInput = { ...orderWhere, items: { some: where } };
+    const [pageOrders, total] = await Promise.all([
+      prisma.order.findMany({ where: pageWhere, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], skip, take: limit, select: { id: true } }),
+      prisma.order.count({ where: pageWhere }),
+    ]);
+    const pageOrderIds = pageOrders.map((o) => o.id);
+
     const orderItems = await prisma.orderItem.findMany({
-      where: {
-        ...where,
-        ...(Object.keys(orderWhere).length > 0
-          ? {
-              order: orderWhere,
-            }
-          : {}),
-      },
-      skip,
-      take: limit,
+      where: { ...where, orderId: { in: pageOrderIds } },
       include: {
         order: {
           select: {
@@ -191,10 +192,17 @@ export class SellerOrderService {
             customerPhone: contactHidden ? null : item.order.customer?.phone,
             deliveryAddress: contactHidden ? withoutDoor(item.order.deliveryAddress) : item.order.deliveryAddress,
             contactHidden,
+            // What this kitchen's dishes cost the customer, and what the kitchen keeps of the order: the order total also holds
+            // other kitchens' dishes, tax and the delivery fee, none of which reaches this kitchen.
+            dishesTotal: 0,
+            kitchenEarns: selfDeliveryFeeFor(item.order.deliveryFeeBreakdown, seller.id) - sellerPaidDeliveryFor(item.order.deliveryFeeBreakdown, seller.id),
           },
           items: [],
         });
       }
+      const entry = orderMap.get(orderId);
+      entry.order.dishesTotal = roundMoney(entry.order.dishesTotal + Number(item.totalPrice));
+      entry.order.kitchenEarns = roundMoney(entry.order.kitchenEarns + Number(item.sellerPayout));
 
       orderMap.get(orderId).items.push({
         id: item.id,
@@ -215,18 +223,9 @@ export class SellerOrderService {
       });
     });
 
-    const orders = Array.from(orderMap.values());
+    const orders = pageOrderIds.filter((id) => orderMap.has(id)).map((id) => orderMap.get(id));
     // Payment receipts are private: this seller gets short-lived links to their orders' receipts.
     for (const o of orders) o.order.paymentProofUrl = await presentFile(o.order.paymentProofUrl);
-
-    // Get total count
-    const totalWhere: Prisma.OrderItemWhereInput = { ...where };
-    if (Object.keys(orderWhere).length > 0) {
-      totalWhere.order = orderWhere;
-    }
-    const total = await prisma.orderItem.count({
-      where: totalWhere,
-    });
 
     return {
       orders,
@@ -594,7 +593,8 @@ export class SellerOrderService {
   /**
    * Accept an entire order (Section 7: Order Placed -> Accepted -> Preparing)
    */
-  async acceptOrder(orderId: string, sellerUserId: string) {
+  /** `preparationMinutes`, when the kitchen chose one on accepting, replaces the time worked out from its dishes. */
+  async acceptOrder(orderId: string, sellerUserId: string, preparationMinutes?: number) {
     let seller = await prisma.seller.findUnique({
       where: { userId: sellerUserId },
     });
@@ -639,7 +639,7 @@ export class SellerOrderService {
 
     // Determine prep time from items or seller default
     const prepTimes = order.items.map((i) => i.product?.preparationTime || seller.minPrepTimeMinutes || 20);
-    const maxPrepMinutes = Math.max(...prepTimes, 15);
+    const maxPrepMinutes = preparationMinutes ?? Math.max(...prepTimes, 15);
     const estimatedReadyAt = new Date(Date.now() + maxPrepMinutes * 60 * 1000);
 
     const result = await prisma.$transaction(async (tx) => {

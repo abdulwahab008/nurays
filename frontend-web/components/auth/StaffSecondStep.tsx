@@ -4,6 +4,9 @@ import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { apiClient, apiErrorCode, apiErrorMessage } from '@/lib/api-client';
 import type { User } from '@/lib/store/auth-store';
+import { useT } from '@/lib/i18n';
+import { authMessages } from '@/lib/i18n/messages/auth';
+import { authFieldError, authHeading, authInput, authLabel, authLede, authLink, authSubmit } from './AuthLayout';
 
 /** What a finished staff sign-in answers: the account and its tokens. */
 export interface StaffSignIn {
@@ -12,8 +15,6 @@ export interface StaffSignIn {
   backupCodesLeft?: number;
   usedBackupCode?: boolean;
 }
-
-const inputClass = 'w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500';
 
 /** The secret in groups of four, as people type it into an authenticator app. */
 const grouped = (secret: string) => secret.replace(/(.{4})/g, '$1 ').trim();
@@ -36,6 +37,7 @@ export function StaffSecondStep({
   onDone: (result: StaffSignIn) => void;
   onRestart: (message: string) => void;
 }) {
+  const t = useT(authMessages);
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -44,7 +46,7 @@ export function StaffSecondStep({
 
   const expiredOr = (err: unknown, fallback: string) => {
     if (apiErrorCode(err) === 'CHALLENGE_EXPIRED') {
-      onRestart('That took too long. Enter your password again.');
+      onRestart(t('staffExpired'));
       return null;
     }
     return apiErrorMessage(err, fallback);
@@ -57,7 +59,7 @@ export function StaffSecondStep({
       .post<{ data: { secret: string; otpauthUrl: string } }>('/auth/2fa/setup', { challengeToken })
       .then((res) => !cancelled && setSetup(res.data.data))
       .catch((err: unknown) => {
-        const message = expiredOr(err, 'Could not start the set-up.');
+        const message = expiredOr(err, t('staffSetupFailed'));
         if (!cancelled && message) setError(message);
       });
     return () => {
@@ -80,7 +82,7 @@ export function StaffSecondStep({
         setBackup({ codes: backupCodes, result });
       }
     } catch (err: unknown) {
-      const message = expiredOr(err, 'That code did not work.');
+      const message = expiredOr(err, t('staffCodeFailed'));
       if (message) setError(message);
       setCode('');
     } finally {
@@ -90,18 +92,18 @@ export function StaffSecondStep({
 
   if (backup) {
     return (
-      <div className="space-y-4" data-testid="backup-codes">
-        <h2 className="text-lg font-bold text-gray-900">Save your backup codes</h2>
-        <p className="text-sm text-gray-700">
-          Each one signs you in once if you lose your phone. They are shown only now: write them down or keep them in a password manager.
-        </p>
+      <div className="space-y-5" data-testid="backup-codes">
+        <div>
+          <h2 className={authHeading}>{t('staffBackupTitle')}</h2>
+          <p className={authLede}>{t('staffBackupBody')}</p>
+        </div>
         <ul className="grid grid-cols-2 gap-2 font-mono text-sm" dir="ltr">
           {backup.codes.map((c) => (
-            <li key={c} className="rounded-lg bg-gray-50 border border-gray-200 px-3 py-2 text-center">{c}</li>
+            <li key={c} className="rounded-lg bg-raised px-3 py-2 text-center text-ink">{c}</li>
           ))}
         </ul>
-        <Button className="w-full bg-green-700 hover:bg-green-800 text-white" onClick={() => onDone(backup.result)} data-testid="backup-codes-saved">
-          I have saved them
+        <Button className={authSubmit} onClick={() => onDone(backup.result)} data-testid="backup-codes-saved">
+          {t('staffBackupSaved')}
         </Button>
       </div>
     );
@@ -111,40 +113,33 @@ export function StaffSecondStep({
     <form onSubmit={submit} className="space-y-5" data-testid={`second-step-${mode}`}>
       {mode === 'code' ? (
         <div>
-          <h2 className="text-lg font-bold text-gray-900">Two-step sign-in</h2>
-          <p className="text-sm text-gray-700 mt-1">Enter the six-digit code from your authenticator app. Lost your phone? Enter one of your backup codes instead.</p>
+          <h2 className={authHeading}>{t('staffCodeTitle')}</h2>
+          <p className={authLede}>{t('staffCodeBody')}</p>
         </div>
       ) : (
-        <div className="space-y-3">
-          <h2 className="text-lg font-bold text-gray-900">Set up two-step sign-in</h2>
-          <p className="text-sm text-gray-700">
-            Staff accounts need a code from an authenticator app (Google Authenticator, Microsoft Authenticator or similar) at every sign-in.
-          </p>
-          <ol className="list-decimal ps-5 text-sm text-gray-700 space-y-2">
+        <div>
+          <h2 className={authHeading}>{t('staffSetupTitle')}</h2>
+          <p className={authLede}>{t('staffSetupBody')}</p>
+          <ol className="mt-5 list-decimal space-y-3 ps-5 text-sm text-muted">
             <li>
-              On your phone, add an account in the app. On the phone itself you can{' '}
-              {setup ? (
-                <a href={setup.otpauthUrl} className="text-green-700 underline font-medium">open it in the app</a>
-              ) : (
-                'open it in the app'
+              {t('staffSetupStep1')}
+              <p className="mt-2 break-all rounded-lg bg-raised px-3 py-2.5 font-mono text-sm text-ink" dir="ltr" data-testid="setup-key">
+                {setup ? grouped(setup.secret) : '…'}
+              </p>
+              {setup && (
+                <a href={setup.otpauthUrl} className={`${authLink} -my-1 inline-flex min-h-11 items-center`}>
+                  {t('staffOpenInApp')}
+                </a>
               )}
-              ; otherwise choose &quot;enter a setup key&quot; and type this key:
             </li>
-          </ol>
-          <p className="rounded-lg bg-gray-50 border border-gray-200 px-3 py-2 font-mono text-sm break-all" dir="ltr" data-testid="setup-key">
-            {setup ? grouped(setup.secret) : '…'}
-          </p>
-          <ol start={2} className="list-decimal ps-5 text-sm text-gray-700">
-            <li>Enter the six-digit code the app now shows.</li>
+            <li>{t('staffSetupStep2')}</li>
           </ol>
         </div>
       )}
 
-      {error && <div role="alert" className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">{error}</div>}
-
       <div>
-        <label htmlFor="second-step-code" className="block text-sm font-medium text-gray-700 mb-2">
-          {mode === 'code' ? 'Code or backup code' : 'Code from the app'}
+        <label htmlFor="second-step-code" className={authLabel}>
+          {mode === 'code' ? t('staffCodeLabel') : t('staffSetupCodeLabel')}
         </label>
         <input
           id="second-step-code"
@@ -152,19 +147,30 @@ export function StaffSecondStep({
           onChange={(e) => setCode(e.target.value)}
           inputMode={mode === 'setup' ? 'numeric' : 'text'}
           autoComplete="one-time-code"
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
           autoFocus
           required
           maxLength={mode === 'setup' ? 6 : 12}
           dir="ltr"
-          className={inputClass}
-          placeholder={mode === 'setup' ? '123456' : '123456 or abcd-efgh'}
+          enterKeyHint="go"
+          aria-invalid={!!error || undefined}
+          aria-describedby={error ? 'second-step-error' : undefined}
+          className={`${authInput} font-mono tracking-wider`}
+          placeholder="000000"
         />
+        {error && (
+          <p id="second-step-error" role="alert" className={authFieldError}>
+            {error}
+          </p>
+        )}
       </div>
-      <Button type="submit" disabled={busy || !code.trim() || (mode === 'setup' && !setup)} className="w-full bg-green-600 hover:bg-green-700 text-white py-2">
-        {busy ? 'Checking…' : mode === 'code' ? 'Sign in' : 'Turn on and sign in'}
+      <Button type="submit" disabled={busy || !code.trim() || (mode === 'setup' && !setup)} className={authSubmit}>
+        {busy ? t('verifying') : mode === 'code' ? t('login') : t('staffTurnOn')}
       </Button>
-      <button type="button" onClick={() => onRestart('')} className="w-full text-sm text-gray-600 hover:text-gray-900">
-        ← Back to the password
+      <button type="button" onClick={() => onRestart('')} className={`${authLink} inline-flex min-h-11 items-center text-sm`}>
+        {t('staffBack')}
       </button>
     </form>
   );

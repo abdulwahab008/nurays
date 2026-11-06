@@ -25,6 +25,13 @@ const bankAccountNumber = z
   .refine((v) => !v.trim() || normalizeBankAccount(v) !== null, BANK_ACCOUNT_HINT)
   .transform((v) => normalizeBankAccount(v) ?? '');
 
+/** A number a rider calls on arrival: blank, or 10 to 15 digits (a mobile or a landline), with an optional + and spaces or dashes. */
+const pickupPhone = z
+  .string()
+  .trim()
+  .max(20)
+  .refine((v) => !v || (/^\+?[\d\s-]+$/.test(v) && /^\d{10,15}$/.test(v.replace(/\D/g, ''))), 'Enter a phone number of 10 to 15 digits');
+
 export const registerSellerSchema = z.object({
   businessName: z.string().min(3, 'Business name must be at least 3 characters').max(120),
   businessNameUrdu: z.string().max(120).optional(),
@@ -102,6 +109,10 @@ export const updateSellerSchema = z.object({
   freeDeliveryRadiusKm: z.number().min(0).max(1000).optional().nullable(),
   latitude: z.number().min(PAKISTAN_BOUNDS.minLat, PIN_OUTSIDE).max(PAKISTAN_BOUNDS.maxLat, PIN_OUTSIDE).optional().nullable(),
   longitude: z.number().min(PAKISTAN_BOUNDS.minLng, PIN_OUTSIDE).max(PAKISTAN_BOUNDS.maxLng, PIN_OUTSIDE).optional().nullable(),
+  // Where a rider (or a pickup customer) collects the food. Blank clears it.
+  pickupAddress: z.string().trim().max(300).optional().nullable(),
+  pickupLandmark: z.string().trim().max(200).optional().nullable(),
+  pickupPhone: pickupPhone.optional().nullable(),
   deliveryFeeType: z.enum(['fixed', 'distance']).or(z.literal('')).optional().nullable(),
   deliveryFeeFixed: z.number().int().min(0).max(100_000).optional().nullable(),
   deliveryFeeBase: z.number().int().min(0).max(100_000).optional().nullable(),

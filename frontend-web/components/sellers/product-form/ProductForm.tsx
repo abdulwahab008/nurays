@@ -28,7 +28,7 @@ import {
   locateCategory,
   newVariant,
   productPayload,
-  productProblem,
+  productProblems,
   saveErrorMessage,
   variantPayload,
   withoutVariant,
@@ -39,7 +39,7 @@ import PhotosSection, { ProductImage } from './PhotosSection';
 import PricingSection from './PricingSection';
 import VariantsEditor from './VariantsEditor';
 import DeliveryMenuSection from './DeliveryMenuSection';
-import { SwitchRow } from './fields';
+import { FieldErrorsContext, SwitchRow } from './fields';
 import { ShortcutsButton, ShortcutsHelp, useFormShortcuts } from './KeyboardShortcuts';
 
 interface LoadedProduct extends SavedProduct {
@@ -80,9 +80,14 @@ export default function ProductForm(props: Props) {
   const [categoriesError, setCategoriesError] = useState<unknown>(null);
   const [parentId, setParentId] = useState<string | null>(null);
   const [showCategoryRequest, setShowCategoryRequest] = useState(false);
+  // What stopped the last save, by field; the messages go once the kitchen changes something.
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const { helpOpen, setHelpOpen } = useFormShortcuts(formRef, saving);
 
-  const update = useCallback((patch: Partial<ProductFormData>) => setForm((prev) => ({ ...prev, ...patch })), []);
+  const update = useCallback((patch: Partial<ProductFormData>) => {
+    setForm((prev) => ({ ...prev, ...patch }));
+    setFieldErrors((prev) => (Object.keys(prev).length ? {} : prev));
+  }, []);
 
   const loadCategories = useCallback(async () => {
     try {
@@ -103,7 +108,7 @@ export default function ProductForm(props: Props) {
           apiClient.get(`/products/${id}`),
           apiClient.get(`/product-variants/product/${id}`).catch((error) => {
             console.error('Failed to load variants:', error);
-            showToast("We couldn't load this dish's variants; saving now leaves them as they are.", 'warning');
+            showToast("We couldn't load this dish's sizes; saving now leaves them as they are.", 'warning');
             return null;
           }),
         ]);
@@ -126,7 +131,7 @@ export default function ProductForm(props: Props) {
         setShowVariants(saved.length > 0);
       } catch (error) {
         console.error('Failed to load product:', error);
-        showToast('Failed to load product', 'error');
+        showToast("We couldn't open this dish.", 'error');
         router.push('/sellers/products');
       } finally {
         setLoading(false);
@@ -142,7 +147,7 @@ export default function ProductForm(props: Props) {
     }
     if (user?.userType !== 'seller' && user?.user_type !== 'seller') {
       router.push('/dashboard');
-      showToast('Access denied. Seller privileges required.', 'error');
+      showToast('This page is for kitchens.', 'error');
       return;
     }
     loadCategories();
@@ -196,9 +201,21 @@ export default function ProductForm(props: Props) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const problem = productProblem(form, customUnit, { requireCategory: mode === 'create' }) || menuError(menu);
-    if (problem) {
-      showToast(problem, 'error');
+    const problems = productProblems(form, customUnit, { requireCategory: mode === 'create', variants });
+    setFieldErrors(problems);
+    const first = Object.keys(problems)[0];
+    if (first) {
+      if (!showVariants && first.startsWith('variant-')) setShowVariants(true);
+      const field = document.getElementById(first);
+      field?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      field?.focus({ preventScroll: true });
+      const count = Object.keys(problems).length;
+      showToast(count === 1 ? problems[first] : `Fix the ${count} things marked in red.`, 'error');
+      return;
+    }
+    const menuProblem = menuError(menu);
+    if (menuProblem) {
+      showToast(menuProblem, 'error');
       return;
     }
 
@@ -206,7 +223,7 @@ export default function ProductForm(props: Props) {
       setSaving(true);
       const uploaded = await uploadNewPhotos();
       if (uploaded === null) {
-        showToast(mode === 'create' ? 'Failed to upload images. Product will be created without images.' : 'Failed to upload new images', 'warning');
+        showToast(mode === 'create' ? 'The photos did not upload. The dish is saved without them.' : 'The new photos did not upload.', 'warning');
       }
       const savedPhotos = images.filter((img) => img.url).map((img) => img.url as string);
       const body = { ...productPayload(form, customUnit, [...savedPhotos, ...(uploaded || [])], mode), ...menuPayload(menu) };
@@ -222,24 +239,29 @@ export default function ProductForm(props: Props) {
       if (!variantsSaved) {
         showToast(
           mode === 'create'
-            ? 'Product created but variants failed. You can add them later by editing the product.'
-            : 'Product updated but some variants failed. Please try again.',
+            ? "Dish saved, but its sizes were not. Open it and add them again."
+            : 'Changes saved, but some sizes were not. Try saving again.',
           'warning',
         );
+        // The dish exists now: going on as "Add a dish" would make a second one.
+        if (mode === 'create') {
+          router.push(`/sellers/products/${id}/edit`);
+          return;
+        }
       } else if (mode === 'create') {
         showToast(
           n > 0
-            ? `Product created with ${n} variant${n > 1 ? 's' : ''}! It'll go live once approved by an admin.`
-            : "Product submitted for review! It'll go live once approved by an admin.",
+            ? `Dish saved with ${n} size${n > 1 ? 's' : ''}. Customers can order it once Nuray has checked it.`
+            : "Dish saved. Customers can order it once Nuray has checked it.",
           'success',
         );
       } else {
-        showToast(touchedVariants ? `Product and ${n} variant(s) updated successfully!` : 'Product updated successfully!', 'success');
+        showToast('Changes saved.', 'success');
       }
       router.push('/sellers/products');
     } catch (error) {
       console.error('Failed to save product:', error);
-      showToast(saveErrorMessage(error, mode === 'create' ? 'Failed to add product. Please try again.' : 'Failed to update product. Please try again.'), 'error');
+      showToast(saveErrorMessage(error, mode === 'create' ? 'The dish was not saved. Try again.' : 'Your changes were not saved. Try again.'), 'error');
     } finally {
       setSaving(false);
     }
@@ -250,7 +272,7 @@ export default function ProductForm(props: Props) {
     if (
       !(await confirmDialog({
         title: 'Delete this dish?',
-        message: 'Are you sure you want to delete this product? This action cannot be undone.',
+        message: 'It leaves your menu for good. This cannot be undone.',
         confirmText: 'Delete',
       }))
     ) {
@@ -260,12 +282,12 @@ export default function ProductForm(props: Props) {
       setSaving(true);
       const response = await apiClient.delete(`/products/${productId}`);
       if (response.data.success) {
-        showToast('Product deleted successfully', 'success');
+        showToast('Dish deleted.', 'success');
         router.push('/sellers/products');
       }
     } catch (error) {
       console.error('Failed to delete product:', error);
-      showToast(saveErrorMessage(error, 'Failed to delete product'), 'error');
+      showToast(saveErrorMessage(error, 'The dish was not deleted. Try again.'), 'error');
     } finally {
       setSaving(false);
     }
@@ -273,7 +295,7 @@ export default function ProductForm(props: Props) {
 
   const addVariant = () => {
     if (variants.length >= MAX_VARIANTS) {
-      showToast(`Maximum ${MAX_VARIANTS} variants allowed per product`, 'warning');
+      showToast(`A dish can have up to ${MAX_VARIANTS} sizes.`, 'warning');
       return;
     }
     setVariants((prev) => [...prev, newVariant(form, prev.length)]);
@@ -311,7 +333,8 @@ export default function ProductForm(props: Props) {
       <div className="max-w-3xl">
         {helpOpen && <ShortcutsHelp onClose={() => setHelpOpen(false)} />}
 
-        <form ref={formRef} onSubmit={handleSubmit}>
+        <FieldErrorsContext.Provider value={fieldErrors}>
+        <form ref={formRef} onSubmit={handleSubmit} noValidate>
           {mode === 'edit' && (
             <section aria-label="Showing to customers" className="border-b border-line pb-6 mb-8">
               <SwitchRow
@@ -359,7 +382,10 @@ export default function ProductForm(props: Props) {
                 onToggle={() => setShowVariants(!showVariants)}
                 onAdd={addVariant}
                 onRemove={removeVariant}
-                onUpdate={(index, patch) => setVariants((prev) => prev.map((v, i) => (i === index ? { ...v, ...patch } : v)))}
+                onUpdate={(index, patch) => {
+                  setVariants((prev) => prev.map((v, i) => (i === index ? { ...v, ...patch } : v)));
+                  setFieldErrors((prev) => (Object.keys(prev).length ? {} : prev));
+                }}
                 onMakeDefault={(index) => setVariants((prev) => prev.map((v, i) => ({ ...v, isDefault: i === index })))}
               />
             }
@@ -398,6 +424,7 @@ export default function ProductForm(props: Props) {
             </Button>
           </div>
         </form>
+        </FieldErrorsContext.Provider>
       </div>
 
       <CategoryRequestModal

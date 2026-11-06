@@ -19,7 +19,7 @@ export interface CreateOrderRequest {
 
 /**
  * A dish of an order, as the API sends it to the customer who placed it. The list sends only the first three dishes and
- * the fields up to `status`; the order's own page sends all of them, with the kitchen and the dish.
+ * the fields up to `status`, plus the kitchen's name; the order's own page sends all of them, with the kitchen and the dish.
  */
 export interface OrderItem {
   id: string;
@@ -32,7 +32,15 @@ export interface OrderItem {
   unitPrice?: number | string;
   totalPrice?: number | string;
   status: string;
-  seller?: { id?: string; businessName?: string; businessNameUrdu?: string | null } | null;
+  seller?: {
+    id?: string;
+    businessName?: string;
+    businessNameUrdu?: string | null;
+    /** On the order's own page, for a self-pickup order only: where to collect it, and the kitchen's number while it is open. */
+    pickupAddress?: string | null;
+    pickupLandmark?: string | null;
+    pickupPhone?: string | null;
+  } | null;
   product?: { id?: string; name?: string; slug?: string; images?: Array<{ imageUrl: string }> } | null;
 }
 
@@ -45,6 +53,8 @@ export interface Order {
   /** The status under its older name: a live update sets both, and old data may carry only this one. */
   status?: string;
   paymentStatus: string;
+  paymentMethod?: string | null;
+  deliveryType?: string | null;
   createdAt: string;
   estimatedDeliveryAt?: string | null;
   /** How many dishes the order has; `items` holds only the first three in the list. */

@@ -22,6 +22,8 @@ export const getAdminOrdersQuerySchema = z.object({
   dateFrom: z.string().refine((d) => !Number.isNaN(Date.parse(d)), 'Invalid dateFrom').optional(),
   dateTo: z.string().refine((d) => !Number.isNaN(Date.parse(d)), 'Invalid dateTo').optional(),
   orderNumber: z.string().optional(),
+  // An order number, or the customer's phone, email or name.
+  search: z.string().trim().max(100).optional(),
 });
 
 export const updateOrderStatusSchema = z.object({

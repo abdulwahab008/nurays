@@ -21,6 +21,7 @@ test('sign-in, checkout and payment keep the whole screen, and staff screens hav
 test('the tab for the page you are on is marked', () => {
   assert.equal(activeCustomerTab('/'), 'home');
   assert.equal(activeCustomerTab('/kitchens/abc'), 'home');
+  assert.equal(activeCustomerTab('/dashboard'), 'home');
   assert.equal(activeCustomerTab('/orders/42'), 'orders');
   assert.equal(activeCustomerTab('/cart'), 'tray');
   assert.equal(activeCustomerTab('/profile/addresses'), 'profile');

@@ -30,6 +30,13 @@ export const updateOrderItemStatusSchema = z.object({
   path: ['reason'],
 });
 
+/** Accepting an order: optionally, how long the kitchen says it will take ("Ready in about"), in minutes. No body keeps the dishes' own times. */
+export const acceptOrderSchema = z
+  .object({
+    preparationTime: z.number().int().min(5, 'Preparation time is at least 5 minutes').max(240, 'Preparation time is at most 4 hours').optional(),
+  })
+  .optional();
+
 export const cancelOrderItemSchema = z.object({
   reason: z.string().min(5).max(500),
 });

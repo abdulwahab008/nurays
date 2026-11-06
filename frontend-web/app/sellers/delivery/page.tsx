@@ -78,8 +78,8 @@ export default function SellerDeliveryPage() {
     maxDeliveryDistanceKm: 5.0 as number | null,
     minOrderAmountForDelivery: 250 as number | null,
     allowPickup: true,
-    latitude: 31.4720 as number | null,
-    longitude: 74.4530 as number | null,
+    latitude: null as number | null,
+    longitude: null as number | null,
   });
 
   const [newAreaInput, setNewAreaInput] = useState('');
@@ -90,6 +90,17 @@ export default function SellerDeliveryPage() {
   const [drafts, setDrafts] = useState<Record<string, CommunityDraft>>({});
   const [allowCrossCommunity, setAllowCrossCommunity] = useState(true);
   const [homeCommunityName, setHomeCommunityName] = useState<string | null>(null);
+  // The page as the server holds it (as loaded, or as last saved): Save changes stays quiet until something differs.
+  const [savedSnapshot, setSavedSnapshot] = useState('');
+  const snapshot = JSON.stringify({ deliveryModel, formData, drafts, allowCrossCommunity });
+  const changed = savedSnapshot !== '' && snapshot !== savedSnapshot;
+  // Taken once the loaded (or saved) values have reached the form, so the snapshot holds them and not the defaults.
+  const [snapshotDue, setSnapshotDue] = useState(false);
+  useEffect(() => {
+    if (!snapshotDue) return;
+    setSavedSnapshot(snapshot);
+    setSnapshotDue(false);
+  }, [snapshotDue, snapshot]);
 
   const loadDeliverySettings = async (silent = false) => {
     try {
@@ -115,8 +126,9 @@ export default function SellerDeliveryPage() {
           maxDeliveryDistanceKm: s.maxDeliveryDistanceKm != null ? Number(s.maxDeliveryDistanceKm) : 5.0,
           minOrderAmountForDelivery: s.minOrderAmountForDelivery != null ? Number(s.minOrderAmountForDelivery) : 250,
           allowPickup: Array.isArray(s.deliveryModes) ? s.deliveryModes.includes('pickup') : true,
-          latitude: s.latitude != null ? parseFloat(String(s.latitude)) : 31.4720,
-          longitude: s.longitude != null ? parseFloat(String(s.longitude)) : 74.4530,
+          // No pin is no pin: a made-up one would measure every delivery from the wrong street.
+          latitude: s.latitude != null ? parseFloat(String(s.latitude)) : null,
+          longitude: s.longitude != null ? parseFloat(String(s.longitude)) : null,
         });
       } else {
         throw new Error('The settings were not in the answer');
@@ -141,6 +153,7 @@ export default function SellerDeliveryPage() {
         showToast('Could not load your per-community delivery fees, so nothing can be saved yet. Try again first.', 'error');
       }
       setSettingsRead(true);
+      setSnapshotDue(true);
     } catch (err: unknown) {
       console.error('Failed to load delivery settings:', err);
       setLoadError(err);
@@ -303,6 +316,7 @@ export default function SellerDeliveryPage() {
           setCommunities(rows);
           setDrafts(Object.fromEntries(rows.map((r) => [r.id, toDraft(r)])));
         }
+        setSnapshotDue(true);
         showToast('Delivery settings saved.', 'success');
       }
     } catch (err) {
@@ -385,7 +399,7 @@ export default function SellerDeliveryPage() {
         {d.enabled && !selfDelivery && (
           <div className="grid grid-cols-2 gap-3 pb-3 sm:ps-8" data-testid="nuray-fee-row">
             <div>
-              <span className="block text-sm text-muted">Customers pay Nuray</span>
+              <span className="block text-sm text-muted">Nuray&apos;s fee, from your earnings</span>
               <span className="mt-1 block text-[15px] font-semibold text-ink tabular-nums">
                 {c.nurayFee == null
                   ? 'Too far for Nuray riders'
@@ -456,6 +470,12 @@ export default function SellerDeliveryPage() {
     );
   };
 
+  const homeFee = communities.find((c) => c.isHome)?.nurayFee;
+  const nurayRiderBody =
+    'A Nuray rider collects the order from your kitchen. Nuray\'s delivery fee comes out of your earnings for that order' +
+    (homeFee != null ? ` (Rs ${homeFee} inside your community)` : '') +
+    '; the customer pays no delivery fee.';
+
   return (
     <DashboardLayout title="Delivery" subtitle={subtitle} sidebarItems={SELLER_SIDEBAR_ITEMS} userType="seller">
       <div className="max-w-3xl">
@@ -477,7 +497,7 @@ export default function SellerDeliveryPage() {
                   {
                     value: 'model_a',
                     title: 'Nuray riders',
-                    body: "A Nuray rider collects the order from your kitchen. Customers pay Nuray's delivery fee.",
+                    body: nurayRiderBody,
                   },
                   {
                     value: 'model_b',
@@ -520,7 +540,7 @@ export default function SellerDeliveryPage() {
               {homeCommunityName ? `Your kitchen is in ${homeCommunityName}. ` : ''}
               {selfDelivery
                 ? 'Set what you charge in each community you deliver to. Once you tick one, you only deliver to the ones ticked.'
-                : 'Nuray riders charge a set fee inside your community and a fee by distance to others. Tick the communities you deliver to.'}
+                : 'Nuray charges you a set fee for each order inside your community, and a fee by distance to others. It comes out of your earnings for that order. Tick the communities you deliver to.'}
             </p>
 
             <div className="mt-4 flex items-center justify-between gap-4">
@@ -851,7 +871,7 @@ export default function SellerDeliveryPage() {
           )}
 
           <div className="sticky bottom-0 z-10 mt-8 flex justify-end border-t border-line bg-page/95 py-4 pb-[calc(1rem+var(--safe-bottom,0px))] backdrop-blur">
-            <Button type="submit" disabled={saving} className="min-h-11 w-full px-6 sm:w-auto">
+            <Button type="submit" disabled={saving || !changed} className="min-h-11 w-full px-6 sm:w-auto">
               {saving ? 'Saving…' : 'Save changes'}
             </Button>
           </div>

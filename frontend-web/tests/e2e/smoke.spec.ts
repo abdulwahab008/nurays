@@ -32,19 +32,19 @@ test.describe('Nuray smoke', () => {
     await expect(page).toHaveURL(/\/(kitchens|products)\//, { timeout: 15000 });
   });
 
-  test('/login renders OTP + Email tabs and Google sign-in', async ({ page }) => {
+  test('/login renders Phone + Email tabs and Google sign-in', async ({ page }) => {
     await page.goto('/login');
     await expect(page.getByRole('heading', { name: /Welcome back/i })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'OTP', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Phone', exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Email', exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: /Continue with Google/i })).toBeVisible();
   });
 
   test('/register renders role choices and email field', async ({ page }) => {
     await page.goto('/register');
-    await expect(page.getByRole('heading', { name: /Create Your Account/i })).toBeVisible();
-    await expect(page.getByRole('button', { name: /Order Food/i })).toBeVisible();
-    await expect(page.getByRole('button', { name: /Cook & Sell/i })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /Create your account/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Order food/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Cook and sell/i })).toBeVisible();
     await expect(page.locator('#email')).toBeVisible();
   });
 

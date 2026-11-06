@@ -5,6 +5,15 @@ import { pageArgs } from '../utils/pagination';
 import { AppError } from '../middleware/errorHandler';
 import { notify } from './notify.service';
 import { thrown } from '../utils/thrown';
+import { realPhoneOrNull } from '../utils/otp';
+
+const STATUS_LABEL: Record<string, string> = {
+  open: 'Open',
+  in_progress: 'In progress',
+  resolved: 'Resolved',
+  closed: 'Closed',
+};
+const statusLabel = (status: string) => STATUS_LABEL[status] ?? status;
 
 export class SupportService {
   /**
@@ -134,13 +143,15 @@ export class SupportService {
     };
   }
 
-  private async formatTicketWithMessages(ticketId: string, includeInternal = false) {
+  /** `staffView`: an admin is reading, so internal notes and the customer's contact details are included. */
+  private async formatTicketWithMessages(ticketId: string, staffView = false) {
     const ticket = await prisma.supportTicket.findUnique({
       where: { id: ticketId },
       include: {
         order: { select: { id: true, orderNumber: true } },
+        user: { select: { email: true, phone: true, profile: { select: { fullName: true } } } },
         messages: {
-          ...(includeInternal ? {} : { where: { isInternal: false } }),
+          ...(staffView ? {} : { where: { isInternal: false } }),
           orderBy: { createdAt: 'asc' },
         },
       },
@@ -155,6 +166,7 @@ export class SupportService {
       select: { id: true, userType: true, profile: { select: { fullName: true } } },
     });
     const authorById = new Map(authors.map((a) => [a.id, a]));
+    const customerName = ticket.user.profile?.fullName || null;
 
     return {
       id: ticket.id,
@@ -165,6 +177,13 @@ export class SupportService {
       priority: ticket.priority,
       status: ticket.status,
       order: ticket.order ? { id: ticket.order.id, orderNumber: ticket.order.orderNumber } : null,
+      ...(staffView
+        ? {
+            customerName,
+            customerEmail: ticket.user.email,
+            customerPhone: realPhoneOrNull(ticket.user.phone),
+          }
+        : {}),
       createdAt: ticket.createdAt,
       updatedAt: ticket.updatedAt,
       messages: ticket.messages.map((m) => {
@@ -172,9 +191,11 @@ export class SupportService {
         return {
           id: m.id,
           message: m.message,
-          ...(includeInternal ? { isInternal: m.isInternal } : {}),
+          ...(staffView ? { isInternal: m.isInternal } : {}),
           authorType: author?.userType ?? 'customer',
-          authorName: author?.profile?.fullName || (author?.userType === 'admin' ? 'Support Team' : 'You'),
+          authorName:
+            author?.profile?.fullName ||
+            (author?.userType === 'admin' ? 'Support Team' : staffView ? customerName || 'Customer' : 'You'),
           createdAt: m.createdAt,
         };
       }),
@@ -257,7 +278,7 @@ export class SupportService {
         subject: t.subject,
         priority: t.priority,
         status: t.status,
-        customerName: t.user.profile?.fullName || t.user.email || t.user.phone,
+        customerName: t.user.profile?.fullName || t.user.email || realPhoneOrNull(t.user.phone) || 'Customer',
         orderNumber: t.order?.orderNumber ?? null,
         assignedTo: t.assignedTo,
         createdAt: t.createdAt,
@@ -298,7 +319,7 @@ export class SupportService {
     const statusChanged = !!status && status !== ticket.status;
     if (statusChanged) {
       await prisma.supportMessage.create({
-        data: { ticketId, userId: adminId, message: `Status changed from ${ticket.status} to ${status}`, isInternal: true },
+        data: { ticketId, userId: adminId, message: `Status changed from ${statusLabel(ticket.status)} to ${statusLabel(status)}`, isInternal: true },
       });
     }
 

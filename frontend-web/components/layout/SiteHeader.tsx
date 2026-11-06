@@ -5,8 +5,9 @@
  * optional search, language, appearance, tray and account. One component, so the pages cannot drift apart again.
  * On a phone the tray, orders and profile live in the tab bar (CustomerTabBar), so the header keeps to the essentials.
  */
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { ChevronDown, LayoutDashboard, LogOut, MapPin, Menu, Moon, Package, Search, ShoppingBag, Snowflake, Sun, X } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 import { useAuthStore } from '@/lib/store/auth-store';
@@ -22,8 +23,8 @@ import { ThemeToggle } from '@/components/layout/ThemeToggle';
 import { cn } from '@/lib/utils';
 
 export interface SiteHeaderProps {
-  /** The home page's live search; other pages have their own search in the page. */
-  search?: { query: string; onChange: (query: string) => void };
+  /** Shows the dish and kitchen search (home); Enter opens the results on /products. Other pages have their own search. */
+  search?: boolean;
   /** Opens the tray drawer; without it the tray button goes to /cart. */
   onOpenTray?: () => void;
   /** Opens the side menu (home only). */
@@ -75,6 +76,13 @@ const iconButton =
 
 export function SiteHeader({ search, onOpenTray, onOpenNav, onFrozen }: SiteHeaderProps) {
   const t = useT(siteMessages);
+  const router = useRouter();
+  const [query, setQuery] = useState('');
+  const submitSearch = (e: FormEvent) => {
+    e.preventDefault();
+    const q = query.trim();
+    if (q) router.push(`/products?search=${encodeURIComponent(q)}`);
+  };
   const { isAuthenticated, user, logout } = useAuthStore(
     useShallow((s) => ({ isAuthenticated: s.isAuthenticated, user: s.user, logout: s.logout })),
   );
@@ -108,7 +116,7 @@ export function SiteHeader({ search, onOpenTray, onOpenNav, onFrozen }: SiteHead
             <Menu className="h-5 w-5" aria-hidden />
           </button>
         )}
-        <Link href="/" aria-label={t('home')} className="shrink-0">
+        <Link href="/" aria-label={t('home')} className="shrink-0 inline-flex items-center min-h-11 min-w-11">
           <span className="sm:hidden">
             <Mark size={36} />
           </span>
@@ -138,22 +146,24 @@ export function SiteHeader({ search, onOpenTray, onOpenNav, onFrozen }: SiteHead
         </nav>
 
         {search ? (
-          <label className="relative ms-auto hidden max-w-md flex-1 items-center sm:flex">
-            <span className="sr-only">{t('searchLabel')}</span>
+          <form role="search" onSubmit={submitSearch} className="relative ms-auto hidden max-w-md flex-1 items-center sm:flex">
+            <label htmlFor="site-search" className="sr-only">{t('searchLabel')}</label>
             <Search className="pointer-events-none absolute start-3.5 h-[18px] w-[18px] text-muted" aria-hidden />
             <input
+              id="site-search"
               type="search"
-              value={search.query}
-              onChange={(e) => search.onChange(e.target.value)}
+              enterKeyHint="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
               placeholder={t('searchPlaceholder')}
               className="h-11 w-full rounded-xl border border-line bg-raised ps-11 pe-10 text-sm font-medium text-ink outline-none transition-colors placeholder:text-muted focus:border-brand focus:bg-surface focus:ring-3 focus:ring-brand/30"
             />
-            {search.query && (
-              <button type="button" onClick={() => search.onChange('')} aria-label={t('clearSearch')} className="absolute end-2 flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:text-ink">
+            {query && (
+              <button type="button" onClick={() => setQuery('')} aria-label={t('clearSearch')} className="absolute end-1 flex h-9 w-9 items-center justify-center rounded-lg text-muted hover:text-ink">
                 <X className="h-4 w-4" aria-hidden />
               </button>
             )}
-          </label>
+          </form>
         ) : (
           <div className="ms-auto" />
         )}
@@ -238,19 +248,20 @@ export function SiteHeader({ search, onOpenTray, onOpenNav, onFrozen }: SiteHead
       </div>
 
       {search && (
-        <div className="px-4 pb-3 sm:hidden">
+        <form role="search" onSubmit={submitSearch} className="px-4 pb-3 sm:hidden">
           <label className="relative flex items-center">
             <span className="sr-only">{t('searchLabel')}</span>
             <Search className="pointer-events-none absolute start-3.5 h-[18px] w-[18px] text-muted" aria-hidden />
             <input
               type="search"
-              value={search.query}
-              onChange={(e) => search.onChange(e.target.value)}
+              enterKeyHint="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
               placeholder={t('searchPlaceholder')}
               className="h-12 w-full rounded-xl border border-line bg-raised ps-11 pe-4 text-[15px] font-medium text-ink outline-none placeholder:text-muted focus:border-brand focus:bg-surface focus:ring-3 focus:ring-brand/30"
             />
           </label>
-        </div>
+        </form>
       )}
     </header>
   );

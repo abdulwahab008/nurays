@@ -74,10 +74,16 @@ describe('getMyDeliveries', () => {
     expect(Date.now() - cutoff.getTime()).toBeLessThan(24.1 * 3600_000);
   });
 
-  it('returns the running and the finished jobs together, newest first', async () => {
-    database([job('r1', 'picked_up', 5), job('r2', 'assigned', 20)], [job('f1', 'delivered', 10), job('f2', 'delivered', 60)]);
+  it('lists running jobs first, furthest along on top, then finished jobs newest first', async () => {
+    database([job('r1', 'assigned', 5), job('r2', 'arrived_at_pickup', 20)], [job('f1', 'delivered', 10), job('f2', 'delivered', 60)]);
     const list = await riderService.getMyDeliveries('user-1');
-    expect(list.map((j) => j.id)).toEqual(['r1', 'f1', 'r2', 'f2']);
+    expect(list.map((j) => j.id)).toEqual(['r2', 'r1', 'f1', 'f2']);
+  });
+
+  it('keeps the older job on top when two running jobs are at the same step', async () => {
+    database([job('r1', 'assigned', 5), job('r2', 'assigned', 20)], []);
+    const list = await riderService.getMyDeliveries('user-1');
+    expect(list.map((j) => j.id)).toEqual(['r2', 'r1']);
   });
 
   it('asks for no finished jobs at all when told to (the pop-up only needs to count the running ones)', async () => {
@@ -106,5 +112,40 @@ describe('getMyDeliveries', () => {
     findRider.mockResolvedValue({ id: 'rider-1', userId: 'user-1', status: 'active', verificationStatus: 'pending' });
     await expect(riderService.getMyDeliveries('user-1')).rejects.toMatchObject({ code: 'RIDER_NOT_APPROVED' });
     expect(findDeliveries).not.toHaveBeenCalled();
+  });
+});
+
+describe('where the rider collects the food', () => {
+  const kitchen = (seller: Record<string, unknown>) => ({
+    status: 'confirmed',
+    fulfillmentType: 'seller',
+    seller: { businessName: "Saima's Kitchen", pickupAddress: null, pickupLandmark: null, pickupPhone: null, primaryCommunityName: null, latitude: null, longitude: null, deliveryProvider: 'platform', user: { phone: '03001234567' }, ...seller },
+  });
+  const withKitchen = (status: string, seller: Record<string, unknown>, riderId: string | null = 'rider-1') => {
+    const j = job('k1', status, 5);
+    return { ...j, riderId, pickupAddress: "Saima's Kitchen", order: { ...j.order, items: [kitchen(seller)] } };
+  };
+
+  it("gives the kitchen's street address, landmark, phone and pin to the rider holding the job", async () => {
+    database([withKitchen('assigned', { pickupAddress: 'House 12, Street 4', primaryCommunityName: 'DHA Phase 5', pickupLandmark: 'Green gate', pickupPhone: '03110000000', latitude: 31.47, longitude: 74.4 })], []);
+    const [j] = await riderService.getMyDeliveries('user-1');
+    expect(j.pickupAddress).toBe("Saima's Kitchen, House 12, Street 4, DHA Phase 5");
+    expect(j.pickup).toEqual({ name: "Saima's Kitchen", address: 'House 12, Street 4', area: 'DHA Phase 5', landmark: 'Green gate', phone: '03110000000' });
+    expect([j.pickupLatitude, j.pickupLongitude]).toEqual([31.47, 74.4]);
+    expect(j.pickupMapsUrl).toBe('https://www.google.com/maps/dir/?api=1&destination=31.47,74.4');
+  });
+
+  it("falls back to the kitchen owner's phone, and never sends Maps to search a kitchen's bare name", async () => {
+    database([withKitchen('assigned', {})], []);
+    const [j] = await riderService.getMyDeliveries('user-1');
+    expect(j.pickup.phone).toBe('03001234567');
+    expect(j.pickupLatitude).toBeNull();
+    expect(j.pickupMapsUrl).toBeNull();
+  });
+
+  it('keeps the kitchen phone from a job nobody holds yet', async () => {
+    database([], [withKitchen('delivered', { pickupPhone: '03110000000' })]);
+    const [j] = await riderService.getMyDeliveries('user-1');
+    expect(j.pickup.phone).toBeNull();
   });
 });

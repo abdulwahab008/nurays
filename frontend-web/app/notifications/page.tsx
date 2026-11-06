@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { loginUrlHere } from '@/lib/auth-redirect';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -25,6 +25,8 @@ import {
   CheckCheck,
 } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
+
+const UNDO_MS = 5000;
 
 interface Notification {
   id: string;
@@ -130,18 +132,70 @@ export default function NotificationsPage() {
     }
   };
 
-  const deleteNotification = async (id: string) => {
+  // A deleted notification leaves the list at once and is only deleted on the server once the undo window has passed.
+  const [undoable, setUndoable] = useState<{ notification: Notification; index: number } | null>(null);
+  const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingRef = useRef<{ notification: Notification; index: number } | null>(null);
+
+  const commitDelete = async (pending: { notification: Notification; index: number }) => {
     try {
-      await apiClient.delete(`/notifications/${id}`);
+      await apiClient.delete(`/notifications/${pending.notification.id}`);
     } catch (error) {
-      // Already gone (deleted in another tab): the list should drop it too.
+      // Already gone (deleted in another tab): nothing to put back.
       if (apiErrorCode(error) !== 'NOTIFICATION_NOT_FOUND') {
         showToast(apiErrorMessage(error, t('deleteFailed')), 'error');
-        return;
+        setNotifications((prev) => {
+          const next = [...prev];
+          next.splice(Math.min(pending.index, next.length), 0, pending.notification);
+          return next;
+        });
       }
     }
-    setNotifications(prev => prev.filter(n => n.id !== id));
   };
+
+  const flushPending = () => {
+    if (undoTimer.current) clearTimeout(undoTimer.current);
+    undoTimer.current = null;
+    const pending = pendingRef.current;
+    pendingRef.current = null;
+    setUndoable(null);
+    if (pending) void commitDelete(pending);
+  };
+
+  const deleteNotification = (id: string) => {
+    flushPending();
+    const index = notifications.findIndex((n) => n.id === id);
+    if (index < 0) return;
+    const pending = { notification: notifications[index], index };
+    pendingRef.current = pending;
+    setUndoable(pending);
+    setNotifications((prev) => prev.filter((n) => n.id !== id));
+    undoTimer.current = setTimeout(flushPending, UNDO_MS);
+  };
+
+  const undoDelete = () => {
+    if (undoTimer.current) clearTimeout(undoTimer.current);
+    undoTimer.current = null;
+    const pending = pendingRef.current;
+    pendingRef.current = null;
+    setUndoable(null);
+    if (!pending) return;
+    setNotifications((prev) => {
+      const next = [...prev];
+      next.splice(Math.min(pending.index, next.length), 0, pending.notification);
+      return next;
+    });
+  };
+
+  // Leaving the page ends the undo window: the delete goes through.
+  useEffect(
+    () => () => {
+      if (undoTimer.current) clearTimeout(undoTimer.current);
+      const pending = pendingRef.current;
+      if (pending) void apiClient.delete(`/notifications/${pending.notification.id}`).catch(() => undefined);
+    },
+    []
+  );
 
   const filteredNotifications = notifications.filter(n =>
     filter === 'all' ? true : !n.isRead
@@ -164,11 +218,11 @@ export default function NotificationsPage() {
     >
       {/* Header Actions */}
       {!couldNotRead && (
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
           <div className="flex gap-2">
             <button
               onClick={() => setFilter('all')}
-              className={`h-10 px-4 rounded-full text-sm font-bold transition-colors ${
+              className={`min-h-11 px-4 rounded-full text-sm font-semibold whitespace-nowrap transition-colors ${
                 filter === 'all'
                   ? 'bg-ink text-page'
                   : 'bg-surface text-ink border border-line hover:bg-raised'
@@ -178,7 +232,7 @@ export default function NotificationsPage() {
             </button>
             <button
               onClick={() => setFilter('unread')}
-              className={`h-10 px-4 rounded-full text-sm font-bold transition-colors ${
+              className={`min-h-11 px-4 rounded-full text-sm font-semibold whitespace-nowrap transition-colors ${
                 filter === 'unread'
                   ? 'bg-ink text-page'
                   : 'bg-surface text-ink border border-line hover:bg-raised'
@@ -188,12 +242,12 @@ export default function NotificationsPage() {
             </button>
           </div>
           <div className="flex items-center gap-2">
-            <Link href="/notifications/settings" className="text-sm font-medium text-muted hover:text-ink underline">
+            <Link href="/notifications/settings" className="inline-flex items-center min-h-11 px-1 text-sm font-medium text-muted hover:text-ink underline">
               {t('settings')}
             </Link>
             {unreadCount > 0 && (
-              <Button variant="outline" onClick={markAllAsRead} className="text-sm">
-                <CheckCheck className="w-4 h-4 me-2" /> {t('markAllRead')}
+              <Button variant="outline" onClick={markAllAsRead} className="whitespace-nowrap">
+                <CheckCheck className="w-4 h-4" /> {t('markAllRead')}
               </Button>
             )}
           </div>
@@ -234,33 +288,30 @@ export default function NotificationsPage() {
                 !notification.isRead ? 'border-line border-s-4 border-s-brand' : 'border-line'
               }`}
             >
-              <div className="flex items-start gap-4">
-                <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 border ${getNotificationColor(notification.type)}`}>
+              <div className="flex items-start gap-3">
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border ${getNotificationColor(notification.type)}`}>
                   {renderNotificationIcon(notification.type)}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
+                  <div className="flex items-start justify-between gap-1">
+                    <div className="min-w-0">
                       <h3 className={`font-semibold ${!notification.isRead ? 'text-ink' : 'text-ink'}`}>
                         {notification.title}
                       </h3>
-                      <p className="text-muted text-sm mt-1">{notification.message}</p>
-                      <p className="text-xs text-muted mt-2">
-                        {formatDate(notification.createdAt)}
-                      </p>
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
+                    <div className="flex items-center shrink-0 -me-2 -mt-2">
                       {!notification.isRead && (
                         <button
                           onClick={() => markAsRead(notification.id)}
-                          className="text-xs text-brand-ink hover:underline font-medium"
+                          className="min-h-11 px-1 text-xs text-brand-ink hover:underline font-medium"
                         >
                           {t('markRead')}
                         </button>
                       )}
                       <button
                         onClick={() => deleteNotification(notification.id)}
-                        className="p-1 rounded-lg text-muted hover:text-red-500 hover:bg-raised transition-colors"
+                        className="w-11 h-11 flex items-center justify-center rounded-xl text-muted hover:text-red-700 hover:bg-raised transition-colors"
+                        data-testid="notification-delete"
                         title={tc('delete')}
                         aria-label={tc('delete')}
                       >
@@ -268,6 +319,8 @@ export default function NotificationsPage() {
                       </button>
                     </div>
                   </div>
+                  <p className="text-muted text-sm mt-1">{notification.message}</p>
+                  <p className="text-xs text-muted mt-2">{formatDate(notification.createdAt)}</p>
                   {notification.link && (
                     <Link
                       href={notification.link}
@@ -281,6 +334,18 @@ export default function NotificationsPage() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+      {undoable && (
+        <div
+          role="status"
+          className="fixed inset-x-4 bottom-[calc(1rem+var(--tabbar-offset)+var(--safe-bottom))] z-40 mx-auto max-w-md flex items-center justify-between gap-3 rounded-2xl bg-ink text-page px-4 py-2 shadow-lg"
+          data-testid="notification-undo"
+        >
+          <span className="text-sm">{t('notificationDeleted')}</span>
+          <button type="button" onClick={undoDelete} className="min-h-11 px-2 text-sm font-semibold text-page underline underline-offset-2">
+            {t('undo')}
+          </button>
         </div>
       )}
     </DashboardLayout>

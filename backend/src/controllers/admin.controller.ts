@@ -33,6 +33,7 @@ export const getAllSellers = async (req: Request, res: Response) => {
   const filters = {
     status: qstr(req.query.status),
     verificationStatus: qstr(req.query.verificationStatus),
+    search: qstr(req.query.search),
     page: req.query.page ? parseInt(req.query.page as string) : undefined,
     limit: req.query.limit ? parseInt(req.query.limit as string) : undefined,
   };
@@ -197,6 +198,8 @@ export const updateSettings = async (req: Request, res: Response) => {
 export const getProductsForModeration = async (req: Request, res: Response) => {
   const filters = {
     status: qstr(req.query.moderationStatus) || qstr(req.query.status),
+    search: qstr(req.query.search),
+    sellerId: qstr(req.query.sellerId),
     page: req.query.page ? parseInt(req.query.page as string) : undefined,
     limit: req.query.limit ? parseInt(req.query.limit as string) : undefined,
   };

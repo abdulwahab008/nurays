@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter, useParams } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { AdminShell } from '@/components/layout/AdminShell';
 import { Button } from '@/components/ui/button';
@@ -10,9 +10,9 @@ import { LoadError } from '@/components/ui/LoadError';
 import { useDialogs } from '@/components/ui/Dialogs';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient, apiErrorMessage, apiErrorStatus } from '@/lib/api-client';
-import { formatPrice, formatDate } from '@/lib/utils';
+import { formatPrice, formatDate, formatDateTime } from '@/lib/utils';
 import { ExternalLink } from '@/components/ExternalLink';
-import { useShallow } from 'zustand/react/shallow';
+import { methodLabel, paymentState, statusLabel, statusTag } from '../order-labels';
 
 interface OrderDetail {
   id: string;
@@ -31,6 +31,8 @@ interface OrderDetail {
   paymentDisputeReason?: string | null;
   paymentSubmittedAt?: string | null;
   deliveryType: string;
+  /** Who pays each delivery: { fee, paidBy: 'customer' | 'seller', provider: 'platform' (a Nuray rider) | 'seller' }. */
+  deliveryFeeBreakdown?: Array<{ fee: number; paidBy?: string; provider?: string }> | null;
   createdAt: string;
   estimatedDeliveryAt?: string;
   deliveredAt?: string;
@@ -65,11 +67,17 @@ interface OrderDetail {
   }>;
 }
 
+// Steps a rider normally makes, checked with a pickup or delivery code; an admin can still make them, after a warning.
+const RIDER_STEPS = new Set(['dispatched', 'in_transit', 'delivered']);
+const ORDER_FORWARD_SEQUENCE = ['pending', 'confirmed', 'preparing', 'ready', 'dispatched', 'in_transit', 'delivered', 'completed'];
+
+const section = 'pt-5 border-t border-line';
+const sectionTitle = 'text-sm font-semibold text-ink mb-2';
+
 export default function AdminOrderDetailPage() {
-  const router = useRouter();
   const params = useParams();
   const id = params?.id as string;
-  const { isAuthenticated, user } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated, user: s.user })));
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const { showToast } = useToast();
   const { confirm: confirmDialog, ask: askDialog } = useDialogs();
   const [loading, setLoading] = useState(true);
@@ -77,13 +85,17 @@ export default function AdminOrderDetailPage() {
   const [loadError, setLoadError] = useState<unknown>(null);
   const [order, setOrder] = useState<OrderDetail | null>(null);
   const [updating, setUpdating] = useState(false);
-  const [selectedStatus, setSelectedStatus] = useState<string>('');
   const [showCancelForm, setShowCancelForm] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
   const [showRefundForm, setShowRefundForm] = useState(false);
   const [refundAmount, setRefundAmount] = useState('');
+  const [refundReason, setRefundReason] = useState('');
   const [confirmNote, setConfirmNote] = useState('');
   const [confirmingPayment, setConfirmingPayment] = useState(false);
+
+  // Dismissed refunds (status "failed") were never owed, so they do not count against what can still be refunded.
+  const refundedSoFar = (order?.refunds ?? []).filter((r) => r.status !== 'failed').reduce((sum, r) => sum + Number(r.amount), 0);
+  const refundable = order ? Math.max(0, Math.round((Number(order.totalAmount) - refundedSoFar) * 100) / 100) : 0;
 
   const loadOrder = async () => {
     try {
@@ -105,26 +117,29 @@ export default function AdminOrderDetailPage() {
   };
 
   useEffect(() => {
-    if (!isAuthenticated) {
-      router.push('/admin/login');
-      return;
-    }
-    if (user?.user_type !== 'admin' && user?.userType !== 'admin') {
-      router.push('/products');
-      showToast('Access denied. Admin privileges required.', 'error');
-      return;
-    }
-    if (id) loadOrder();
-  }, [isAuthenticated, user, id, router]);
+    if (isAuthenticated && id) loadOrder();
+  }, [isAuthenticated, id]);
 
-  const updateStatus = async () => {
-    if (!order || !selectedStatus || selectedStatus === order.orderStatus) return;
+  const updateStatus = async (selectedStatus: string) => {
+    if (!order || selectedStatus === order.orderStatus) return;
+    const label = statusLabel(selectedStatus).toLowerCase();
+    const skipsRider = RIDER_STEPS.has(selectedStatus);
+    if (
+      !(await confirmDialog({
+        title: `Mark as ${label}?`,
+        message: skipsRider
+          ? 'This skips the rider: no pickup or delivery code is checked. Only do it when you know the order really moved.'
+          : `The kitchen and the customer see the order as ${label}.`,
+        confirmText: `Mark as ${label}`,
+        variant: 'warning',
+      }))
+    )
+      return;
     try {
       setUpdating(true);
       await apiClient.patch(`/admin/orders/${order.id}/status`, { status: selectedStatus });
       showToast('Order status updated', 'success');
       loadOrder();
-      setSelectedStatus('');
     } catch (error) {
       showToast(apiErrorMessage(error, 'Failed to update status'), 'error');
     } finally {
@@ -220,17 +235,25 @@ export default function AdminOrderDetailPage() {
 
   const handleProcessRefund = async () => {
     if (!order) return;
-    const amount = refundAmount.trim() ? parseFloat(refundAmount.trim()) : undefined;
-    if (refundAmount.trim() && (Number.isNaN(amount) || (amount ?? 0) <= 0)) {
-      showToast('Enter a valid refund amount, or leave blank for a full refund', 'warning');
+    const amount = refundAmount.trim() ? parseFloat(refundAmount.trim()) : refundable;
+    if (Number.isNaN(amount) || amount <= 0 || amount > refundable) {
+      showToast(`Enter an amount up to ${formatPrice(refundable)}`, 'warning');
       return;
     }
+    if (refundReason.trim().length < 3) {
+      showToast('Say why the customer is being refunded', 'warning');
+      return;
+    }
+    const who = order.customer?.profile?.fullName || 'the customer';
+    const how = order.paymentMethod === 'wallet' ? 'to their Nuray wallet' : 'by manual transfer';
+    if (!(await confirmDialog({ title: 'Refund this order?', message: `Refund ${formatPrice(amount)} to ${who} ${how}?`, confirmText: `Refund ${formatPrice(amount)}`, variant: 'warning' }))) return;
     try {
       setUpdating(true);
-      await apiClient.post(`/admin/orders/${order.id}/refund`, amount != null ? { refundAmount: amount } : {});
-      showToast('Refund processed successfully', 'success');
+      const res = await apiClient.post(`/admin/orders/${order.id}/refund`, { refundAmount: amount, reason: refundReason.trim() });
+      showToast(`Refund of ${formatPrice(Number(res.data?.data?.refundAmount ?? amount))} recorded`, 'success');
       setShowRefundForm(false);
       setRefundAmount('');
+      setRefundReason('');
       loadOrder();
     } catch (error) {
       showToast(apiErrorMessage(error, 'Failed to process refund'), 'error');
@@ -239,444 +262,371 @@ export default function AdminOrderDetailPage() {
     }
   };
 
-  const getStatusColor = (status: string) => {
-    const map: Record<string, string> = {
-      pending: 'bg-yellow-100 text-yellow-800',
-      confirmed: 'bg-blue-100 text-blue-800',
-      preparing: 'bg-purple-100 text-purple-800',
-      ready: 'bg-indigo-100 text-indigo-800',
-      in_transit: 'bg-brand-100 text-brand-800',
-      delivered: 'bg-green-100 text-green-800',
-      completed: 'bg-green-100 text-green-800',
-      cancelled: 'bg-red-100 text-red-800',
-    };
-    return map[status] || 'bg-gray-100 text-gray-800';
-  };
-
-  if (!isAuthenticated || (user?.user_type !== 'admin' && user?.userType !== 'admin')) {
-    return null;
-  }
-
-  // Mirrors the backend's isValidOrderStatusTransition — admin can only move
-  // an order exactly one step forward at a time (or to Cancelled, handled by
-  // the dedicated cancel flow below), so only ever offer that single next step.
-  const ORDER_FORWARD_SEQUENCE = ['pending', 'confirmed', 'preparing', 'ready', 'dispatched', 'in_transit', 'delivered', 'completed'];
-  const NEXT_STATUS_META: Record<string, { label: string; color: string }> = {
-    confirmed: { label: 'Confirmed', color: 'bg-blue-700 hover:bg-blue-800' },
-    preparing: { label: 'Preparing', color: 'bg-purple-700 hover:bg-purple-800' },
-    ready: { label: 'Ready', color: 'bg-indigo-700 hover:bg-indigo-800' },
-    dispatched: { label: 'Dispatched', color: 'bg-pink-700 hover:bg-pink-800' },
-    in_transit: { label: 'In Transit', color: 'bg-brand-700 hover:bg-brand-800' },
-    delivered: { label: 'Delivered', color: 'bg-green-700 hover:bg-green-800' },
-  };
+  // Mirrors the backend's isValidOrderStatusTransition: an admin moves an order exactly one step forward at a time (or to
+  // Cancelled, through the cancel flow below), so only that single next step is offered.
   const currentIndex = order ? ORDER_FORWARD_SEQUENCE.indexOf(order.orderStatus) : -1;
-  const nextStatus = currentIndex >= 0 && currentIndex < ORDER_FORWARD_SEQUENCE.length - 1
-    ? ORDER_FORWARD_SEQUENCE[currentIndex + 1]
-    : null;
-  const nextStatusOptions = nextStatus && NEXT_STATUS_META[nextStatus]
-    ? [{ value: nextStatus, ...NEXT_STATUS_META[nextStatus] }]
-    : [];
+  const nextStatus = currentIndex >= 0 && currentIndex < ORDER_FORWARD_SEQUENCE.length - 2 ? ORDER_FORWARD_SEQUENCE[currentIndex + 1] : null;
+  const payment = order ? paymentState(order) : null;
+  const deliveries = (order?.deliveryFeeBreakdown ?? []).filter((d) => Number(d.fee) > 0);
+  const canChangeStatus = !!order && !['delivered', 'completed', 'cancelled', 'refunded'].includes(order.orderStatus);
 
   return (
     <AdminShell>
       <div className="max-w-4xl mx-auto">
-        <div className="mb-6">
-          <Link
-            href="/admin/orders"
-            className="text-brand-ink hover:underline text-sm font-medium inline-block"
-          >
-            ← Back to Orders
+        <div className="mb-4">
+          <Link href="/admin/orders" className="inline-flex min-h-11 items-center text-sm font-medium text-brand-ink hover:underline">
+            Back to orders
           </Link>
         </div>
 
-        {loading ? (
-          <div className="text-center py-12">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto mb-4"></div>
-            <p className="text-gray-600">Loading order...</p>
+        {loading && !order ? (
+          <div className="flex items-center justify-center gap-3 py-12 text-sm text-muted" role="status">
+            <span className="h-5 w-5 animate-spin rounded-full border-2 border-line-strong border-t-brand-ink" aria-hidden="true" />
+            Loading the order…
           </div>
         ) : loadError ? (
           <LoadError error={loadError} onRetry={loadOrder} title="We couldn't load this order" />
         ) : !order ? (
-          <div className="bg-white rounded-lg shadow-sm p-12 text-center">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Order not found</h3>
-            <Link href="/admin/orders">
-              <Button variant="outline">Back to Orders</Button>
-            </Link>
+          <div className="py-12 text-center space-y-3">
+            <p className="text-sm text-muted">There is no order with this link.</p>
+            <Link href="/admin/orders" className="text-sm font-medium text-brand-ink underline">Back to orders</Link>
           </div>
         ) : (
-          <div className="space-y-6">
-            <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-              <div className="p-6 border-b border-gray-200">
-                <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="bg-surface border border-line rounded-2xl shadow-[var(--shadow-card)]">
+            <div className="p-4 sm:p-6 border-b border-line">
+              <h1 className="text-2xl font-semibold text-ink break-all">Order #{order.orderNumber}</h1>
+              <p className="text-sm text-muted mt-1">Placed {formatDateTime(order.createdAt)}</p>
+              <dl className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-sm">
+                <div className="flex items-center gap-2">
+                  <dt className="text-muted">Order</dt>
+                  <dd className={statusTag(order.orderStatus)} data-testid="order-status">{statusLabel(order.orderStatus)}</dd>
+                </div>
+                <div className="flex items-center gap-2">
+                  <dt className="text-muted">Payment</dt>
+                  <dd className={payment!.tag} data-testid="payment-status">{payment!.label}</dd>
+                </div>
+              </dl>
+            </div>
+
+            <div className="p-4 sm:p-6 space-y-5">
+              {order.orderStatus === 'delivery_failed' && (
+                <div className="rounded-xl border border-red-200 bg-red-50 p-4">
+                  <h2 className="text-sm font-semibold text-red-700 mb-1">Delivery failed</h2>
+                  <p className="text-sm text-ink mb-3">
+                    The rider or kitchen couldn&apos;t complete this delivery. Send it back out for another attempt, or cancel it below.
+                  </p>
+                  <Button onClick={handleRetryDelivery} disabled={updating}>
+                    {updating ? 'Retrying…' : 'Retry delivery'}
+                  </Button>
+                </div>
+              )}
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                {order.customer && (
                   <div>
-                    <h1 className="text-2xl font-bold text-gray-900">Order #{order.orderNumber}</h1>
-                    <p className="text-sm text-gray-500 mt-1">{formatDate(order.createdAt)}</p>
+                    <h2 className={sectionTitle}>Customer</h2>
+                    <p className="text-ink">{order.customer.profile?.fullName || 'No name given'}</p>
+                    {order.customer.phone && <p className="text-sm text-muted" data-ltr>{order.customer.phone}</p>}
+                    {order.customer.email && <p className="text-sm text-muted break-all">{order.customer.email}</p>}
                   </div>
-                  <div className="flex gap-2">
-                    <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(order.orderStatus)}`}>
-                      {order.orderStatus.replace('_', ' ')}
-                    </span>
-                    <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                      order.paymentStatus === 'paid' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
-                    }`}>
-                      {order.paymentStatus}
-                    </span>
-                  </div>
+                )}
+                <div>
+                  <h2 className={sectionTitle}>Payment</h2>
+                  <p className="text-ink">{methodLabel(order.paymentMethod)}</p>
+                  {order.deliveryAddress && (
+                    <>
+                      <h2 className={`${sectionTitle} mt-4`}>Delivery address</h2>
+                      <p className="text-sm text-ink">
+                        {order.deliveryAddress.addressLine1}, {order.deliveryAddress.area}, {order.deliveryAddress.city}
+                      </p>
+                    </>
+                  )}
                 </div>
               </div>
 
-              <div className="p-6 space-y-6">
-                {order.customer && (
-                  <div>
-                    <h2 className="text-sm font-medium text-gray-500 uppercase mb-2">Customer</h2>
-                    <p className="text-gray-900">{order.customer.profile?.fullName || '—'}</p>
-                    <p className="text-gray-600 text-sm">{order.customer.email || order.customer.phone}</p>
-                  </div>
-                )}
-
-                {['jazzcash', 'easypaisa', 'bank'].includes(order.paymentMethod) && ['payment_submitted', 'disputed'].includes(order.paymentStatus) && (
-                  <div className={`rounded-lg border p-4 ${order.paymentStatus === 'disputed' ? 'border-red-200 bg-red-50' : 'border-amber-200 bg-amber-50'}`} data-testid="transfer-check">
-                    <h2 className="text-sm font-semibold text-gray-900">
-                      {order.paymentStatus === 'disputed' ? 'The kitchen says this transfer never arrived' : 'Transfer waiting for the kitchen to confirm'}
-                    </h2>
-                    <div className="mt-2 text-sm text-gray-700 space-y-1">
-                      <p>
-                        {order.paymentMethod === 'bank' ? 'Bank transfer' : order.paymentMethod === 'jazzcash' ? 'JazzCash' : 'EasyPaisa'} to the kitchen
-                        {order.paymentSenderAccount ? `, from ${order.paymentSenderAccount}` : ''}
-                        {order.paymentReferenceNumber ? ` · reference ${order.paymentReferenceNumber}` : ''}
-                      </p>
-                      {order.paymentDisputeReason && <p>Kitchen: &ldquo;{order.paymentDisputeReason}&rdquo;</p>}
-                      {order.paymentProofUrl && (
-                        <ExternalLink href={order.paymentProofUrl} className="underline font-medium">
-                          Open the customer&apos;s receipt
-                        </ExternalLink>
-                      )}
-                    </div>
-                    <p className="mt-3 text-xs text-gray-600">
-                      Check the receipt with the kitchen&apos;s statement. If the money arrived, confirm it here; if not, cancel the order below.
+              {['jazzcash', 'easypaisa', 'bank'].includes(order.paymentMethod) && ['payment_submitted', 'disputed'].includes(order.paymentStatus) && (
+                <div className={`rounded-xl border p-4 ${order.paymentStatus === 'disputed' ? 'border-red-200 bg-red-50' : 'border-line bg-accent-soft'}`} data-testid="transfer-check">
+                  <h2 className="text-sm font-semibold text-ink">
+                    {order.paymentStatus === 'disputed' ? 'The kitchen says this transfer never arrived' : 'Transfer waiting for the kitchen to confirm'}
+                  </h2>
+                  <div className="mt-2 text-sm text-ink space-y-1">
+                    <p>
+                      {methodLabel(order.paymentMethod)} to the kitchen
+                      {order.paymentSenderAccount ? `, from ${order.paymentSenderAccount}` : ''}
+                      {order.paymentReferenceNumber ? ` · reference ${order.paymentReferenceNumber}` : ''}
                     </p>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <input
-                        value={confirmNote}
-                        onChange={(e) => setConfirmNote(e.target.value)}
-                        placeholder="Note (optional), e.g. how it was checked"
-                        className="flex-1 min-w-[220px] px-3 py-2 rounded-lg border border-gray-200 text-sm bg-white"
-                      />
-                      <Button onClick={handleConfirmPayment} disabled={confirmingPayment} className="bg-green-600 hover:bg-green-700 text-white">
-                        {confirmingPayment ? 'Confirming…' : 'Confirm payment received'}
-                      </Button>
-                    </div>
+                    {order.paymentDisputeReason && <p>Kitchen: &ldquo;{order.paymentDisputeReason}&rdquo;</p>}
+                    {order.paymentProofUrl && (
+                      <ExternalLink href={order.paymentProofUrl} className="font-medium text-brand-ink underline">
+                        Open the customer&apos;s receipt
+                      </ExternalLink>
+                    )}
                   </div>
-                )}
-
-                {order.deliveryAddress && (
-                  <div>
-                    <h2 className="text-sm font-medium text-gray-500 uppercase mb-2">Delivery Address</h2>
-                    <p className="text-gray-700">
-                      {order.deliveryAddress.addressLine1}, {order.deliveryAddress.area}, {order.deliveryAddress.city}
-                    </p>
-                  </div>
-                )}
-
-                <div>
-                  <h2 className="text-sm font-medium text-gray-500 uppercase mb-2">Items</h2>
-                  <div className="border rounded-lg overflow-hidden">
-                    <table className="w-full text-sm">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          <th className="px-4 py-2 text-start font-medium text-gray-600">Product</th>
-                          <th className="px-4 py-2 text-start font-medium text-gray-600">Seller</th>
-                          <th className="px-4 py-2 text-end font-medium text-gray-600">Qty</th>
-                          <th className="px-4 py-2 text-end font-medium text-gray-600">Price</th>
-                          <th className="px-4 py-2 text-end font-medium text-gray-600">Total</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-200">
-                        {order.items.map((item) => (
-                          <tr key={item.id}>
-                            <td className="px-4 py-3 font-medium text-gray-900">{item.productName}</td>
-                            <td className="px-4 py-3 text-gray-600">{item.seller?.businessName || '—'}</td>
-                            <td className="px-4 py-3 text-end">{item.quantity}</td>
-                            <td className="px-4 py-3 text-end">{formatPrice(item.unitPrice)}</td>
-                            <td className="px-4 py-3 text-end font-medium">{formatPrice(item.totalPrice)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                  <p className="mt-3 text-xs text-muted">
+                    Check the receipt with the kitchen&apos;s statement. If the money arrived, confirm it here; if not, cancel the order below.
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <label htmlFor="confirm-note" className="sr-only">Note</label>
+                    <input
+                      id="confirm-note"
+                      value={confirmNote}
+                      onChange={(e) => setConfirmNote(e.target.value)}
+                      placeholder="Note (optional), e.g. how it was checked"
+                      className="nuray-input flex-1 min-w-[220px] text-sm"
+                    />
+                    <Button onClick={handleConfirmPayment} disabled={confirmingPayment}>
+                      {confirmingPayment ? 'Confirming…' : 'Confirm payment received'}
+                    </Button>
                   </div>
                 </div>
+              )}
 
-                <div className="border-t pt-4 space-y-1 text-sm">
-                  <div className="flex justify-between text-gray-600">
-                    <span>Subtotal</span>
-                    <span>{formatPrice(order.subtotal)}</span>
+              <div className={section}>
+                <h2 className={sectionTitle}>Items</h2>
+                <ul className="divide-y divide-line">
+                  {order.items.map((item) => (
+                    <li key={item.id} className="flex items-start justify-between gap-3 py-2 text-sm">
+                      <div className="min-w-0">
+                        <p className="text-ink">
+                          {item.quantity} × {item.productName}
+                        </p>
+                        <p className="text-xs text-muted">
+                          {item.seller?.businessName || 'Kitchen not known'} · {formatPrice(item.unitPrice)} each
+                        </p>
+                      </div>
+                      <span className="shrink-0 font-medium text-ink tabular-nums">{formatPrice(item.totalPrice)}</span>
+                    </li>
+                  ))}
+                </ul>
+
+                <dl className="mt-3 space-y-1 text-sm">
+                  <div className="flex justify-between text-muted">
+                    <dt>Subtotal</dt>
+                    <dd className="tabular-nums">{formatPrice(order.subtotal)}</dd>
                   </div>
                   {order.deliveryFee > 0 && (
-                    <div className="flex justify-between text-gray-600">
-                      <span>Delivery</span>
-                      <span>{formatPrice(order.deliveryFee)}</span>
+                    <div className="flex justify-between text-muted">
+                      <dt>Delivery, paid by the customer</dt>
+                      <dd className="tabular-nums">{formatPrice(order.deliveryFee)}</dd>
                     </div>
                   )}
+                  {deliveries
+                    .filter((d) => d.paidBy === 'seller')
+                    .map((d, i) => (
+                      <div key={i} className="flex justify-between gap-3 text-muted" data-testid="delivery-paid-by-kitchen">
+                        <dt>Delivery, paid by the kitchen ({d.provider === 'platform' ? 'Nuray rider' : 'own rider'})</dt>
+                        <dd className="shrink-0 tabular-nums">{formatPrice(Number(d.fee))}</dd>
+                      </div>
+                    ))}
                   {order.discountAmount > 0 && (
-                    <div className="flex justify-between text-green-600">
-                      <span>Discount</span>
-                      <span>-{formatPrice(order.discountAmount)}</span>
+                    <div className="flex justify-between text-brand-ink">
+                      <dt>Discount</dt>
+                      <dd className="tabular-nums">-{formatPrice(order.discountAmount)}</dd>
                     </div>
                   )}
                   {order.taxAmount > 0 && (
-                    <div className="flex justify-between text-gray-600">
-                      <span>Tax</span>
-                      <span>{formatPrice(order.taxAmount)}</span>
+                    <div className="flex justify-between text-muted">
+                      <dt>Tax</dt>
+                      <dd className="tabular-nums">{formatPrice(order.taxAmount)}</dd>
                     </div>
                   )}
-                  <div className="flex justify-between font-bold text-lg text-gray-900 pt-2">
-                    <span>Total</span>
-                    <span>{formatPrice(order.totalAmount)}</span>
+                  <div className="flex justify-between pt-2 text-lg font-semibold text-ink">
+                    <dt>Total</dt>
+                    <dd className="tabular-nums">{formatPrice(order.totalAmount)}</dd>
                   </div>
-                </div>
-
-                {/* Failed delivery — the primary action here, not just another status option */}
-                {order.orderStatus === 'delivery_failed' && (
-                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
-                    <h2 className="text-sm font-semibold text-amber-900 mb-1">Delivery failed</h2>
-                    <p className="text-sm text-amber-800 mb-3">
-                      The rider or seller couldn&apos;t complete this delivery. Send it back out for another attempt, or cancel and refund below.
-                    </p>
-                    <button
-                      onClick={handleRetryDelivery}
-                      disabled={updating}
-                      className="px-4 py-2 rounded-lg text-sm font-medium text-white bg-amber-600 hover:bg-amber-700 disabled:opacity-50 transition-all"
-                    >
-                      {updating ? 'Retrying...' : 'Retry Delivery'}
-                    </button>
-                  </div>
-                )}
-
-                {/* Status Update */}
-                {!['delivered', 'completed', 'cancelled', 'refunded'].includes(order.orderStatus) && (
-                  <div>
-                    <h2 className="text-sm font-medium text-gray-500 uppercase mb-3">Update Status</h2>
-                    <div className="flex gap-3 flex-wrap">
-                      {nextStatusOptions.map((s) => (
-                          <button
-                            key={s.value}
-                            onClick={() => setSelectedStatus((prev) => (prev === s.value ? '' : s.value))}
-                            className={`px-4 py-2 rounded-lg text-sm font-medium text-white transition-all ${
-                              selectedStatus === s.value
-                                ? s.color + ' ring-2 ring-offset-2 ring-gray-400 scale-105'
-                                : s.color
-                            }`}
-                          >
-                            {s.label}
-                          </button>
-                        ))}
+                  {refundedSoFar > 0 && (
+                    <div className="flex justify-between text-ink" data-testid="refunded-total">
+                      <dt>Refunded</dt>
+                      <dd className="tabular-nums">-{formatPrice(refundedSoFar)}</dd>
                     </div>
-                    {selectedStatus && (
-                      <div className="mt-3 flex items-center gap-3">
-                        <span className="text-sm text-gray-600">
-                          Change status to <strong>{selectedStatus.replace('_', ' ')}</strong>?
-                        </span>
-                        <button
-                          onClick={updateStatus}
-                          disabled={updating}
-                          className="px-4 py-1.5 bg-gray-900 text-white text-sm rounded-lg hover:bg-gray-700 disabled:opacity-50"
-                        >
-                          {updating ? 'Updating...' : 'Confirm'}
-                        </button>
-                        <button
-                          onClick={() => setSelectedStatus('')}
-                          className="text-sm text-gray-500 hover:text-gray-700"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    )}
+                  )}
+                </dl>
+              </div>
 
-                    {/* Cancel Order — separate from the generic status list: this restores
-                        stock, cascades to order items, and records who/why. */}
-                    <div className="mt-5 pt-5 border-t border-gray-100">
-                      {!showCancelForm ? (
-                        <button
-                          onClick={() => setShowCancelForm(true)}
-                          className="px-4 py-2 rounded-lg text-sm font-medium text-white bg-red-500 hover:bg-red-600 transition-all"
-                        >
-                          Cancel Order
-                        </button>
-                      ) : (
-                        <div className="space-y-2">
-                          <label className="block text-sm font-medium text-gray-700">
-                            Reason for cancellation
-                          </label>
-                          <textarea
-                            value={cancelReason}
-                            onChange={(e) => setCancelReason(e.target.value)}
-                            rows={2}
-                            placeholder="e.g., Customer requested cancellation, out of stock..."
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500"
-                          />
-                          <div className="flex items-center gap-3">
-                            <button
-                              onClick={handleCancelOrder}
-                              disabled={updating || cancelReason.trim().length < 5}
-                              className="px-4 py-1.5 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700 disabled:opacity-50"
-                            >
-                              {updating ? 'Cancelling...' : 'Confirm Cancellation'}
-                            </button>
-                            <button
-                              onClick={() => { setShowCancelForm(false); setCancelReason(''); }}
-                              className="text-sm text-gray-500 hover:text-gray-700"
-                            >
-                              Dismiss
-                            </button>
-                          </div>
-                        </div>
+              {canChangeStatus && (
+                <div className={section}>
+                  {nextStatus && (
+                    <>
+                      <h2 className={sectionTitle}>Move the order on</h2>
+                      {RIDER_STEPS.has(nextStatus) && (
+                        <p className="text-xs text-muted mb-2">The rider normally does this with the pickup or delivery code.</p>
                       )}
-                    </div>
-                  </div>
-                )}
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Button
+                          variant={RIDER_STEPS.has(nextStatus) ? 'outline' : 'default'}
+                          onClick={() => updateStatus(nextStatus)}
+                          disabled={updating}
+                        >
+                          {updating ? 'Updating…' : `Mark as ${statusLabel(nextStatus).toLowerCase()}`}
+                        </Button>
+                      </div>
+                    </>
+                  )}
 
-                {/* Refund */}
-                {order.paymentStatus === 'paid' && (
-                  <div className="pt-5 border-t border-gray-100">
-                    <h2 className="text-sm font-medium text-gray-500 uppercase mb-3">Refund</h2>
-                    {!showRefundForm ? (
-                      <button
-                        onClick={() => setShowRefundForm(true)}
-                        className="px-4 py-2 rounded-lg text-sm font-medium text-white bg-amber-700 hover:bg-amber-800 transition-all"
-                      >
-                        Process Refund
-                      </button>
+                  {/* Cancelling is its own flow: it restores stock, cascades to the items, and records who and why. */}
+                  <div className={nextStatus ? 'mt-4' : ''}>
+                    {!showCancelForm ? (
+                      <Button variant="outline" className="text-red-700 border-red-200 hover:bg-red-50" onClick={() => setShowCancelForm(true)}>
+                        Cancel order
+                      </Button>
                     ) : (
                       <div className="space-y-2">
-                        <label className="block text-sm font-medium text-gray-700">
-                          Refund amount (leave blank for full refund of {formatPrice(order.totalAmount)})
-                        </label>
-                        <input
-                          type="number"
-                          min={0}
-                          max={order.totalAmount}
-                          value={refundAmount}
-                          onChange={(e) => setRefundAmount(e.target.value)}
-                          placeholder={String(order.totalAmount)}
-                          className="w-48 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500"
+                        <label htmlFor="cancel-reason" className="block text-sm font-medium text-ink">Reason for cancelling</label>
+                        <textarea
+                          id="cancel-reason"
+                          value={cancelReason}
+                          onChange={(e) => setCancelReason(e.target.value)}
+                          rows={2}
+                          placeholder="e.g. Customer asked to cancel, out of stock…"
+                          className="nuray-input w-full text-sm"
                         />
-                        <div className="flex items-center gap-3">
-                          <button
-                            onClick={handleProcessRefund}
-                            disabled={updating}
-                            className="px-4 py-1.5 bg-amber-600 text-white text-sm rounded-lg hover:bg-amber-700 disabled:opacity-50"
-                          >
-                            {updating ? 'Processing...' : 'Confirm Refund'}
-                          </button>
-                          <button
-                            onClick={() => { setShowRefundForm(false); setRefundAmount(''); }}
-                            className="text-sm text-gray-500 hover:text-gray-700"
-                          >
-                            Dismiss
-                          </button>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Button variant="destructive" onClick={handleCancelOrder} disabled={updating || cancelReason.trim().length < 5}>
+                            {updating ? 'Cancelling…' : 'Cancel the order'}
+                          </Button>
+                          <Button variant="ghost" onClick={() => { setShowCancelForm(false); setCancelReason(''); }}>
+                            Keep the order
+                          </Button>
                         </div>
                       </div>
                     )}
                   </div>
-                )}
+                </div>
+              )}
 
-                {order.refunds && order.refunds.length > 0 && (
-                  <div>
-                    <h2 className="text-sm font-medium text-gray-500 uppercase mb-2">Refunds</h2>
-                    <ul className="space-y-2 text-sm">
-                      {order.refunds.map((r) => (
-                        <li key={r.id} className="flex items-center justify-between gap-3 rounded-lg border border-gray-200 px-3 py-2">
-                          <div className="min-w-0">
-                            <span className="font-medium text-gray-900">{formatPrice(r.amount)}</span>
-                            <span className="ms-2 text-gray-500">
-                              {r.method === 'wallet' ? 'to wallet' : 'manual transfer'}
-                              {r.reference ? ` · ref ${r.reference}` : ''}
-                            </span>
-                            {r.reason && <div className="text-xs text-gray-500 truncate">{r.reason}</div>}
-                          </div>
-                          {r.status === 'pending' ? (
-                            <button
-                              onClick={() => handleCompleteRefund(r.id)}
-                              disabled={updating}
-                              className="shrink-0 px-3 py-1.5 bg-amber-600 text-white text-xs rounded-lg hover:bg-amber-700 disabled:opacity-50"
-                            >
-                              Mark as sent
-                            </button>
-                          ) : null}
-                          {r.status === 'pending' ? (
-                            <button
-                              onClick={() => handleDismissRefund(r.id)}
-                              disabled={updating}
-                              className="shrink-0 px-3 py-1.5 border border-gray-300 text-gray-700 text-xs rounded-lg hover:bg-gray-50 disabled:opacity-50"
-                            >
-                              Dismiss
-                            </button>
-                          ) : (
-                            <span className={`shrink-0 text-xs font-medium ${r.status === 'completed' ? 'text-emerald-600' : 'text-red-600'}`}>
-                              {r.status === 'completed' ? 'Refunded' : 'Failed'}
-                            </span>
-                          )}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-
-                {order.investigation && (
-                  <div data-testid="order-investigation" className="space-y-4">
-                    <h2 className="text-sm font-medium text-gray-500 uppercase">Investigation</h2>
-                    {order.investigation.rider && (
-                      <p className="text-sm text-gray-700" data-testid="inv-rider">
-                        Rider: <strong>{order.investigation.rider.name || 'Unnamed'}</strong>
-                        {order.investigation.rider.phone && <> · <span data-ltr>{order.investigation.rider.phone}</span></>}
-                        {order.investigation.rider.vehicle && <> · {order.investigation.rider.vehicle}</>}
-                      </p>
-                    )}
-                    {order.investigation.supportTickets.length > 0 && (
-                      <div data-testid="inv-tickets">
-                        <p className="text-xs font-medium text-gray-500 mb-1">Complaints on this order</p>
-                        <ul className="text-sm text-gray-700 space-y-1">
-                          {order.investigation.supportTickets.map((t) => (
-                            <li key={t.id}>{t.ticketNumber} · {t.subject} · <span className="font-medium">{t.status.replace('_', ' ')}</span> · {t.priority}</li>
-                          ))}
-                        </ul>
+              {order.paymentStatus === 'paid' && refundable > 0 && (
+                <div className={section}>
+                  <h2 className={sectionTitle}>Refund</h2>
+                  {!showRefundForm ? (
+                    <Button variant="outline" onClick={() => setShowRefundForm(true)}>Refund the customer</Button>
+                  ) : (
+                    <div className="space-y-3 max-w-md">
+                      <div>
+                        <label htmlFor="refund-amount" className="block text-sm font-medium text-ink mb-1">Amount (Rs)</label>
+                        <input
+                          id="refund-amount"
+                          type="number"
+                          inputMode="decimal"
+                          min={1}
+                          max={refundable}
+                          value={refundAmount}
+                          onChange={(e) => setRefundAmount(e.target.value)}
+                          placeholder={String(refundable)}
+                          className="nuray-input w-48"
+                        />
+                        <p className="mt-1 text-xs text-muted">
+                          Up to {formatPrice(refundable)}{refundedSoFar > 0 ? ` (${formatPrice(refundedSoFar)} already refunded)` : ''}. Leave empty to refund all of it.
+                        </p>
                       </div>
-                    )}
-                    {[
-                      ['Payment attempts', order.investigation.paymentAttempts.map((a) => `${a.gateway} ${a.status} Rs ${a.amount}${a.settledVia ? ` via ${a.settledVia}` : ''} · ${formatDate(a.createdAt)}`)],
-                      ['Wallet movements', order.investigation.walletTransactions.map((w) => `${w.transactionType} Rs ${w.amount} (${w.status}) · ${formatDate(w.createdAt)}`)],
-                      ['Ledger entries', order.investigation.ledgerEntries.map((l) => `${l.transactionType} ${l.entryType} Rs ${l.amount} · ${formatDate(l.createdAt)}`)],
-                      ['Rider ledger', order.investigation.riderLedgerEntries.map((l) => `${l.type} Rs ${l.amount}${l.note ? ` · ${l.note}` : ''} · ${formatDate(l.createdAt)}`)],
-                      ['Admin actions on this order', order.investigation.adminActions.map((a) => `${a.action.replace(/^admin:/, '')} by ${a.admin || 'unknown'} (${a.status ?? '?'}) · ${formatDate(a.createdAt)}`)],
-                    ].map(([title, rows]) => (
-                      (rows as string[]).length > 0 && (
-                        <details key={title as string} className="text-sm" open={title === 'Admin actions on this order'}>
-                          <summary className="cursor-pointer text-xs font-medium text-gray-500">{title as string} ({(rows as string[]).length})</summary>
-                          <ul className="mt-1 space-y-0.5 text-gray-600 font-mono text-xs">
-                            {(rows as string[]).map((r, i) => <li key={i}>{r}</li>)}
-                          </ul>
-                        </details>
-                      )
-                    ))}
-                  </div>
-                )}
+                      <div>
+                        <label htmlFor="refund-reason" className="block text-sm font-medium text-ink mb-1">Why</label>
+                        <textarea
+                          id="refund-reason"
+                          rows={2}
+                          maxLength={300}
+                          value={refundReason}
+                          onChange={(e) => setRefundReason(e.target.value)}
+                          placeholder="e.g. Two samosas were missing"
+                          className="nuray-input w-full text-sm"
+                        />
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Button onClick={handleProcessRefund} disabled={updating || refundReason.trim().length < 3}>
+                          {updating ? 'Recording…' : 'Refund'}
+                        </Button>
+                        <Button variant="ghost" onClick={() => { setShowRefundForm(false); setRefundAmount(''); setRefundReason(''); }}>
+                          Not now
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
 
-                {order.statusHistory && order.statusHistory.length > 0 && (
-                  <div>
-                    <h2 className="text-sm font-medium text-gray-500 uppercase mb-2">Status History</h2>
-                    <ul className="space-y-2 text-sm text-gray-600">
-                      {order.statusHistory.map((h, i) => (
-                        <li key={i}>
-                          <span className="font-medium text-gray-700">{h.status}</span>
-                          {h.notes && ` — ${h.notes}`}
-                          {h.changedByName && <span className="text-gray-500"> · by {h.changedByName}</span>}
-                          <span className="text-gray-500 ms-2">{formatDate(h.createdAt)}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </div>
+              {order.refunds && order.refunds.length > 0 && (
+                <div className={section}>
+                  <h2 className={sectionTitle}>Refunds</h2>
+                  <ul className="space-y-2 text-sm">
+                    {order.refunds.map((r) => (
+                      <li key={r.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-line px-3 py-2">
+                        <div className="min-w-0">
+                          <span className="font-medium text-ink tabular-nums">{formatPrice(r.amount)}</span>
+                          <span className="ms-2 text-muted">
+                            {r.method === 'wallet' ? 'to wallet' : 'manual transfer'}
+                            {r.reference ? ` · ${r.status === 'failed' ? 'why' : 'ref'}: ${r.reference}` : ''}
+                          </span>
+                          {r.reason && <p className="text-xs text-muted break-words">{r.reason}</p>}
+                        </div>
+                        {r.status === 'pending' ? (
+                          <div className="flex gap-2">
+                            <Button size="sm" className="h-11" onClick={() => handleCompleteRefund(r.id)} disabled={updating}>Mark as sent</Button>
+                            <Button size="sm" variant="outline" className="h-11" onClick={() => handleDismissRefund(r.id)} disabled={updating}>Not owed</Button>
+                          </div>
+                        ) : (
+                          <span className={r.status === 'completed' ? 'inline-flex rounded-full px-2 py-0.5 text-xs font-medium bg-brand-soft text-brand-soft-ink' : 'inline-flex rounded-full px-2 py-0.5 text-xs font-medium bg-raised text-muted'}>
+                            {r.status === 'completed' ? 'Refunded' : 'Not owed'}
+                          </span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {order.statusHistory && order.statusHistory.length > 0 && (
+                <div className={section}>
+                  <h2 className={sectionTitle}>Status history</h2>
+                  <ol className="space-y-2 text-sm">
+                    {order.statusHistory.map((h, i) => (
+                      <li key={i} className="flex flex-wrap gap-x-2">
+                        <span className="font-medium text-ink">{statusLabel(h.status)}</span>
+                        <span className="text-muted">{formatDateTime(h.createdAt)}</span>
+                        {h.changedByName && <span className="text-muted">by {h.changedByName}</span>}
+                        {h.notes && <span className="w-full text-muted break-words">{h.notes}</span>}
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+              )}
+
+              {order.investigation && (
+                <div data-testid="order-investigation" className={`${section} space-y-3`}>
+                  <h2 className={sectionTitle}>Investigation</h2>
+                  {order.investigation.rider && (
+                    <p className="text-sm text-ink" data-testid="inv-rider">
+                      Rider: <strong>{order.investigation.rider.name || 'Unnamed'}</strong>
+                      {order.investigation.rider.phone && <> · <span data-ltr>{order.investigation.rider.phone}</span></>}
+                      {order.investigation.rider.vehicle && <> · {order.investigation.rider.vehicle}</>}
+                    </p>
+                  )}
+                  {order.investigation.supportTickets.length > 0 && (
+                    <div data-testid="inv-tickets">
+                      <p className="text-xs font-medium text-muted mb-1">Complaints on this order</p>
+                      <ul className="text-sm text-ink space-y-1">
+                        {order.investigation.supportTickets.map((t) => (
+                          <li key={t.id}>{t.ticketNumber} · {t.subject} · <span className="font-medium">{t.status.replace('_', ' ')}</span> · {t.priority}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {[
+                    ['Payment attempts', order.investigation.paymentAttempts.map((a) => `${a.gateway} ${a.status} Rs ${a.amount}${a.settledVia ? ` via ${a.settledVia}` : ''} · ${formatDate(a.createdAt)}`)],
+                    ['Wallet movements', order.investigation.walletTransactions.map((w) => `${w.transactionType} Rs ${w.amount} (${w.status}) · ${formatDate(w.createdAt)}`)],
+                    ['Ledger entries', order.investigation.ledgerEntries.map((l) => `${l.transactionType} ${l.entryType} Rs ${l.amount} · ${formatDate(l.createdAt)}`)],
+                    ['Rider ledger', order.investigation.riderLedgerEntries.map((l) => `${l.type} Rs ${l.amount}${l.note ? ` · ${l.note}` : ''} · ${formatDate(l.createdAt)}`)],
+                    ['Admin actions on this order', order.investigation.adminActions.map((a) => `${a.action.replace(/^admin:/, '')} by ${a.admin || 'unknown'} (${a.status ?? '?'}) · ${formatDateTime(a.createdAt)}`)],
+                  ].map(([title, rows]) => (
+                    (rows as string[]).length > 0 && (
+                      <details key={title as string} className="text-sm" open={title === 'Admin actions on this order'}>
+                        <summary className="cursor-pointer min-h-11 flex items-center text-xs font-medium text-muted">{title as string} ({(rows as string[]).length})</summary>
+                        <ul className="mt-1 space-y-0.5 text-muted text-xs break-words">
+                          {(rows as string[]).map((r, i) => <li key={i}>{r}</li>)}
+                        </ul>
+                      </details>
+                    )
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         )}

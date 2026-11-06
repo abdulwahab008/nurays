@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { apiClient } from '@/lib/api-client';
-import { BrandLockup } from '@/components/ui/Mark';
+import { AuthLogo, authColumn, authFieldError, authHeading, authInput, authLabel, authLede, authLink, authShell, authSubmit } from '@/components/auth/AuthLayout';
 import { useT } from '@/lib/i18n';
 import { useRequestErrorMessage } from '@/components/ui/LoadError';
 import { authMessages } from '@/lib/i18n/messages/auth';
@@ -17,10 +17,16 @@ export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
+  const [fieldError, setFieldError] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email.trim()) return;
+    const problem = !email.trim() ? t('errEnterEmail') : !/^\S+@\S+\.\S+$/.test(email.trim()) ? t('errEmailInvalid') : '';
+    setFieldError(problem);
+    if (problem) {
+      document.getElementById('forgot-email')?.focus();
+      return;
+    }
     setLoading(true);
     try {
       await apiClient.post('/auth/forgot-password', { email: email.trim() });
@@ -34,42 +40,63 @@ export default function ForgotPasswordPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-page px-4 py-8">
-      <div className="w-full max-w-md sm:bg-surface sm:rounded-[24px] sm:border sm:border-line p-2 sm:p-10">
-        <div className="mb-6 flex justify-center">
-          <BrandLockup />
-        </div>
-        <h1 className="text-[28px] leading-tight font-extrabold tracking-tight text-ink mb-1">{t('forgotTitle')}</h1>
+    <main className={authShell}>
+      <div className={authColumn}>
+        <AuthLogo />
+        <h1 className={`mt-8 ${authHeading}`}>{sent ? t('checkEmail') : t('forgotTitle')}</h1>
         {sent ? (
-          <>
-            <p className="text-sm text-muted mt-3">
-              {t('forgotSentPrefix')} <strong data-ltr>{email}</strong>{t('forgotSentSuffix')}
-            </p>
-            <Link href="/login" className="mt-6 inline-block text-sm font-semibold text-brand-soft-ink underline">
-              {t('backToLogin')}
-            </Link>
-          </>
+          <p className={authLede} role="status">
+            {t('forgotSentPrefix')} <strong className="font-semibold text-ink break-all" data-ltr>{email.trim()}</strong>
+            {t('forgotSentSuffix')}
+          </p>
         ) : (
-          <form onSubmit={handleSubmit} className="space-y-4 mt-3">
-            <p className="text-sm text-muted">{t('forgotIntro')}</p>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com"
-              dir="ltr"
-              required
-              className="nuray-input"
-            />
-            <Button variant="primary" type="submit" className="w-full h-12 text-[15px] font-extrabold" disabled={loading}>
-              {loading ? t('sendingEllipsis') : t('sendResetLink')}
-            </Button>
-            <Link href="/login" className="block text-center text-sm text-muted underline">
-              {t('backToLogin')}
-            </Link>
-          </form>
+          <>
+            <p className={authLede}>{t('forgotIntro')}</p>
+            <form onSubmit={handleSubmit} noValidate className="mt-7 space-y-5">
+              <div>
+                <label htmlFor="forgot-email" className={authLabel}>
+                  {t('emailAddress')}
+                </label>
+                <input
+                  type="email"
+                  id="forgot-email"
+                  value={email}
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    setFieldError('');
+                  }}
+                  placeholder="you@example.com"
+                  autoComplete="email"
+                  inputMode="email"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  enterKeyHint="send"
+                  dir="ltr"
+                  required
+                  aria-invalid={fieldError ? true : undefined}
+                  aria-describedby={fieldError ? 'forgot-email-error' : undefined}
+                  className={authInput}
+                />
+                {fieldError && (
+                  <p id="forgot-email-error" role="alert" className={authFieldError}>
+                    {fieldError}
+                  </p>
+                )}
+              </div>
+              <Button type="submit" className={authSubmit} disabled={loading}>
+                {loading ? t('sendingEllipsis') : t('sendResetLink')}
+              </Button>
+            </form>
+          </>
         )}
+        <p className="mt-8 text-sm text-muted">
+          {t('rememberedIt')}{' '}
+          <Link href="/login" className={`${authLink} -my-2.5 inline-block py-2.5`}>
+            {t('signInLink')}
+          </Link>
+        </p>
       </div>
-    </div>
+    </main>
   );
 }

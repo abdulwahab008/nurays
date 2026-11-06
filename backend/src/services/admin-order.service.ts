@@ -58,6 +58,7 @@ export class AdminOrderService {
     dateFrom?: string;
     dateTo?: string;
     orderNumber?: string;
+    search?: string;
   }) {
     const { page, limit, skip } = pageArgs(filters.page, filters.limit);
 
@@ -77,6 +78,19 @@ export class AdminOrderService {
 
     if (filters.orderNumber) {
       where.orderNumber = { contains: filters.orderNumber, mode: 'insensitive' };
+    }
+
+    // Support is usually given the customer's phone or email, not the order number.
+    const search = filters.search?.trim();
+    if (search) {
+      const digits = search.replace(/\D/g, '');
+      where.OR = [
+        { orderNumber: { contains: search, mode: 'insensitive' } },
+        { customer: { email: { contains: search, mode: 'insensitive' } } },
+        { customer: { profile: { fullName: { contains: search, mode: 'insensitive' } } } },
+        // 0300 123 4567 and +92 300 1234567 are the same phone: matched on its last ten digits.
+        ...(digits.length >= 4 ? [{ customer: { phone: { contains: digits.length > 10 ? digits.slice(-10) : digits.replace(/^0/, '') } } }] : []),
+      ];
     }
 
     if (filters.dateFrom || filters.dateTo) {
@@ -161,6 +175,7 @@ export class AdminOrderService {
         paymentMethod: order.paymentMethod,
         itemsCount: order._count.items,
         sellersCount: new Set(order.items.map((item) => item.sellerId)).size,
+        items: order.items.map((item) => ({ seller: item.seller ? { id: item.seller.id, businessName: item.seller.businessName } : null })),
         createdAt: order.createdAt,
         estimatedDeliveryAt: order.estimatedDeliveryAt,
         deliveredAt: order.deliveredAt,
@@ -727,6 +742,8 @@ export class AdminOrderService {
       revenueThisMonth,
       allTimeOrders,
       allTimeRevenue,
+      newCustomersThisWeek,
+      newKitchensThisWeek,
     ] = await Promise.all([
       // Total orders (in period)
       prisma.order.count({
@@ -752,10 +769,10 @@ export class AdminOrderService {
         },
       }),
 
-      // Total users (all customers)
-      prisma.user.count({ where: { userType: 'customer' } }),
-      // Total sellers (all sellers)
-      prisma.seller.count(),
+      // Customers with a working account (not suspended, banned or deleted)
+      prisma.user.count({ where: { userType: 'customer', status: 'active' } }),
+      // Live kitchens: approved and not suspended or closed down
+      prisma.seller.count({ where: { verificationStatus: 'approved', status: 'active' } }),
 
       // Active users (users who placed orders in period)
       prisma.order.findMany({
@@ -872,6 +889,8 @@ export class AdminOrderService {
         where: { paymentStatus: 'paid' },
         _sum: { totalAmount: true },
       }),
+      prisma.user.count({ where: { userType: 'customer', status: 'active', createdAt: { gte: weekStart } } }),
+      prisma.seller.count({ where: { verificationStatus: 'approved', status: 'active', createdAt: { gte: weekStart } } }),
     ]);
 
     const totalRevenueNum = Number(totalRevenue._sum.totalAmount || 0);
@@ -884,6 +903,8 @@ export class AdminOrderService {
         periodRevenue: totalRevenueNum,
         totalUsers,
         totalSellers,
+        newUsersThisWeek: newCustomersThisWeek,
+        newSellersThisWeek: newKitchensThisWeek,
         activeUsers: activeUsers.filter((u) => u.customerId).length,
         activeSellers: activeSellers.length,
         totalCommission: Number(totalCommission._sum.commissionAmount || 0),
@@ -920,29 +941,26 @@ export class AdminOrderService {
    * Get order statistics
    */
   async getOrderStatistics() {
+    const todayStart = new Date(new Date().setHours(0, 0, 0, 0));
     const [
-      todayOrders,
+      todayPlaced,
+      todayCancelled,
       todayRevenue,
-      pendingOrders,
-      inTransitOrders,
+      waitingForKitchen,
+      beingPrepared,
+      onTheWay,
+      failedDeliveries,
       cancelledOrders,
       averageOrderValue,
     ] = await Promise.all([
-      // Today's orders
-      prisma.order.count({
-        where: {
-          createdAt: {
-            gte: new Date(new Date().setHours(0, 0, 0, 0)),
-          },
-        },
-      }),
+      // Today's orders that still stand (a cancelled one is counted on its own below)
+      prisma.order.count({ where: { createdAt: { gte: todayStart }, orderStatus: { not: 'cancelled' } } }),
+      prisma.order.count({ where: { createdAt: { gte: todayStart }, orderStatus: 'cancelled' } }),
 
       // Today's revenue
       prisma.order.aggregate({
         where: {
-          createdAt: {
-            gte: new Date(new Date().setHours(0, 0, 0, 0)),
-          },
+          createdAt: { gte: todayStart },
           paymentStatus: 'paid',
         },
         _sum: {
@@ -950,19 +968,14 @@ export class AdminOrderService {
         },
       }),
 
-      // Pending orders
-      prisma.order.count({
-        where: {
-          orderStatus: 'pending',
-        },
-      }),
-
-      // In transit orders
-      prisma.order.count({
-        where: {
-          orderStatus: 'in_transit',
-        },
-      }),
+      // Placed and not yet accepted by the kitchen
+      prisma.order.count({ where: { orderStatus: 'pending' } }),
+      // Accepted and in the kitchen: cooking or ready for collection
+      prisma.order.count({ where: { orderStatus: { in: ['confirmed', 'preparing', 'ready'] } } }),
+      // With a rider: picked up ('dispatched') or on the road ('in_transit'), see utils/deliveryStatus.ts
+      prisma.order.count({ where: { orderStatus: { in: ['dispatched', 'in_transit'] } } }),
+      // A rider could not hand it over; an admin has to decide what happens to it
+      prisma.order.count({ where: { orderStatus: 'delivery_failed' } }),
 
       // Cancelled orders (last 7 days)
       prisma.order.count({
@@ -974,7 +987,7 @@ export class AdminOrderService {
         },
       }),
 
-      // Average order value
+      // Average order value (last 30 days)
       prisma.order.aggregate({
         where: {
           paymentStatus: 'paid',
@@ -990,15 +1003,22 @@ export class AdminOrderService {
 
     return {
       today: {
-        orders: todayOrders,
+        orders: todayPlaced,
+        cancelled: todayCancelled,
         revenue: Number(todayRevenue._sum.totalAmount || 0),
       },
-      pendingOrders,
-      inTransitOrders,
+      // Every order not yet with a rider: waiting for the kitchen plus being prepared.
+      pendingOrders: waitingForKitchen + beingPrepared,
+      waitingForKitchen,
+      beingPrepared,
+      inTransitOrders: onTheWay,
+      failedDeliveries,
       cancelledOrdersLast7Days: cancelledOrders,
       averageOrderValue: Number(averageOrderValue._avg.totalAmount || 0),
+      averageOrderValueDays: 30,
     };
   }
+
 }
 
 export default new AdminOrderService();

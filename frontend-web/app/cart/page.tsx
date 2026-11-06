@@ -10,9 +10,7 @@ import {
   Truck,
   Tag,
   ShoppingBag,
-  Lock,
   Check,
-  ImageOff,
   ChevronLeft,
   ChevronRight,
   ChefHat,
@@ -24,13 +22,18 @@ import {
   ArrowRight,
 } from 'lucide-react';
 import { cartService, CartResponse } from '@/lib/services/cart.service';
+import { productService } from '@/lib/services/product.service';
+import { useCommunityStore } from '@/lib/store/community-store';
+import { loginUrlFor } from '@/lib/auth-redirect';
+import { CoverImage } from '@/components/ui/CoverImage';
+import { kitchenMessages } from '@/lib/i18n/messages/kitchen';
 import { formatPrice, imageVariant, orderTotals } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { LoadError } from '@/components/ui/LoadError';
 import { useAuthStore } from '@/lib/store/auth-store';
-import { useCartStore, CartItem as LocalCartItem } from '@/lib/store/cart-store';
+import { useCartStore, trayFromServer, CartItem as LocalCartItem } from '@/lib/store/cart-store';
 import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
-import { apiClient, apiErrorMessage, errorMessage } from '@/lib/api-client';
+import { apiClient, apiErrorMessage } from '@/lib/api-client';
 import { useToast } from '@/components/ui/toast';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { DEFAULT_ADDRESS, useDeliveryEstimate } from '@/lib/hooks/use-delivery-estimate';
@@ -84,6 +87,8 @@ export default function CartPage() {
   const router = useRouter();
   const t = useT(checkoutMessages);
   const tc = useT(commonMessages);
+  const tk = useT(kitchenMessages);
+  const selectedCommunity = useCommunityStore((st) => st.selectedCommunity);
   const { isAuthenticated } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated })));
   const { showToast } = useToast();
   const storeItems = useCartStore((s) => s.items);
@@ -159,60 +164,9 @@ export default function CartPage() {
         const response = await cartService.getCart();
         const cartData = response.data;
 
-        if (cartData?.items?.length) {
-          setCart(cartData);
-          setItems(
-            cartData.items.map((i) => ({
-              id: i.id,
-              productId: i.product.id,
-              productName: i.product.name,
-              productImage: i.product.image,
-              sellerId: i.seller.id,
-              sellerName: i.seller.businessName,
-              quantity: i.quantity,
-              unitPrice: i.variant?.price ?? i.product.price,
-              stockType: i.stockType,
-              hubId: i.hubId,
-              subtotal: i.subtotal,
-            }))
-          );
-        } else if (localStoreItems.length > 0) {
-          // One-time sync of guest items to authenticated cart
-          for (const item of localStoreItems) {
-            try {
-              await cartService.addToCart({
-                productId: item.productId,
-                quantity: item.quantity,
-                stockType: item.stockType || 'direct',
-              });
-            } catch (err) {
-              console.warn('Syncing guest cart item to server:', errorMessage(err, ''));
-            }
-          }
-          const fresh = await cartService.getCart();
-          if (fresh.data?.items?.length) {
-            setCart(fresh.data);
-            setItems(
-              fresh.data.items.map((i) => ({
-                id: i.id,
-                productId: i.product.id,
-                productName: i.product.name,
-                productImage: i.product.image,
-                sellerId: i.seller.id,
-                sellerName: i.seller.businessName,
-                quantity: i.quantity,
-                unitPrice: i.variant?.price ?? i.product.price,
-                stockType: i.stockType,
-                hubId: i.hubId,
-                subtotal: i.subtotal,
-              }))
-            );
-          } else {
-            setCart(null);
-          }
-        } else {
-          setCart(null);
-        }
+        // Signed in, the server's tray is the truth: dishes added while signed out were merged in at sign-in.
+        setCart(cartData?.items?.length ? cartData : null);
+        setItems(trayFromServer(cartData?.items ?? []));
 
         if (cartData?.items?.length) {
           const productIds = cartData.items.map((i) => i.product.id).filter(Boolean);
@@ -388,7 +342,48 @@ export default function CartPage() {
   });
   const deliveryKnown = !!deliveryEstimate && deliveryEstimate.isDeliverable !== false;
   const isFreeDelivery = deliveryKnown && deliveryEstimate.isFree;
-  const deliveryFee = deliveryKnown && !deliveryEstimate.isFree ? deliveryEstimate.deliveryFee : 0;
+
+  // Without a saved address (a guest, or a customer who has not added one) the kitchen's quote for the chosen area stands
+  // in, as on the kitchen and dish pages; the same listing says which dishes are frozen (for the insulated pack).
+  const traySellerId = hasItems ? cart.activeSeller?.id || cart.items[0]?.seller.id || null : null;
+  const areaId = selectedCommunity?.id ?? null;
+  const [kitchenInfo, setKitchenInfo] = useState<{
+    key: string;
+    frozen: Set<string>;
+    quote: { deliverable: boolean; fee: number; reason: string | null } | null;
+  } | null>(null);
+  useEffect(() => {
+    if (!traySellerId) return;
+    let cancelled = false;
+    const key = `${traySellerId}:${areaId}`;
+    productService
+      .getProducts({ sellerId: traySellerId, limit: 50, communityId: areaId ?? undefined })
+      .then((res) => {
+        if (cancelled) return;
+        const list = res.data?.products ?? [];
+        const d = areaId ? list[0]?.delivery : null;
+        setKitchenInfo({
+          key,
+          frozen: new Set(list.filter((p) => p.productType === 'frozen').map((p) => p.id)),
+          quote: d ? { deliverable: d.deliverable, fee: d.fee, reason: d.reason } : null,
+        });
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [traySellerId, areaId]);
+  const info = kitchenInfo?.key === `${traySellerId}:${areaId}` ? kitchenInfo : null;
+  // Hub stock is the frozen range; a kitchen's own frozen dishes are known from its listing.
+  const hasFrozen = (cart?.items ?? []).some((i) => i.stockType === 'hub' || info?.frozen.has(i.product.id));
+  const areaQuote = !deliveryEstimate && !estimatePending ? info?.quote ?? null : null;
+  const areaQuoteKnown = !!areaQuote && areaQuote.deliverable;
+
+  const deliveryFee = deliveryKnown
+    ? (deliveryEstimate.isFree ? 0 : deliveryEstimate.deliveryFee)
+    : areaQuoteKnown
+      ? areaQuote.fee
+      : 0;
   const { gst, total: displayTotal } = orderTotals(discountedSubtotal, deliveryFee);
 
   // Progress towards free delivery, only for a kitchen that has an order amount which waives its fee, and measured the
@@ -458,7 +453,7 @@ export default function CartPage() {
 
             {/* Quick Cuisine Shortcut Pills */}
             <div className="mb-8">
-              <span className="text-[11px] font-bold text-muted uppercase tracking-wider block mb-2.5">
+              <span className="text-sm font-semibold text-muted block mb-2.5">
                 {t('popularNearby')}
               </span>
               <div className="flex flex-wrap items-center justify-center gap-2 max-w-lg mx-auto">
@@ -466,31 +461,31 @@ export default function CartPage() {
                   href="/products?category=biryani"
                   className="px-3 py-1.5 rounded-xl bg-surface border border-line text-xs font-semibold text-ink hover:border-brand hover:text-brand-ink transition-colors shadow-2xs"
                 >
-                  🍛 {t('pill.biryani')}
+                  {t('pill.biryani')}
                 </Link>
                 <Link
                   href="/products?category=paratha"
                   className="px-3 py-1.5 rounded-xl bg-surface border border-line text-xs font-semibold text-ink hover:border-brand hover:text-brand-ink transition-colors shadow-2xs"
                 >
-                  🫓 {t('pill.paratha')}
+                  {t('pill.paratha')}
                 </Link>
                 <Link
                   href="/products?productType=frozen"
                   className="px-3 py-1.5 rounded-xl bg-surface border border-line text-xs font-semibold text-ink hover:border-frozen-ink hover:text-frozen-ink transition-colors shadow-2xs"
                 >
-                  ❄️ {t('pill.frozen')}
+                  {t('pill.frozen')}
                 </Link>
                 <Link
                   href="/products?category=bbq"
                   className="px-3 py-1.5 rounded-xl bg-surface border border-line text-xs font-semibold text-ink hover:border-brand hover:text-brand-ink transition-colors shadow-2xs"
                 >
-                  🔥 {t('pill.kebab')}
+                  {t('pill.kebab')}
                 </Link>
                 <Link
                   href="/products?category=desserts"
                   className="px-3 py-1.5 rounded-xl bg-surface border border-line text-xs font-semibold text-ink hover:border-accent hover:text-accent-soft-ink transition-colors shadow-2xs"
                 >
-                  🍯 {t('pill.kheer')}
+                  {t('pill.kheer')}
                 </Link>
               </div>
             </div>
@@ -518,11 +513,17 @@ export default function CartPage() {
 
   // ── CART WITH ITEMS ──
   const activeSeller = cart.activeSeller || cart.items[0]?.seller;
+  // Portions, not lines: two plates of one dish are two items, everywhere on this page.
+  const trayCount = cart.items.reduce((sum, i) => sum + i.quantity, 0);
 
   return (
     <DashboardLayout
       title={t('cartTitleFull')}
-      subtitle={t(cart.items.length > 1 ? 'cartSubtitleMany' : 'cartSubtitleOne', { count: cart.items.reduce((s, i) => s + i.quantity, 0) })}
+      subtitle={
+        activeSeller
+          ? t(trayCount === 1 ? 'cartSubtitleOne' : 'cartSubtitleMany', { count: trayCount, kitchen: activeSeller.businessName })
+          : t(trayCount === 1 ? 'itemsInTrayOne' : 'itemsInTrayMany', { count: trayCount })
+      }
       sidebarItems={sidebarItems}
       userType="customer"
     >
@@ -613,7 +614,7 @@ export default function CartPage() {
                 <div>
                   <h2 className="text-base font-extrabold text-ink leading-tight">{t('selectedDishes')}</h2>
                   <span className="text-xs text-muted">
-                    {t(cart.items.length > 1 ? 'itemsInTrayMany' : 'itemsInTrayOne', { count: cart.items.length })}
+                    {t(trayCount === 1 ? 'itemsInTrayOne' : 'itemsInTrayMany', { count: trayCount })}
                   </span>
                 </div>
               </div>
@@ -658,9 +659,7 @@ export default function CartPage() {
                             className="w-full h-full object-cover"
                           />
                         ) : (
-                          <div className="w-full h-full flex items-center justify-center text-muted">
-                            <ImageOff className="w-8 h-8" />
-                          </div>
+                          <CoverImage alt={item.product.name} label={item.product.name} size="sm" className="w-full h-full" />
                         )}
                         <span
                           className={`absolute bottom-1.5 start-1.5 px-2 py-0.5 rounded-full text-[11px] font-extrabold flex items-center gap-1 ${
@@ -699,7 +698,7 @@ export default function CartPage() {
                           <button
                             type="button"
                             onClick={() => handleRemoveItem(item.id)}
-                            className="w-9 h-9 rounded-xl text-muted hover:text-red-600 hover:bg-raised flex items-center justify-center transition-colors shrink-0"
+                            className="w-11 h-11 rounded-xl text-muted hover:text-red-600 hover:bg-raised flex items-center justify-center transition-colors shrink-0"
                             title={t('removeDish')}
                             aria-label={t('removeDish')}
                           >
@@ -716,11 +715,11 @@ export default function CartPage() {
 
                         {/* Quantity and Price Row */}
                         <div className="mt-3 flex items-center justify-between gap-3">
-                          <div className="flex items-center h-10 rounded-xl border border-line">
+                          <div className="flex items-center h-11 rounded-xl border border-line">
                             <button
                               type="button"
                               onClick={() => handleUpdateQuantity(item.id, item.quantity - 1)}
-                              className="w-10 h-10 rounded-s-xl text-ink font-extrabold hover:bg-raised flex items-center justify-center text-lg transition-colors"
+                              className="w-11 h-11 rounded-s-xl text-ink font-extrabold hover:bg-raised flex items-center justify-center text-lg transition-colors"
                               title={t('decrease')}
                               aria-label={t('decrease')}
                             >
@@ -732,7 +731,7 @@ export default function CartPage() {
                             <button
                               type="button"
                               onClick={() => handleUpdateQuantity(item.id, item.quantity + 1)}
-                              className="w-10 h-10 rounded-e-xl text-brand-ink font-extrabold hover:bg-raised flex items-center justify-center text-lg transition-colors"
+                              className="w-11 h-11 rounded-e-xl text-brand-ink font-extrabold hover:bg-raised flex items-center justify-center text-lg transition-colors"
                               title={t('increase')}
                               aria-label={t('increase')}
                             >
@@ -765,7 +764,7 @@ export default function CartPage() {
               <h3 className="text-base font-extrabold text-ink pb-3 border-b border-line flex items-center justify-between">
                 <span>{t('orderSummary')}</span>
                 <span className="text-xs font-semibold text-muted">
-                  {t(cart.items.length > 1 ? 'itemsMany' : 'itemsOne', { count: cart.items.length })}
+                  {t(trayCount === 1 ? 'itemsOne' : 'itemsMany', { count: trayCount })}
                 </span>
               </h3>
 
@@ -786,21 +785,41 @@ export default function CartPage() {
                   </div>
                 )}
 
-                <div className="flex justify-between text-muted font-medium">
-                  <span className="flex items-center gap-1.5">
-                    <Snowflake className="w-3.5 h-3.5 text-frozen-ink" />
-                    <span>{t('insulatedPack')}</span>
-                  </span>
-                  <span className="text-brand-ink font-bold text-xs">{tc('free')}</span>
-                </div>
+                {hasFrozen && (
+                  <div className="flex justify-between text-muted font-medium">
+                    <span className="flex items-center gap-1.5">
+                      <Snowflake className="w-3.5 h-3.5 text-frozen-ink" />
+                      <span>{t('insulatedPack')}</span>
+                    </span>
+                    <span className="text-brand-ink font-bold text-xs">{tc('free')}</span>
+                  </div>
+                )}
 
                 <div className={`flex justify-between text-muted font-medium transition-opacity ${estimatePending ? 'opacity-60' : ''}`}>
                   <span className="flex items-center gap-1.5">
                     <Truck className="w-3.5 h-3.5 text-muted" />
-                    <span>{t('estimatedDelivery')}</span>
+                    <span>{areaQuote && selectedCommunity ? tk('trayDeliveryToArea', { area: selectedCommunity.name }) : t('estimatedDelivery')}</span>
                   </span>
-                  {!deliveryEstimate ? (
-                    <span className="font-semibold text-muted">{t('deliveryAtCheckout')}</span>
+                  {!deliveryEstimate && areaQuote ? (
+                    areaQuoteKnown ? (
+                      <span className="font-bold text-ink">
+                        {areaQuote.fee === 0 ? t('freeCaps') : tk('trayAbout', { amount: formatPrice(areaQuote.fee) })}
+                      </span>
+                    ) : (
+                      <span className="font-bold text-red-600">{t('deliveryNotAvailable')}</span>
+                    )
+                  ) : !deliveryEstimate ? (
+                    selectedCommunity ? (
+                      <span className="font-semibold text-muted">{t('deliveryAtCheckout')}</span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => useCommunityStore.getState().openSelectorModal()}
+                        className="font-semibold text-brand-ink hover:underline"
+                      >
+                        {tk('chooseArea')}
+                      </button>
+                    )
                   ) : !deliveryKnown ? (
                     <span className="font-bold text-red-600">{t('deliveryNotAvailable')}</span>
                   ) : (
@@ -812,9 +831,10 @@ export default function CartPage() {
                 {deliveryEstimate && !deliveryKnown && deliveryEstimate.reason && (
                   <p className="text-xs text-red-600 -mt-1">{deliveryEstimate.reason}</p>
                 )}
+                {areaQuote && !areaQuoteKnown && areaQuote.reason && <p className="text-xs text-red-600 -mt-1">{areaQuote.reason}</p>}
 
                 <div className="flex justify-between text-muted font-medium">
-                  <span>{t('salesTaxRegional')}</span>
+                  <span>{t('salesTax5')}</span>
                   <span className="font-bold text-ink">{formatPrice(gst)}</span>
                 </div>
               </div>
@@ -870,11 +890,13 @@ export default function CartPage() {
               {/* Total Row */}
               <div className="pt-3 border-t border-line">
                 <div className="flex items-baseline justify-between">
-                  <span className="text-sm font-bold text-ink">{deliveryKnown ? t('totalPayable') : t('totalBeforeDelivery')}</span>
+                  <span className="text-sm font-bold text-ink">
+                    {deliveryKnown ? t('totalPayable') : areaQuoteKnown ? tk('trayEstimatedTotal') : t('totalBeforeDelivery')}
+                  </span>
                   <span className="text-2xl font-extrabold text-ink">{formatPrice(displayTotal)}</span>
                 </div>
                 <span className="text-xs text-muted block mt-0.5">
-                  {deliveryKnown ? t('includesAll') : t('deliveryAddedAtCheckout')}
+                  {deliveryKnown ? t('includesAll') : areaQuoteKnown ? tk('trayAreaNote') : t('deliveryAddedAtCheckout')}
                 </span>
               </div>
 
@@ -891,7 +913,7 @@ export default function CartPage() {
                   </button>
                 </Link>
               ) : (
-                <Link href="/login?redirect=/checkout" className="block pt-1">
+                <Link href={loginUrlFor('/checkout')} className="block pt-1">
                   <button
                     type="button"
                     className="w-full h-14 rounded-2xl bg-brand hover:bg-brand-500 text-on-brand text-base font-extrabold transition-colors active:scale-98 flex items-center justify-center gap-2 cursor-pointer"
@@ -912,17 +934,6 @@ export default function CartPage() {
                 </button>
               </Link>
 
-              {/* Trust Badges */}
-              <div className="pt-3 border-t border-line space-y-1.5 text-xs text-muted">
-                <div className="flex items-center gap-2">
-                  <ShieldCheck className="w-3.5 h-3.5 text-brand-soft-ink shrink-0" />
-                  <span>{t('trustHalal')}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Lock className="w-3.5 h-3.5 text-muted shrink-0" />
-                  <span>{t('trustEncrypted')}</span>
-                </div>
-              </div>
             </div>
           </div>
         </div>

@@ -36,7 +36,7 @@ export const CUSTOMER_SIDEBAR_ITEMS: SidebarItem[] = [
   { name: 'Favorite Kitchens', href: '/favorites', icon: 'favorites' },
   { name: 'My Orders', href: '/orders', icon: 'orders' },
   { name: 'Nuray Wallet', href: '/wallet', icon: 'earnings' },
-  { name: 'My Cart', href: '/cart', icon: 'cart' },
+  { name: 'Your tray', href: '/cart', icon: 'cart' },
   { name: 'My Profile', href: '/profile', icon: 'profile' },
   { name: 'Saved Addresses', href: '/profile/addresses', icon: 'addresses' },
   { name: 'Help & Support', href: '/support', icon: 'support' },
@@ -57,7 +57,6 @@ export const SELLER_SIDEBAR_ITEMS: SidebarItem[] = [
     icon: 'products',
     subItems: [
       { name: 'Dishes', href: '/sellers/products', icon: 'products' },
-      { name: 'Stock', href: '/sellers/products?view=inventory', icon: 'inventory' },
       { name: 'Discounts', href: '/sellers/promotions', icon: 'promotions' },
     ],
   },

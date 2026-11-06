@@ -36,8 +36,8 @@ export function AdminShell({ children }: { children: ReactNode }) {
   // Wait for mount to avoid hydration mismatch
   if (!mounted) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--cream-50)' }}>
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2" style={{ borderColor: 'var(--forest-500)' }}></div>
+      <div className="min-h-screen flex items-center justify-center bg-page" role="status">
+        <span className="h-5 w-5 animate-spin rounded-full border-2 border-line-strong border-t-brand-ink" aria-hidden="true" />
       </div>
     );
   }
@@ -46,7 +46,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
   if (!isAuthenticated) return <>{children}</>;
 
   return (
-    <div className="min-h-screen" style={{ background: 'var(--cream-50)' }}>
+    <div className="min-h-screen bg-page">
       <DashboardNavbar
         userType="admin"
         onMenuToggle={() => setDrawerPath(drawerOpen ? null : pathname)}

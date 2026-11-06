@@ -3,7 +3,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
+import { ChevronLeft } from 'lucide-react';
 import { AdminShell } from '@/components/layout/AdminShell';
+import { StatusPill } from '@/components/admin/AdminListParts';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { useDialogs } from '@/components/ui/Dialogs';
@@ -31,6 +33,8 @@ interface RiderMoneyDetail extends RiderMoneySummary {
   entries: RiderLedgerEntry[];
   pagination: { page: number; totalPages: number; total: number };
 }
+
+const STANDING_LABEL: Record<string, string> = { active: 'Active', suspended: 'Suspended', inactive: 'Inactive' };
 
 const toAmount = (v: string) => (v.trim() === '' ? 0 : Number(v));
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -164,19 +168,17 @@ export default function AdminRiderMoneyPage() {
     <AdminShell>
       <div className="max-w-5xl mx-auto space-y-5 pb-16">
         <div>
-          <Link href="/admin/riders" className="text-sm text-gray-500 hover:underline">
-            ← Riders
+          <Link href="/admin/riders" className="inline-flex min-h-11 items-center gap-1 text-sm font-medium text-brand-ink hover:underline">
+            <ChevronLeft aria-hidden="true" className="h-4 w-4 rtl:rotate-180" />
+            All riders
           </Link>
           <div className="mt-2 flex flex-wrap items-center gap-3">
             <h1 className="text-3xl font-bold text-gray-900">{rider.name || 'Name not set'}</h1>
-            <span className={`px-2 py-1 rounded text-xs font-semibold ${rider.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-              {rider.status}
-            </span>
+            <StatusPill tone={rider.status === 'active' ? 'good' : 'problem'}>{STANDING_LABEL[rider.status] ?? rider.status}</StatusPill>
             {rider.isAvailable && rider.status === 'active' && <span className="px-2 py-1 rounded text-xs font-semibold bg-blue-100 text-blue-800">On duty</span>}
             {rider.verificationStatus === 'approved' && (
               <Button
                 variant="outline"
-                size="sm"
                 disabled={busy !== null}
                 onClick={() => changeStanding(rider.status === 'active' ? 'suspended' : 'active')}
                 className={rider.status === 'active' ? 'border-red-200 text-red-700' : ''}
@@ -215,7 +217,7 @@ export default function AdminRiderMoneyPage() {
             {data.cashHeld > 0 && (
               <button
                 type="button"
-                className="text-xs font-semibold text-green-700 hover:underline"
+                className="min-h-11 text-start text-xs font-semibold text-green-700 hover:underline"
                 onClick={() => {
                   setKept(suggestedKeep ? String(suggestedKeep) : '');
                   setHandedIn(String(round2(data.cashHeld - suggestedKeep)));
@@ -404,7 +406,7 @@ export default function AdminRiderMoneyPage() {
                       {e.orderId && (
                         <>
                           {' · '}
-                          <Link href={`/admin/orders/${e.orderId}`} className="underline">
+                          <Link href={`/admin/orders/${e.orderId}`} className="inline-flex min-h-11 items-center underline">
                             order
                           </Link>
                         </>
@@ -421,7 +423,7 @@ export default function AdminRiderMoneyPage() {
           )}
           {page < data.pagination.totalPages && (
             <div className="p-4 text-center border-t border-gray-100">
-              <button type="button" onClick={loadMore} className="text-sm font-semibold text-green-700 hover:underline">
+              <button type="button" onClick={loadMore} className="min-h-11 text-sm font-semibold text-green-700 hover:underline">
                 Show older
               </button>
             </div>

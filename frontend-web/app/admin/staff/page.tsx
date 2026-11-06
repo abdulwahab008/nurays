@@ -95,48 +95,48 @@ export default function AdminStaffPage() {
 
   return (
     <AdminShell>
-      <div className="max-w-5xl mx-auto p-4 sm:p-6">
+      <div className="max-w-5xl mx-auto">
         <div className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-900">Staff</h1>
-          <p className="text-gray-500 mt-1">There is one super admin with full access. Add an admin to run operations, or a customer support person to resolve complaints.</p>
+          <h1 className="text-2xl font-semibold text-ink">Staff</h1>
+          <p className="text-sm text-muted mt-1">There is one super admin with full access. Add an admin to run operations, or a customer support person to resolve complaints.</p>
         </div>
 
         {!allowed ? (
-          <p className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-900" data-testid="staff-denied">
+          <p className="rounded-xl bg-accent-soft p-4 text-sm text-accent-soft-ink" data-testid="staff-denied">
             Only the super admin can manage staff.
           </p>
         ) : (
           <>
-            <form onSubmit={create} className="mb-8 grid gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:grid-cols-2" data-testid="staff-form">
-              <h2 className="sm:col-span-2 text-lg font-semibold text-gray-900">Add a staff member</h2>
-              <label className="text-sm text-gray-700">
+            <form onSubmit={create} className="mb-8 grid gap-3 rounded-2xl border border-line bg-surface p-4 sm:grid-cols-2" data-testid="staff-form">
+              <h2 className="sm:col-span-2 text-base font-semibold text-ink">Add a staff member</h2>
+              <label className="text-sm font-medium text-ink">
                 Full name
-                <input required minLength={2} value={form.fullName} onChange={(e) => setForm({ ...form, fullName: e.target.value })} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2" name="fullName" />
+                <input required minLength={2} value={form.fullName} onChange={(e) => setForm({ ...form, fullName: e.target.value })} className="nuray-input mt-1 w-full" name="fullName" />
               </label>
-              <label className="text-sm text-gray-700">
+              <label className="text-sm font-medium text-ink">
                 Email
-                <input required type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2" name="email" />
+                <input required type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="nuray-input mt-1 w-full" name="email" />
               </label>
-              <label className="text-sm text-gray-700">
+              <label className="text-sm font-medium text-ink">
                 Role
-                <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value as 'admin' | 'support' })} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2" name="role">
+                <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value as 'admin' | 'support' })} className="nuray-input mt-1 w-full" name="role">
                   <option value="support">Customer support</option>
                   <option value="admin">Admin</option>
                 </select>
-                <span className="mt-1 block text-xs text-gray-500">{ROLE_HELP[form.role]}</span>
+                <span className="mt-1 block text-xs font-normal text-muted">{ROLE_HELP[form.role]}</span>
               </label>
-              <label className="text-sm text-gray-700">
+              <label className="text-sm font-medium text-ink">
                 First password (at least 12 characters)
-                <input required minLength={12} type="password" autoComplete="new-password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2" name="password" />
+                <input required minLength={12} type="password" autoComplete="new-password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} className="nuray-input mt-1 w-full" name="password" />
               </label>
               <div className="sm:col-span-2">
                 <Button type="submit" disabled={busy === 'new'}>{busy === 'new' ? 'Creating…' : 'Create account'}</Button>
               </div>
             </form>
 
-            <h2 className="mb-3 text-lg font-semibold text-gray-900">Everyone with admin access</h2>
+            <h2 className="mb-3 text-base font-semibold text-ink">Everyone with admin access</h2>
             {loading ? (
-              <p className="text-gray-500">Loading…</p>
+              <p className="text-sm text-muted" role="status">Loading…</p>
             ) : loadError && members.length === 0 ? (
               <LoadError error={loadError} onRetry={load} title="We couldn't load the staff" />
             ) : (
@@ -144,20 +144,20 @@ export default function AdminStaffPage() {
                 {members.map((m) => {
                   const locked = m.role === 'super_admin' || m.id === user?.id;
                   return (
-                    <li key={m.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm min-w-0">
+                    <li key={m.id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-line bg-surface p-4 min-w-0">
                       <div className="min-w-0 max-w-full break-words">
-                        <p className="font-semibold text-gray-900">
+                        <p className="font-semibold text-ink">
                           {m.name ?? m.email}{' '}
-                          <span className="ms-1 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700">{ROLE_LABEL[m.role]}</span>
-                          {m.status !== 'active' && <span className="ms-1 rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700">{m.status}</span>}
-                          <span className={`ms-1 rounded-full px-2 py-0.5 text-xs font-medium ${m.twoFactorEnabled ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-900'}`} data-testid="staff-2fa">
+                          <span className="ms-1 rounded-full bg-raised px-2 py-0.5 text-xs font-medium text-muted">{ROLE_LABEL[m.role]}</span>
+                          {m.status !== 'active' && <span className="ms-1 rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700">{m.status}</span>}
+                          <span className={`ms-1 rounded-full px-2 py-0.5 text-xs font-medium ${m.twoFactorEnabled ? 'bg-brand-soft text-brand-soft-ink' : 'bg-accent-soft text-accent-soft-ink'}`} data-testid="staff-2fa">
                             {m.twoFactorEnabled ? 'Two-step on' : 'Two-step not set up'}
                           </span>
                         </p>
-                        <p className="text-xs text-gray-500">{m.email} · {m.lastLoginAt ? `last sign-in ${formatDateTime(m.lastLoginAt)}` : 'never signed in'}</p>
+                        <p className="text-xs text-muted break-all">{m.email} · {m.lastLoginAt ? `last sign-in ${formatDateTime(m.lastLoginAt)}` : 'never signed in'}</p>
                       </div>
                       {locked ? (
-                        <span className="text-xs text-gray-500">{m.role === 'super_admin' ? 'Cannot be changed' : 'This is you'}</span>
+                        <span className="text-xs text-muted">{m.role === 'super_admin' ? 'Cannot be changed' : 'This is you'}</span>
                       ) : (
                         <div className="flex flex-wrap gap-2">
                           <select
@@ -165,19 +165,19 @@ export default function AdminStaffPage() {
                             value={m.role}
                             disabled={busy === m.id}
                             onChange={(e) => run(m.id, () => apiClient.patch(`/admin/staff/${m.id}`, { role: e.target.value }), 'Role changed; they are signed out')}
-                            className="rounded-lg border border-gray-300 px-2 py-1 text-sm"
+                            className="nuray-input text-sm"
                           >
                             <option value="support">Customer support</option>
                             <option value="admin">Admin</option>
                           </select>
-                          <Button variant="outline" size="sm" disabled={busy === m.id} onClick={() => run(m.id, () => apiClient.post(`/admin/staff/${m.id}/status`, { status: m.status === 'active' ? 'suspended' : 'active' }), m.status === 'active' ? 'Suspended' : 'Reactivated')}>
+                          <Button variant="outline" disabled={busy === m.id} onClick={() => run(m.id, () => apiClient.post(`/admin/staff/${m.id}/status`, { status: m.status === 'active' ? 'suspended' : 'active' }), m.status === 'active' ? 'Suspended' : 'Reactivated')}>
                             {m.status === 'active' ? 'Suspend' : 'Reactivate'}
                           </Button>
-                          <Button variant="outline" size="sm" disabled={busy === m.id} onClick={() => resetPassword(m)}>Reset password</Button>
+                          <Button variant="outline" disabled={busy === m.id} onClick={() => resetPassword(m)}>Reset password</Button>
                           {m.twoFactorEnabled && (
-                            <Button variant="outline" size="sm" disabled={busy === m.id} onClick={() => resetTwoFactor(m)}>Reset two-step</Button>
+                            <Button variant="outline" disabled={busy === m.id} onClick={() => resetTwoFactor(m)}>Reset two-step</Button>
                           )}
-                          <Button variant="outline" size="sm" disabled={busy === m.id} onClick={() => remove(m)}>Remove</Button>
+                          <Button variant="outline" disabled={busy === m.id} onClick={() => remove(m)}>Remove</Button>
                         </div>
                       )}
                     </li>

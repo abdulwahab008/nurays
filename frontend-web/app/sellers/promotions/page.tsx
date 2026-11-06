@@ -91,6 +91,15 @@ function whenLabel(p: Promotion): string {
   return 'Not live';
 }
 
+/**
+ * A time as a date-and-time box shows it: the phone's local time, YYYY-MM-DDTHH:MM. toISOString() alone gives UTC, which the box
+ * then reads back as local time, moving the deal five hours earlier in Pakistan on every save.
+ */
+function toLocalInput(at: Date | string): string {
+  const d = new Date(at);
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
+}
+
 /** The form's starting values: the promotion being edited, or a week-long 15% deal starting now. */
 function promotionFormFor(initialData?: Promotion | null): PromotionFormValues {
   if (initialData) {
@@ -98,8 +107,8 @@ function promotionFormFor(initialData?: Promotion | null): PromotionFormValues {
       name: initialData.name,
       type: initialData.type === 'fixed' ? 'fixed' : 'percentage',
       discountValue: String(initialData.discountValue),
-      startDate: initialData.startDate.slice(0, 16),
-      endDate: initialData.endDate.slice(0, 16),
+      startDate: toLocalInput(initialData.startDate),
+      endDate: toLocalInput(initialData.endDate),
       code: initialData.code || '',
       minOrderValue: initialData.minOrderAmount != null ? String(initialData.minOrderAmount) : '',
       maxUsage: initialData.usageLimitTotal != null ? String(initialData.usageLimitTotal) : '',
@@ -109,8 +118,8 @@ function promotionFormFor(initialData?: Promotion | null): PromotionFormValues {
     name: '',
     type: 'percentage',
     discountValue: '15',
-    startDate: new Date().toISOString().slice(0, 16),
-    endDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 16),
+    startDate: toLocalInput(new Date()),
+    endDate: toLocalInput(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)),
     code: '',
     minOrderValue: '',
     maxUsage: '',

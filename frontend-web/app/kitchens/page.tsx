@@ -2,26 +2,20 @@
 
 import { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { SiteHeader } from '@/components/layout/SiteHeader';
-import {
-  Search,
-  Star,
-  Clock,
-  Bike,
-  ShieldCheck,
-  Heart,
-  MapPin,
-  Snowflake,
-  ChefHat,
-  ChevronRight,
-  ArrowUpDown,
-} from 'lucide-react';
+import { Search, Star, Clock, Bike, ShieldCheck, Heart, MapPin, Snowflake, ChefHat, ArrowUpDown, X } from 'lucide-react';
 import { CoverImage } from '@/components/ui/CoverImage';
+import { Button } from '@/components/ui/button';
+import { useToast } from '@/components/ui/toast';
 import { apiClient, ApiResponse } from '@/lib/api-client';
-import type { PublicSeller, PublicSellerAvailability } from '@/lib/services/seller.service';
+import type { PublicSellerAvailability } from '@/lib/services/seller.service';
+import { favoriteService } from '@/lib/services/favorite.service';
 import { displayRating, formatPrice } from '@/lib/utils';
+import { loginUrlHere } from '@/lib/auth-redirect';
 import { useAuthStore } from '@/lib/store/auth-store';
-import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
+import { useCommunityStore } from '@/lib/store/community-store';
+import { kitchensForArea, quoteOf, quoteParams, type QuotedSeller } from '@/components/marketplace/delivery-quote';
 import { useT } from '@/lib/i18n';
 import { browseMessages, businessTypeKey, type BrowseT } from '@/lib/i18n/messages/browse';
 import { kitchenMessages, kitchenKey, type KitchenT } from '@/lib/i18n/messages/kitchen';
@@ -57,6 +51,10 @@ interface Kitchen {
   businessType: string | null;
   href: string;
   isSubZero: boolean;
+  /** In the chosen area (rather than a nearby one that also delivers there). */
+  inArea: boolean;
+  /** Fee and time to the chosen area; null when no area is chosen or the API did not quote one. */
+  quote: { fee: number; min: number | null; max: number | null } | null;
 }
 
 type SortOption = 'rating' | 'reviews';
@@ -136,7 +134,14 @@ function formatCategory(category: string): string {
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
-function toKitchen(s: PublicSeller): Kitchen {
+/** "Rs 50 delivery · 40–65 min" from the quote; null without one. */
+function describeQuote(quote: Kitchen['quote'], tk: KitchenT): string | null {
+  if (!quote) return null;
+  const fee = quote.fee === 0 ? tk('freeDelivery') : tk('amountDelivery', { amount: formatPrice(quote.fee) });
+  return quote.min != null && quote.max != null ? tk('feeAndTime', { fee, min: quote.min, max: quote.max }) : fee;
+}
+
+function toKitchen(s: QuotedSeller, communityId: string | null): Kitchen {
   const reviewsCount = Number(s.totalReviews) || 0;
   const rating = displayRating(s.ratingAverage, reviewsCount);
   const products = s.products ?? [];
@@ -166,11 +171,19 @@ function toKitchen(s: PublicSeller): Kitchen {
     businessType: s.businessType ?? null,
     href: `/kitchens/${s.id}`,
     isSubZero: products.some((p) => p.productType === 'frozen'),
+    inArea: communityId != null && s.community?.id === communityId,
+    quote: quoteOf(s.delivery),
   };
 }
 
 export default function KitchensDirectoryPage() {
+  const router = useRouter();
+  const { showToast } = useToast();
   const { isAuthenticated } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated })));
+  const { selectedCommunity, openSelectorModal } = useCommunityStore(
+    useShallow((s) => ({ selectedCommunity: s.selectedCommunity, openSelectorModal: s.openSelectorModal })),
+  );
+  const communityId = selectedCommunity?.id ?? null;
   const tb = useT(browseMessages);
   const tk = useT(kitchenMessages);
   const [search, setSearch] = useState('');
@@ -181,15 +194,16 @@ export default function KitchensDirectoryPage() {
   const [status, setStatus] = useState<LoadStatus>('loading');
   const [reloadKey, setReloadKey] = useState(0);
 
+  // With an area chosen, only the kitchens that deliver there (its own first), each with its fee and time.
   useEffect(() => {
     let cancelled = false;
     // Calls the API directly: sellerService.getPublicSellers() turns a failed request into an
     // empty list, which would wrongly tell people there are no kitchens instead of offering a retry.
     apiClient
-      .get<ApiResponse<PublicSeller[]>>('/sellers', { params: { limit: 50 } })
+      .get<ApiResponse<QuotedSeller[]>>('/sellers', { params: { limit: 50, ...quoteParams(communityId) } })
       .then((res) => {
         if (cancelled) return;
-        setKitchens((res.data?.data ?? []).map(toKitchen));
+        setKitchens(kitchensForArea(res.data?.data ?? [], communityId).map((s) => toKitchen(s, communityId)));
         setStatus('ready');
       })
       .catch((err) => {
@@ -201,22 +215,54 @@ export default function KitchensDirectoryPage() {
     return () => {
       cancelled = true;
     };
-  }, [reloadKey]);
+  }, [reloadKey, communityId]);
+
+  // The signed-in customer's saved kitchens, so the hearts show what is really saved.
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    let cancelled = false;
+    favoriteService
+      .getFavorites()
+      .then((list) => {
+        if (!cancelled) setFavorites(new Set(list.map((f) => f.sellerId)));
+      })
+      .catch(() => {
+        // Hearts start empty; saving still works.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthenticated]);
 
   const retry = () => {
     setStatus('loading');
     setReloadKey((k) => k + 1);
   };
 
-  const toggleFavorite = (id: string, e: React.MouseEvent) => {
+  const toggleFavorite = async (kitchen: Kitchen, e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    setFavorites((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+    if (!isAuthenticated) {
+      router.push(loginUrlHere());
+      return;
+    }
+    const wasSaved = favorites.has(kitchen.id);
+    const setSaved = (saved: boolean) =>
+      setFavorites((prev) => {
+        const next = new Set(prev);
+        if (saved) next.add(kitchen.id);
+        else next.delete(kitchen.id);
+        return next;
+      });
+    setSaved(!wasSaved);
+    try {
+      if (wasSaved) await favoriteService.removeFavorite(kitchen.id);
+      else await favoriteService.addFavorite(kitchen.id);
+      showToast(tk(wasSaved ? 'toastRemovedFav' : 'toastSavedFav', { name: kitchen.name }), 'info');
+    } catch {
+      setSaved(wasSaved);
+      showToast(tk('toastFavFailed'), 'error');
+    }
   };
 
   const filteredKitchens = useMemo(() => {
@@ -231,432 +277,270 @@ export default function KitchensDirectoryPage() {
           if (!matchesName && !matchesChef && !matchesArea && !matchesCuisine) return false;
         }
 
-        if (selectedFilter === 'top_rated' && (!k.rating || k.ratingValue < 4.85)) return false;
+        if (selectedFilter === 'top_rated' && (!k.rating || k.ratingValue < 4.5)) return false;
         if (selectedFilter === 'open_now' && !k.isOpen) return false;
-        if (selectedFilter === 'free_delivery' && !k.offersFreeDelivery) return false;
+        if (selectedFilter === 'free_delivery' && !(k.quote ? k.quote.fee === 0 : k.offersFreeDelivery)) return false;
         if (selectedFilter === 'frozen' && !k.isSubZero) return false;
 
         return true;
       })
       .sort((a, b) => {
+        // The chosen area's own kitchens stay first; the sort applies within each group.
+        if (a.inArea !== b.inArea) return a.inArea ? -1 : 1;
         if (sortBy === 'reviews') return b.reviewsCount - a.reviewsCount;
         // Highest rated first; kitchens with no reviews yet ("New") come after rated ones.
         return b.ratingValue - a.ratingValue || b.reviewsCount - a.reviewsCount;
       });
   }, [kitchens, search, selectedFilter, sortBy]);
 
-  // Average over every review across the listed kitchens; null until someone has reviewed.
-  const averageRating = useMemo(() => {
-    let total = 0;
-    let count = 0;
-    for (const k of kitchens) {
-      if (!k.rating) continue;
-      total += k.ratingValue * k.reviewsCount;
-      count += k.reviewsCount;
-    }
-    return count > 0 ? (total / count).toFixed(1) : null;
-  }, [kitchens]);
-
   const isReady = status === 'ready';
-  const kitchenCountLabel = tk(kitchens.length === 1 ? 'countOne' : 'countMany', { count: kitchens.length });
+  const inArea = filteredKitchens.filter((k) => k.inArea);
+  const nearby = filteredKitchens.filter((k) => !k.inArea);
 
-  const renderToolbar = () => (
-    <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
-      <div className="relative flex-1 max-w-md">
-        <Search className="w-4 h-4 text-muted absolute start-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-        <input
-          type="text"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder={tk('searchPlaceholder')}
-          aria-label={tk('searchPlaceholder')}
-          className="w-full h-12 ps-10 pe-10 rounded-[14px] bg-raised focus:bg-surface text-[15px] font-semibold text-ink placeholder:text-muted placeholder:font-medium border border-transparent focus:border-brand focus:ring-2 focus:ring-brand/20 outline-none transition-all"
-        />
-        {search && (
-          <button
-            onClick={() => setSearch('')}
-            aria-label={tk('clearSearch')}
-            className="absolute end-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full text-sm text-muted hover:text-ink hover:bg-line"
-          >
-            ✕
-          </button>
-        )}
-      </div>
-
-      <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
-        {[
-          { id: 'all', label: tk('chipAll'), icon: ChefHat },
-          { id: 'top_rated', label: tk('chipTopRated'), icon: Star },
-          { id: 'open_now', label: tk('chipOpenNow'), icon: Clock },
-          { id: 'free_delivery', label: tk('chipFreeDelivery'), icon: Bike },
-          { id: 'frozen', label: tk('chipFrozen'), icon: Snowflake },
-        ].map((chip) => {
-          const Icon = chip.icon;
-          const isActive = selectedFilter === chip.id;
-          return (
-            <button
-              key={chip.id}
-              onClick={() => setSelectedFilter(chip.id)}
-              aria-pressed={isActive}
-              className={`flex-shrink-0 flex items-center gap-1.5 h-10 px-4 rounded-full text-sm font-bold whitespace-nowrap transition-colors ${
-                isActive ? 'bg-ink text-page' : 'bg-surface hover:bg-raised text-ink border border-line'
-              }`}
-            >
-              <Icon className="w-3.5 h-3.5" />
-              <span>{chip.label}</span>
-            </button>
-          );
-        })}
-
-        <div className="h-4 w-px bg-line mx-1 hidden lg:block" />
-
-        <div className="hidden lg:flex flex-shrink-0 items-center gap-1 text-sm text-muted">
-          <ArrowUpDown className="w-3.5 h-3.5" />
-          <select
-            value={sortBy}
-            onChange={(e) => setSortBy(e.target.value as SortOption)}
-            aria-label={tk('sortLabel')}
-            className="bg-transparent text-sm font-bold text-ink outline-none cursor-pointer"
-          >
-            <option value="rating">{tk('sortRating')}</option>
-            <option value="reviews">{tk('sortReviews')}</option>
-          </select>
-        </div>
-      </div>
-    </div>
-  );
-
-  const renderLoadingSkeleton = () => (
-    <div
-      className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6"
-      aria-busy="true"
-      aria-label={tk('loadingKitchens')}
-    >
-      {Array.from({ length: 6 }).map((_, i) => (
-        <div
-          key={i}
-          className="bg-surface rounded-[20px] border border-line overflow-hidden animate-pulse"
-        >
-          <div className="aspect-[16/10] w-full bg-raised" />
-          <div className="p-4 space-y-3">
-            <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 rounded-xl bg-raised flex-shrink-0" />
-              <div className="flex-1 space-y-1.5">
-                <div className="h-3.5 w-2/3 rounded bg-raised" />
-                <div className="h-2.5 w-1/2 rounded bg-raised" />
-              </div>
-            </div>
-            <div className="h-3 w-3/4 rounded bg-raised" />
-            <div className="pt-2.5 border-t border-line flex gap-1">
-              <div className="h-4 w-16 rounded-md bg-raised" />
-              <div className="h-4 w-12 rounded-md bg-raised" />
-            </div>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-
-  const renderKitchensGrid = (isPublic: boolean) => (
-    <div className={isPublic ? 'max-w-[1280px] mx-auto px-4 sm:px-8 py-8' : 'py-2'}>
-      {isReady && kitchens.length > 0 && (
-        <div className="flex items-center justify-between mb-6">
-          <p className="text-xs font-semibold text-muted">
-            {tk(filteredKitchens.length === 1 ? 'showingVerifiedOne' : 'showingVerifiedMany')
-              .split(/(\{count\})/)
-              .map((part, i) =>
-                part === '{count}' ? (
-                  <span key={i} className="font-bold text-ink">{filteredKitchens.length}</span>
-                ) : (
-                  part
-                ),
-              )}
-          </p>
-          {selectedFilter !== 'all' && (
-            <button
-              onClick={() => setSelectedFilter('all')}
-              className="text-xs font-semibold text-brand-ink hover:underline"
-            >
-              {tk('resetFilters')}
-            </button>
-          )}
-        </div>
-      )}
-
-      {status === 'loading' ? (
-        renderLoadingSkeleton()
-      ) : status === 'error' ? (
-        <div
-          role="alert"
-          className="bg-surface rounded-[20px] border border-dashed border-line-strong p-10 text-center max-w-md mx-auto my-12"
-        >
-          <div className="w-12 h-12 rounded-2xl bg-brand-soft text-brand-soft-ink flex items-center justify-center mx-auto mb-3">
-            <ChefHat className="w-6 h-6" />
-          </div>
-          <h3 className="text-base font-bold text-ink mb-1">{tk('loadError')}</h3>
-          <p className="text-xs text-muted mb-5">
-            {tk('loadErrorBody')}
-          </p>
-          <button
-            onClick={retry}
-            className="h-11 px-5 rounded-xl bg-brand text-on-brand text-sm font-extrabold hover:bg-brand-500 transition-colors"
-          >
-            {tk('tryAgain')}
-          </button>
-        </div>
-      ) : kitchens.length === 0 ? (
-        <div className="bg-surface rounded-[20px] border border-dashed border-line-strong p-10 text-center max-w-md mx-auto my-12">
-          <div className="w-12 h-12 rounded-2xl bg-brand-soft text-brand-soft-ink flex items-center justify-center mx-auto mb-3">
-            <ChefHat className="w-6 h-6" />
-          </div>
-          <h3 className="text-base font-bold text-ink mb-1">{tk('noneListed')}</h3>
-          <p className="text-xs text-muted">
-            {tk('noneListedBody')}
-          </p>
-        </div>
-      ) : filteredKitchens.length === 0 ? (
-        <div className="bg-surface rounded-[20px] border border-dashed border-line-strong p-10 text-center max-w-md mx-auto my-12">
-          <div className="w-12 h-12 rounded-2xl bg-brand-soft text-brand-soft-ink flex items-center justify-center mx-auto mb-3">
-            <ChefHat className="w-6 h-6" />
-          </div>
-          <h3 className="text-base font-bold text-ink mb-1">{tk('noMatch')}</h3>
-          <p className="text-xs text-muted mb-5">
-            {tk('noMatchBody')}
-          </p>
-          <button
-            onClick={() => {
-              setSearch('');
-              setSelectedFilter('all');
-            }}
-            className="h-11 px-5 rounded-xl bg-brand text-on-brand text-sm font-extrabold hover:bg-brand-500 transition-colors"
-          >
-            {tk('viewAll')}
-          </button>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-          {filteredKitchens.map((kitchen) => {
-            const isFav = favorites.has(kitchen.id);
-            const open = describeOpenState(kitchen.availability, tk);
-            const deliveryFee = describeDeliveryFee(kitchen.deliveryFeeType, kitchen.fixedFee, kitchen.freeOver, tk);
-            return (
-              <Link
-                key={kitchen.id}
-                href={kitchen.href}
-                className="group flex flex-col bg-surface rounded-[20px] border border-line hover:border-line-strong hover:shadow-[var(--shadow-card)] transition-all duration-200 overflow-hidden"
-              >
-                <div className="relative aspect-[16/10] w-full overflow-hidden bg-raised">
-                  <CoverImage
-                    src={kitchen.coverPhoto}
-                    alt={kitchen.name}
-                    label={kitchen.name}
-                    size="md"
-                    className="w-full h-full transition-transform duration-500 group-hover:scale-[1.03]"
-                  />
-
-                  {/* Only when a dish really is discounted */}
-                  {kitchen.hasDiscount && (
-                    <span className="absolute top-3 start-3 px-2.5 py-1 rounded-full bg-accent text-on-accent text-[11px] font-extrabold">
-                      {tk('discounted')}
-                    </span>
-                  )}
-
-                  <button
-                    onClick={(e) => toggleFavorite(kitchen.id, e)}
-                    className="absolute top-3 end-3 w-9 h-9 rounded-full bg-surface/95 flex items-center justify-center text-ink hover:scale-105 transition-transform shadow-xs"
-                    aria-label={tk('saveFav')}
-                    aria-pressed={isFav}
-                  >
-                    <Heart
-                      className={`w-4 h-4 transition-colors ${
-                        isFav ? 'fill-red-500 text-red-500' : 'text-muted hover:text-red-500'
-                      }`}
-                    />
-                  </button>
-                </div>
-
-                <div className="p-4 flex-1 flex flex-col gap-2">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <h2 className="text-base font-extrabold text-ink truncate">{kitchen.name}</h2>
-                      <p className="text-[13px] text-muted truncate flex items-center gap-1">
-                        <span>{kitchen.chef}</span>
-                        {kitchen.area && (
-                          <>
-                            <span aria-hidden>·</span>
-                            <MapPin className="w-3 h-3 inline flex-shrink-0" aria-hidden />
-                            <span>{kitchen.area.split(',')[0]}</span>
-                          </>
-                        )}
-                      </p>
-                    </div>
-
-                    {/* "New" until the kitchen has real reviews */}
-                    {kitchen.rating ? (
-                      <span
-                        title={tk(kitchen.reviewsCount === 1 ? 'ratingFromOne' : 'ratingFromMany', {
-                          rating: kitchen.rating,
-                          count: kitchen.reviewsCount,
-                        })}
-                        className="flex-shrink-0 flex items-center gap-1 text-sm font-extrabold text-ink"
-                      >
-                        <Star className="w-4 h-4 fill-accent text-accent" aria-hidden />
-                        <span>{kitchen.rating}</span>
-                      </span>
-                    ) : (
-                      <span
-                        title={tk('noReviews')}
-                        className="flex-shrink-0 px-2 py-0.5 rounded-full bg-accent-soft text-accent-soft-ink text-[11px] font-extrabold"
-                      >
-                        {tk('new')}
-                      </span>
-                    )}
-                  </div>
-
-                  {kitchen.cuisine.length > 0 && <p className="text-[13px] text-muted truncate">{kitchen.cuisine.join(' · ')}</p>}
-
-                  <div className="mt-auto pt-1 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs font-semibold text-muted">
-                    {/* From the API's availability */}
-                    {open.label && (
-                      <span
-                        title={open.detail ?? undefined}
-                        className={`px-2 py-0.5 rounded-full font-extrabold ${
-                          kitchen.isOpen ? 'bg-brand-soft text-brand-soft-ink' : 'bg-raised text-muted'
-                        }`}
-                      >
-                        {open.label}
-                      </span>
-                    )}
-                    <span className="flex items-center gap-1">
-                      <Bike className="w-3.5 h-3.5" aria-hidden />
-                      {deliveryFee ?? tk('feeAtCheckout')}
-                    </span>
-                    <span>
-                      {kitchen.minOrder != null ? tk('minAmount', { amount: formatPrice(kitchen.minOrder) }) : tk('noMin')}
-                    </span>
-                  </div>
-
-                  <span className="flex items-center gap-1 text-[11px] font-bold text-brand-ink">
-                    <ShieldCheck className="w-3.5 h-3.5" aria-hidden />
-                    <span>{verifiedBadge(kitchen.businessType, tb, tk)}</span>
-                  </span>
-                </div>
-              </Link>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-
-  // Authenticated customer: Render inside the customer DashboardLayout shell
-  if (isAuthenticated) {
+  const renderCard = (kitchen: Kitchen) => {
+    const isFav = favorites.has(kitchen.id);
+    const open = describeOpenState(kitchen.availability, tk);
+    const deliveryFee =
+      describeQuote(kitchen.quote, tk) ?? describeDeliveryFee(kitchen.deliveryFeeType, kitchen.fixedFee, kitchen.freeOver, tk);
     return (
-      <DashboardLayout
-        title={tk('dashTitle')}
-        subtitle={tk('dashSubtitle')}
-        sidebarItems={CUSTOMER_SIDEBAR_ITEMS}
-        userType="customer"
+      <Link
+        key={kitchen.id}
+        href={kitchen.href}
+        className="group flex flex-col bg-surface rounded-[20px] border border-line hover:border-line-strong hover:shadow-[var(--shadow-card)] transition-all duration-200 overflow-hidden"
       >
-        <div className="space-y-6">
-          <div className="flex items-center justify-between pb-1">
-            <Link
-              href="/products"
-              className="inline-flex items-center gap-1.5 text-xs font-bold text-muted hover:text-brand-ink transition-colors py-1.5 px-3 rounded-xl bg-surface border border-line shadow-2xs hover:border-line-strong"
-            >
-              <ChevronRight className="rtl:-scale-x-100 w-3.5 h-3.5 rotate-180" />
-              <span>{tk('browseAllDishes')}</span>
-            </Link>
-            {isReady && (
-              <span className="text-xs font-medium text-muted">
-                {tk(filteredKitchens.length === 1 ? 'showingOne' : 'showingMany', { count: filteredKitchens.length })}
+        <div className="relative aspect-[16/10] w-full overflow-hidden bg-raised">
+          <CoverImage
+            src={kitchen.coverPhoto}
+            alt={kitchen.name}
+            label={kitchen.name}
+            size="md"
+            className="w-full h-full transition-transform duration-500 group-hover:scale-[1.03]"
+          />
+
+          {kitchen.hasDiscount && (
+            <span className="absolute top-3 start-3 px-2.5 py-1 rounded-full bg-accent text-on-accent text-xs font-bold">
+              {tk('discounted')}
+            </span>
+          )}
+
+          {/* 36px to look at, 44px to tap */}
+          <button
+            type="button"
+            onClick={(e) => toggleFavorite(kitchen, e)}
+            className="absolute top-1 end-1 w-11 h-11 flex items-center justify-center"
+            aria-label={isFav ? tk('removeFav') : tk('saveFav')}
+            aria-pressed={isFav}
+          >
+            <span className="w-9 h-9 rounded-full bg-surface/95 flex items-center justify-center shadow-xs">
+              <Heart className={`w-4 h-4 ${isFav ? 'fill-red-500 text-red-500' : 'text-muted'}`} aria-hidden />
+            </span>
+          </button>
+        </div>
+
+        <div className="p-4 flex-1 flex flex-col gap-2">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h3 className="text-base font-bold text-ink truncate flex items-center gap-1">
+                <span className="truncate">{kitchen.name}</span>
+                <ShieldCheck className="w-4 h-4 shrink-0 text-brand-ink" aria-label={verifiedBadge(kitchen.businessType, tb, tk)} />
+              </h3>
+              <p className="text-[13px] text-muted truncate flex items-center gap-1">
+                <span>{kitchen.chef}</span>
+                {kitchen.area && (
+                  <>
+                    <span aria-hidden>·</span>
+                    <MapPin className="w-3 h-3 inline flex-shrink-0" aria-hidden />
+                    <span>{kitchen.area.split(',')[0]}</span>
+                  </>
+                )}
+              </p>
+            </div>
+
+            {kitchen.rating ? (
+              <span
+                title={tk(kitchen.reviewsCount === 1 ? 'ratingFromOne' : 'ratingFromMany', {
+                  rating: kitchen.rating,
+                  count: kitchen.reviewsCount,
+                })}
+                className="flex-shrink-0 flex items-center gap-1 text-sm font-bold text-ink"
+              >
+                <Star className="w-4 h-4 fill-accent text-accent" aria-hidden />
+                <span>{kitchen.rating}</span>
+              </span>
+            ) : (
+              <span title={tk('noReviews')} className="flex-shrink-0 px-2 py-0.5 rounded-full bg-accent-soft text-accent-soft-ink text-xs font-medium">
+                {tk('new')}
               </span>
             )}
           </div>
 
-          <div className="bg-surface rounded-2xl border border-line p-5 shadow-xs">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-5">
-              <div>
-                <h2 className="text-base font-bold text-ink">{tk('communityVerified')}</h2>
-                <p className="text-xs text-muted">
-                  {tk('orderDirect')}
-                </p>
-              </div>
-              <div className="flex items-center gap-3 flex-wrap">
-                {isReady && (
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-raised border border-line text-xs font-semibold text-ink">
-                    <ChefHat className="w-3.5 h-3.5 text-brand-ink" />
-                    {tk(kitchens.length === 1 ? 'verifiedCountOne' : 'verifiedCountMany', { count: kitchens.length })}
-                  </span>
-                )}
-              </div>
-            </div>
-            {renderToolbar()}
+          {kitchen.cuisine.length > 0 && <p className="text-[13px] text-muted truncate">{kitchen.cuisine.join(' · ')}</p>}
+
+          <p className="mt-auto pt-1 flex items-center gap-1.5 text-sm font-semibold text-ink">
+            <Bike className="w-4 h-4 text-muted shrink-0" aria-hidden />
+            <span className="truncate">{deliveryFee ?? tk('feeAtCheckout')}</span>
+          </p>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs font-medium text-muted">
+            {open.label && (
+              <span
+                title={open.detail ?? undefined}
+                className={`px-2 py-0.5 rounded-full ${kitchen.isOpen ? 'bg-brand-soft text-brand-soft-ink' : 'bg-raised text-muted'}`}
+              >
+                {open.label}
+              </span>
+            )}
+            <span>{kitchen.minOrder != null ? tk('minAmount', { amount: formatPrice(kitchen.minOrder) }) : tk('noMin')}</span>
           </div>
-
-          {renderKitchensGrid(false)}
         </div>
-      </DashboardLayout>
+      </Link>
     );
-  }
+  };
 
-  // Public visitor: Render with top marketplace header
+  const grid = (list: Kitchen[]) => <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">{list.map(renderCard)}</div>;
+
+  const emptyCard = (title: string, body: string, action?: React.ReactNode, role?: string) => (
+    <div role={role} className="bg-surface rounded-[20px] border border-dashed border-line-strong p-8 text-center max-w-md mx-auto my-10">
+      <ChefHat className="w-6 h-6 text-muted mx-auto mb-3" aria-hidden />
+      <h3 className="text-base font-bold text-ink mb-1">{title}</h3>
+      <p className="text-sm text-muted">{body}</p>
+      {action && <div className="mt-5">{action}</div>}
+    </div>
+  );
+
   return (
-    <div className="min-h-screen bg-page text-ink pb-24">
+    <div className="min-h-screen bg-page text-ink">
       <SiteHeader />
 
-      {/* Hero Header */}
-      <section className="pt-6 sm:pt-10 pb-2">
-        <div className="max-w-[1280px] mx-auto px-4 sm:px-8">
-          <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-            <div>
-              <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-accent-soft text-accent-soft-ink text-xs sm:text-[13px] font-extrabold mb-3">
-                <ChefHat className="w-3.5 h-3.5" />
-                <span>{tk('heroBadge')}</span>
-              </div>
-              <h1 className="text-[28px] sm:text-[40px] leading-tight font-extrabold tracking-tight text-ink">
-                {tk('dashTitle')}
-              </h1>
-              <p className="text-[15px] sm:text-base text-muted mt-2 max-w-2xl leading-relaxed">
-                {tk('heroBody')}
-              </p>
-            </div>
+      <div className="max-w-[1280px] mx-auto px-4 sm:px-8 pt-6 pb-10">
+        <h1 className="text-[24px] sm:text-[32px] leading-tight font-extrabold tracking-tight text-ink">
+          {selectedCommunity ? tk('titleArea', { area: selectedCommunity.name }) : tk('titleAll')}
+        </h1>
+        {selectedCommunity ? (
+          <p className="text-sm text-muted mt-1">
+            {isReady ? tk(filteredKitchens.length === 1 ? 'showingOne' : 'showingMany', { count: filteredKitchens.length }) : ' '}
+          </p>
+        ) : (
+          <div className="mt-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl bg-brand-soft p-4">
+            <p className="flex items-start gap-2 text-sm text-brand-soft-ink">
+              <MapPin className="w-4 h-4 mt-0.5 shrink-0" aria-hidden />
+              <span>{tk('chooseAreaBody')}</span>
+            </p>
+            <Button onClick={openSelectorModal} className="h-11 shrink-0 rounded-xl">
+              {tk('chooseArea')}
+            </Button>
+          </div>
+        )}
 
-            {/* Quick Metrics Pills — real counts, "—" while loading */}
-            <div className="flex items-center gap-3 flex-wrap">
-              <div className="px-4 py-2.5 rounded-2xl bg-surface border border-line text-start">
-                <div className="text-xs font-semibold text-muted">{tk('dashTitle')}</div>
-                <div className="text-base font-extrabold text-ink">{isReady ? kitchenCountLabel : '—'}</div>
-              </div>
-              <div className="px-4 py-2.5 rounded-2xl bg-surface border border-line text-start">
-                <div className="text-xs font-semibold text-muted">{tk('averageRating')}</div>
-                <div className="text-base font-extrabold text-ink flex items-center gap-1">
-                  {!isReady ? (
-                    <span>—</span>
-                  ) : averageRating ? (
-                    <>
-                      <Star className="w-3.5 h-3.5 fill-accent text-accent" />
-                      <span>{averageRating} / 5.0</span>
-                    </>
-                  ) : (
-                    <span>{tk('noReviews')}</span>
-                  )}
-                </div>
-              </div>
-            </div>
+        {/* Search and filters */}
+        <div className="mt-5 flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
+          <div className="relative flex-1 lg:max-w-md">
+            <Search className="w-4 h-4 text-muted absolute start-3.5 top-1/2 -translate-y-1/2 pointer-events-none" aria-hidden />
+            <input
+              type="search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder={tk('searchPlaceholder')}
+              aria-label={tk('searchPlaceholder')}
+              className="w-full h-12 ps-10 pe-11 rounded-xl bg-raised focus:bg-surface text-[15px] text-ink placeholder:text-muted border border-transparent focus:border-brand focus:ring-2 focus:ring-brand/20 outline-none"
+            />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch('')}
+                aria-label={tk('clearSearch')}
+                className="absolute end-1 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full flex items-center justify-center text-muted hover:text-ink"
+              >
+                <X className="w-4 h-4" aria-hidden />
+              </button>
+            )}
           </div>
 
-          {/* Search & Filter Toolbar */}
-          <div className="mt-6">
-            {renderToolbar()}
+          <div className="flex items-center gap-2 overflow-x-auto scrollbar-none -mx-4 px-4 lg:mx-0 lg:px-0">
+            {[
+              { id: 'all', label: tk('chipAll'), icon: ChefHat },
+              { id: 'open_now', label: tk('chipOpenNow'), icon: Clock },
+              { id: 'top_rated', label: tk('chipTopRated'), icon: Star },
+              { id: 'free_delivery', label: tk('chipFreeDelivery'), icon: Bike },
+              { id: 'frozen', label: tk('chipFrozen'), icon: Snowflake },
+            ].map((chip) => {
+              const Icon = chip.icon;
+              const isActive = selectedFilter === chip.id;
+              return (
+                <button
+                  key={chip.id}
+                  type="button"
+                  onClick={() => setSelectedFilter(chip.id)}
+                  aria-pressed={isActive}
+                  className={`flex-shrink-0 flex items-center gap-1.5 h-11 px-4 rounded-full text-sm font-semibold whitespace-nowrap border transition-colors ${
+                    isActive ? 'bg-brand-soft text-brand-soft-ink border-brand' : 'bg-surface text-ink border-line hover:bg-raised'
+                  }`}
+                >
+                  <Icon className="w-4 h-4" aria-hidden />
+                  <span>{chip.label}</span>
+                </button>
+              );
+            })}
+
+            <label className="flex flex-shrink-0 items-center gap-1 h-11 px-3 rounded-full border border-line bg-surface text-sm text-muted">
+              <ArrowUpDown className="w-4 h-4" aria-hidden />
+              <span className="sr-only">{tk('sortLabel')}</span>
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as SortOption)}
+                className="bg-transparent text-sm font-semibold text-ink outline-none cursor-pointer"
+              >
+                <option value="rating">{tk('sortRating')}</option>
+                <option value="reviews">{tk('sortReviews')}</option>
+              </select>
+            </label>
           </div>
         </div>
-      </section>
 
-      {/* Kitchens Grid */}
-      <main>
-        {renderKitchensGrid(true)}
-      </main>
+        <main className="mt-6">
+          {status === 'loading' ? (
+            <div role="status" className="flex items-center justify-center gap-2 py-16 text-sm text-muted">
+              <span className="w-4 h-4 border-2 border-brand border-t-transparent rounded-full animate-spin" aria-hidden />
+              {tk('loadingKitchens')}
+            </div>
+          ) : status === 'error' ? (
+            emptyCard(tk('loadError'), tk('loadErrorBody'), <Button onClick={retry} className="h-11 rounded-xl">{tk('tryAgain')}</Button>, 'alert')
+          ) : kitchens.length === 0 ? (
+            selectedCommunity
+              ? emptyCard(tk('noneInArea', { area: selectedCommunity.name }), tk('noneInAreaBody'), (
+                  <Button variant="outline" onClick={openSelectorModal} className="h-11 rounded-xl">
+                    {tk('changeArea')}
+                  </Button>
+                ))
+              : emptyCard(tk('noneListed'), tk('noneListedBody'))
+          ) : filteredKitchens.length === 0 ? (
+            emptyCard(tk('noMatch'), tk('noMatchBody'), (
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setSearch('');
+                  setSelectedFilter('all');
+                }}
+                className="h-11 rounded-xl"
+              >
+                {tk('viewAll')}
+              </Button>
+            ))
+          ) : selectedCommunity && inArea.length > 0 && nearby.length > 0 ? (
+            <div className="space-y-8">
+              <section>
+                <h2 className="text-lg font-bold text-ink mb-3">{tk('inArea', { area: selectedCommunity.name })}</h2>
+                {grid(inArea)}
+              </section>
+              <section className="border-t border-line pt-6">
+                <h2 className="text-lg font-bold text-ink mb-3">{tk('alsoDelivers', { area: selectedCommunity.name })}</h2>
+                {grid(nearby)}
+              </section>
+            </div>
+          ) : (
+            grid(filteredKitchens)
+          )}
+        </main>
+      </div>
     </div>
   );
 }

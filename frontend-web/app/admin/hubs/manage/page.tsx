@@ -66,10 +66,10 @@ const blankHub = (): HubForm => ({
   status: 'active',
 });
 
-const STATUS_STYLE: Record<AdminHub['status'], string> = {
-  active: 'bg-green-100 text-green-800',
-  maintenance: 'bg-amber-100 text-amber-800',
-  inactive: 'bg-gray-100 text-gray-600',
+const STATUS: Record<AdminHub['status'], { label: string; style: string }> = {
+  active: { label: 'Active', style: 'bg-brand-soft text-brand-soft-ink' },
+  maintenance: { label: 'Maintenance', style: 'bg-accent-soft text-accent-soft-ink' },
+  inactive: { label: 'Off', style: 'bg-raised text-muted' },
 };
 
 /** Hubs (frozen-stock centres): set them up, switch them off, and give each its manager. */
@@ -180,71 +180,68 @@ export default function AdminHubSetupPage() {
     }
   };
 
-  const field = 'w-full px-3 py-2 rounded-lg border border-gray-200 text-sm';
-  const label = 'block text-xs font-semibold text-gray-700 mb-1';
+  const field = 'nuray-input w-full text-sm';
+  const label = 'block text-sm font-medium text-ink mb-1';
 
   return (
     <AdminShell>
       <div className="max-w-6xl mx-auto space-y-6">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Hubs &amp; managers</h1>
-            <p className="text-gray-600 mt-1">
+            <h1 className="text-2xl font-semibold text-ink">Hubs and managers</h1>
+            <p className="text-sm text-muted mt-1">
               Set up hubs and give each a manager. Day-to-day stock and temperature work is in{' '}
-              <Link href="/admin/hubs" className="underline">
+              <Link href="/admin/hubs" className="text-brand-ink underline">
                 Operations
               </Link>
               .
             </p>
           </div>
-          <Button
-            onClick={() => setForm(form ? null : blankHub())}
-            className="bg-green-600 hover:bg-green-700 text-white"
-          >
+          <Button variant={form ? 'outline' : 'default'} onClick={() => setForm(form ? null : blankHub())}>
             {form ? 'Close' : 'New hub'}
           </Button>
         </div>
 
         {form && (
-          <form onSubmit={saveHub} className="bg-white border border-gray-200 rounded-lg p-5 grid grid-cols-1 lg:grid-cols-2 gap-5" data-testid="hub-form">
+          <form onSubmit={saveHub} className="bg-surface border border-line rounded-2xl p-4 sm:p-5 grid grid-cols-1 lg:grid-cols-2 gap-5" data-testid="hub-form">
             <div className="space-y-3">
-              <h2 className="font-bold text-gray-900">{form.id ? `Edit ${form.name}` : 'New hub'}</h2>
+              <h2 className="text-base font-semibold text-ink">{form.id ? `Edit ${form.name}` : 'New hub'}</h2>
               <div className="grid grid-cols-3 gap-3">
                 <div className="col-span-2">
-                  <label className={label}>Name</label>
-                  <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="DHA cold hub" className={field} />
+                  <label htmlFor="hub-name" className={label}>Name</label>
+                  <input id="hub-name" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="DHA cold hub" className={field} />
                 </div>
                 <div>
-                  <label className={label}>Code</label>
-                  <input required value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value.toUpperCase() })} placeholder="LHE-DHA" className={field} />
+                  <label htmlFor="hub-code" className={label}>Code</label>
+                  <input id="hub-code" required value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value.toUpperCase() })} placeholder="LHE-DHA" className={field} />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className={label}>City</label>
-                  <input required value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} className={field} />
+                  <label htmlFor="hub-city" className={label}>City</label>
+                  <input id="hub-city" required value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} className={field} />
                 </div>
                 <div>
-                  <label className={label}>Area</label>
-                  <input required value={form.area} onChange={(e) => setForm({ ...form, area: e.target.value })} className={field} />
+                  <label htmlFor="hub-area" className={label}>Area</label>
+                  <input id="hub-area" required value={form.area} onChange={(e) => setForm({ ...form, area: e.target.value })} className={field} />
                 </div>
               </div>
               <div>
-                <label className={label}>Street address</label>
-                <input required value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} className={field} />
+                <label htmlFor="hub-street-address" className={label}>Street address</label>
+                <input id="hub-street-address" required value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} className={field} />
               </div>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
-                  <label className={label}>Capacity (cu ft)</label>
-                  <input required type="number" min={1} value={form.capacityCubicFeet} onChange={(e) => setForm({ ...form, capacityCubicFeet: e.target.value })} className={field} />
+                  <label htmlFor="hub-capacity-cu-ft" className={label}>Capacity (cu ft)</label>
+                  <input id="hub-capacity-cu-ft" required type="number" min={1} value={form.capacityCubicFeet} onChange={(e) => setForm({ ...form, capacityCubicFeet: e.target.value })} className={field} />
                 </div>
                 <div>
-                  <label className={label}>Freezer units</label>
-                  <input required type="number" min={1} value={form.freezerUnits} onChange={(e) => setForm({ ...form, freezerUnits: e.target.value })} className={field} />
+                  <label htmlFor="hub-freezer-units" className={label}>Freezer units</label>
+                  <input id="hub-freezer-units" required type="number" min={1} value={form.freezerUnits} onChange={(e) => setForm({ ...form, freezerUnits: e.target.value })} className={field} />
                 </div>
                 <div>
-                  <label className={label}>Status</label>
-                  <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as AdminHub['status'] })} className={field}>
+                  <label htmlFor="hub-status" className={label}>Status</label>
+                  <select id="hub-status" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as AdminHub['status'] })} className={field}>
                     <option value="active">Active</option>
                     <option value="maintenance">Maintenance</option>
                     <option value="inactive">Inactive</option>
@@ -252,66 +249,69 @@ export default function AdminHubSetupPage() {
                 </div>
               </div>
               <div>
-                <label className={label}>Contact phone (optional)</label>
-                <input value={form.contactPhone} onChange={(e) => setForm({ ...form, contactPhone: e.target.value })} className={field} />
+                <label htmlFor="hub-contact-phone-optional" className={label}>Contact phone (optional)</label>
+                <input id="hub-contact-phone-optional" value={form.contactPhone} onChange={(e) => setForm({ ...form, contactPhone: e.target.value })} className={field} />
               </div>
-              <Button type="submit" disabled={saving} className="bg-green-600 hover:bg-green-700 text-white">
+              <Button type="submit" disabled={saving}>
                 {saving ? 'Saving…' : form.id ? 'Save changes' : 'Create hub'}
               </Button>
             </div>
             <div>
-              <label className={label}>Location: click the map or drag the pin</label>
+              <p className={label}>Location</p>
               <LocationMap
                 center={form.location ?? { lat: 31.5204, lng: 74.3587 }}
                 markerPosition={form.location}
+                hidePinUntilPicked
                 height="360px"
                 onLocationSelect={(c) => setForm((prev) => (prev ? { ...prev, location: { lat: c.lat, lng: c.lng } } : prev))}
               />
-              <p className="text-xs text-gray-500 mt-1">{form.location ? `${form.location.lat.toFixed(5)}, ${form.location.lng.toFixed(5)}` : 'No location picked yet.'}</p>
+              <p className={`text-sm mt-2 ${form.location ? 'text-muted' : 'text-accent-soft-ink bg-accent-soft rounded-lg px-3 py-2'}`} role="status">
+                {form.location ? 'Drag the pin to move the hub.' : 'Tap the map to place the hub.'}
+              </p>
             </div>
           </form>
         )}
 
-        <section className="bg-white border border-gray-200 rounded-lg overflow-x-auto">
-          <h2 className="px-5 pt-5 font-bold text-gray-900">Hubs</h2>
+        <section className="bg-surface border border-line rounded-2xl overflow-x-auto">
+          <h2 className="px-5 pt-5 text-base font-semibold text-ink">Hubs</h2>
           {loading && hubs.length === 0 ? (
-            <p className="p-8 text-center text-gray-500">Loading…</p>
+            <p className="p-8 text-center text-sm text-muted" role="status">Loading…</p>
           ) : loadError && hubs.length === 0 ? (
             <LoadError error={loadError} onRetry={load} title="We couldn't load the hubs" className="m-4" />
           ) : hubs.length === 0 ? (
-            <p className="p-8 text-center text-gray-500">No hubs yet.</p>
+            <p className="p-8 text-center text-sm text-muted">No hubs yet. Add the first with New hub.</p>
           ) : (
             <table className="w-full text-sm mt-3" data-testid="hubs-table">
-              <thead className="bg-gray-50 text-start text-xs uppercase tracking-wide text-gray-500">
+              <thead className="bg-raised text-start text-xs font-medium text-muted">
                 <tr>
                   <th className="px-5 py-2">Hub</th>
                   <th className="px-5 py-2">Capacity</th>
                   <th className="px-5 py-2">Manager</th>
-                  <th className="px-5 py-2" />
+                  <th className="px-5 py-2"><span className="sr-only">Actions</span></th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-line">
                 {hubs.map((h) => (
                   <tr key={h.id}>
                     <td className="px-5 py-3">
-                      <p className="font-semibold text-gray-900">
-                        {h.name} <span className="font-mono text-xs text-gray-500">{h.code}</span>
+                      <p className="font-semibold text-ink">
+                        {h.name} <span className="text-xs font-normal text-muted">{h.code}</span>
                       </p>
-                      <p className="text-xs text-gray-500">
+                      <p className="text-xs text-muted">
                         {h.address}, {h.area}, {h.city}
                       </p>
-                      <span className={`inline-block mt-1 px-2 py-0.5 rounded text-xs font-semibold ${STATUS_STYLE[h.status]}`}>{h.status}</span>
+                      <span className={`inline-block mt-1 rounded-full px-2 py-0.5 text-xs font-medium ${STATUS[h.status].style}`}>{STATUS[h.status].label}</span>
                     </td>
-                    <td className="px-5 py-3 text-gray-700">
+                    <td className="px-5 py-3 text-ink">
                       {h.capacityCubicFeet.toLocaleString()} cu ft · {h.freezerUnits} {h.freezerUnits === 1 ? 'freezer' : 'freezers'}
-                      <p className="text-xs text-gray-500">{h.currentUtilization}% used</p>
+                      <p className="text-xs text-muted">{h.currentUtilization}% used</p>
                     </td>
                     <td className="px-5 py-3">
                       <select
                         value={h.manager?.id ?? ''}
                         disabled={busy === h.id}
                         onChange={(e) => assign(h.id, e.target.value)}
-                        className="px-2 py-1.5 rounded-lg border border-gray-200 text-sm bg-white max-w-[220px]"
+                        className="nuray-input text-sm max-w-[240px]"
                         aria-label={`Manager of ${h.name}`}
                       >
                         <option value="">No manager (admins run it)</option>
@@ -327,8 +327,8 @@ export default function AdminHubSetupPage() {
                     <td className="px-5 py-3 text-end">
                       <Button
                         variant="outline"
-                        size="sm"
-                        onClick={() =>
+                        onClick={() => {
+                          window.scrollTo({ top: 0, behavior: 'smooth' });
                           setForm({
                             id: h.id,
                             name: h.name,
@@ -341,8 +341,8 @@ export default function AdminHubSetupPage() {
                             freezerUnits: String(h.freezerUnits),
                             contactPhone: h.contactPhone ?? '',
                             status: h.status,
-                          })
-                        }
+                          });
+                        }}
                       >
                         Edit
                       </Button>
@@ -354,10 +354,10 @@ export default function AdminHubSetupPage() {
           )}
         </section>
 
-        <section className="bg-white border border-gray-200 rounded-lg p-5 space-y-4">
+        <section className="bg-surface border border-line rounded-2xl p-4 sm:p-5 space-y-4">
           <div>
-            <h2 className="font-bold text-gray-900">Hub managers</h2>
-            <p className="text-xs text-gray-500 mt-1">
+            <h2 className="text-base font-semibold text-ink">Hub managers</h2>
+            <p className="text-sm text-muted mt-1">
               A hub manager runs the hubs assigned to them from their own console (/hub). Ask them to sign up as a customer first, then add them
               here by email or phone.
             </p>
@@ -367,7 +367,7 @@ export default function AdminHubSetupPage() {
               value={newManager}
               onChange={(e) => setNewManager(e.target.value)}
               placeholder="Email or phone of their account"
-              className="flex-1 min-w-[240px] px-3 py-2 rounded-lg border border-gray-200 text-sm"
+              className="nuray-input flex-1 min-w-0 basis-60 text-sm"
               aria-label="Email or phone of the new hub manager"
             />
             <Button type="submit" disabled={busy === 'add-manager' || newManager.trim().length < 3} variant="outline">
@@ -377,21 +377,21 @@ export default function AdminHubSetupPage() {
           {loadError && managers.length === 0 ? (
             <LoadError compact error={loadError} onRetry={load} title="We couldn't load the hub managers" />
           ) : managers.length === 0 ? (
-            <p className="text-sm text-gray-500">No hub managers yet.</p>
+            <p className="text-sm text-muted">No hub managers yet.</p>
           ) : (
-            <ul className="divide-y divide-gray-100" data-testid="hub-managers">
+            <ul className="divide-y divide-line" data-testid="hub-managers">
               {managers.map((m) => (
                 <li key={m.id} className="py-3 flex flex-wrap items-center justify-between gap-2">
                   <div>
-                    <p className="font-semibold text-gray-900">
-                      {m.name || 'Name not set'} {m.status !== 'active' && <span className="text-xs text-red-600">({m.status})</span>}
+                    <p className="font-semibold text-ink">
+                      {m.name || 'Name not set'} {m.status !== 'active' && <span className="text-xs text-red-700">({m.status})</span>}
                     </p>
-                    <p className="text-xs text-gray-500">
+                    <p className="text-xs text-muted break-words">
                       {m.phone}
                       {m.email ? ` · ${m.email}` : ''} · {m.hubs.length ? `runs ${m.hubs.map((h) => h.name).join(', ')}` : 'no hub yet'}
                     </p>
                   </div>
-                  <Button variant="outline" size="sm" disabled={busy === m.id} onClick={() => removeManager(m)} className="border-red-200 text-red-700">
+                  <Button variant="outline" disabled={busy === m.id} onClick={() => removeManager(m)} className="border-red-200 text-red-700 hover:bg-red-50">
                     Remove role
                   </Button>
                 </li>

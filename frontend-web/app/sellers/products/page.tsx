@@ -14,6 +14,7 @@ import { apiClient, apiErrorMessage } from '@/lib/api-client';
 import { formatPrice } from '@/lib/utils';
 import { useShallow } from 'zustand/react/shallow';
 import { ImageOff, Loader2, Package, Pencil, Plus, Search, Trash2, X } from 'lucide-react';
+import { StockList } from '@/components/sellers/StockList';
 
 const sidebarItems = SELLER_SIDEBAR_ITEMS;
 
@@ -311,7 +312,7 @@ function SellerProductsContent() {
           </nav>
 
           <div className="flex gap-2 sm:pb-2">
-            {products.length > 0 && (
+            {isInventoryView && products.length > 0 && (
               <Button
                 variant="outline"
                 className="flex-1 sm:flex-none px-4"
@@ -339,14 +340,21 @@ function SellerProductsContent() {
         {!couldNotRead && products.length > 0 && (
           <>
             <dl className="grid grid-cols-2 gap-x-6 gap-y-4 sm:flex sm:flex-wrap sm:gap-x-10">
-              {[
-                { label: 'Showing to customers', value: activeCount },
-                { label: 'Hidden', value: hiddenCount },
-                { label: 'Running low', value: lowStockCount },
-                { label: 'Sold out', value: outOfStockCount },
-                ...(pendingCount > 0 ? [{ label: 'Waiting for approval', value: pendingCount }] : []),
-              ].map((figure) => (
-                <div key={figure.label} className={figure.value === 0 && figure.label !== 'Showing to customers' ? 'hidden sm:block' : undefined}>
+              {(isInventoryView
+                ? [
+                    { label: 'More than 10 left', value: inStockCount, always: true },
+                    { label: 'Running low', value: lowStockCount, always: true },
+                    { label: 'Sold out', value: outOfStockCount, always: true },
+                  ]
+                : [
+                    { label: 'Showing to customers', value: activeCount, always: true },
+                    { label: 'Hidden', value: hiddenCount, always: false },
+                    { label: 'Running low', value: lowStockCount, always: false },
+                    { label: 'Sold out', value: outOfStockCount, always: false },
+                    ...(pendingCount > 0 ? [{ label: 'Waiting for approval', value: pendingCount, always: false }] : []),
+                  ]
+              ).map((figure) => (
+                <div key={figure.label} className={figure.value === 0 && !figure.always ? 'hidden sm:block' : undefined}>
                   <dt className="text-sm text-muted">{figure.label}</dt>
                   <dd className="text-2xl font-semibold text-ink tabular-nums">{figure.value}</dd>
                 </div>
@@ -445,6 +453,8 @@ function SellerProductsContent() {
               Clear filters
             </Button>
           </div>
+        ) : isInventoryView ? (
+          <StockList rows={filteredProducts} saving={updatingStock} onSave={handleQuickStockUpdate} />
         ) : (
           <div className="rounded-[20px] bg-surface border border-line shadow-[var(--shadow-card)] overflow-hidden">
             <div aria-hidden="true" className="hidden sm:grid sm:grid-cols-[3.5rem_minmax(0,1fr)_7rem_8rem_3rem_5.5rem] gap-x-5 px-5 py-2.5 border-b border-line text-xs text-muted">

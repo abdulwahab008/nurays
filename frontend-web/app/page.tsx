@@ -17,20 +17,36 @@ import { SlideOverCartDrawer } from '@/components/marketplace/SlideOverCartDrawe
 import { UberLeftSidebar } from '@/components/marketplace/UberLeftSidebar';
 import { cartService } from '@/lib/services/cart.service';
 import { favoriteService } from '@/lib/services/favorite.service';
-import { apiClient } from '@/lib/api-client';
+import { apiClient, errorMessage } from '@/lib/api-client';
 import { useLocale, useT } from '@/lib/i18n';
 import { homeMessages } from '@/lib/i18n/messages/home';
+import { browseMessages } from '@/lib/i18n/messages/browse';
 import { toHomeDish, toHomeKitchen } from '@/lib/home-feed';
 import { filterKitchens, isKitchenFilter, type HomeDish, type KitchenFilter } from '@/lib/home-filters';
 import { SiteHeader } from '@/components/layout/SiteHeader';
 import HomeHero from '@/components/home/HomeHero';
 import FilterBar from '@/components/home/FilterBar';
 import PromoBanners from '@/components/home/PromoBanners';
-import { KitchenAvatarRow, KitchenGrid, TrendingKitchens } from '@/components/home/KitchenSections';
+import { KitchenGrid, TrendingKitchens } from '@/components/home/KitchenSections';
 import { PersonalDishes, PopularDishes } from '@/components/home/DishSections';
 import StatsBand from '@/components/home/StatsBand';
 import HomeFooter from '@/components/home/HomeFooter';
 import { useHomeFeed } from '@/components/home/useHomeFeed';
+import { useCommunityStore } from '@/lib/store/community-store';
+import { quoteOf, type QuotedSeller } from '@/components/marketplace/delivery-quote';
+import { formatPrice } from '@/lib/utils';
+import type { HomeT } from '@/lib/home-feed';
+
+/** The kitchen's delivery fee and time to the chosen area, when the API quoted them. */
+function quoteLabel(s: QuotedSeller, t: HomeT): string | null {
+  const q = quoteOf(s.delivery);
+  if (!q) return null;
+  if (q.min == null || q.max == null) return q.fee === 0 ? t('freeDelivery') : t('deliveryFixed', { fee: formatPrice(q.fee) });
+  return q.fee === 0 ? t('freeDeliveryQuote', { min: q.min, max: q.max }) : t('deliveryQuote', { fee: formatPrice(q.fee), min: q.min, max: q.max });
+}
+
+/** Kitchens shown on the home page before "View all". */
+const HOME_KITCHEN_LIMIT = 6;
 
 interface CartErrorBody {
   error?: { code?: string; details?: { existingSeller?: { name?: string } } };
@@ -42,11 +58,11 @@ export default function Home() {
   const addItem = useCartStore((s) => s.addItem);
   const { showToast } = useToast();
   const t = useT(homeMessages);
+  const tb = useT(browseMessages);
   const { locale } = useLocale();
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isCartOpen, setIsCartOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
   const [selectedFilter, setSelectedFilter] = useState<KitchenFilter>('all');
   const [selectedCuisine, setSelectedCuisine] = useState<string>('');
 
@@ -60,6 +76,9 @@ export default function Home() {
     dish: null,
   });
   const [switchingKitchen, setSwitchingKitchen] = useState(false);
+  const { selectedCommunity, openSelectorModal } = useCommunityStore(
+    useShallow((s) => ({ selectedCommunity: s.selectedCommunity, openSelectorModal: s.openSelectorModal })),
+  );
 
   const {
     sellers,
@@ -74,7 +93,7 @@ export default function Home() {
     stats,
     favoriteKitchenIds,
     setFavoriteKitchenIds,
-  } = useHomeFeed(isAuthenticated);
+  } = useHomeFeed(isAuthenticated, selectedCommunity?.id ?? null);
 
   useEffect(() => {
     if (isAuthenticated && user) {
@@ -86,7 +105,14 @@ export default function Home() {
   }, [isAuthenticated, user, router]);
 
   // Mapped at render so the labels follow the chosen language.
-  const kitchens = useMemo(() => sellers.map((s) => toHomeKitchen(s, t, locale)), [sellers, t, locale]);
+  const kitchens = useMemo(
+    () =>
+      sellers.map((s) => {
+        const k = toHomeKitchen(s, t, locale);
+        return { ...k, deliveryFee: quoteLabel(s, t) ?? k.deliveryFee };
+      }),
+    [sellers, t, locale],
+  );
   const dishes = useMemo(() => products.map((p) => toHomeDish(p, t)), [products, t]);
   const trendingKitchens = useMemo(() => trendingSellers.map((s) => toHomeKitchen(s, t, locale)), [trendingSellers, t, locale]);
   const recommendedDishes = useMemo(
@@ -94,10 +120,11 @@ export default function Home() {
     [recommended, t],
   );
   const orderAgainDishes = useMemo(() => orderAgain.map((p) => toHomeDish(p, t)), [orderAgain, t]);
-  const filteredKitchens = filterKitchens(kitchens, searchQuery, selectedCuisine, selectedFilter);
+  const filtering = selectedCuisine !== '' || selectedFilter !== 'all';
+  const matching = filterKitchens(kitchens, '', selectedCuisine, selectedFilter);
+  const filteredKitchens = filtering ? matching : matching.slice(0, HOME_KITCHEN_LIMIT);
 
   const clearFilters = () => {
-    setSearchQuery('');
     setSelectedCuisine('');
     setSelectedFilter('all');
   };
@@ -132,27 +159,17 @@ export default function Home() {
     e.preventDefault();
     e.stopPropagation();
 
-    addItem({
-      id: `${dish.id}-${Date.now()}`,
-      productId: dish.id,
-      productName: dish.name,
-      productImage: dish.photo ?? undefined,
-      sellerId: dish.kitchenId,
-      sellerName: dish.kitchenName,
-      quantity: 1,
-      unitPrice: dish.price,
-      stockType: dish.isFrozen ? 'hub' : 'direct',
-      subtotal: dish.price,
-    });
+    // One kitchen per order: ask before mixing kitchens in the tray (signed in or not).
+    const other = useCartStore.getState().items.find((i) => i.sellerId !== dish.kitchenId);
+    if (other) {
+      setConflictModal({ isOpen: true, existingKitchenName: other.sellerName || t('anotherKitchen'), dish });
+      return;
+    }
 
-    const token = apiClient.getAccessToken();
-    if (token || isAuthenticated) {
+    const stockType = dish.isFrozen ? 'hub' : 'direct';
+    if (apiClient.getAccessToken() || isAuthenticated) {
       try {
-        await cartService.addToCart({
-          productId: dish.id,
-          quantity: 1,
-          stockType: dish.isFrozen ? 'hub' : 'direct',
-        });
+        await cartService.addToCart({ productId: dish.id, quantity: 1, stockType });
       } catch (err: unknown) {
         const response = isAxiosError(err) ? err.response : undefined;
         const apiError = (response?.data as CartErrorBody | undefined)?.error;
@@ -162,10 +179,25 @@ export default function Home() {
             existingKitchenName: apiError?.details?.existingSeller?.name || t('anotherKitchen'),
             dish,
           });
-          return;
+        } else {
+          showToast(apiError?.code === 'INSUFFICIENT_STOCK' ? tb('toastInsufficientStock') : errorMessage(err, tb('toastAddToCartFailed')), 'error');
         }
+        return;
       }
     }
+
+    addItem({
+      id: `${dish.id}-${Date.now()}`,
+      productId: dish.id,
+      productName: dish.name,
+      productImage: dish.photo ?? undefined,
+      sellerId: dish.kitchenId,
+      sellerName: dish.kitchenName,
+      quantity: 1,
+      unitPrice: dish.price,
+      stockType,
+      subtotal: dish.price,
+    });
     showToast(t('addedToTray', { name: dish.name }), 'success');
   };
 
@@ -174,12 +206,14 @@ export default function Home() {
     if (!dish) return;
     setSwitchingKitchen(true);
     try {
-      await cartService.addToCart({
-        productId: dish.id,
-        quantity: 1,
-        stockType: dish.isFrozen ? 'hub' : 'direct',
-        clearAndAdd: true,
-      });
+      if (isAuthenticated) {
+        await cartService.addToCart({
+          productId: dish.id,
+          quantity: 1,
+          stockType: dish.isFrozen ? 'hub' : 'direct',
+          clearAndAdd: true,
+        });
+      }
       useCartStore.getState().clearCart();
       useCartStore.getState().addItem({
         id: `${dish.id}-${Date.now()}`,
@@ -215,7 +249,7 @@ export default function Home() {
       />
 
       <SiteHeader
-        search={{ query: searchQuery, onChange: setSearchQuery }}
+        search
         onOpenNav={() => setIsSidebarOpen(true)}
         onOpenTray={() => setIsCartOpen(true)}
         onFrozen={() => setSelectedFilter('frozen')}
@@ -227,10 +261,11 @@ export default function Home() {
         selectedFilter={selectedFilter}
         onSelectFilter={setSelectedFilter}
       />
-      <PromoBanners />
+      <PromoBanners forCustomer={isAuthenticated} />
       <TrendingKitchens kitchens={trendingKitchens} />
-      <KitchenAvatarRow kitchens={kitchens} state={kitchensState} />
       <KitchenGrid
+        title={selectedCommunity ? t('kitchensForArea', { area: selectedCommunity.name }) : undefined}
+        areaPrompt={selectedCommunity ? undefined : { text: t('chooseAreaPrompt'), action: t('chooseAreaButton'), onChoose: openSelectorModal }}
         kitchens={kitchens}
         filteredKitchens={filteredKitchens}
         state={kitchensState}

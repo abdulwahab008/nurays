@@ -1,13 +1,16 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { DashboardLayout, ADMIN_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
+import { useCallback, useEffect, useState } from 'react';
+import { DashboardLayout, adminSidebarFor } from '@/components/layout/DashboardShell';
 import { Button } from '@/components/ui/button';
 import { LoadError } from '@/components/ui/LoadError';
 import { useToast } from '@/components/ui/toast';
+import { RejectReasonModal } from '@/components/admin/RejectReasonModal';
+import { AdminFilterTabs } from '@/components/admin/AdminFilterTabs';
+import { LoadingLine, StatusPill, type PillTone } from '@/components/admin/AdminListParts';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient, apiErrorMessage } from '@/lib/api-client';
+import { formatDateTime } from '@/lib/utils';
 import { useShallow } from 'zustand/react/shallow';
 
 interface CategoryRequest {
@@ -36,340 +39,187 @@ interface CategoryRequest {
   };
 }
 
-const productTypeLabels: Record<string, { label: string; icon: string; color: string }> = {
-  frozen: { label: 'Frozen', icon: '❄️', color: 'blue' },
-  fresh: { label: 'Fresh', icon: '🥬', color: 'green' },
-  ready_to_eat: { label: 'Ready to Eat', icon: '🍽️', color: 'orange' },
-  ready_to_cook: { label: 'Ready to Cook', icon: '🍳', color: 'purple' },
+const PRODUCT_TYPE_LABEL: Record<string, string> = {
+  frozen: 'Frozen',
+  fresh: 'Fresh',
+  ready_to_eat: 'Ready to eat',
+  ready_to_cook: 'Ready to cook',
 };
 
-const statusStyles: Record<string, string> = {
-  pending: 'bg-yellow-100 text-yellow-800',
-  approved: 'bg-green-100 text-green-800',
-  rejected: 'bg-red-100 text-red-800',
-  category_created: 'bg-blue-100 text-blue-800',
+const STATUS: Record<string, { tone: PillTone; label: string }> = {
+  pending: { tone: 'waiting', label: 'Waiting' },
+  approved: { tone: 'good', label: 'Approved' },
+  category_created: { tone: 'good', label: 'Category created' },
+  rejected: { tone: 'problem', label: 'Rejected' },
 };
+
+type Filter = 'pending' | 'approved' | 'rejected' | 'all';
+const FILTERS: ReadonlyArray<{ id: Filter; label: string }> = [
+  { id: 'pending', label: 'Waiting' },
+  { id: 'approved', label: 'Approved' },
+  { id: 'rejected', label: 'Rejected' },
+  { id: 'all', label: 'All' },
+];
 
 export default function CategoryRequestsPage() {
-  const router = useRouter();
   const { isAuthenticated, user } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated, user: s.user })));
+  const isAdmin = user?.user_type === 'admin' || user?.userType === 'admin';
   const { showToast } = useToast();
-
   const [requests, setRequests] = useState<CategoryRequest[]>([]);
   const [loading, setLoading] = useState(true);
-  // Why the requests could not be read; shown instead of "No requests found", which would be untrue.
+  // Why the requests could not be read; shown instead of "No requests", which would be untrue.
   const [loadError, setLoadError] = useState<unknown>(null);
-  const [filter, setFilter] = useState<string>('pending');
-  const [selectedRequest, setSelectedRequest] = useState<CategoryRequest | null>(null);
-  const [showRejectModal, setShowRejectModal] = useState(false);
-  const [rejectReason, setRejectReason] = useState('');
+  const [filter, setFilter] = useState<Filter>('pending');
+  const [rejecting, setRejecting] = useState<CategoryRequest | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
 
-  const loadRequests = async () => {
+  const loadRequests = useCallback(async () => {
     setLoading(true);
-    setLoadError(null);
     try {
-      const params = filter !== 'all' ? `?status=${filter}` : '';
-      const response = await apiClient.get(`/category-requests${params}`);
-      if (response.data.success) {
-        setRequests(response.data.data || []);
-      }
+      const response = await apiClient.get('/category-requests', { params: { status: filter === 'all' ? undefined : filter } });
+      if (response.data.success) setRequests(response.data.data || []);
+      setLoadError(null);
     } catch (error) {
-      console.error('Failed to load requests:', error);
+      setRequests([]);
       setLoadError(error);
     } finally {
       setLoading(false);
     }
-  };
+  }, [filter]);
 
   useEffect(() => {
-    if (!isAuthenticated) {
-      router.push('/admin/login');
-      return;
-    }
-
-    if (user?.userType !== 'admin' && user?.user_type !== 'admin') {
-      router.push('/dashboard');
-      showToast('Access denied. Admin privileges required.', 'error');
-      return;
-    }
-
-    loadRequests();
-  }, [isAuthenticated, user, router, filter]);
+    if (isAuthenticated && isAdmin) void loadRequests();
+  }, [isAuthenticated, isAdmin, loadRequests]);
 
   const handleApprove = async (request: CategoryRequest) => {
     setActionLoading(true);
     try {
       const response = await apiClient.post(`/category-requests/${request.id}/approve`);
       if (response.data.success) {
-        showToast('Category request approved and category created!', 'success');
-        loadRequests();
+        showToast(`${request.name} is now a category`, 'success');
+        void loadRequests();
       }
     } catch (error) {
-      const message = apiErrorMessage(error, 'Failed to approve request');
-      showToast(message, 'error');
+      showToast(apiErrorMessage(error, 'That did not go through'), 'error');
     } finally {
       setActionLoading(false);
     }
   };
 
-  const handleReject = async () => {
-    if (!selectedRequest || !rejectReason.trim()) {
-      showToast('Please provide a rejection reason', 'error');
-      return;
-    }
-
+  const handleReject = async (reason: string) => {
+    if (!rejecting) return;
     setActionLoading(true);
     try {
-      const response = await apiClient.post(`/category-requests/${selectedRequest.id}/reject`, {
-        reason: rejectReason.trim(),
-      });
+      const response = await apiClient.post(`/category-requests/${rejecting.id}/reject`, { reason });
       if (response.data.success) {
-        showToast('Category request rejected', 'success');
-        setShowRejectModal(false);
-        setSelectedRequest(null);
-        setRejectReason('');
-        loadRequests();
+        showToast('Request rejected', 'success');
+        setRejecting(null);
+        void loadRequests();
       }
     } catch (error) {
-      const message = apiErrorMessage(error, 'Failed to reject request');
-      showToast(message, 'error');
+      showToast(apiErrorMessage(error, 'That did not go through'), 'error');
     } finally {
       setActionLoading(false);
     }
   };
 
-  const openRejectModal = (request: CategoryRequest) => {
-    setSelectedRequest(request);
-    setRejectReason('');
-    setShowRejectModal(true);
-  };
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  };
+  if (!isAuthenticated || !isAdmin) return null;
 
   return (
-    <DashboardLayout sidebarItems={ADMIN_SIDEBAR_ITEMS} title="Category Requests" userType="admin">
-      <div className="max-w-6xl mx-auto">
-        {/* Header */}
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-900">Category Requests</h1>
-          <p className="text-gray-500 mt-1">Review and manage category requests from sellers</p>
-        </div>
+    <DashboardLayout
+      title="Category requests"
+      subtitle="Kitchens ask for a category their dishes do not fit. Approving one creates it."
+      sidebarItems={adminSidebarFor(user?.permissions)}
+      userType="admin"
+    >
+      <div className="max-w-5xl">
+        <AdminFilterTabs label="Request status" value={filter} onChange={setFilter} tabs={FILTERS} className="mb-5" />
 
-        {/* Filter Tabs */}
-        <div className="flex gap-2 mb-6 bg-gray-100 p-1 rounded-xl w-fit">
-          {[
-            { value: 'pending', label: 'Pending' },
-            { value: 'approved', label: 'Approved' },
-            { value: 'rejected', label: 'Rejected' },
-            { value: 'all', label: 'All' },
-          ].map((tab) => (
-            <button
-              key={tab.value}
-              onClick={() => setFilter(tab.value)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                filter === tab.value
-                  ? 'bg-white text-gray-900 shadow-sm'
-                  : 'text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Requests List */}
-        {loading ? (
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
-            <div className="flex items-center justify-center">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-              <span className="ms-3 text-gray-600">Loading requests...</span>
-            </div>
-          </div>
-        ) : loadError && requests.length === 0 ? (
-          <LoadError error={loadError} onRetry={loadRequests} title="We couldn't load the category requests" />
+        {loading && requests.length === 0 ? (
+          <LoadingLine text="Loading requests" />
+        ) : loadError ? (
+          <LoadError error={loadError} onRetry={() => void loadRequests()} title="We couldn't load the category requests" />
         ) : requests.length === 0 ? (
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-12 text-center">
-            <div className="text-5xl mb-4">📭</div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">No requests found</h3>
-            <p className="text-gray-500">
-              {filter === 'pending'
-                ? 'No pending category requests at the moment'
-                : `No ${filter} requests to show`}
-            </p>
-          </div>
+          <p className="py-2 text-sm text-muted" data-testid="category-requests-empty">
+            {filter === 'all'
+              ? 'No kitchen has asked for a new category yet.'
+              : filter === 'pending'
+                ? 'No request is waiting. When a kitchen asks for a new category, it shows up here.'
+                : `No ${FILTERS.find((f) => f.id === filter)?.label.toLowerCase()} requests.`}
+          </p>
         ) : (
-          <div className="space-y-4">
+          <ul className="space-y-4">
             {requests.map((request) => {
-              const typeInfo = productTypeLabels[request.productType] || {
-                label: request.productType,
-                icon: '📦',
-                color: 'gray',
-              };
-
+              const st = STATUS[request.status] ?? { tone: 'neutral' as PillTone, label: request.status };
+              const pending = request.status === 'pending';
               return (
-                <div
+                <li
                   key={request.id}
-                  className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-shadow"
+                  className={pending ? 'rounded-2xl border border-line bg-surface p-4 shadow-[var(--shadow-card)] sm:p-5' : 'border-t border-line py-4'}
                 >
-                  <div className="flex items-start justify-between">
-                    {/* Left: Request Info */}
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-3">
-                        <span className="text-2xl">{typeInfo.icon}</span>
-                        <div>
-                          <h3 className="text-lg font-semibold text-gray-900">{request.name}</h3>
-                          {request.nameUrdu && (
-                            <p className="text-gray-500 text-sm" dir="rtl">
-                              {request.nameUrdu}
-                            </p>
-                          )}
-                        </div>
-                        <span className={`px-3 py-1 rounded-full text-xs font-medium ${statusStyles[request.status] || 'bg-gray-100 text-gray-800'}`}>
-                          {request.status.replace('_', ' ')}
-                        </span>
+                  <div className="flex flex-col gap-4 md:flex-row md:items-start">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="text-[17px] font-semibold text-ink">{request.name}</h3>
+                        <StatusPill tone={st.tone}>{st.label}</StatusPill>
                       </div>
-
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                        <div>
-                          <span className="text-gray-500">Product Type</span>
-                          <p className="font-medium text-gray-900">{typeInfo.label}</p>
-                        </div>
-                        <div>
-                          <span className="text-gray-500">Category Type</span>
-                          <p className="font-medium text-gray-900">
-                            {request.parentCategoryId ? 'Subcategory' : 'Main Category'}
-                          </p>
-                        </div>
-                        {request.parentCategory && (
-                          <div>
-                            <span className="text-gray-500">Parent Category</span>
-                            <p className="font-medium text-gray-900">{request.parentCategory.name}</p>
-                          </div>
-                        )}
-                        <div>
-                          <span className="text-gray-500">Requested</span>
-                          <p className="font-medium text-gray-900">{formatDate(request.createdAt)}</p>
-                        </div>
-                      </div>
-
-                      {request.description && (
-                        <div className="mt-3 p-3 bg-gray-50 rounded-xl">
-                          <span className="text-xs text-gray-500 block mb-1">Description</span>
-                          <p className="text-sm text-gray-700">{request.description}</p>
-                        </div>
+                      {request.nameUrdu && (
+                        <p className="text-sm text-muted" dir="rtl">
+                          {request.nameUrdu}
+                        </p>
                       )}
-
-                      {/* Seller Info */}
-                      <div className="mt-3 flex items-center gap-2 text-sm text-gray-500">
-                        <span>👨‍🍳</span>
-                        <span>
-                          Requested by{' '}
-                          <span className="font-medium text-gray-700">
-                            {request.seller?.businessName || 'Unknown Seller'}
-                          </span>
-                          {request.seller?.user?.email && (
-                            <span className="text-gray-500"> ({request.seller.user.email})</span>
-                          )}
-                        </span>
-                      </div>
-
-                      {/* Admin Notes (if rejected) */}
+                      <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
+                        <dt className="text-muted">Kitchen</dt>
+                        <dd className="min-w-0 text-ink">
+                          {request.seller?.businessName || 'Unknown kitchen'}
+                          {request.seller?.user?.email && <span className="break-all text-muted"> ({request.seller.user.email})</span>}
+                        </dd>
+                        <dt className="text-muted">Food type</dt>
+                        <dd className="text-ink">{PRODUCT_TYPE_LABEL[request.productType] ?? request.productType}</dd>
+                        <dt className="text-muted">Place</dt>
+                        <dd className="text-ink">{request.parentCategory ? `Under ${request.parentCategory.name}` : 'A main category'}</dd>
+                        <dt className="text-muted">Asked</dt>
+                        <dd className="text-ink">{formatDateTime(request.createdAt)}</dd>
+                      </dl>
+                      {request.description && <p className="mt-3 rounded-xl bg-raised p-3 text-sm text-ink">{request.description}</p>}
                       {request.status === 'rejected' && request.adminNotes && (
-                        <div className="mt-3 p-3 bg-red-50 rounded-xl border border-red-100">
-                          <span className="text-xs text-red-600 block mb-1">Rejection Reason</span>
-                          <p className="text-sm text-red-700">{request.adminNotes}</p>
-                        </div>
+                        <p className="mt-3 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">Rejected: {request.adminNotes}</p>
                       )}
                     </div>
-
-                    {/* Right: Actions */}
-                    {request.status === 'pending' && (
-                      <div className="flex flex-col gap-2 ms-4">
+                    {pending && (
+                      <div className="grid grid-cols-2 gap-2 md:w-56 md:shrink-0">
                         <Button
-                          onClick={() => handleApprove(request)}
-                          disabled={actionLoading}
-                          className="bg-green-600 hover:bg-green-700 text-white px-4 py-2"
-                        >
-                          ✓ Approve
-                        </Button>
-                        <Button
-                          onClick={() => openRejectModal(request)}
-                          disabled={actionLoading}
                           variant="outline"
-                          className="border-red-300 text-red-600 hover:bg-red-50 px-4 py-2"
+                          className="min-h-11 border-red-200 text-red-700 hover:bg-red-50"
+                          onClick={() => setRejecting(request)}
+                          disabled={actionLoading}
                         >
-                          ✕ Reject
+                          Reject
+                        </Button>
+                        <Button className="min-h-11" onClick={() => handleApprove(request)} disabled={actionLoading}>
+                          Approve
                         </Button>
                       </div>
                     )}
                   </div>
-                </div>
+                </li>
               );
             })}
-          </div>
-        )}
-
-        {/* Reject Modal */}
-        {showRejectModal && selectedRequest && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl max-w-md w-full shadow-xl">
-              <div className="p-6 border-b border-gray-100">
-                <h2 className="text-xl font-bold text-gray-900">Reject Category Request</h2>
-                <p className="text-sm text-gray-500 mt-1">
-                  Rejecting: <span className="font-medium">{selectedRequest.name}</span>
-                </p>
-              </div>
-
-              <div className="p-6">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Rejection Reason <span className="text-red-500">*</span>
-                </label>
-                <textarea
-                  value={rejectReason}
-                  onChange={(e) => setRejectReason(e.target.value)}
-                  placeholder="Explain why this category request is being rejected..."
-                  rows={4}
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-transparent resize-none"
-                />
-                <p className="text-xs text-gray-500 mt-2">
-                  This message will be visible to the seller.
-                </p>
-              </div>
-
-              <div className="p-6 border-t border-gray-100 flex gap-3">
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setShowRejectModal(false);
-                    setSelectedRequest(null);
-                    setRejectReason('');
-                  }}
-                  className="flex-1"
-                  disabled={actionLoading}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  onClick={handleReject}
-                  disabled={actionLoading || !rejectReason.trim()}
-                  className="flex-1 bg-red-600 hover:bg-red-700 text-white"
-                >
-                  {actionLoading ? 'Rejecting...' : 'Reject Request'}
-                </Button>
-              </div>
-            </div>
-          </div>
+          </ul>
         )}
       </div>
+      <RejectReasonModal
+        isOpen={!!rejecting}
+        title={`Reject ${rejecting?.name ?? 'this request'}?`}
+        description={`${rejecting?.seller?.businessName ?? 'The kitchen'} is told the reason.`}
+        suggestions={['A category like this already exists', 'The name is unclear', 'This is not food Nuray sells']}
+        confirmLabel="Reject request"
+        audience="kitchen"
+        helpText="It can ask again with a clearer name."
+        busy={actionLoading}
+        onConfirm={handleReject}
+        onCancel={() => setRejecting(null)}
+      />
     </DashboardLayout>
   );
 }

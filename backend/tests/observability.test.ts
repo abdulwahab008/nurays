@@ -42,6 +42,22 @@ describe('errorHandler', () => {
     expect(res.json.mock.calls[0][0]).toMatchObject({ requestId: 'req-1', error: { code: 'ORDER_NOT_FOUND' } });
   });
 
+  it('gives no stack for a client error, even in development, and gives one for a fault there', () => {
+    const before = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'development';
+    try {
+      const clientRes = mockRes();
+      errorHandler(new AppError('Validation failed: name is required', 400, 'VALIDATION_ERROR'), req(), clientRes, jest.fn() as NextFunction);
+      expect(clientRes.json.mock.calls[0][0].error.stack).toBeUndefined();
+
+      const faultRes = mockRes();
+      errorHandler(new AppError('Failed to send email', 502, 'EMAIL_SEND_FAILED'), req(), faultRes, jest.fn() as NextFunction);
+      expect(faultRes.json.mock.calls[0][0].error.stack).toEqual(expect.any(String));
+    } finally {
+      process.env.NODE_ENV = before;
+    }
+  });
+
   it('reports an AppError that is a server failure (5xx)', () => {
     errorHandler(new AppError('Failed to send email', 502, 'EMAIL_SEND_FAILED'), req(), mockRes(), jest.fn() as NextFunction);
     expect(reportError).toHaveBeenCalledTimes(1);

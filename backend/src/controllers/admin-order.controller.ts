@@ -19,6 +19,7 @@ export const getAllOrders = async (req: Request, res: Response) => {
     dateFrom: req.query.dateFrom as string | undefined,
     dateTo: req.query.dateTo as string | undefined,
     orderNumber: req.query.orderNumber as string | undefined,
+    search: req.query.search as string | undefined,
   };
 
   const result = await adminOrderService.getAllOrders(filters);

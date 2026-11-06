@@ -1,7 +1,7 @@
 'use client';
 
-import { ProductFormData, UNIT_OPTIONS, discountPercent, profitOf } from '@/lib/product-form';
-import { FormSection, fieldClass, hintClass, labelClass } from './fields';
+import { PRODUCT_FIELD, ProductFormData, UNIT_OPTIONS, discountPercent, profitOf } from '@/lib/product-form';
+import { FieldError, FormSection, fieldClass, hintClass, labelClass, useFieldError } from './fields';
 
 function stockBadge(qty: number) {
   if (qty > 20) return { cls: 'bg-brand-soft text-brand-soft-ink', text: 'Good stock' };
@@ -20,6 +20,7 @@ function MoneyField({
   onChange: (v: string) => void;
   placeholder: string;
 }) {
+  const { inputProps, errorClass } = useFieldError(id);
   return (
     <div className="relative">
       <span className="pointer-events-none absolute start-3 top-1/2 -translate-y-1/2 text-[15px] text-muted">Rs</span>
@@ -31,7 +32,8 @@ function MoneyField({
         placeholder={placeholder}
         min="0"
         step="any"
-        className={`${fieldClass} ps-10 tabular-nums`}
+        {...inputProps}
+        className={`${fieldClass} ps-10 tabular-nums ${errorClass}`}
       />
     </div>
   );
@@ -64,6 +66,8 @@ export default function PricingSection({
   const stock = parseInt(form.stockQuantity, 10);
   const discount = discountPercent(form.price, form.originalPrice);
   const profit = price > 0 && cost > 0 ? profitOf(price, cost) : null;
+  const customUnitError = useFieldError(PRODUCT_FIELD.customUnit);
+  const stockError = useFieldError(PRODUCT_FIELD.stock);
   const unitLabel = form.unit === 'other' ? customUnit : UNIT_OPTIONS.find((u) => u.value === form.unit)?.label;
 
   return (
@@ -74,6 +78,7 @@ export default function PricingSection({
             Price
           </label>
           <MoneyField id="product-price-input" value={form.price} onChange={(v) => update({ price: v })} placeholder="299" />
+          <FieldError id={PRODUCT_FIELD.price} />
           <p className={hintClass}>What the customer pays.</p>
         </div>
 
@@ -87,6 +92,7 @@ export default function PricingSection({
             onChange={(v) => update({ originalPrice: v })}
             placeholder="350"
           />
+          <FieldError id={PRODUCT_FIELD.originalPrice} />
           <p className={hintClass}>
             {discount > 0 ? <span className="text-brand-ink">Customers see {discount}% off.</span> : 'Set it higher than the price to show a discount.'}
           </p>
@@ -120,14 +126,19 @@ export default function PricingSection({
             ))}
           </select>
           {form.unit === 'other' && (
-            <input
-              type="text"
-              aria-label="Your own unit"
-              value={customUnit}
-              onChange={(e) => onCustomUnit(e.target.value)}
-              placeholder="e.g. per dozen, per box, per tray"
-              className={`${fieldClass} mt-2`}
-            />
+            <>
+              <input
+                type="text"
+                id={PRODUCT_FIELD.customUnit}
+                aria-label="Your own unit"
+                value={customUnit}
+                onChange={(e) => onCustomUnit(e.target.value)}
+                placeholder="e.g. per dozen, per box, per tray"
+                {...customUnitError.inputProps}
+                className={`${fieldClass} mt-2 ${customUnitError.errorClass}`}
+              />
+              <FieldError id={PRODUCT_FIELD.customUnit} />
+            </>
           )}
         </div>
 
@@ -146,8 +157,11 @@ export default function PricingSection({
             placeholder="50"
             min="0"
             step="1"
-            className={`${fieldClass} tabular-nums`}
+            {...stockError.inputProps}
+            className={`${fieldClass} tabular-nums ${stockError.errorClass}`}
           />
+          <FieldError id={PRODUCT_FIELD.stock} />
+          {form.stockQuantity.trim() === '0' && <p className={hintClass}>Sold out: customers cannot order it until you add more.</p>}
         </div>
       </div>
 

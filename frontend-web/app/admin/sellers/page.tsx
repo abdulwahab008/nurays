@@ -1,59 +1,93 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense, useCallback, useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { AdminShell } from '@/components/layout/AdminShell';
-import { Button } from '@/components/ui/button';
-import { useToast } from '@/components/ui/toast';
+import { ChevronRight } from 'lucide-react';
+import { DashboardLayout, adminSidebarFor } from '@/components/layout/DashboardShell';
 import { LoadError } from '@/components/ui/LoadError';
+import { AdminFilterTabs } from '@/components/admin/AdminFilterTabs';
+import { LoadingLine, Pager, SearchForm, StatusPill, type PillTone } from '@/components/admin/AdminListParts';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
-import { formatDate } from '@/lib/utils';
+import { displayRating, formatDate } from '@/lib/utils';
 import { useShallow } from 'zustand/react/shallow';
 
 interface Seller {
   id: string;
   businessName: string;
-  businessNameUrdu?: string;
+  businessNameUrdu?: string | null;
   verificationStatus: string;
   status: string;
   createdAt: string;
+  communityName?: string | null;
+  isOpen?: boolean;
+  ratingAverage?: number;
+  totalReviews?: number;
+  totalDishes?: number;
+  liveDishes?: number;
+  orders30d?: number;
   user: {
-    email: string;
-    phone: string;
+    email: string | null;
+    phone: string | null;
+    profile?: { fullName?: string | null } | null;
   };
 }
 
+type Filter = 'all' | 'approved' | 'pending' | 'rejected' | 'suspended';
+const FILTERS: Filter[] = ['all', 'approved', 'pending', 'rejected', 'suspended'];
+const FILTER_LABEL: Record<Filter, string> = { all: 'All', approved: 'Approved', pending: 'Waiting', rejected: 'Rejected', suspended: 'Suspended' };
+const PAGE_SIZE = 25;
+
+/** One pill per kitchen: what a customer would find right now, or why it is not on Nuray. */
+function kitchenStatus(s: Pick<Seller, 'verificationStatus' | 'status' | 'isOpen'>): { tone: PillTone; label: string } {
+  if (s.status === 'suspended') return { tone: 'problem', label: 'Suspended' };
+  if (s.verificationStatus === 'pending') return { tone: 'waiting', label: 'Waiting' };
+  if (s.verificationStatus === 'rejected') return { tone: 'problem', label: 'Rejected' };
+  if (s.status !== 'active') return { tone: 'neutral', label: 'Inactive' };
+  return s.isOpen === false ? { tone: 'neutral', label: 'Closed now' } : { tone: 'good', label: 'Live' };
+}
+
 export default function AdminAllSellersPage() {
+  return (
+    <Suspense fallback={null}>
+      <AdminAllSellers />
+    </Suspense>
+  );
+}
+
+function AdminAllSellers() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { isAuthenticated, user } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated, user: s.user })));
-  const { showToast } = useToast();
+  const isAdmin = user?.user_type === 'admin' || user?.userType === 'admin';
+  const param = searchParams.get('status') as Filter | null;
+  const filter: Filter = param && FILTERS.includes(param) ? param : 'all';
   const [loading, setLoading] = useState(true);
   const [sellers, setSellers] = useState<Seller[]>([]);
-  // Why the kitchens could not be read; shown instead of "No Sellers Found", which would be untrue.
+  const [counts, setCounts] = useState<Partial<Record<Filter, number>> | null>(null);
+  const [pagination, setPagination] = useState({ total: 0, totalPages: 1 });
+  const [page, setPage] = useState(1);
+  const [query, setQuery] = useState('');
+  // Why the kitchens could not be read; shown instead of "No kitchens", which would be untrue.
   const [loadError, setLoadError] = useState<unknown>(null);
-  const [filter, setFilter] = useState<string>('all');
 
-  const loadSellers = async () => {
+  const loadSellers = useCallback(async () => {
     try {
       setLoading(true);
-      const params = new URLSearchParams();
-      if (filter !== 'all') {
-        // Map filter to appropriate query params
-        if (['approved', 'pending', 'rejected'].includes(filter)) {
-          params.append('verificationStatus', filter);
-        } else if (['active', 'inactive'].includes(filter)) {
-          params.append('status', filter);
-        }
-      }
-      const queryString = params.toString();
-      const response = await apiClient.get(`/admin/sellers${queryString ? `?${queryString}` : ''}`);
-      if (response.data.success) {
-        setSellers(response.data.data.sellers || []);
-      } else {
-        setSellers([]);
-      }
+      const response = await apiClient.get('/admin/sellers', {
+        params: {
+          verificationStatus: ['approved', 'pending', 'rejected'].includes(filter) ? filter : undefined,
+          status: filter === 'suspended' ? 'suspended' : undefined,
+          search: query || undefined,
+          page,
+          limit: PAGE_SIZE,
+        },
+      });
+      const data = response.data.data;
+      setSellers(data.sellers || []);
+      setCounts(data.counts ?? null);
+      setPagination({ total: data.pagination?.total ?? 0, totalPages: data.pagination?.totalPages || 1 });
       setLoadError(null);
     } catch (error) {
       // The kitchens on the screen belong to the filter before this change, so they go with the failure.
@@ -62,132 +96,126 @@ export default function AdminAllSellersPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [filter, query, page]);
 
   useEffect(() => {
-    if (!isAuthenticated) {
-      router.push('/admin/login');
-      return;
-    }
+    if (isAuthenticated && isAdmin) void loadSellers();
+  }, [isAuthenticated, isAdmin, loadSellers]);
 
-    if (user?.user_type !== 'admin' && user?.userType !== 'admin') {
-      router.push('/products');
-      showToast('Access denied. Admin privileges required.', 'error');
-      return;
-    }
+  if (!isAuthenticated || !isAdmin) return null;
 
-    loadSellers();
-  }, [isAuthenticated, user, filter, router]);
-
-  const getStatusColor = (status: string) => {
-    const statusMap: Record<string, string> = {
-      approved: 'bg-green-100 text-green-800',
-      pending: 'bg-yellow-100 text-yellow-800',
-      rejected: 'bg-red-100 text-red-800',
-      active: 'bg-blue-100 text-blue-800',
-      inactive: 'bg-gray-100 text-gray-800',
-    };
-    return statusMap[status] || 'bg-gray-100 text-gray-800';
-  };
-
-  if (!isAuthenticated || (user?.user_type !== 'admin' && user?.userType !== 'admin')) {
-    return null;
-  }
+  const owner = (s: Seller) => s.user.profile?.fullName || s.user.email || 'Owner not named';
+  const rating = (s: Seller) => displayRating(s.ratingAverage, s.totalReviews);
 
   return (
-    <AdminShell>
-      <div className="max-w-7xl mx-auto">
-        <div className="mb-6 flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">All Sellers</h1>
-            <p className="text-gray-600 mt-1">Manage all sellers on the platform</p>
-          </div>
-          <Button variant="outline" onClick={loadSellers} disabled={loading}>
-            {loading ? 'Loading...' : 'Refresh'}
-          </Button>
+    <DashboardLayout title="Kitchens" sidebarItems={adminSidebarFor(user?.permissions)} userType="admin">
+      <div className="max-w-6xl">
+        <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+          <AdminFilterTabs
+            label="Kitchen status"
+            value={filter}
+            onChange={(next) => {
+              setPage(1);
+              router.replace(next === 'all' ? '/admin/sellers' : `/admin/sellers?status=${next}`);
+            }}
+            tabs={FILTERS.map((f) => ({ id: f, label: FILTER_LABEL[f], count: counts?.[f] ?? null, waiting: f === 'pending' }))}
+            className="md:flex-1"
+          />
+          <SearchForm
+            placeholder="Kitchen, owner, phone or email"
+            label="Search kitchens"
+            onSearch={(q) => {
+              setQuery(q);
+              setPage(1);
+            }}
+          />
         </div>
 
-        {/* Filters */}
-        <div className="bg-white rounded-lg shadow-sm p-4 mb-6">
-          <div className="flex gap-2 flex-wrap">
-            {['all', 'approved', 'pending', 'rejected', 'active', 'inactive'].map((status) => (
-              <button
-                key={status}
-                onClick={() => setFilter(status)}
-                className={`px-4 py-2 rounded-md font-medium transition-colors ${
-                  filter === status
-                    ? 'bg-green-600 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                {status.charAt(0).toUpperCase() + status.slice(1)}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {loading ? (
-          <div className="text-center py-12">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto mb-4"></div>
-            <p className="text-gray-600">Loading sellers...</p>
-          </div>
+        {loading && sellers.length === 0 ? (
+          <LoadingLine text="Loading kitchens" />
         ) : loadError ? (
-          <LoadError error={loadError} onRetry={loadSellers} title="We couldn't load the kitchens" />
+          <LoadError error={loadError} onRetry={() => void loadSellers()} title="We couldn't load the kitchens" />
         ) : sellers.length === 0 ? (
-          <div className="bg-white rounded-lg shadow-sm p-12 text-center">
-            <div className="text-6xl mb-4">🏪</div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">No Sellers Found</h3>
-            <p className="text-gray-600">No sellers match your current filter.</p>
-          </div>
+          <p className="py-6 text-sm text-muted">
+            {query ? 'No kitchen matches that search.' : filter === 'all' ? 'No kitchen has signed up yet.' : `No ${FILTER_LABEL[filter].toLowerCase()} kitchens.`}
+          </p>
         ) : (
-          <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-50">
+          <>
+            {/* Phones: one short row per kitchen, the whole row opens it. */}
+            <ul className="divide-y divide-line border-y border-line md:hidden" data-testid="kitchens-list">
+              {sellers.map((s) => {
+                const st = kitchenStatus(s);
+                return (
+                  <li key={s.id}>
+                    <Link href={`/admin/sellers/${s.id}`} className="flex min-h-[72px] items-center gap-3 py-3 hover:bg-raised">
+                      <span className="min-w-0 flex-1">
+                        <span className="flex items-start justify-between gap-2">
+                          <span className="text-sm font-semibold text-ink">{s.businessName}</span>
+                          <StatusPill tone={st.tone}>{st.label}</StatusPill>
+                        </span>
+                        <span className="block truncate text-xs text-muted">
+                          {owner(s)}
+                          {s.communityName ? ` · ${s.communityName}` : ''}
+                        </span>
+                        <span className="block text-xs text-muted">
+                          {s.liveDishes ?? 0} of {s.totalDishes ?? 0} dishes live · {s.orders30d ?? 0} {s.orders30d === 1 ? 'order' : 'orders'} in 30 days
+                          {rating(s) ? ` · ${rating(s)} stars` : ''}
+                        </span>
+                      </span>
+                      <ChevronRight aria-hidden="true" className="h-4 w-4 shrink-0 text-muted rtl:rotate-180" />
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+
+            <div className="hidden overflow-x-auto rounded-2xl border border-line bg-surface md:block">
+              <table className="w-full text-sm [&_th]:text-start" data-testid="kitchens-table">
+                <thead className="border-b border-line text-xs text-muted">
                   <tr>
-                    <th className="px-6 py-3 text-start text-xs font-medium text-gray-500 uppercase">Business Name</th>
-                    <th className="px-6 py-3 text-start text-xs font-medium text-gray-500 uppercase">Email</th>
-                    <th className="px-6 py-3 text-start text-xs font-medium text-gray-500 uppercase">Phone</th>
-                    <th className="px-6 py-3 text-start text-xs font-medium text-gray-500 uppercase">Status</th>
-                    <th className="px-6 py-3 text-start text-xs font-medium text-gray-500 uppercase">Joined</th>
-                    <th className="px-6 py-3 text-start text-xs font-medium text-gray-500 uppercase">Actions</th>
+                    <th className="px-4 py-3 font-medium">Kitchen</th>
+                    <th className="px-4 py-3 font-medium">Owner</th>
+                    <th className="px-4 py-3 font-medium">Dishes live</th>
+                    <th className="px-4 py-3 font-medium">Orders, 30 days</th>
+                    <th className="px-4 py-3 font-medium">Rating</th>
+                    <th className="px-4 py-3 font-medium">Status</th>
+                    <th className="px-4 py-3 font-medium">Joined</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-200">
-                  {sellers.map((seller) => (
-                    <tr key={seller.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4">
-                        <div className="font-medium text-gray-900">{seller.businessName}</div>
-                        {seller.businessNameUrdu && (
-                          <div className="text-sm text-gray-500">{seller.businessNameUrdu}</div>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-900">{seller.user.email}</td>
-                      <td className="px-6 py-4 text-sm text-gray-900">{seller.user.phone}</td>
-                      <td className="px-6 py-4">
-                        <span className={`px-2 py-1 rounded text-xs font-medium ${getStatusColor(seller.verificationStatus)}`}>
-                          {seller.verificationStatus}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-500">
-                        {formatDate(seller.createdAt)}
-                      </td>
-                      <td className="px-6 py-4 text-sm">
-                        <Link href={`/admin/sellers/${seller.id}`}>
-                          <Button variant="outline" size="sm">
-                            View Details
-                          </Button>
-                        </Link>
-                      </td>
-                    </tr>
-                  ))}
+                <tbody className="divide-y divide-line">
+                  {sellers.map((s) => {
+                    const st = kitchenStatus(s);
+                    return (
+                      <tr key={s.id} className="hover:bg-raised">
+                        <td className="px-4 py-3">
+                          <Link href={`/admin/sellers/${s.id}`} className="font-semibold text-ink hover:text-brand-ink hover:underline">
+                            {s.businessName}
+                          </Link>
+                          <p className="text-xs text-muted">{s.communityName || 'No community set'}</p>
+                        </td>
+                        <td className="px-4 py-3">
+                          <p className="text-ink">{owner(s)}</p>
+                          <p className="text-xs text-muted">{s.user.phone || s.user.email || 'No contact given'}</p>
+                        </td>
+                        <td className="px-4 py-3 tabular-nums text-ink">
+                          {s.liveDishes ?? 0} <span className="text-muted">of {s.totalDishes ?? 0}</span>
+                        </td>
+                        <td className="px-4 py-3 tabular-nums text-ink">{s.orders30d ?? 0}</td>
+                        <td className="px-4 py-3 tabular-nums text-ink">{rating(s) ?? <span className="text-muted">New</span>}</td>
+                        <td className="px-4 py-3">
+                          <StatusPill tone={st.tone}>{st.label}</StatusPill>
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-muted">{formatDate(s.createdAt)}</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
-          </div>
+            <Pager page={page} totalPages={pagination.totalPages} total={pagination.total} noun="kitchens" onChange={setPage} />
+          </>
         )}
       </div>
-    </AdminShell>
+    </DashboardLayout>
   );
 }
-

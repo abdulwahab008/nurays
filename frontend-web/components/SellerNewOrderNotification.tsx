@@ -10,14 +10,45 @@ import { useToast } from '@/components/ui/toast';
 import { useT } from '@/lib/i18n';
 import { kitchenOrderMessages } from '@/lib/i18n/messages/kitchen-orders';
 import { newAudioContext } from '@/lib/audio';
+import { Loader2, X } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { RejectOrderDialog } from '@/components/sellers/RejectOrderDialog';
 import { useShallow } from 'zustand/react/shallow';
 
 interface NewOrderData {
   orderId: string;
   orderNumber: string;
+  /** The whole order, as the customer pays it (other kitchens' dishes, tax and delivery included). */
   totalAmount: number;
-  items?: { productName: string; quantity: number }[];
+  /** This kitchen's dishes in the order, and what it keeps of them, when known. */
+  dishesTotal?: number;
+  kitchenEarns?: number;
+  items?: { productName: string; quantity: number; totalPrice?: number }[];
   createdAt: string;
+}
+
+/** What the kitchen's own dishes come to: the live event lists them with their prices, the orders list adds them up. */
+function dishesTotalOf(order: NewOrderData): number {
+  if (typeof order.dishesTotal === 'number') return order.dishesTotal;
+  const items = order.items ?? [];
+  if (items.length > 0 && items.every((i) => typeof i.totalPrice === 'number')) {
+    return items.reduce((sum, i) => sum + (i.totalPrice ?? 0), 0);
+  }
+  return order.totalAmount;
+}
+
+const WAITING_STATUSES = ['pending', 'confirmed'];
+
+/** Whether the order still waits for this kitchen; false once it was accepted, rejected or cancelled, on any device. */
+async function stillWaiting(orderId: string): Promise<boolean> {
+  try {
+    const res = await apiClient.get<{ data: { orderStatus: string; items: { status: string }[] } }>(`/seller/orders/${orderId}`);
+    const order = res.data.data;
+    return WAITING_STATUSES.includes(order.orderStatus) && order.items.some((i) => i.status !== 'cancelled');
+  } catch {
+    // Unknown (offline, or the server is slow): keep ringing rather than miss an order.
+    return true;
+  }
 }
 
 /**
@@ -85,7 +116,7 @@ function playNewOrderSound() {
 
 export function SellerNewOrderNotification() {
   const { user } = useAuthStore(useShallow((s) => ({ user: s.user })));
-  const { onNewOrder } = useSocket();
+  const { onNewOrder, onOrderStatusUpdate } = useSocket();
   const router = useRouter();
   const pathname = usePathname();
   const { showToast } = useToast();
@@ -94,10 +125,16 @@ export function SellerNewOrderNotification() {
   // Exactly ONE active incoming order popup at a time.
   const [activeOrder, setActiveOrder] = useState<NewOrderData | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  // The reasons dialog is open for the alert's order: the bell waits while the kitchen chooses.
+  const [rejecting, setRejecting] = useState(false);
 
   // Track resolved orders so we never re-alert or re-popup an order already handled
   const handledOrderIdsRef = useRef<Set<string>>(new Set());
   const chimeTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const activeOrderIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    activeOrderIdRef.current = activeOrder?.orderId ?? null;
+  }, [activeOrder?.orderId]);
 
   const isSeller = user?.userType === 'seller' || user?.user_type === 'seller';
   const isSellerPage = pathname?.startsWith('/sellers');
@@ -153,7 +190,10 @@ export function SellerNewOrderNotification() {
   useEffect(() => {
     if (!isSeller || !isSellerPage || checkedWaitingRef.current) return;
     checkedWaitingRef.current = true;
-    type Waiting = { order: { id: string; orderNumber: string; totalAmount: number; createdAt: string; orderStatus: string; paymentMethod: string; paymentStatus: string }; items: { product: { name: string } | null; quantity: number }[] };
+    type Waiting = {
+      order: { id: string; orderNumber: string; totalAmount: number; dishesTotal?: number; kitchenEarns?: number; createdAt: string; orderStatus: string; paymentMethod: string; paymentStatus: string };
+      items: { product: { name: string } | null; quantity: number; totalPrice: number }[];
+    };
     apiClient
       .get<{ data: { orders: Waiting[] } }>('/seller/orders', { params: { status: 'pending', limit: 5 } })
       .then((res) => {
@@ -170,8 +210,10 @@ export function SellerNewOrderNotification() {
             orderId: waiting.order.id,
             orderNumber: waiting.order.orderNumber,
             totalAmount: waiting.order.totalAmount,
+            dishesTotal: waiting.order.dishesTotal,
+            kitchenEarns: waiting.order.kitchenEarns,
             createdAt: waiting.order.createdAt,
-            items: waiting.items.map((i) => ({ productName: i.product?.name ?? '', quantity: i.quantity })),
+            items: waiting.items.map((i) => ({ productName: i.product?.name ?? '', quantity: i.quantity, totalPrice: i.totalPrice })),
           }
         );
         playNewOrderSound();
@@ -184,7 +226,7 @@ export function SellerNewOrderNotification() {
   // 10-Second Repeating Bell Audio Loop:
   // Rings every 10 seconds while the order card is showing, UNLESS the chef accepts or rejects it!
   useEffect(() => {
-    if (!isSeller || !isSellerPage || !activeOrder) {
+    if (!isSeller || !isSellerPage || !activeOrder || rejecting) {
       if (chimeTimerRef.current) {
         clearInterval(chimeTimerRef.current);
         chimeTimerRef.current = null;
@@ -192,9 +234,14 @@ export function SellerNewOrderNotification() {
       return;
     }
 
-    // Set recurring 10-second bell chime
+    // The order may have been accepted or rejected on the kitchen's other device while this one missed the live update.
+    const orderId = activeOrder.orderId;
     chimeTimerRef.current = setInterval(() => {
-      playNewOrderSound();
+      void stillWaiting(orderId).then((waiting) => {
+        if (activeOrderIdRef.current !== orderId) return;
+        if (waiting) playNewOrderSound();
+        else stopChimeAndClose(orderId);
+      });
     }, 10_000);
 
     return () => {
@@ -203,7 +250,16 @@ export function SellerNewOrderNotification() {
         chimeTimerRef.current = null;
       }
     };
-  }, [activeOrder?.orderId, isSeller, isSellerPage]);
+  }, [activeOrder?.orderId, isSeller, isSellerPage, rejecting, stopChimeAndClose]);
+
+  useEffect(() => {
+    if (!isSeller || !onOrderStatusUpdate) return;
+    return onOrderStatusUpdate(({ orderId, status }) => {
+      if (WAITING_STATUSES.includes(status)) return;
+      handledOrderIdsRef.current.add(orderId);
+      if (activeOrderIdRef.current === orderId) stopChimeAndClose(orderId);
+    });
+  }, [isSeller, onOrderStatusUpdate, stopChimeAndClose]);
 
   // Listen for order status updates from the kitchen orders page
   // If an order is accepted or rejected in the orders list, close the alert immediately
@@ -235,8 +291,9 @@ export function SellerNewOrderNotification() {
     stopChimeAndClose(orderId);
 
     try {
-      const res = await apiClient.post(`/seller/orders/${orderId}/accept`);
-      if (res.data?.success) {
+      const res = await apiClient.post<{ success: boolean; data: { estimatedReadyAt?: string } }>(`/seller/orders/${orderId}/accept`);
+      // Without a new ready time the order had already been accepted, on the kitchen's other device: that one said so.
+      if (res.data?.success && res.data.data?.estimatedReadyAt) {
         showToast(t('alert.acceptedToast', { number: `\u2066#${orderNumber}\u2069` }), 'success');
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('seller-orders-updated'));
@@ -245,34 +302,6 @@ export function SellerNewOrderNotification() {
       }
     } catch (err) {
       showToast(apiErrorMessage(err, t('acceptFailed')), 'error');
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  // 1-Click Reject: stops bell immediately and declines order
-  const handleQuickReject = async () => {
-    if (!activeOrder) return;
-    setIsProcessing(true);
-    const orderId = activeOrder.orderId;
-    const orderNumber = activeOrder.orderNumber;
-
-    // Stop bell chime right away
-    stopChimeAndClose(orderId);
-
-    try {
-      const res = await apiClient.post(`/seller/orders/${orderId}/reject`, {
-        reason: 'Too busy / High kitchen load',
-      });
-      if (res.data?.success) {
-        showToast(t('alert.declinedToast', { number: `\u2066#${orderNumber}\u2069` }), 'info');
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('seller-orders-updated'));
-          window.dispatchEvent(new CustomEvent('seller-order-status-changed', { detail: { orderId, status: 'rejected' } }));
-        }
-      }
-    } catch (err) {
-      showToast(apiErrorMessage(err, t('rejectFailed')), 'error');
     } finally {
       setIsProcessing(false);
     }
@@ -287,128 +316,112 @@ export function SellerNewOrderNotification() {
   // Never render for customers or outside /sellers routes or when no active order
   if (!isSeller || !isSellerPage || !activeOrder) return null;
 
+  const dishesTotal = dishesTotalOf(activeOrder);
+
   return (
-    <div className="fixed top-[calc(1rem+var(--safe-top))] end-[calc(1rem+var(--safe-end))] z-[9999] flex flex-col gap-3 pointer-events-none">
-      <div
+    <div className="fixed inset-x-3 bottom-[calc(0.75rem+var(--safe-bottom,0px))] z-[9999] pointer-events-none sm:inset-x-auto sm:bottom-auto sm:top-[calc(4.5rem+var(--safe-top,0px))] sm:end-[calc(1rem+var(--safe-end,0px))]">
+      <section
         id={`seller-alert-order-${activeOrder.orderId}`}
-        className="pointer-events-auto w-[380px] bg-white rounded-3xl shadow-2xl border-2 border-emerald-400 overflow-hidden ring-4 ring-emerald-500/10"
-        style={{ animation: 'slideInRight 0.35s cubic-bezier(0.34,1.56,0.64,1)' }}
+        role="alertdialog"
+        aria-labelledby="seller-alert-title"
+        aria-describedby="seller-alert-rings"
+        className="pointer-events-auto w-full sm:w-[380px] max-h-[calc(100dvh-6rem)] overflow-y-auto rounded-[20px] border border-line bg-surface text-ink shadow-[var(--shadow-card)] motion-safe:animate-[sellerAlertIn_0.25s_ease-out]"
       >
-        {/* Pulsing Emerald Header */}
-        <div className="bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-600 px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <span className="relative flex h-3.5 w-3.5">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-85"></span>
-              <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-white shadow-xs"></span>
+        <header className="flex items-center justify-between gap-3 bg-accent-soft px-4 py-2">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <span className="relative flex h-2.5 w-2.5 shrink-0" aria-hidden="true">
+              <span className="absolute inline-flex h-full w-full rounded-full bg-accent-soft-ink opacity-60 motion-safe:animate-ping" />
+              <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-accent-soft-ink" />
             </span>
-            <div>
-              <span className="text-white font-black text-xs tracking-wider uppercase block">
-                {t('alert.incoming')}
-              </span>
-              <span className="text-[11px] text-emerald-100 font-medium">
-                {t('alert.rings')}
-              </span>
+            <div className="min-w-0">
+              <h2 id="seller-alert-title" className="text-sm font-semibold text-accent-soft-ink">{t('alert.incoming')}</h2>
+              <p id="seller-alert-rings" className="text-xs text-accent-soft-ink">{t('alert.rings')}</p>
             </div>
           </div>
           <button
+            type="button"
             onClick={handleDismiss}
-            className="text-white/80 hover:text-white hover:bg-white/20 p-1 rounded-full transition-colors"
-            title={t('alert.dismissAlert')}
             aria-label={t('alert.dismissAlert')}
+            className="-me-2 inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-accent-soft-ink hover:bg-surface/60 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-brand/40"
           >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-            </svg>
+            <X className="h-5 w-5" aria-hidden="true" />
           </button>
-        </div>
+        </header>
 
-        {/* Card Body */}
-        <div className="p-4 space-y-3">
-          <div className="flex items-center justify-between">
-            <div>
-              <span className="text-gray-500 text-[11px] font-bold uppercase tracking-wider block">
-                {t('alert.ticket')}
-              </span>
-              <span className="text-gray-900 font-black text-base" data-ltr>#{activeOrder.orderNumber}</span>
+        <div className="space-y-3 p-4">
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <p className="text-sm text-muted">{t('alert.ticket')}</p>
+              <p className="break-all text-base font-semibold text-ink" data-ltr>#{activeOrder.orderNumber}</p>
             </div>
-            <div className="text-end">
-              <span className="text-gray-500 text-[11px] font-bold uppercase tracking-wider block">
-                {t('alert.amount')}
-              </span>
-              <span className="text-emerald-600 font-black text-lg">
-                {typeof activeOrder.totalAmount === 'number'
-                  ? formatPrice(activeOrder.totalAmount)
-                  : String(activeOrder.totalAmount ?? '')}
-              </span>
+            <div className="shrink-0 text-end">
+              <p className="text-sm text-muted">{t('list.dishesTotal')}</p>
+              <p className="text-2xl font-semibold text-ink tabular-nums">{formatPrice(dishesTotal)}</p>
+              {typeof activeOrder.kitchenEarns === 'number' && (
+                <p className="text-sm text-muted tabular-nums">{t('list.youEarn', { amount: formatPrice(activeOrder.kitchenEarns) })}</p>
+              )}
             </div>
           </div>
 
-          {/* Items Preview */}
           {activeOrder.items && activeOrder.items.length > 0 && (
-            <div className="bg-gray-50 rounded-2xl p-2.5 space-y-1.5 border border-gray-100 max-h-28 overflow-y-auto">
+            <ul className="max-h-28 space-y-1 overflow-y-auto border-t border-line pt-3">
               {activeOrder.items.map((item, i) => (
-                <div key={i} className="flex items-center justify-between text-xs text-gray-700">
-                  <span className="truncate max-w-[220px] font-semibold">{item.productName}</span>
-                  <span className="font-extrabold text-emerald-700 ms-2 shrink-0 bg-emerald-50 px-2 py-0.5 rounded-md">
-                    × {item.quantity}
-                  </span>
-                </div>
+                <li key={i} className="flex items-baseline gap-2 text-[15px] text-ink">
+                  <span className="font-semibold tabular-nums">{item.quantity} ×</span>
+                  <span className="min-w-0 truncate">{item.productName}</span>
+                </li>
               ))}
-            </div>
+            </ul>
           )}
 
-          {/* Action Buttons */}
-          <div className="space-y-2 pt-1">
-            <div className="flex items-center gap-2">
-              <button
-                id={`alert-accept-btn-${activeOrder.orderId}`}
-                onClick={handleQuickAccept}
-                disabled={isProcessing}
-                className="flex-1 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-xs font-black py-2.5 px-3 rounded-xl transition-all shadow-md flex items-center justify-center gap-1.5"
-              >
-                {isProcessing ? (
-                  <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                ) : (
-                  <span>✓</span>
-                )}
-                <span>{t('alert.acceptPrepare')}</span>
-              </button>
-
-              <button
-                id={`alert-reject-btn-${activeOrder.orderId}`}
-                onClick={handleQuickReject}
-                disabled={isProcessing}
-                className="bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 active:scale-95 text-xs font-bold py-2.5 px-3 rounded-xl transition-all"
-              >
-                {t('reject')}
-              </button>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => {
-                  router.push('/sellers/orders');
-                  handleDismiss();
-                }}
-                className="flex-1 bg-slate-100 hover:bg-slate-200 active:scale-95 text-slate-700 text-xs font-extrabold py-2 px-3 rounded-xl transition-all text-center"
-              >
-                {t('alert.viewInOrders')}
-              </button>
-              <button
-                onClick={handleDismiss}
-                className="text-gray-500 hover:text-gray-600 text-xs font-medium px-2 py-2"
-              >
-                {t('alert.dismiss')}
-              </button>
-            </div>
+          <div className="flex items-center gap-2 pt-1">
+            <Button
+              id={`alert-accept-btn-${activeOrder.orderId}`}
+              onClick={handleQuickAccept}
+              disabled={isProcessing}
+              className="min-h-11 flex-1 px-4"
+            >
+              {isProcessing && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
+              {t('alert.acceptPrepare')}
+            </Button>
+            <Button
+              id={`alert-reject-btn-${activeOrder.orderId}`}
+              variant="outline"
+              onClick={() => setRejecting(true)}
+              disabled={isProcessing}
+              className="min-h-11 px-4 text-red-700 hover:bg-red-50"
+            >
+              {t('reject')}
+            </Button>
           </div>
+          <Button
+            variant="ghost"
+            onClick={() => {
+              router.push(`/sellers/orders/${activeOrder.orderId}`);
+              handleDismiss();
+            }}
+            className="min-h-11 w-full"
+          >
+            {t('alert.viewInOrders')}
+          </Button>
         </div>
-      </div>
+      </section>
+
+      {rejecting && (
+        <div className="pointer-events-auto">
+          <RejectOrderDialog
+            orderId={activeOrder.orderId}
+            orderNumber={activeOrder.orderNumber}
+            onClose={() => setRejecting(false)}
+            onRejected={() => stopChimeAndClose(activeOrder.orderId)}
+          />
+        </div>
+      )}
 
       <style>{`
-        @keyframes slideInRight {
-          from { opacity: 0; transform: translateX(110%); }
-          to   { opacity: 1; transform: translateX(0);    }
+        @keyframes sellerAlertIn {
+          from { opacity: 0; transform: translateY(12px); }
+          to   { opacity: 1; transform: translateY(0); }
         }
       `}</style>
     </div>

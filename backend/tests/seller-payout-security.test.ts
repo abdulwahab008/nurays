@@ -172,3 +172,29 @@ describe('what the API accepts for a payout account', () => {
     expect(r.success && r.data).toMatchObject({ jazzcashNumber: 'PK00BANK000000', bankAccountNumber: null, currentPassword: PASSWORD });
   });
 });
+
+describe('the kitchen map pin', () => {
+  const area = { name: 'Gulshan-e-Iqbal', city: 'Karachi', centerLatitude: '24.92', centerLongitude: '67.09' };
+
+  it('is refused when moved to another city than the kitchen area', async () => {
+    setup({ seller: { communityId: 'c1', latitude: '24.91', longitude: '67.08' } });
+    db.community = { findUnique: jest.fn(async () => area) };
+    await expect(sellerService.updateSellerProfile('owner-1', { latitude: 31.472, longitude: 74.453 })).rejects.toMatchObject({ statusCode: 400, code: 'PIN_FAR_FROM_AREA' });
+    expect(db.seller.update).not.toHaveBeenCalled();
+  });
+
+  it('is saved when moved within the area', async () => {
+    setup({ seller: { communityId: 'c1', latitude: '24.91', longitude: '67.08' } });
+    db.community = { findUnique: jest.fn(async () => area) };
+    await sellerService.updateSellerProfile('owner-1', { latitude: 24.93, longitude: 67.1 });
+    expect(saved()).toMatchObject({ latitude: 24.93, longitude: 67.1 });
+  });
+
+  it('does not block other settings when an old pin is off and is sent back unchanged', async () => {
+    setup({ seller: { communityId: 'c1', latitude: '31.472', longitude: '74.453' } });
+    db.community = { findUnique: jest.fn(async () => area) };
+    await sellerService.updateSellerProfile('owner-1', { latitude: 31.472, longitude: 74.453, storeNotice: 'Open' });
+    expect(db.community.findUnique).not.toHaveBeenCalled();
+    expect(saved()).toMatchObject({ storeNotice: 'Open' });
+  });
+});

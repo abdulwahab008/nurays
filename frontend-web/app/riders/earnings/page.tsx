@@ -1,12 +1,10 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { loginUrlHere } from '@/lib/auth-redirect';
-import { useRouter } from 'next/navigation';
 import { DashboardLayout, RIDER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { Button } from '@/components/ui/button';
 import { useAuthStore } from '@/lib/store/auth-store';
-import { apiClient, apiErrorMessage } from '@/lib/api-client';
+import { apiErrorMessage } from '@/lib/api-client';
 import { useToast } from '@/components/ui/toast';
 import { useLiveRefresh } from '@/lib/hooks/use-live-refresh';
 import { riderService, RiderEarnings, RiderLedgerEntry } from '@/lib/services/rider.service';
@@ -21,7 +19,6 @@ import { useShallow } from 'zustand/react/shallow';
  * hold, usually keeping what they're owed.
  */
 export default function RiderEarningsPage() {
-  const router = useRouter();
   const { isAuthenticated, user } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated, user: s.user })));
   const { showToast } = useToast();
   const t = useT(riderMessages);
@@ -47,18 +44,10 @@ export default function RiderEarningsPage() {
     }
   }, [t]);
 
+  // app/riders/layout.tsx sends signed-out people to sign in and other accounts to their own home.
   useEffect(() => {
-    if (!isAuthenticated && !apiClient.getAccessToken()) {
-      router.replace(loginUrlHere());
-      return;
-    }
-    if (!user) return;
-    if (!isRider) {
-      router.push('/products');
-      return;
-    }
-    load();
-  }, [isAuthenticated, user, isRider, router, load]);
+    if (isRider) load();
+  }, [isRider, load]);
 
   // A delivery completed (on this or another device) changes the numbers.
   useLiveRefresh(load, {

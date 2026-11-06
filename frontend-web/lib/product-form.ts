@@ -127,7 +127,8 @@ export function formFromProduct(p: SavedProduct): { form: ProductFormData; custo
       shelfLifeHours: text(p.shelfLifeHours),
       preparationTime: text(p.preparationTime),
       unit: custom ? 'other' : unit,
-      stockQuantity: String(p.stockQuantity || 50),
+      // 0 is a real count (sold out): only a dish with no count at all starts at 50.
+      stockQuantity: p.stockQuantity == null ? '50' : String(p.stockQuantity),
       stockType: (p.stockType === 'hub' || p.stockType === 'both' ? p.stockType : 'direct') as StockType,
       ingredients: p.ingredients || '',
       isHalal: p.dietaryInfo ? p.dietaryInfo.includes('Halal') : true,
@@ -136,16 +137,51 @@ export function formFromProduct(p: SavedProduct): { form: ProductFormData; custo
   };
 }
 
+/** The ids the form's problems are keyed by: each is the element to mark and move to. */
+export const PRODUCT_FIELD = {
+  name: 'product-name-input',
+  category: 'product-category',
+  price: 'product-price-input',
+  originalPrice: 'product-original-price-input',
+  customUnit: 'product-custom-unit-input',
+  stock: 'product-stock-input',
+  variantName: (index: number) => `variant-${index}-name`,
+} as const;
+
 /**
- * Why the form cannot be saved yet, or null. A new dish must have a category; an old dish saved
- * before categories were required can still be edited without one.
+ * What stops the form from being saved, by field (see PRODUCT_FIELD), in the order the fields appear; empty when it can be
+ * saved. A new dish must have a category; an old dish saved before categories were required can still be edited without one.
+ * Sizes are checked here too, so a dish is never saved without the sizes the kitchen added to it.
  */
-export function productProblem(f: ProductFormData, customUnit: string, opts: { requireCategory: boolean }): string | null {
-  if (!f.name.trim()) return 'Please enter product name';
-  if (opts.requireCategory && !f.categoryId) return 'Please select a category';
-  if (!f.price || !(parseFloat(f.price) > 0)) return 'Please enter a valid price';
-  if (f.unit === 'other' && !customUnit.trim()) return 'Please enter a custom unit type';
-  return null;
+export function productProblems(
+  f: ProductFormData,
+  customUnit: string,
+  opts: { requireCategory: boolean; variants?: Array<Pick<VariantDraft, 'name'>> },
+): Record<string, string> {
+  const problems: Record<string, string> = {};
+  if (!f.name.trim()) problems[PRODUCT_FIELD.name] = "Add the dish's name.";
+  if (opts.requireCategory && !f.categoryId) problems[PRODUCT_FIELD.category] = 'Choose a category.';
+  const price = parseFloat(f.price);
+  if (!f.price || !(price > 0)) problems[PRODUCT_FIELD.price] = 'Enter a price above Rs 0.';
+  if (f.originalPrice.trim() && price > 0 && !(parseFloat(f.originalPrice) > price)) {
+    problems[PRODUCT_FIELD.originalPrice] = 'The price before discount must be higher than the price.';
+  }
+  if (f.unit === 'other' && !customUnit.trim()) problems[PRODUCT_FIELD.customUnit] = 'Say what the price is for, such as per tray.';
+  const stock = f.stockQuantity.trim();
+  if (stock && !(Number.isInteger(Number(stock)) && Number(stock) >= 0)) problems[PRODUCT_FIELD.stock] = 'Enter a whole number, 0 or more.';
+  (opts.variants ?? []).forEach((v, i) => {
+    if (!v.name.trim()) problems[PRODUCT_FIELD.variantName(i)] = 'Give this size a name.';
+  });
+  return problems;
+}
+
+/** The first thing stopping the form from being saved, or null. */
+export function productProblem(
+  f: ProductFormData,
+  customUnit: string,
+  opts: { requireCategory: boolean; variants?: Array<Pick<VariantDraft, 'name'>> },
+): string | null {
+  return Object.values(productProblems(f, customUnit, opts))[0] ?? null;
 }
 
 /** The body for POST /products (create) or PATCH /products/:id (edit), without the menu fields. */
@@ -164,7 +200,8 @@ export function productPayload(f: ProductFormData, customUnit: string, images: s
     shelfLifeHours: int(f.shelfLifeHours),
     preparationTime: int(f.preparationTime),
     unit: f.unit === 'other' ? customUnit.trim() : f.unit,
-    stockQuantity: parseInt(f.stockQuantity, 10) || 50,
+    // 0 means sold out; only an empty box falls back to 50.
+    stockQuantity: f.stockQuantity.trim() === '' ? 50 : Math.max(0, parseInt(f.stockQuantity, 10) || 0),
     stockType: f.stockType,
     ingredients: f.ingredients.trim() || undefined,
     dietaryInfo: f.isHalal ? ['Halal'] : [],

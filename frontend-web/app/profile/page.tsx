@@ -5,7 +5,7 @@ import { loginUrlHere } from '@/lib/auth-redirect';
 import { apiClient, apiErrorMessage, apiErrorCode, errorMessage } from '@/lib/api-client';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { userProfileService, UserProfile } from '@/lib/services/user-profile.service';
+import { userProfileService, UserProfile, type Address } from '@/lib/services/user-profile.service';
 import { formatPhoneNumber } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { LoadError } from '@/components/ui/LoadError';
@@ -17,6 +17,7 @@ import { PasswordCard } from '@/components/profile/PasswordCard';
 import { SessionsCard } from '@/components/profile/SessionsCard';
 import { TwoFactorCard } from '@/components/profile/TwoFactorCard';
 import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
+import { ThemeToggle } from '@/components/layout/ThemeToggle';
 import { useT, useLocale, LOCALES, LOCALE_NAMES } from '@/lib/i18n';
 import { commonMessages } from '@/lib/i18n/messages/common';
 import { accountMessages } from '@/lib/i18n/messages/account';
@@ -38,7 +39,8 @@ import {
   Check,
   ArrowRight,
   Globe,
-  ShieldCheck,
+  LogOut,
+  Palette,
 } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
@@ -97,6 +99,9 @@ export default function ProfilePage() {
   const [phoneBusy, setPhoneBusy] = useState(false);
   const [editing, setEditing] = useState(false);
   const [sendingVerification, setSendingVerification] = useState(false);
+  const [defaultAddress, setDefaultAddress] = useState<Address | null>(null);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const photoInputRef = useRef<HTMLInputElement>(null);
   const [formData, setFormData] = useState({
     fullName: '',
     email: '',
@@ -157,9 +162,32 @@ export default function ProfilePage() {
     }
   };
 
+  // A new photo is uploaded (resized by the server), then set as the profile picture.
+  const changePhoto = async (file: File) => {
+    setUploadingPhoto(true);
+    try {
+      const body = new FormData();
+      body.append('avatar', file);
+      const uploaded = await apiClient.post<{ data: { url: string } }>('/upload/avatar', body, { headers: { 'Content-Type': 'multipart/form-data' } });
+      await userProfileService.updateAvatar(uploaded.data.data.url);
+      showToast(t('photoUpdated'), 'success');
+      loadProfile();
+    } catch (err) {
+      showToast(apiErrorMessage(err, t('photoUpdateFailed')), 'error');
+    } finally {
+      setUploadingPhoto(false);
+      if (photoInputRef.current) photoInputRef.current.value = '';
+    }
+  };
+
   const loadProfile = async () => {
     setLoading(true);
     setLoadError(null);
+    // Where the person gets food delivered is their default address, not the city typed on the profile.
+    userProfileService
+      .getAddresses()
+      .then((res) => setDefaultAddress(res.data.find((a) => a.isDefault) ?? res.data[0] ?? null))
+      .catch(() => setDefaultAddress(null));
     try {
       const response = await userProfileService.getProfile();
       setProfile(response.data);
@@ -292,8 +320,23 @@ export default function ProfilePage() {
                   </span>
                 )}
               </div>
-              <Button variant="outline" className="w-full mb-3 flex items-center justify-center gap-2" size="sm">
-                <Camera className="w-4 h-4" /> {t('changePhoto')}
+              <input
+                ref={photoInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) void changePhoto(file);
+                }}
+              />
+              <Button
+                variant="outline"
+                className="w-full min-h-11"
+                disabled={uploadingPhoto}
+                onClick={() => photoInputRef.current?.click()}
+              >
+                <Camera className="w-4 h-4" /> {uploadingPhoto ? t('uploadingPhoto') : t('changePhoto')}
               </Button>
             </div>
           </div>
@@ -452,7 +495,7 @@ export default function ProfilePage() {
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="p-4 bg-raised rounded-xl">
-                  <p className="text-xs text-muted uppercase tracking-wide mb-1">{t('phoneNumber')}</p>
+                  <p className="text-xs text-muted mb-1">{t('phoneNumber')}</p>
                   <p className="font-semibold text-ink flex items-center gap-2">
                     <Phone className="w-4 h-4 text-muted" />
                     {hasRealPhone ? <span data-ltr>{formatPhoneNumber(profile!.phone)}</span> : t('notProvided')}
@@ -523,40 +566,40 @@ export default function ProfilePage() {
                   )}
                 </div>
                 <div className="p-4 bg-raised rounded-xl">
-                  <p className="text-xs text-muted uppercase tracking-wide mb-1">{t('emailAddress')}</p>
+                  <p className="text-xs text-muted mb-1">{t('emailAddress')}</p>
                   <p className="font-semibold text-ink flex items-center gap-2">
                     <Mail className="w-4 h-4 text-muted" />
                     {profile?.email ? <span data-ltr>{profile.email}</span> : t('notProvided')}
                   </p>
                 </div>
                 <div className="p-4 bg-raised rounded-xl">
-                  <p className="text-xs text-muted uppercase tracking-wide mb-1">{t('fullName')}</p>
+                  <p className="text-xs text-muted mb-1">{t('fullName')}</p>
                   <p className="font-semibold text-ink flex items-center gap-2">
                     <User className="w-4 h-4 text-muted" />
                     {profile?.profile?.fullName || t('notSet')}
                   </p>
                 </div>
                 <div className="p-4 bg-raised rounded-xl">
-                  <p className="text-xs text-muted uppercase tracking-wide mb-1">{t('location')}</p>
+                  <p className="text-xs text-muted mb-1">{t('location')}</p>
                   <p className="font-semibold text-ink flex items-center gap-2">
-                    <MapPin className="w-4 h-4 text-muted" />
-                    {profile?.profile?.area && profile?.profile?.city
-                      ? `${profile.profile.area}, ${profile.profile.city}`
-                      : t('notSet')}
+                    <MapPin className="w-4 h-4 text-muted shrink-0" />
+                    <span className="min-w-0">
+                      {defaultAddress
+                        ? [defaultAddress.area, defaultAddress.city].filter(Boolean).join(', ')
+                        : profile?.profile?.area && profile?.profile?.city
+                          ? `${profile.profile.area}, ${profile.profile.city}`
+                          : t('notSet')}
+                    </span>
                   </p>
+                  <Link href="/profile/addresses" className="inline-flex items-center min-h-11 text-xs font-semibold text-brand-ink hover:underline">
+                    {defaultAddress ? t('editAddresses') : t('addAnAddress')}
+                  </Link>
                 </div>
                 <div className="p-4 bg-raised rounded-xl">
-                  <p className="text-xs text-muted uppercase tracking-wide mb-1">{t('accountType')}</p>
+                  <p className="text-xs text-muted mb-1">{t('accountType')}</p>
                   <p className="font-semibold text-ink flex items-center gap-2">
                     {profile?.userType === 'seller' ? <Store className="w-4 h-4 text-accent-soft-ink" /> : profile?.userType === 'rider' ? <Bike className="w-4 h-4 text-brand-ink" /> : <ShoppingCart className="w-4 h-4 text-brand-ink" />}
                     <span className="capitalize">{roleLabel(profile?.userType)}</span>
-                  </p>
-                </div>
-                <div className="p-4 bg-raised rounded-xl">
-                  <p className="text-xs text-muted uppercase tracking-wide mb-1">{t('language')}</p>
-                  <p className="font-semibold text-ink flex items-center gap-2">
-                    <Globe className="w-4 h-4 text-brand-ink" />
-                    {profile?.profile?.languagePreference === 'ur' ? t('langUrdu') : t('langEnglish')}
                   </p>
                 </div>
               </div>
@@ -595,6 +638,15 @@ export default function ProfilePage() {
             </div>
           </div>
 
+          {/* Appearance */}
+          <div className="bg-surface rounded-[20px] border border-line p-6" data-testid="appearance-setting">
+            <h2 className="text-lg font-bold text-ink mb-1 flex items-center gap-2">
+              <Palette className="w-5 h-5 text-brand-ink" /> {t('appearance')}
+            </h2>
+            <p className="text-sm text-muted mb-4">{t('appearanceDesc')}</p>
+            <ThemeToggle className="max-w-sm" />
+          </div>
+
           {/* Security & Account */}
           <div className="bg-surface rounded-[20px] border border-line p-6">
             <h2 className="text-lg font-bold text-ink mb-4 flex items-center gap-2">
@@ -605,7 +657,7 @@ export default function ProfilePage() {
               <SessionsCard />
               {(user?.userType ?? user?.user_type) === 'admin' && <TwoFactorCard />}
               {profile?.email && (
-                <div className="flex items-center justify-between gap-3 p-4 bg-raised rounded-xl">
+                <div className="flex items-center justify-between gap-3 p-4 bg-raised rounded-xl" data-testid="email-verification">
                   <div className="flex items-center gap-3 min-w-0">
                     <div className="w-10 h-10 shrink-0 bg-brand-soft rounded-xl flex items-center justify-center text-brand-soft-ink">
                       <Mail className="w-5 h-5" />
@@ -632,30 +684,31 @@ export default function ProfilePage() {
             </div>
           </div>
 
-          {/* Danger Zone */}
-          <div className="bg-surface rounded-2xl shadow-sm border border-red-100 p-6">
-            <h2 className="text-lg font-bold text-red-600 mb-4 flex items-center gap-2">
-              <AlertTriangle className="w-5 h-5 text-red-600" /> {t('dangerZone')}
-            </h2>
-            <div className="flex items-center justify-between p-4 bg-red-50 rounded-xl">
-              <div>
-                <p className="font-medium text-ink">{t('signOut')}</p>
-                <p className="text-xs text-muted">{t('signOutDesc')}</p>
-              </div>
-              <Button 
-                variant="outline" 
-                size="sm" 
-                className="border-red-200 text-red-600 hover:bg-red-50"
-                onClick={() => {
-                  leaving.current = true;
-                  logout();
-                  router.push('/');
-                }}
-              >
-                {t('signOut')}
-              </Button>
+          <div className="bg-surface rounded-[20px] border border-line p-4 flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="font-medium text-ink">{t('signOut')}</p>
+              <p className="text-xs text-muted">{t('signOutDesc')}</p>
             </div>
-            <div className="flex items-center justify-between gap-3 p-4 bg-red-50 rounded-xl mt-3">
+            <Button
+              variant="outline"
+              className="shrink-0 min-h-11"
+              data-testid="profile-sign-out"
+              onClick={() => {
+                leaving.current = true;
+                logout();
+                router.push('/');
+              }}
+            >
+              <LogOut className="w-4 h-4" /> {t('signOut')}
+            </Button>
+          </div>
+
+          {/* Danger Zone */}
+          <div className="bg-surface rounded-[20px] border border-red-200 p-6">
+            <h2 className="text-lg font-bold text-red-700 mb-4 flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-red-700" /> {t('dangerZone')}
+            </h2>
+            <div className="flex items-center justify-between gap-3 p-4 bg-red-50 rounded-xl">
               <div className="min-w-0">
                 <p className="font-medium text-ink">{t('deleteAccount')}</p>
                 <p className="text-xs text-muted">{t('deleteAccountDesc')}</p>

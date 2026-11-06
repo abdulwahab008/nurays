@@ -270,7 +270,7 @@ function DashboardSidebarContent({ items: allItems, userType }: DashboardSidebar
                 <div className="flex items-center">
                   <Link
                     href={item.href}
-                    className="group flex-1 flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 relative"
+                    className="group flex-1 flex min-h-11 items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 relative"
                     style={{
                       background: isSelfActive ? accentSoft : 'transparent',
                       color: isSectionActive ? accentText : 'var(--fg-muted)',
@@ -298,7 +298,7 @@ function DashboardSidebarContent({ items: allItems, userType }: DashboardSidebar
                       type="button"
                       onClick={(e) => toggleExpand(item.name, e)}
                       aria-label={tNav(isExpanded ? 'collapse' : 'expand', { name: label(item.name) })}
-                      className="p-2 me-1 text-muted hover:text-ink hover:bg-raised rounded-lg transition-colors cursor-pointer"
+                      className="grid h-11 w-11 shrink-0 place-items-center text-muted hover:text-ink hover:bg-raised rounded-lg transition-colors cursor-pointer"
                     >
                       <svg
                         className={`w-3.5 h-3.5 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}
@@ -321,7 +321,7 @@ function DashboardSidebarContent({ items: allItems, userType }: DashboardSidebar
                         <Link
                           key={sub.href}
                           href={sub.href}
-                          className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all duration-150 relative group/sub"
+                          className="flex min-h-11 items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all duration-150 relative group/sub"
                           style={{
                             background: isSubActive ? accentSoft : 'transparent',
                             color: isSubActive ? accentText : 'var(--fg-muted)',

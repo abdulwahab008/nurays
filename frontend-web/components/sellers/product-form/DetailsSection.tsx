@@ -1,7 +1,7 @@
 'use client';
 
-import { ProductFormData } from '@/lib/product-form';
-import { FormSection, SwitchRow, chipClass, fieldClass, hintClass, labelClass, textareaClass } from './fields';
+import { PRODUCT_FIELD, ProductFormData } from '@/lib/product-form';
+import { FieldError, FormSection, SwitchRow, chipClass, fieldClass, hintClass, labelClass, textareaClass, useFieldError } from './fields';
 
 const PREP_PRESETS = [
   { label: 'Burger', mins: 15 },
@@ -21,6 +21,7 @@ export default function DetailsSection({
   update: (patch: Partial<ProductFormData>) => void;
   categoryPicker: React.ReactNode;
 }) {
+  const nameError = useFieldError(PRODUCT_FIELD.name);
   return (
     <FormSection id="dish-details" title="Dish">
       <div className="space-y-6">
@@ -35,8 +36,10 @@ export default function DetailsSection({
             onChange={(e) => update({ name: e.target.value })}
             placeholder="e.g. Chicken samosa (pack of 12)"
             maxLength={100}
-            className={fieldClass}
+            {...nameError.inputProps}
+            className={`${fieldClass} ${nameError.errorClass}`}
           />
+          <FieldError id={PRODUCT_FIELD.name} />
           <div className="mt-1.5 flex justify-between gap-3 text-sm text-muted">
             <span>Say the size or how many are in it.</span>
             <span className="tabular-nums">{form.name.length}/100</span>
@@ -60,7 +63,10 @@ export default function DetailsSection({
           <p className={hintClass}>Helps customers who search in Urdu find it.</p>
         </div>
 
-        {categoryPicker}
+        <div id={PRODUCT_FIELD.category} tabIndex={-1} className="space-y-6 rounded-xl focus:outline-none">
+          {categoryPicker}
+          <FieldError id={PRODUCT_FIELD.category} />
+        </div>
 
         <div>
           <p className={labelClass}>Time to cook and pack</p>

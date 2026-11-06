@@ -19,6 +19,7 @@ import { useT } from '@/lib/i18n';
 import { commonMessages } from '@/lib/i18n/messages/common';
 import { kitchenOrderMessages, kitchenStatusLabel, paymentMethodLabel, paymentStatusLabel } from '@/lib/i18n/messages/kitchen-orders';
 import { ExternalLink } from '@/components/ExternalLink';
+import { RejectOrderDialog } from '@/components/sellers/RejectOrderDialog';
 import { useShallow } from 'zustand/react/shallow';
 
 interface SellerOrderDetail {
@@ -74,6 +75,7 @@ export default function SellerOrderDetailPage() {
   const [loadError, setLoadError] = useState<unknown>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [chatOpen, setChatOpen] = useState(false);
+  const [rejecting, setRejecting] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -235,13 +237,24 @@ export default function SellerOrderDetailPage() {
 
               <div className="px-5 pt-5 pb-5 space-y-3">
                 {order.orderStatus === 'pending' && (
-                  <Button
-                    className="w-full"
-                    disabled={!!busy}
-                    onClick={() => act('accept', `/seller/orders/${order.id}/accept`, {}, t('detail.accepted'))}
-                  >
-                    {t('detail.acceptOrder')}
-                  </Button>
+                  <>
+                    <Button
+                      className="w-full"
+                      disabled={!!busy}
+                      onClick={() => act('accept', `/seller/orders/${order.id}/accept`, {}, t('detail.accepted'))}
+                    >
+                      {t('detail.acceptOrder')}
+                    </Button>
+                    <Button
+                      id={`reject-order-btn-${order.id}`}
+                      variant="outline"
+                      className="w-full text-red-700 hover:bg-red-50"
+                      disabled={!!busy}
+                      onClick={() => setRejecting(true)}
+                    >
+                      {t('reject')}
+                    </Button>
+                  </>
                 )}
                 {['confirmed', 'preparing'].includes(order.orderStatus) && (
                   <Button
@@ -357,6 +370,10 @@ export default function SellerOrderDetailPage() {
                 )}
               </section>
             </aside>
+
+            {rejecting && (
+              <RejectOrderDialog orderId={order.id} orderNumber={order.orderNumber} onClose={() => setRejecting(false)} onRejected={load} />
+            )}
 
             <OrderChatModal
               isOpen={chatOpen}

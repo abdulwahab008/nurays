@@ -23,6 +23,8 @@ export interface LocationMapProps {
   radiusKm?: number | null;
   height?: string;
   draggable?: boolean;
+  /** No pin or radius until a place is picked (markerPosition null): a pin at the default centre would look like a choice. */
+  hidePinUntilPicked?: boolean;
 }
 
 const PAKISTAN_CITIES = [
@@ -41,6 +43,7 @@ function LocationMapInner({
   radiusKm = null,
   height = '320px',
   draggable = true,
+  hidePinUntilPicked = false,
 }: LocationMapProps) {
   const t = useT(accountMessages);
   const tc = useT(commonMessages);
@@ -111,7 +114,8 @@ L.tileLayer(MAP_TILE_URL, { attribution: MAP_ATTRIBUTION, maxZoom: MAP_MAX_ZOOM 
           const marker = L.marker([initialPos.lat, initialPos.lng], {
             icon: pinIcon,
             draggable,
-          }).addTo(map);
+          });
+          if (!hidePinUntilPicked || markerPosition) marker.addTo(map);
 
           marker.on('dragend', () => {
             const pos = marker.getLatLng();
@@ -122,6 +126,7 @@ L.tileLayer(MAP_TILE_URL, { attribution: MAP_ATTRIBUTION, maxZoom: MAP_MAX_ZOOM 
 
           map.on('click', (e: Leaflet.LeafletMouseEvent) => {
             marker.setLatLng(e.latlng);
+            if (!map.hasLayer(marker)) marker.addTo(map);
             setCurrentCoords({ lat: e.latlng.lat, lng: e.latlng.lng });
             setLocateFailed(false);
             onLocationSelect?.({ lat: e.latlng.lat, lng: e.latlng.lng });
@@ -176,6 +181,7 @@ L.tileLayer(MAP_TILE_URL, { attribution: MAP_ATTRIBUTION, maxZoom: MAP_MAX_ZOOM 
   useEffect(() => {
     if (markerRef.current && markerPosition) {
       markerRef.current.setLatLng([markerPosition.lat, markerPosition.lng]);
+      if (mapInstanceRef.current && !mapInstanceRef.current.hasLayer(markerRef.current)) markerRef.current.addTo(mapInstanceRef.current);
       mapInstanceRef.current?.panTo([markerPosition.lat, markerPosition.lng]);
       setCurrentCoords(markerPosition);
     }
@@ -186,7 +192,7 @@ L.tileLayer(MAP_TILE_URL, { attribution: MAP_ATTRIBUTION, maxZoom: MAP_MAX_ZOOM 
     if (!isLoaded || !mapInstanceRef.current || !LRef.current) return;
     const map = mapInstanceRef.current;
     const L = LRef.current;
-    const pos = markerPosition ?? currentCoords ?? center;
+    const pos = markerPosition ?? currentCoords ?? (hidePinUntilPicked ? null : center);
 
     if (circleRef.current) {
       map.removeLayer(circleRef.current);
@@ -203,13 +209,14 @@ L.tileLayer(MAP_TILE_URL, { attribution: MAP_ATTRIBUTION, maxZoom: MAP_MAX_ZOOM 
       }).addTo(map);
       circleRef.current = circle;
     }
-  }, [isLoaded, markerPosition, currentCoords, center, radiusKm]);
+  }, [isLoaded, markerPosition, currentCoords, center, radiusKm, hidePinUntilPicked]);
 
   // Jump to specific coordinates
   const jumpTo = useCallback((lat: number, lng: number, zoomLevel = 15, address?: string) => {
     if (!mapInstanceRef.current || !markerRef.current) return;
     mapInstanceRef.current.flyTo([lat, lng], zoomLevel, { duration: 1.2 });
     markerRef.current.setLatLng([lat, lng]);
+    if (!mapInstanceRef.current.hasLayer(markerRef.current)) markerRef.current.addTo(mapInstanceRef.current);
     setCurrentCoords({ lat, lng });
     setLocateFailed(false);
     onLocationSelect?.({ lat, lng, address });

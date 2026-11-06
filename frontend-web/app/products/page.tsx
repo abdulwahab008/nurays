@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useRef, useState } from 'react';
 import { loginUrlHere } from '@/lib/auth-redirect';
 import { getStackedDiscountedPrice } from '@/lib/pricing';
+import { useCartStore, type CartItem } from '@/lib/store/cart-store';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { SiteHeader } from '@/components/layout/SiteHeader';
@@ -14,7 +15,6 @@ import { CoverImage } from '@/components/ui/CoverImage';
 import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient, apiErrorCode, apiErrorStatus, apiErrorDetails, errorMessage, type CartConflictDetails } from '@/lib/api-client';
-import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { useCommunityStore } from '@/lib/store/community-store';
 import { useHydrated } from '@/lib/hooks/use-hydrated';
 import { communityService, CommunityDetail, CommunityKitchen } from '@/lib/services/community.service';
@@ -76,21 +76,6 @@ const productTypeOptions = [
   { value: 'ready_to_cook', labelKey: 'type.ready_to_cook', icon: UtensilsCrossed },
 ] as const;
 
-const businessTypeOptions = [
-  { value: '', label: 'Any Kitchen Type' },
-  { value: 'home_kitchen', label: 'Home Kitchens' },
-  { value: 'cloud_kitchen', label: 'Cloud Kitchens' },
-  { value: 'bakery', label: 'Home Bakeries' },
-];
-
-const maxDistanceOptions = [
-  { value: '', label: 'Any Distance' },
-  { value: '2', label: 'Within 2 km' },
-  { value: '5', label: 'Within 5 km' },
-  { value: '10', label: 'Within 10 km' },
-  { value: '20', label: 'Within 20 km' },
-];
-
 // Labels come from browseMessages (`type.<productType>`).
 const PRODUCT_TYPE_BADGES: Record<string, { icon: typeof Flame; className: string }> = {
   frozen: { icon: Snowflake, className: 'bg-frozen-soft text-frozen-ink' },
@@ -128,7 +113,16 @@ function ProductsContent() {
 
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
 
-  const [viewMode, setViewMode] = useState<'kitchens' | 'dishes'>('kitchens');
+  // This is the dishes page: dishes unless the link (or the customer) asked for kitchens. Kept in the address so Back keeps it.
+  const [viewMode, setViewModeState] = useState<'kitchens' | 'dishes'>(searchParams.get('view') === 'kitchens' ? 'kitchens' : 'dishes');
+  const setViewMode = (mode: 'kitchens' | 'dishes') => {
+    setViewModeState(mode);
+    const params = new URLSearchParams(window.location.search);
+    if (mode === 'kitchens') params.set('view', 'kitchens');
+    else params.delete('view');
+    const query = params.toString();
+    router.replace(`/products${query ? `?${query}` : ''}`, { scroll: false });
+  };
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
@@ -283,9 +277,8 @@ function ProductsContent() {
     const paramSearch = searchParams.get('search') || '';
     setSearchQuery(paramSearch);
     setSearchInput(paramSearch);
-    if (paramSearch) {
-      setViewMode('dishes');
-    }
+    if (paramSearch) setViewModeState('dishes');
+    else if (searchParams.get('view') === 'kitchens') setViewModeState('kitchens');
     setPage(1);
   }, [searchParams.toString()]);
 
@@ -371,43 +364,68 @@ function ProductsContent() {
   const handleQuickAddToCart = async (e: React.MouseEvent, product: Product) => {
     e.preventDefault();
     e.stopPropagation();
-    if (!isAuthenticated) {
-      router.push(loginUrlHere());
+    const stockType = product.productType === 'frozen' ? 'hub' : 'direct';
+    const unitPrice = getStackedDiscountedPrice(product.price, promotionsByProductId[product.id]);
+    const trayLine = (): CartItem => ({
+      id: `${product.id}-${Date.now()}`,
+      productId: product.id,
+      productName: product.name,
+      productImage: product.primaryImage,
+      sellerId: product.seller.id,
+      sellerName: product.seller.businessName,
+      quantity: 1,
+      unitPrice,
+      stockType,
+      subtotal: unitPrice,
+    });
+    const replaceTray = async () => {
+      try {
+        if (isAuthenticated) {
+          await cartService.addToCart({ productId: product.id, quantity: 1, stockType, clearAndAdd: true });
+        }
+        useCartStore.getState().clearCart();
+        useCartStore.getState().addItem(trayLine());
+        setCartConflict(null);
+        showToast(t('toastCartUpdated', { kitchen: product.seller.businessName }), 'success');
+      } catch {
+        showToast(t('toastReplaceItemsFailed'), 'error');
+      }
+    };
+
+    // One kitchen per order: ask before mixing kitchens in the tray (signed in or not).
+    const other = useCartStore.getState().items.find((i) => i.sellerId !== product.seller.id);
+    if (other) {
+      setCartConflict({
+        existingSellerName: other.sellerName || t('previousKitchen'),
+        newSellerName: product.seller.businessName || t('newKitchen'),
+        onConfirmClearAndAdd: replaceTray,
+        onCancel: () => setCartConflict(null),
+      });
       return;
     }
+
+    if (!isAuthenticated) {
+      useCartStore.getState().addItem(trayLine());
+      showToast(t('toastAdded', { name: product.name }), 'success');
+      return;
+    }
+
     setAddingProductId(product.id);
     try {
-      await cartService.addToCart({
-        productId: product.id,
-        quantity: 1,
-        stockType: product.productType === 'frozen' ? 'hub' : 'direct',
-      });
+      await cartService.addToCart({ productId: product.id, quantity: 1, stockType });
+      useCartStore.getState().addItem(trayLine());
       showToast(t('toastAdded', { name: product.name }), 'success');
     } catch (err) {
       if (apiErrorStatus(err) === 409 || apiErrorCode(err) === 'CART_SELLER_MISMATCH') {
         const details = apiErrorDetails(err) as CartConflictDetails | undefined;
         setCartConflict({
           existingSellerName: details?.existingSeller?.name || t('previousKitchen'),
-          newSellerName: details?.newSeller?.name || product.seller?.businessName || t('newKitchen'),
-          onConfirmClearAndAdd: async () => {
-            try {
-              await cartService.addToCart({
-                productId: product.id,
-                quantity: 1,
-                stockType: product.productType === 'frozen' ? 'hub' : 'direct',
-                clearAndAdd: true,
-              });
-              setCartConflict(null);
-              showToast(t('toastCartUpdated', { kitchen: product.seller?.businessName }), 'success');
-            } catch {
-              showToast(t('toastReplaceItemsFailed'), 'error');
-            }
-          },
+          newSellerName: details?.newSeller?.name || product.seller.businessName || t('newKitchen'),
+          onConfirmClearAndAdd: replaceTray,
           onCancel: () => setCartConflict(null),
         });
       } else {
-        const msg = errorMessage(err, t('toastAddDishFailed'));
-        showToast(msg, 'error');
+        showToast(errorMessage(err, t('toastAddDishFailed')), 'error');
       }
     } finally {
       setAddingProductId(null);
@@ -732,25 +750,11 @@ function ProductsContent() {
 
       return (
         <div>
-          <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
-            <div>
-              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-brand-soft text-brand-soft-ink text-xs font-extrabold mb-2">
-                <MapPin className="w-3 h-3" />
-                <span>{t('hyperlocal', { name: communityName })}</span>
-              </div>
-              <h2 className="text-[22px] font-extrabold text-ink tracking-tight">
-                {t('verifiedDomestic')}
-              </h2>
-              <p className="text-xs text-muted mt-0.5">
-                {t('independentChefs')}
-              </p>
-            </div>
-            {activeCommunityDetail && (
-              <span className="text-sm font-semibold text-muted">
-                {t(kitchens.length === 1 ? 'showingKitchensOne' : 'showingKitchensMany', { count: kitchens.length, area: communityName })}
-              </span>
-            )}
-          </div>
+          {activeCommunityDetail && (
+            <p className="mb-4 text-sm text-muted">
+              {t(kitchens.length === 1 ? 'showingKitchensOne' : 'showingKitchensMany', { count: kitchens.length, area: communityName })}
+            </p>
+          )}
 
           {communityKitchensLoading || (!activeCommunityDetail && !communityError) ? (
             kitchenSkeleton
@@ -1194,8 +1198,8 @@ function ProductsContent() {
                       onClick={(e) => handleQuickAddToCart(e, product)}
                       disabled={addingProductId === product.id}
                       title={t('addToCart')}
-                      aria-label={t('addToCart')}
-                      className="flex items-center justify-center gap-1 h-9 min-w-9 px-2.5 sm:px-3 rounded-[10px] bg-brand hover:bg-brand-500 text-on-brand font-extrabold text-sm transition-all active:scale-95 cursor-pointer"
+                      aria-label={t('addNameToTray', { name: product.name })}
+                      className="flex items-center justify-center gap-1 h-11 min-w-11 px-2.5 sm:px-3 rounded-[10px] bg-brand hover:bg-brand-500 text-on-brand font-extrabold text-sm transition-all active:scale-95 cursor-pointer"
                     >
                       {addingProductId === product.id ? (
                         <div className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
@@ -1243,64 +1247,11 @@ function ProductsContent() {
     );
   }
 
-  if (isAuthenticated) {
-    return (
-      <DashboardLayout
-        title={t('dashTitle')}
-        subtitle={t('dashSubtitle')}
-        sidebarItems={CUSTOMER_SIDEBAR_ITEMS}
-        userType="customer"
-      >
-        <div className="space-y-6">
-          {renderFilterBar()}
-          {renderMarketplaceContent()}
-        </div>
-        <CartConflictModal isOpen={!!cartConflict} conflict={cartConflict} />
-        <ClosedKitchenModal
-          isOpen={!!closedKitchenModalData}
-          onClose={() => setClosedKitchenModalData(null)}
-          kitchenName={closedKitchenModalData?.businessName || t('homeKitchen')}
-          chefName={closedKitchenModalData?.chefName}
-          avatar={closedKitchenModalData?.avatar}
-          opensAt={closedKitchenModalData?.opensAt}
-          allowsPreOrder={closedKitchenModalData?.acceptsPreOrders === true}
-          // '' (not undefined) hides the modal's "Next Slot" row instead of its built-in placeholder time
-          nextAvailableSlot={closedKitchenModalData?.preOrderDeliveryTime ?? ''}
-          onProceedToMenu={() => {
-            if (closedKitchenModalData) {
-              const preorderParam = closedKitchenModalData.acceptsPreOrders ? 'true' : 'false';
-              router.push(`/kitchens/${closedKitchenModalData.id}?preorder=${preorderParam}`);
-              setClosedKitchenModalData(null);
-            }
-          }}
-          onBrowseOpenKitchens={() => {
-            setOpenNow(true);
-            setClosedKitchenModalData(null);
-          }}
-        />
-      </DashboardLayout>
-    );
-  }
-
   return (
-    <div className="min-h-screen bg-page text-ink pb-24">
+    <div className="min-h-screen bg-page text-ink">
       <SiteHeader />
 
-      {/* Main Multi-Vendor Marketplace Container */}
-      <div className="max-w-[1280px] mx-auto px-4 sm:px-8 py-6 md:py-10">
-        <div className="mb-6">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-accent-soft text-accent-soft-ink text-xs sm:text-[13px] font-extrabold mb-3">
-            <ChefHat className="w-3.5 h-3.5" />
-            <span>{t('catalogBadge')}</span>
-          </div>
-          <h1 className="text-[28px] sm:text-[40px] leading-tight font-extrabold text-ink tracking-tight">
-            {selectedCommunity?.city ? t('publicTitleCity', { city: selectedCommunity.city }) : t('publicTitle')}
-          </h1>
-          <p className="mt-2 text-muted text-[15px] sm:text-base max-w-2xl leading-relaxed">
-            {t('publicSubtitle')}
-          </p>
-        </div>
-
+      <div className="max-w-[1280px] mx-auto px-4 sm:px-8 py-6 md:py-8">
         <div className="space-y-6">
           {renderFilterBar()}
           {renderMarketplaceContent()}

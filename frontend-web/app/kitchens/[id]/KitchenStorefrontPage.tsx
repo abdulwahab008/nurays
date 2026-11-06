@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo, useRef, type ReactNode } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { SiteHeader } from '@/components/layout/SiteHeader';
 import { isAxiosError } from 'axios';
@@ -9,12 +9,18 @@ import { CoverImage } from '@/components/ui/CoverImage';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { useToast } from '@/components/ui/toast';
 import { displayRating, formatPrice } from '@/lib/utils';
+import { getStackedDiscountedPrice, type CatalogPromotionLike } from '@/lib/pricing';
 import { apiClient, ApiResponse, apiErrorStatus, apiErrorCode, apiErrorDetails, errorMessage, type CartConflictDetails } from '@/lib/api-client';
 import type { PublicSeller, PublicSellerAvailability } from '@/lib/services/seller.service';
 import { cartService } from '@/lib/services/cart.service';
 import { useCartStore } from '@/lib/store/cart-store';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
-import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
+import { Button } from '@/components/ui/button';
+import { favoriteService } from '@/lib/services/favorite.service';
+import { productService } from '@/lib/services/product.service';
+import { addressService } from '@/lib/services/address.service';
+import { useCommunityStore } from '@/lib/store/community-store';
+import { loginUrlHere } from '@/lib/auth-redirect';
 import { useT } from '@/lib/i18n';
 import { browseMessages, businessTypeKey, productTypeKey, type BrowseT } from '@/lib/i18n/messages/browse';
 import { kitchenMessages, kitchenKey, type KitchenT } from '@/lib/i18n/messages/kitchen';
@@ -32,7 +38,7 @@ import {
   ArrowLeft,
   Check,
   Bell,
-  MessageSquare,
+  Heart,
 } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
@@ -49,6 +55,8 @@ interface KitchenDish {
   photo: string | null;
   /** e.g. "30 min prep" — only when the kitchen set a preparation time. */
   prepTime: string | null;
+  /** How many the kitchen has left; null when the API did not say. */
+  stock: number | null;
 }
 
 export interface KitchenReview {
@@ -71,7 +79,7 @@ export interface KitchenProfile {
   rating: string | null;
   ratingValue: number;
   reviewCount: number;
-  deliveryFee: string;
+  deliveryFee: string | null;
   minOrder: number | null;
   /** The API's availability; null when it wasn't provided, so no open/closed claim is made. */
   availability: PublicSellerAvailability | null;
@@ -85,12 +93,15 @@ export interface KitchenProfile {
   coverPhoto: string | null;
   chefAvatar: string | null;
   verifiedLabel: string;
+  isVerified: boolean;
   storeNotice: string | null;
   reviews: KitchenReview[];
   dishes: KitchenDish[];
 }
 
 type LoadState = 'loading' | 'ready' | 'not_found' | 'error';
+
+type CatalogPromotion = CatalogPromotionLike & { id: string };
 
 // Kitchens set their hours in Pakistan time.
 const PKT = 'Asia/Karachi';
@@ -159,8 +170,8 @@ function describeHours(
   return cutoff ? tk('orderCutoff', { time: cutoff }) : null;
 }
 
-/** The kitchen's own delivery terms. Without any, the fee depends on the address and is worked out at checkout. */
-function describeDeliveryFee(s: PublicSeller, tk: KitchenT): string {
+/** The kitchen's own delivery terms; null without any (the fee then depends on where the customer is). */
+function describeDeliveryFee(s: PublicSeller, tk: KitchenT): string | null {
   const freeOver = positiveAmount(s.freeDeliveryThreshold);
   const fixedFee = s.deliveryFeeType === 'fixed' ? nonNegativeAmount(s.deliveryFeeFixed) : null;
   const freeOverNote = freeOver != null ? tk('freeOverNote', { amount: formatPrice(freeOver) }) : '';
@@ -168,12 +179,33 @@ function describeDeliveryFee(s: PublicSeller, tk: KitchenT): string {
   if (fixedFee != null) return `${tk('amountDelivery', { amount: formatPrice(fixedFee) })}${freeOverNote}`;
   if (s.deliveryFeeType === 'distance') return `${tk('feeByDistanceLong')}${freeOverNote}`;
   if (freeOver != null) return tk('freeDeliveryOver', { amount: formatPrice(freeOver) });
-  return tk('feeAtCheckout');
+  return null;
 }
 
-function toKitchenProfile(s: PublicSeller, tb: BrowseT, tk: KitchenT): KitchenProfile {
+/** What delivery to the customer costs and takes, as the dish cards are quoted; null when not known. */
+interface DeliveryToYou {
+  deliverable: boolean;
+  fee: number;
+  min: number | null;
+  max: number | null;
+  reason: string | null;
+}
+
+function describeDeliveryToYou(d: DeliveryToYou, tk: KitchenT): string {
+  if (!d.deliverable) return d.reason || tk('notDeliverable');
+  const fee = d.fee === 0 ? tk('freeDelivery') : tk('amountDelivery', { amount: formatPrice(d.fee) });
+  return d.min != null && d.max != null ? tk('feeAndTime', { fee, min: d.min, max: d.max }) : fee;
+}
+
+function toKitchenProfile(
+  s: PublicSeller,
+  promotions: Record<string, CatalogPromotion[]>,
+  tb: BrowseT,
+  tk: KitchenT,
+): KitchenProfile {
   const availability = s.availability ?? null;
-  const reviewCount = Number(s.totalReviews) || (s.reviews?.length ?? 0);
+  // The stored aggregate is not trusted on its own: with no published review there is no rating to show.
+  const reviewCount = s.reviews?.length ? Number(s.totalReviews) || s.reviews.length : 0;
   const rating = displayRating(s.ratingAverage, reviewCount);
   const businessKey = businessTypeKey(s.businessType);
   const typeLabel = businessKey ? tb(businessKey) : tk('kitchenFallback');
@@ -206,6 +238,7 @@ function toKitchenProfile(s: PublicSeller, tb: BrowseT, tk: KitchenT): KitchenPr
     coverPhoto: s.coverImageUrl || null,
     chefAvatar: s.chef?.avatar || null,
     verifiedLabel: isVerified ? tk('verifiedType', { type: typeLabel }) : typeLabel,
+    isVerified,
     storeNotice: s.storeNotice || null,
     reviews: (s.reviews ?? []).map((r) => ({
       id: r.id,
@@ -216,8 +249,10 @@ function toKitchenProfile(s: PublicSeller, tb: BrowseT, tk: KitchenT): KitchenPr
       avatar: r.avatar || null,
     })),
     dishes: (s.products ?? []).map((p) => {
-      const price = Number(p.price);
-      const originalPrice = p.originalPrice != null ? Number(p.originalPrice) : null;
+      const listPrice = Number(p.price);
+      const deals = promotions[p.id];
+      const price = getStackedDiscountedPrice(listPrice, deals);
+      const originalPrice = deals?.length ? listPrice : p.originalPrice != null ? Number(p.originalPrice) : null;
       const prepMinutes = positiveAmount(p.preparationTime);
       const typeKey = productTypeKey(p.productType);
       return {
@@ -231,6 +266,7 @@ function toKitchenProfile(s: PublicSeller, tb: BrowseT, tk: KitchenT): KitchenPr
         typeLabel: typeKey ? tb(typeKey) : p.productType ? p.productType.replace(/_/g, ' ') : tk('dish'),
         photo: p.images?.[0] || null,
         prepTime: prepMinutes != null ? tb('minPrep', { min: prepMinutes }) : null,
+        stock: p.stockQuantity ?? null,
       };
     }),
   };
@@ -242,13 +278,18 @@ function toKitchenProfile(s: PublicSeller, tb: BrowseT, tk: KitchenT): KitchenPr
  */
 export default function KitchenStorefrontPage({ initial }: { initial?: PublicSeller }) {
   const params = useParams();
+  const router = useRouter();
   const { showToast } = useToast();
   const { isAuthenticated } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated })));
   const tb = useT(browseMessages);
   const tk = useT(kitchenMessages);
   // The API's seller; the page's text is built from it in the current language.
   const [seller, setSeller] = useState<PublicSeller | null>(initial ?? null);
-  const kitchen = useMemo(() => (seller ? toKitchenProfile(seller, tb, tk) : null), [seller, tb, tk]);
+  const [promotions, setPromotions] = useState<Record<string, CatalogPromotion[]>>({});
+  const kitchen = useMemo(
+    () => (seller ? toKitchenProfile(seller, promotions, tb, tk) : null),
+    [seller, promotions, tb, tk],
+  );
   const [loadState, setLoadState] = useState<LoadState>(initial ? 'ready' : 'loading');
   // A kitchen on screen stays there if a refresh cannot reach the API (a 404 still says it is gone).
   const shownRef = useRef(Boolean(initial));
@@ -267,9 +308,111 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
     dish: null,
   });
   const [switchingKitchen, setSwitchingKitchen] = useState(false);
+  const [isFavorite, setIsFavorite] = useState(false);
+  const [deliveryToYou, setDeliveryToYou] = useState<DeliveryToYou | null>(null);
+  const communityId = useCommunityStore((st) => st.selectedCommunity?.id ?? null);
+  const openAreaPicker = useCommunityStore((st) => st.openSelectorModal);
 
   const idParam = params?.id;
   const kitchenId = (Array.isArray(idParam) ? idParam[0] : idParam) ?? '';
+  const sellerId = seller?.id ?? null;
+
+  // What this kitchen already has in the tray (kept in the browser), so the counts and the tray bar survive a revisit.
+  useEffect(() => {
+    if (!sellerId) return;
+    const mine = useCartStore.getState().items.filter((i) => i.sellerId === sellerId);
+    setAddedItems(Object.fromEntries(mine.map((i) => [i.productId, i.quantity])));
+    setCartCount(mine.reduce((n, i) => n + i.quantity, 0));
+    setCartTotal(mine.reduce((n, i) => n + i.subtotal, 0));
+  }, [sellerId]);
+
+  useEffect(() => {
+    if (!sellerId || !isAuthenticated) return;
+    let cancelled = false;
+    favoriteService.checkFavorite(sellerId).then((fav) => {
+      if (!cancelled) setIsFavorite(fav);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [sellerId, isAuthenticated]);
+
+  // The kitchen's running deals, priced the same way as on the dish page.
+  const productIdsKey = (seller?.products ?? []).map((p) => p.id).join(',');
+  useEffect(() => {
+    if (!productIdsKey) return;
+    let cancelled = false;
+    apiClient
+      .get<ApiResponse<Record<string, CatalogPromotion[]>>>(`/promotions/catalog?productIds=${encodeURIComponent(productIdsKey)}`)
+      .then((res) => {
+        if (!cancelled) setPromotions(res.data?.data ?? {});
+      })
+      .catch(() => {
+        if (!cancelled) setPromotions({});
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [productIdsKey]);
+
+  // The fee and time to the customer's address (signed in) or chosen area, worked out by the server exactly as on the
+  // dish cards: one of the kitchen's dishes, listed with where the customer is, carries the kitchen's quote.
+  useEffect(() => {
+    if (!sellerId) return;
+    let cancelled = false;
+    (async () => {
+      let coords: { latitude: number; longitude: number } | undefined;
+      if (isAuthenticated) {
+        try {
+          const saved = (await addressService.getAddresses()).data ?? [];
+          coords = (saved.find((a) => a.isDefault && a.coordinates) ?? saved.find((a) => a.coordinates))?.coordinates;
+        } catch {
+          // The area alone still gives a quote.
+        }
+      }
+      if (!coords && !communityId) {
+        if (!cancelled) setDeliveryToYou(null);
+        return;
+      }
+      try {
+        const res = await productService.getProducts({
+          sellerId,
+          limit: 1,
+          communityId: communityId ?? undefined,
+          customerLat: coords?.latitude,
+          customerLng: coords?.longitude,
+        });
+        const d = res.data?.products?.[0]?.delivery;
+        if (cancelled) return;
+        setDeliveryToYou(
+          d ? { deliverable: d.deliverable, fee: d.fee, min: d.estimatedMinMinutes, max: d.estimatedMaxMinutes, reason: d.reason } : null,
+        );
+      } catch {
+        if (!cancelled) setDeliveryToYou(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [sellerId, communityId, isAuthenticated]);
+
+  const toggleFavorite = async () => {
+    if (!isAuthenticated) {
+      router.push(loginUrlHere());
+      return;
+    }
+    if (!kitchen) return;
+    const was = isFavorite;
+    setIsFavorite(!was);
+    try {
+      if (was) await favoriteService.removeFavorite(kitchen.id);
+      else await favoriteService.addFavorite(kitchen.id);
+      showToast(tk(was ? 'toastRemovedFav' : 'toastSavedFav', { name: kitchen.name }), 'info');
+    } catch {
+      setIsFavorite(was);
+      showToast(tk('toastFavFailed'), 'error');
+    }
+  };
 
   useEffect(() => {
     if (!kitchenId) return;
@@ -320,6 +463,39 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
       showToast(tk('toastClosed', { name: kitchen.name }), 'error');
       return;
     }
+    if (dish.stock != null && (addedItems[dish.id] || 0) >= dish.stock) {
+      showToast(tb('toastInsufficientStock'), 'error');
+      return;
+    }
+
+    // One kitchen per order: a tray holding another kitchen's dishes is asked about first, not mixed or refused by the server.
+    const other = useCartStore.getState().items.find((i) => i.sellerId !== kitchen?.id);
+    if (other) {
+      setConflictModal({ isOpen: true, existingKitchenName: other.sellerName || tk('anotherHomeKitchen'), dish });
+      return;
+    }
+
+    const stockType = dish.isFrozen ? 'hub' : 'direct';
+    if (isAuthenticated) {
+      try {
+        await cartService.addToCart({ productId: dish.id, quantity: 1, stockType });
+      } catch (err) {
+        if (apiErrorCode(err) === 'INSUFFICIENT_STOCK') {
+          showToast(tb('toastInsufficientStock'), 'error');
+          setReloadKey((k) => k + 1);
+        } else if (apiErrorStatus(err) === 409 || apiErrorCode(err) === 'CART_SELLER_MISMATCH') {
+          const details = apiErrorDetails(err) as CartConflictDetails | undefined;
+          setConflictModal({
+            isOpen: true,
+            existingKitchenName: details?.existingSeller?.name || tk('anotherHomeKitchen'),
+            dish,
+          });
+        } else {
+          showToast(errorMessage(err, tb('toastAddToCartFailed')), 'error');
+        }
+        return;
+      }
+    }
 
     setAddedItems((prev) => ({
       ...prev,
@@ -327,12 +503,6 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
     }));
     setCartCount((c) => c + 1);
     setCartTotal((t) => t + dish.price);
-
-    if (kitchen?.preOrderOnly) {
-      showToast(tk('toastPreorderOnly', { name: kitchen.name }), 'info');
-    }
-
-    // Add to global client cart store
     useCartStore.getState().addItem({
       id: newCartLineId(dish.id),
       productId: dish.id,
@@ -342,42 +512,13 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
       sellerName: kitchen?.name || tb('homeKitchen'),
       quantity: 1,
       unitPrice: dish.price,
-      stockType: dish.isFrozen ? 'hub' : 'direct',
+      stockType,
       subtotal: dish.price,
     });
 
-    if (isAuthenticated) {
-      try {
-        await cartService.addToCart({
-          productId: dish.id,
-          quantity: 1,
-          stockType: dish.isFrozen ? 'hub' : 'direct',
-        });
-      } catch (err) {
-        if (apiErrorStatus(err) === 409 || apiErrorCode(err) === 'CART_SELLER_MISMATCH') {
-          const details = apiErrorDetails(err) as CartConflictDetails | undefined;
-          // Revert optimistic add
-          setAddedItems((prev) => {
-            const next = { ...prev };
-            if (next[dish.id] <= 1) delete next[dish.id];
-            else next[dish.id] -= 1;
-            return next;
-          });
-          setCartCount((c) => Math.max(0, c - 1));
-          setCartTotal((t) => Math.max(0, t - dish.price));
-
-          setConflictModal({
-            isOpen: true,
-            existingKitchenName: details?.existingSeller?.name || tk('anotherHomeKitchen'),
-            dish,
-          });
-          return;
-        } else {
-          console.warn('Backend cart add notice:', errorMessage(err, ''));
-        }
-      }
+    if (kitchen?.preOrderOnly) {
+      showToast(tk('toastPreorderOnly', { name: kitchen.name }), 'info');
     }
-
     showToast(tk('toastAddedTray', { name: dish.name }), 'success');
   };
 
@@ -386,12 +527,14 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
     if (!dish) return;
     setSwitchingKitchen(true);
     try {
-      await cartService.addToCart({
-        productId: dish.id,
-        quantity: 1,
-        stockType: dish.isFrozen ? 'hub' : 'direct',
-        clearAndAdd: true,
-      });
+      if (isAuthenticated) {
+        await cartService.addToCart({
+          productId: dish.id,
+          quantity: 1,
+          stockType: dish.isFrozen ? 'hub' : 'direct',
+          clearAndAdd: true,
+        });
+      }
       useCartStore.getState().clearCart();
       useCartStore.getState().addItem({
         id: newCartLineId(dish.id),
@@ -454,33 +597,20 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
     }
   };
 
-  const renderPublicHeader = () => <SiteHeader />;
-
-  // Not-found / error pages, in the same shell as the storefront.
-  const renderStatePage = (title: string, subtitle: string, body: ReactNode) => {
-    if (isAuthenticated) {
-      return (
-        <DashboardLayout title={title} subtitle={subtitle} sidebarItems={CUSTOMER_SIDEBAR_ITEMS} userType="customer">
-          {body}
-        </DashboardLayout>
-      );
-    }
-    return (
-      <div className="min-h-screen bg-page text-ink pb-32">
-        {renderPublicHeader()}
-        {body}
-      </div>
-    );
-  };
+  // Not-found / error pages, under the same header as the storefront.
+  const renderStatePage = (body: ReactNode) => (
+    <div className="min-h-screen bg-page text-ink">
+      <SiteHeader />
+      <div className="px-4">{body}</div>
+    </div>
+  );
 
   const pageState: LoadState = kitchenId ? loadState : 'not_found';
 
   if (pageState === 'not_found') {
     return renderStatePage(
-      tk('notFound'),
-      tk('notFoundSub'),
       <div className="text-center py-14 px-6 bg-surface rounded-3xl border border-line shadow-xs max-w-md mx-auto my-12">
-        <div className="w-12 h-12 rounded-2xl bg-brand-50 text-brand-ink flex items-center justify-center mx-auto mb-4">
+        <div className="w-12 h-12 rounded-2xl bg-brand-soft text-brand-soft-ink flex items-center justify-center mx-auto mb-4">
           <ChefHat className="w-6 h-6" />
         </div>
         <h1 className="font-bold text-ink text-base">{tk('notFound')}</h1>
@@ -489,7 +619,7 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
         </p>
         <Link
           href="/kitchens"
-          className="inline-flex items-center gap-1.5 mt-5 px-4 py-2 rounded-xl bg-ink text-page text-xs font-semibold hover:bg-ink/90 transition-colors"
+          className="inline-flex items-center gap-1.5 mt-5 h-11 px-4 rounded-xl border border-line text-ink text-sm font-semibold hover:bg-raised transition-colors"
         >
           <ArrowLeft className="rtl:-scale-x-100 w-3.5 h-3.5" />
           <span>{tk('browseAllKitchens')}</span>
@@ -500,13 +630,11 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
 
   if (pageState === 'error') {
     return renderStatePage(
-      tk('errorTitle'),
-      tk('errorSub'),
       <div
         role="alert"
         className="text-center py-14 px-6 bg-surface rounded-3xl border border-line shadow-xs max-w-md mx-auto my-12"
       >
-        <div className="w-12 h-12 rounded-2xl bg-brand-50 text-brand-ink flex items-center justify-center mx-auto mb-4">
+        <div className="w-12 h-12 rounded-2xl bg-brand-soft text-brand-soft-ink flex items-center justify-center mx-auto mb-4">
           <ChefHat className="w-6 h-6" />
         </div>
         <h1 className="font-bold text-ink text-base">{tk('errorHeading')}</h1>
@@ -514,15 +642,12 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
           {tk('errorBody')}
         </p>
         <div className="mt-5 flex items-center justify-center gap-2">
-          <button
-            onClick={retryLoad}
-            className="px-4 py-2 rounded-xl bg-ink text-page text-xs font-semibold hover:bg-ink/90 transition-colors"
-          >
+          <Button onClick={retryLoad} className="h-11 rounded-xl">
             {tk('tryAgain')}
-          </button>
+          </Button>
           <Link
             href="/kitchens"
-            className="px-4 py-2 rounded-xl bg-surface border border-line text-ink text-xs font-semibold hover:bg-raised transition-colors"
+            className="inline-flex items-center h-11 px-4 rounded-xl border border-line text-ink text-sm font-semibold hover:bg-raised transition-colors"
           >
             {tk('allKitchens')}
           </Link>
@@ -532,167 +657,135 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
   }
 
   if (!kitchen) {
-    if (isAuthenticated) {
-      return (
-        <DashboardLayout
-          title={tk('loadingTitle')}
-          subtitle={tk('loadingSub')}
-          sidebarItems={CUSTOMER_SIDEBAR_ITEMS}
-          userType="customer"
-        >
-          <div className="text-center py-20 bg-surface rounded-3xl border border-line shadow-xs max-w-md mx-auto my-8">
-            <div className="w-12 h-12 border-3 border-brand border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-            <p className="font-bold text-ink text-sm">{tk('loadingStorefront')}</p>
-            <p className="text-xs text-muted mt-1">{tk('fetchingMenu')}</p>
-          </div>
-        </DashboardLayout>
-      );
-    }
-    return (
-      <div className="min-h-screen bg-page text-ink flex items-center justify-center">
-        <div className="text-center p-8 bg-surface rounded-3xl border border-line shadow-sm max-w-sm">
-          <div className="w-12 h-12 border-3 border-brand border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="font-bold text-ink text-sm">{tk('loadingStorefront')}</p>
-          <p className="text-xs text-muted mt-1">{tk('fetchingMenu')}</p>
-        </div>
-      </div>
+    return renderStatePage(
+      <div role="status" className="flex items-center justify-center gap-2 py-24 text-sm text-muted">
+        <span className="w-4 h-4 border-2 border-brand border-t-transparent rounded-full animate-spin" aria-hidden />
+        {tk('loadingStorefront')}
+      </div>,
     );
   }
 
-  const filteredDishes = activeCategory === 'all'
+  const frozenCount = kitchen.dishes.filter((d) => d.isFrozen).length;
+  const freshCount = kitchen.dishes.length - frozenCount;
+  // A tab only for a kind the menu has, and no tabs at all when the menu is one kind.
+  const categories = [
+    { id: 'all', label: tk('tabAll', { count: kitchen.dishes.length }), Icon: UtensilsCrossed },
+    { id: 'fresh', label: tk('tabFresh', { count: freshCount }), Icon: Flame },
+    { id: 'frozen', label: tk('tabFrozen', { count: frozenCount }), Icon: Snowflake },
+  ];
+  const showTabs = freshCount > 0 && frozenCount > 0;
+  const category = showTabs ? activeCategory : 'all';
+  const filteredDishes = category === 'all'
     ? kitchen.dishes
-    : activeCategory === 'frozen'
+    : category === 'frozen'
     ? kitchen.dishes.filter((d) => d.isFrozen)
     : kitchen.dishes.filter((d) => !d.isFrozen);
+  const deliveryLine = deliveryToYou ? describeDeliveryToYou(deliveryToYou, tk) : kitchen.deliveryFee;
 
   const isOpenNow = kitchen.availability?.isOpen === true;
   const orderingBlocked = kitchen.isClosed && !kitchen.preOrderOnly;
 
-  const renderStorefrontBody = (isPublic: boolean) => (
+  const renderStorefrontBody = () => (
     <>
 
-      {/* Kitchen Hero Banner */}
+      {/* The kitchen's cover photo; without one, a short band so the menu is not pushed off the screen */}
       <div className="relative">
-        <div className="h-48 sm:h-72 w-full overflow-hidden relative bg-raised">
-          <CoverImage
-            src={kitchen.coverPhoto}
-            alt={kitchen.name}
-            label={kitchen.name}
-            size="lg"
-            eager
-            className="w-full h-full"
-          />
-        </div>
-
-        {/* Kitchen Info Card overlapping banner */}
-        <div className="max-w-[1280px] mx-auto px-4 sm:px-8 -mt-14 sm:-mt-20 relative z-10">
-          <div className="bg-surface rounded-[24px] p-5 sm:p-7 shadow-[var(--shadow-card)] border border-line text-ink flex flex-col md:flex-row gap-5 items-start md:items-center justify-between">
-            <div className="flex items-start gap-4">
-              <div className="relative">
-                <CoverImage
-                  src={kitchen.chefAvatar}
-                  alt={kitchen.chefName}
-                  label={kitchen.chefName}
-                  size="sm"
-                  eager
-                  className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl ring-4 ring-surface shadow-md"
-                />
-                <div className="absolute -bottom-1.5 -end-1.5 bg-brand text-on-brand text-xs font-bold p-1 rounded-full shadow-xs">
-                  <Check className="w-3 h-3" strokeWidth={3} />
-                </div>
-              </div>
-
-              <div>
-                {/* Opening state — only what the API reports */}
-                <div className="flex flex-wrap items-center gap-2 mb-1">
-                  {kitchen.statusText && (
-                    <span
-                      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-extrabold ${
-                        isOpenNow ? 'bg-brand-soft text-brand-soft-ink' : 'bg-accent-soft text-accent-soft-ink'
-                      }`}
-                    >
-                      <span
-                        className={`w-2 h-2 rounded-full ${isOpenNow ? 'bg-brand' : 'bg-accent-soft-ink'}`}
-                      />
-                      <span>{kitchen.statusText}</span>
-                    </span>
-                  )}
-                  {kitchen.hoursText && (
-                    <span className="px-2.5 py-1 rounded-full bg-raised text-ink text-xs font-bold">
-                      {kitchen.hoursText}
-                    </span>
-                  )}
-                  {kitchen.preOrderOnly && kitchen.availability?.status !== 'preorder_only' && (
-                    <span className="px-2.5 py-1 rounded-full bg-raised text-ink text-xs font-bold">
-                      {tb('preOrdersOnly')}
-                    </span>
-                  )}
-                </div>
-
-                <h1 className="text-[24px] sm:text-[32px] leading-tight font-extrabold tracking-tight text-ink">
-                  {kitchen.name}
-                </h1>
-                <p className="text-sm font-bold text-brand-ink mt-0.5">
-                  {tk('operatedBy', { name: kitchen.chefName })}
-                </p>
-                {kitchen.area && (
-                  <p className="text-[13px] text-muted mt-1 flex items-center gap-1">
-                    <MapPin className="w-3.5 h-3.5" />
-                    <span>{kitchen.area}</span>
-                  </p>
-                )}
-
-                {kitchen.chefBio && (
-                  <p className="text-sm text-muted mt-2 max-w-xl line-clamp-2 leading-relaxed">
-                    {kitchen.chefBio}
-                  </p>
-                )}
-              </div>
-            </div>
-
-            {/* Quick Metrics */}
-            <div className="flex flex-wrap md:flex-col gap-2.5 w-full md:w-auto border-t md:border-t-0 md:border-s border-line pt-3 md:pt-0 md:ps-6">
-              <a
-                href="#customer-reviews"
-                className="flex items-center gap-1.5 bg-accent-soft hover:bg-accent-200/60 px-3 py-1.5 rounded-xl transition-colors cursor-pointer"
-                title={kitchen.rating ? tk('viewReviews') : tk('noReviews')}
-              >
-                {kitchen.rating ? (
-                  <>
-                    <Star className="w-3.5 h-3.5 fill-accent text-accent" />
-                    <span className="text-accent-soft-ink font-extrabold text-sm">{kitchen.rating}</span>
-                    <span className="text-[11px] text-accent-soft-ink font-medium">
-                      {tk(kitchen.reviewCount === 1 ? 'reviewsParenOne' : 'reviewsParenMany', { count: kitchen.reviewCount })}
-                    </span>
-                  </>
-                ) : (
-                  <>
-                    <span className="text-accent-soft-ink font-bold text-xs">{tk('new')}</span>
-                    <span className="text-[11px] text-accent-soft-ink font-medium">{tk('noReviews')}</span>
-                  </>
-                )}
-              </a>
-              <div className="flex items-center gap-2 bg-raised px-3 py-1.5 rounded-xl">
-                <span className="text-xs font-medium text-ink flex items-center gap-1">
-                  <Bike className="w-3 h-3 text-muted" />
-                  <span>{kitchen.deliveryFee}</span>
-                </span>
-              </div>
-              <div className="text-xs font-semibold text-muted bg-raised px-3 py-1.5 rounded-xl">
-                {kitchen.minOrder != null ? tk('minOrderLabel', { amount: formatPrice(kitchen.minOrder) }) : tk('noMinimum')}
-              </div>
-            </div>
+        {kitchen.coverPhoto ? (
+          <div className="h-44 sm:h-72 w-full overflow-hidden relative bg-raised">
+            <CoverImage src={kitchen.coverPhoto} alt={kitchen.name} label={kitchen.name} size="lg" eager className="w-full h-full" />
           </div>
-        </div>
-      </div>
+        ) : (
+          <div className="h-[120px] w-full bg-brand-soft" aria-hidden />
+        )}
 
-      {/* Verification badge */}
-      <div className="max-w-[1280px] mx-auto px-4 sm:px-8 mt-5">
-        <div className="flex items-center gap-2 overflow-x-auto pb-2 no-scrollbar">
-          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-brand-soft text-brand-soft-ink text-xs font-bold whitespace-nowrap">
-            <ShieldCheck className="w-3.5 h-3.5" />
-            <span>{kitchen.verifiedLabel}</span>
-          </span>
+        <div className="max-w-[1280px] mx-auto px-4 sm:px-8 -mt-12 sm:-mt-20 relative z-10">
+          <div className="relative bg-surface rounded-[24px] p-4 sm:p-7 shadow-[var(--shadow-card)] border border-line text-ink">
+            <button
+              type="button"
+              onClick={toggleFavorite}
+              aria-label={isFavorite ? tk('removeFav') : tk('saveFav')}
+              aria-pressed={isFavorite}
+              className="absolute top-3 end-3 w-11 h-11 rounded-full border border-line bg-surface hover:bg-raised flex items-center justify-center"
+            >
+              <Heart className={`w-5 h-5 ${isFavorite ? 'fill-red-500 text-red-500' : 'text-muted'}`} aria-hidden />
+            </button>
+
+            <div className="flex items-start gap-3 sm:gap-4 pe-12">
+              <CoverImage
+                src={kitchen.chefAvatar}
+                alt={kitchen.chefName}
+                label={kitchen.chefName}
+                size="sm"
+                eager
+                className="w-14 h-14 sm:w-20 sm:h-20 rounded-2xl shrink-0"
+              />
+              <div className="min-w-0">
+                <h1 className="text-[22px] sm:text-[32px] leading-tight font-extrabold tracking-tight text-ink flex items-center gap-1.5">
+                  <span>{kitchen.name}</span>
+                  {kitchen.isVerified && (
+                    <ShieldCheck className="w-5 h-5 shrink-0 text-brand-ink" aria-label={kitchen.verifiedLabel} />
+                  )}
+                </h1>
+                <p className="text-sm text-muted mt-0.5 flex flex-wrap items-center gap-x-1.5">
+                  <span>{tk('operatedBy', { name: kitchen.chefName })}</span>
+                  {kitchen.area && (
+                    <>
+                      <span aria-hidden>·</span>
+                      <MapPin className="w-3.5 h-3.5" aria-hidden />
+                      <span>{kitchen.area}</span>
+                    </>
+                  )}
+                </p>
+                <a href="#customer-reviews" className="mt-1 inline-flex min-h-8 items-center gap-1 text-sm text-ink">
+                  {kitchen.rating ? (
+                    <>
+                      <Star className="w-4 h-4 fill-accent text-accent" aria-hidden />
+                      <span className="font-bold">{kitchen.rating}</span>
+                      <span className="text-muted">
+                        {tk(kitchen.reviewCount === 1 ? 'reviewsParenOne' : 'reviewsParenMany', { count: kitchen.reviewCount })}
+                      </span>
+                    </>
+                  ) : (
+                    <span className="px-2 py-0.5 rounded-full bg-accent-soft text-accent-soft-ink text-xs font-medium">
+                      {tk('new')} · {tk('noReviews')}
+                    </span>
+                  )}
+                </a>
+              </div>
+            </div>
+
+            {kitchen.chefBio && <p className="text-sm text-muted mt-3 max-w-2xl line-clamp-2 leading-relaxed">{kitchen.chefBio}</p>}
+
+            {/* What a customer needs before ordering: open or not, delivery fee and time, minimum */}
+            <ul className="mt-4 pt-4 border-t border-line space-y-2 text-sm">
+              {(kitchen.statusText || kitchen.hoursText) && (
+                <li className="flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-muted shrink-0" aria-hidden />
+                  <span className={`font-semibold ${isOpenNow ? 'text-brand-ink' : 'text-ink'}`}>
+                    {kitchen.statusText}
+                  </span>
+                  {kitchen.hoursText && <span className="text-muted">· {kitchen.hoursText}</span>}
+                  {kitchen.preOrderOnly && kitchen.availability?.status !== 'preorder_only' && (
+                    <span className="text-muted">· {tb('preOrdersOnly')}</span>
+                  )}
+                </li>
+              )}
+              <li className="flex items-center gap-2">
+                <Bike className="w-4 h-4 text-muted shrink-0" aria-hidden />
+                {deliveryLine ? (
+                  <span className="font-semibold text-ink">{deliveryLine}</span>
+                ) : (
+                  <button type="button" onClick={openAreaPicker} className="min-h-8 font-semibold text-brand-ink underline-offset-2 hover:underline">
+                    {tk('chooseAreaForFee')}
+                  </button>
+                )}
+              </li>
+              <li className="flex items-center gap-2 text-muted">
+                <span className="w-4 shrink-0" aria-hidden />
+                <span>{kitchen.minOrder != null ? tk('minOrderLabel', { amount: formatPrice(kitchen.minOrder) }) : tk('noMinimum')}</span>
+              </li>
+            </ul>
+          </div>
         </div>
       </div>
 
@@ -765,49 +858,34 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
         </div>
       )}
 
-      {/* Menu Categories Bar */}
-      {kitchen.dishes.length > 0 && (
+      {/* Menu kinds, only when the menu has both */}
+      {showTabs && (
         <div className="sticky top-(--header-offset) z-30 bg-page/95 backdrop-blur-md border-b border-line py-3 mt-6">
-          <div className="max-w-[1280px] mx-auto px-4 sm:px-8 flex items-center gap-2.5 overflow-x-auto no-scrollbar">
-            <button
-              onClick={() => setActiveCategory('all')}
-              className={`flex-shrink-0 inline-flex items-center gap-1.5 h-10 px-4 rounded-full text-sm font-bold transition-colors whitespace-nowrap ${
-                activeCategory === 'all'
-                  ? 'bg-ink text-page'
-                  : 'bg-surface text-ink hover:bg-raised border border-line'
-              }`}
-            >
-              <UtensilsCrossed className="w-3.5 h-3.5" />
-              <span>{tk('fullMenu', { count: kitchen.dishes.length })}</span>
-            </button>
-            <button
-              onClick={() => setActiveCategory('fresh')}
-              className={`flex-shrink-0 inline-flex items-center gap-1.5 h-10 px-4 rounded-full text-sm font-bold transition-colors whitespace-nowrap ${
-                activeCategory === 'fresh'
-                  ? 'bg-brand text-on-brand'
-                  : 'bg-surface text-ink hover:bg-raised border border-line'
-              }`}
-            >
-              <Flame className="w-3.5 h-3.5" />
-              <span>{tk('freshSpecials')}</span>
-            </button>
-            <button
-              onClick={() => setActiveCategory('frozen')}
-              className={`flex-shrink-0 inline-flex items-center gap-1.5 h-10 px-4 rounded-full text-sm font-bold transition-colors whitespace-nowrap ${
-                activeCategory === 'frozen'
-                  ? 'bg-frozen text-white'
-                  : 'bg-surface text-ink hover:bg-raised border border-line'
-              }`}
-            >
-              <Snowflake className="w-3.5 h-3.5" />
-              <span>{tk('frozenPantry')}</span>
-            </button>
+          <div role="tablist" className="max-w-[1280px] mx-auto px-4 sm:px-8 flex items-center gap-2 overflow-x-auto no-scrollbar">
+            {categories.map(({ id, label, Icon }) => {
+              const selected = category === id;
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  role="tab"
+                  aria-selected={selected}
+                  onClick={() => setActiveCategory(id)}
+                  className={`flex-shrink-0 inline-flex items-center gap-1.5 h-11 px-4 rounded-full border text-sm font-semibold whitespace-nowrap transition-colors ${
+                    selected ? 'bg-brand-soft text-brand-soft-ink border-brand' : 'bg-surface text-ink border-line hover:bg-raised'
+                  }`}
+                >
+                  <Icon className="w-4 h-4" aria-hidden />
+                  <span>{label}</span>
+                </button>
+              );
+            })}
           </div>
         </div>
       )}
 
       {/* Dishes Menu Grid */}
-      <main className="max-w-[1280px] mx-auto px-4 sm:px-8 mt-8">
+      <main className={`max-w-[1280px] mx-auto px-4 sm:px-8 ${showTabs ? 'mt-6' : 'mt-8'}`}>
         {kitchen.dishes.length === 0 ? (
           <div className="text-center py-14 px-6 bg-surface rounded-[20px] border border-dashed border-line-strong">
             <UtensilsCrossed className="w-8 h-8 text-line-strong mx-auto mb-2" />
@@ -825,9 +903,9 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
             <div className="mb-5 flex items-end justify-between gap-4">
               <div>
                 <h2 className="text-[22px] sm:text-[28px] font-extrabold tracking-tight text-ink">
-                  {activeCategory === 'all'
+                  {category === 'all'
                     ? tk('currentMenu')
-                    : activeCategory === 'fresh'
+                    : category === 'fresh'
                     ? tk('freshMeals')
                     : tk('frozenPacks')}
                 </h2>
@@ -842,7 +920,7 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
 
             {filteredDishes.length === 0 ? (
               <p className="text-center text-sm text-muted py-10 bg-surface rounded-[20px] border border-dashed border-line-strong">
-                {activeCategory === 'frozen'
+                {category === 'frozen'
                   ? tk('noFrozen')
                   : tk('noFresh')}
               </p>
@@ -850,6 +928,8 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
                 {filteredDishes.map((dish) => {
                   const count = addedItems[dish.id] || 0;
+                  const soldOut = dish.stock != null && dish.stock <= 0;
+                  const atStock = dish.stock != null && count >= dish.stock;
                   return (
                     <div
                       key={dish.id}
@@ -917,13 +997,23 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
                           </div>
 
                           {orderingBlocked ? (
-                            <span className="inline-flex items-center h-9 px-3 rounded-[10px] bg-raised text-muted text-sm font-bold cursor-not-allowed">
+                            <span className="inline-flex items-center h-11 px-3 rounded-xl bg-raised text-muted text-sm font-semibold cursor-not-allowed">
                               {tk('closed')}
                             </span>
+                          ) : soldOut && count === 0 ? (
+                            <button
+                              type="button"
+                              disabled
+                              className="inline-flex items-center h-11 px-3 rounded-xl bg-raised text-muted text-sm font-semibold cursor-not-allowed"
+                            >
+                              {tb('soldOut')}
+                            </button>
                           ) : count === 0 ? (
                             <button
+                              type="button"
                               onClick={() => handleAddToCart(dish)}
-                              className={`inline-flex items-center gap-1.5 h-9 px-4 rounded-[10px] text-sm font-extrabold transition-all active:scale-95 ${
+                              aria-label={tb('addNameToTray', { name: dish.name })}
+                              className={`inline-flex items-center gap-1.5 h-11 px-4 rounded-xl text-sm font-bold transition-all active:scale-95 ${
                                 kitchen.preOrderOnly ? 'bg-accent hover:bg-accent-300 text-on-accent' : 'bg-brand hover:bg-brand-500 text-on-brand'
                               }`}
                             >
@@ -937,11 +1027,11 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
                               )}
                             </button>
                           ) : (
-                            <div className="flex items-center gap-1 bg-raised p-1 rounded-[12px]">
+                            <div className="flex items-center gap-1 bg-raised p-0.5 rounded-xl">
                               <button
                                 onClick={() => handleRemoveFromCart(dish)}
                                 aria-label={tk('removeOne', { name: dish.name })}
-                                className="w-8 h-8 rounded-[9px] bg-surface text-ink font-extrabold hover:bg-line transition-colors flex items-center justify-center text-base shadow-xs"
+                                className="w-10 h-10 rounded-[10px] bg-surface text-ink font-extrabold hover:bg-line transition-colors flex items-center justify-center text-base shadow-xs"
                               >
                                 -
                               </button>
@@ -950,8 +1040,9 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
                               </span>
                               <button
                                 onClick={() => handleAddToCart(dish)}
+                                disabled={atStock}
                                 aria-label={tk('addOne', { name: dish.name })}
-                                className="w-8 h-8 rounded-[9px] bg-brand text-on-brand font-extrabold hover:bg-brand-500 transition-colors flex items-center justify-center text-base"
+                                className="w-10 h-10 rounded-[10px] bg-brand text-on-brand font-extrabold hover:bg-brand-500 transition-colors flex items-center justify-center text-base disabled:opacity-50 disabled:cursor-not-allowed"
                               >
                                 +
                               </button>
@@ -973,10 +1064,6 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
         <div className="bg-surface rounded-[24px] p-5 sm:p-8 border border-line">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-line">
             <div>
-              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-accent-soft text-accent-soft-ink text-xs font-extrabold mb-2">
-                <MessageSquare className="w-3.5 h-3.5" />
-                <span>{tk('verifiedFeedback')}</span>
-              </div>
               <h2 className="text-[22px] sm:text-[28px] font-extrabold tracking-tight text-ink">
                 {tk('reviewsTitle')}
               </h2>
@@ -1135,44 +1222,10 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
     </>
   );
 
-  // Authenticated customer: Render inside the customer DashboardLayout shell
-  if (isAuthenticated) {
-    return (
-      <DashboardLayout
-        title={kitchen.name}
-        subtitle={[kitchen.chefName, kitchen.area, kitchen.verifiedLabel].filter(Boolean).join(' • ')}
-        sidebarItems={CUSTOMER_SIDEBAR_ITEMS}
-        userType="customer"
-      >
-        <div className="space-y-6">
-          <div className="flex items-center justify-between pb-1">
-            <Link
-              href="/products"
-              className="inline-flex items-center gap-1.5 text-xs font-bold text-muted hover:text-brand-ink transition-colors py-1.5 px-3 rounded-xl bg-surface border border-line shadow-2xs hover:border-line-strong"
-            >
-              <ArrowLeft className="rtl:-scale-x-100 w-3.5 h-3.5" />
-              <span>{tk('backToKitchensMenus')}</span>
-            </Link>
-            <Link
-              href="/kitchens"
-              className="text-xs font-semibold text-muted hover:text-brand-ink transition-colors"
-            >
-              {tk('viewDirectory')}
-            </Link>
-          </div>
-
-          {renderStorefrontBody(false)}
-        </div>
-      </DashboardLayout>
-    );
-  }
-
-  // Public visitor: Render with top marketplace header
   return (
     <div className="min-h-screen bg-page text-ink pb-32">
-      {renderPublicHeader()}
-
-      {renderStorefrontBody(true)}
+      <SiteHeader />
+      {renderStorefrontBody()}
     </div>
   );
 }

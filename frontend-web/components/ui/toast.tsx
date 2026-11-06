@@ -15,6 +15,8 @@ interface ToastContextType {
   toasts: Toast[];
   showToast: (message: string, type?: ToastType, duration?: number) => void;
   removeToast: (id: string) => void;
+  /** Takes every message off the screen (a window that needs the person's attention is opening). */
+  clearToasts: () => void;
 }
 
 const ToastContext = createContext<ToastContextType | undefined>(undefined);
@@ -34,6 +36,8 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     setToasts((prev) => prev.filter((toast) => toast.id !== id));
   }, []);
 
+  const clearToasts = useCallback(() => setToasts([]), []);
+
   const showToast = useCallback((message: string, type: ToastType = 'info', duration: number = 5000) => {
     const id = Math.random().toString(36).substring(2, 9);
     const toast: Toast = { id, message, type, duration };
@@ -49,7 +53,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   }, [removeToast]);
 
   return (
-    <ToastContext.Provider value={{ toasts, showToast, removeToast }}>
+    <ToastContext.Provider value={{ toasts, showToast, removeToast, clearToasts }}>
       {children}
       <ToastContainer toasts={toasts} removeToast={removeToast} />
     </ToastContext.Provider>

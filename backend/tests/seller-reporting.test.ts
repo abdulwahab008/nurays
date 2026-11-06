@@ -92,6 +92,7 @@ beforeEach(() => {
   mockPrisma.riderLedgerEntry.findMany.mockResolvedValue([]);
   mockPrisma.riderLedgerEntry.aggregate.mockResolvedValue({ _sum: { amount: 0 } });
   mockPrisma.product.findMany.mockResolvedValue([]);
+  mockPrisma.order.findMany.mockResolvedValue([]);
   mockPrisma.review.findMany.mockResolvedValue([]);
 });
 

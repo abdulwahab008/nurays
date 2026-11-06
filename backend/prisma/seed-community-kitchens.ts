@@ -148,7 +148,7 @@ export async function seedCommunityKitchens() {
           type: 'ready_to_eat',
           unit: 'portion',
           description: 'Crispy fried bread triangles soaked in rich cardamom syrup and drenched in thick, creamy malai rabri.',
-          image: 'https://images.unsplash.com/photo-1605478371313-fa6f93afb78c?w=600&q=80&auto=format&fit=crop',
+          image: 'https://images.unsplash.com/photo-1606491956689-2ea866880c84?w=600&q=80&auto=format&fit=crop',
         },
       ],
     },

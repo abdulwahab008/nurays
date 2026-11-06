@@ -61,7 +61,10 @@ export function fileRoutes(): Router {
       fileHeaders(res);
       res.setHeader('Cache-Control', 'private, no-store');
       res.setHeader('Content-Disposition', `inline; filename="${path.basename(file)}"`);
-      res.sendFile(file, { dotfiles: 'deny' }, (err) => {
+      // With `root`, send checks only the key's segments for dotfiles; without it, every segment of the absolute
+      // path is checked, so an UPLOADS_DIR under any dot-directory (~/.local, .claude/worktrees) served nothing.
+      const base = s.dirFor('private');
+      res.sendFile(path.relative(base, file), { root: base, dotfiles: 'deny' }, (err) => {
         if (err && !res.headersSent) res.status(404).end();
       });
     });

@@ -1,8 +1,6 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { loginUrlHere } from '@/lib/auth-redirect';
-import { useRouter } from 'next/navigation';
 import { DashboardLayout, RIDER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { Button } from '@/components/ui/button';
 import { LoadError } from '@/components/ui/LoadError';
@@ -11,7 +9,7 @@ import { useDialogs } from '@/components/ui/Dialogs';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { riderService, Delivery, RiderProfile } from '@/lib/services/rider.service';
 import { formatPrice, displayRating } from '@/lib/utils';
-import { apiClient, apiErrorMessage, apiErrorCode } from '@/lib/api-client';
+import { apiErrorMessage, apiErrorCode } from '@/lib/api-client';
 import { useLiveRefresh } from '@/lib/hooks/use-live-refresh';
 import { useRiderLocation, LocationSharing } from '@/lib/hooks/use-rider-location';
 import { BackgroundLocationNotice } from '@/components/riders/BackgroundLocationNotice';
@@ -27,15 +25,6 @@ import { ExternalLink } from '@/components/ExternalLink';
 import { reserveExternal } from '@/lib/open-external';
 import { useShallow } from 'zustand/react/shallow';
 
-const ROAD_STEPS: { id: string; labelKey: RiderMessageKey }[] = [
-  { id: 'assigned', labelKey: 'step.assigned' },
-  { id: 'arrived_at_pickup', labelKey: 'step.arrived_at_pickup' },
-  { id: 'picked_up', labelKey: 'step.picked_up' },
-  { id: 'in_transit', labelKey: 'step.in_transit' },
-  { id: 'arrived_at_customer', labelKey: 'step.arrived_at_customer' },
-  { id: 'delivered', labelKey: 'step.delivered' },
-];
-
 const SHARING_BADGE: Record<LocationSharing, { labelKey: RiderMessageKey; tone: string; dot: string }> = {
   sharing: { labelKey: 'loc.sharing', tone: 'text-brand-ink', dot: 'bg-brand-600 motion-safe:animate-pulse' },
   waiting: { labelKey: 'loc.waiting', tone: 'text-muted', dot: 'bg-line-strong motion-safe:animate-pulse' },
@@ -49,17 +38,38 @@ const TABS = ['active', 'available', 'history'] as const;
 // A job that is over: delivered, reported failed, or called off (order cancelled).
 const FINISHED_STATUSES = ['delivered', 'delivery_failed', 'cancelled'];
 
+// Four steps the rider sees: to the kitchen, at the kitchen, on the way, at the door. Picked up and on the way are one
+// step: "I've picked up the food" moves the job through both.
 const STEP_ORDER: Record<string, number> = {
   assigned: 0,
   arrived_at_pickup: 1,
   picked_up: 2,
-  in_transit: 3,
-  arrived_at_customer: 4,
-  delivered: 5,
+  in_transit: 2,
+  arrived_at_customer: 3,
+  delivered: 4,
+};
+const STEP_COUNT = 4;
+
+// Order statuses from which the food has left, or may leave, the kitchen (as the server checks before a pickup).
+const KITCHEN_READY_STATUSES = ['ready', 'dispatched', 'in_transit'];
+const foodReady = (d: Delivery) => KITCHEN_READY_STATUSES.includes(d.orderStatus ?? '');
+
+// A reported problem stays on the Current tab this long, with what to do with the food.
+const FAILED_NOTICE_MS = 24 * 3600 * 1000;
+
+const isToday = (iso: string | null | undefined) => {
+  if (!iso) return false;
+  const d = new Date(iso);
+  return d.toDateString() === new Date().toDateString();
 };
 
+const clockTime = (iso: string) =>
+  new Intl.DateTimeFormat(typeof document !== 'undefined' && document.documentElement.lang === 'ur' ? 'ur-PK-u-nu-latn' : 'en-PK', {
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(new Date(iso));
+
 export default function RiderDashboardPage() {
-  const router = useRouter();
   const { isAuthenticated, user } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated, user: s.user })));
   const { showToast } = useToast();
   const { confirm: confirmDialog } = useDialogs();
@@ -76,10 +86,12 @@ export default function RiderDashboardPage() {
   // The job list carries the latest finished jobs only; "show older" asks for the most the server will send.
   const [olderShown, setOlderShown] = useState(false);
   const historyRef = useRef<number | undefined>(undefined);
+  const profileLoadedRef = useRef(false);
 
   // Doorstep PIN Handshake Modal state
   const [pinModalDelivery, setPinModalDelivery] = useState<Delivery | null>(null);
   const [pinLocked, setPinLocked] = useState(false);
+  const [pinError, setPinError] = useState<string | null>(null);
   const [pinDigits, setPinDigits] = useState(['', '', '', '']);
   const [verifyingPin, setVerifyingPin] = useState(false);
   const pinInputRefs = [
@@ -106,14 +118,26 @@ export default function RiderDashboardPage() {
       if (!silent) setLoading(true);
       setBlockedReason(null);
 
+      // The first read asks for the profile alone: an applicant or a paused account is told so by it, and the
+      // job lists (refused for the same reason) are not asked for at all. Later reloads read everything at once.
+      let firstProfile: Awaited<ReturnType<typeof riderService.getRiderProfile>> | null = null;
+      if (!profileLoadedRef.current) {
+        try {
+          firstProfile = await riderService.getRiderProfile();
+        } catch (error) {
+          const code = apiErrorCode(error);
+          if (code === 'RIDER_NOT_APPROVED' || code === 'RIDER_REJECTED' || code === 'RIDER_SUSPENDED') throw error;
+        }
+      }
       const [availableRes, mineRes, profileRes] = await Promise.all([
         riderService.getAvailableDeliveries(),
         riderService.getMyDeliveries({ history: historyRef.current }),
-        riderService.getRiderProfile().catch(() => null),
+        firstProfile ?? riderService.getRiderProfile().catch(() => null),
       ]);
 
-      const availableList = availableRes.data || [];
-      const myList = mineRes.data || [];
+      const availableList = (availableRes.data || []);
+      const myList = (mineRes.data || []);
+      if (profileRes?.data) profileLoadedRef.current = true;
 
       setAvailable(availableList);
       setMine(myList);
@@ -147,13 +171,14 @@ export default function RiderDashboardPage() {
   const loadAvailable = useCallback(async () => {
     try {
       const res = await riderService.getAvailableDeliveries();
-      setAvailable(res.data || []);
+      setAvailable((res.data || []));
     } catch {
       // The next full reload reports what is wrong (an account that cannot take jobs, a lost connection).
     }
   }, []);
 
   const isRider = user?.user_type === 'rider' || user?.userType === 'rider';
+  const userId = user?.id;
 
   // The sidebar links to #active / #available / #history.
   useEffect(() => {
@@ -166,23 +191,14 @@ export default function RiderDashboardPage() {
     return () => window.removeEventListener('hashchange', fromHash);
   }, []);
 
-  // Auth guard and initial load. The saved session can load a moment after the first
-  // render, so a stored token means "wait for it", not "send to login".
+  // Initial load. app/riders/layout.tsx sends signed-out people to sign in and other accounts to their own home.
   useEffect(() => {
-    if (!isAuthenticated && !apiClient.getAccessToken()) {
-      router.replace(loginUrlHere());
-      return;
-    }
-    if (!user) return;
-    if (!isRider) {
-      router.push('/products');
-      showToast(t('accessDenied'), 'error');
-      return;
-    }
+    if (!userId || !isRider) return;
     loadAll();
-    // loadAll changes with the active tab; reloading on every tab switch isn't wanted.
+    // loadAll changes with the active tab; reloading on every tab switch isn't wanted. Keyed on who is signed in, not on
+    // the user object: a refreshed copy of the same account must not read everything twice.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthenticated, user, isRider, router, showToast]);
+  }, [userId, isRider]);
 
   // Jobs given to this rider or cancelled, and status changes on this rider's orders (e.g. the kitchen
   // marking food ready), arrive as live events and reload everything.
@@ -202,9 +218,14 @@ export default function RiderDashboardPage() {
   const activeDeliveries = mine.filter(
     (d) => !FINISHED_STATUSES.includes(d.status)
   );
-  const completedDeliveries = mine.filter((d) => d.status === 'delivered');
+  // Done: delivered jobs and the ones reported as not delivered.
+  const completedDeliveries = mine.filter((d) => d.status === 'delivered' || d.status === 'delivery_failed');
+  const deliveredToday = mine.filter((d) => d.status === 'delivered' && isToday(d.deliveryTime));
+  const earnedToday = deliveredToday.reduce((sum, d) => sum + (d.riderFee ?? 0) + (d.riderBonus ?? 0), 0);
+  // Reported in the last day: the rider still has the food and needs to know what to do with it.
+  const recentlyFailed = mine.filter((d) => d.status === 'delivery_failed' && Date.now() - new Date(d.createdAt).getTime() < FAILED_NOTICE_MS);
   // Every delivery the rider has made, from their profile: the list below only holds the latest ones.
-  const deliveredTotal = profile?.totalDeliveries ?? completedDeliveries.length;
+  const deliveredTotal = profile?.totalDeliveries ?? mine.filter((d) => d.status === 'delivered').length;
 
   const showOlderDeliveries = () => {
     historyRef.current = 200;
@@ -258,21 +279,18 @@ export default function RiderDashboardPage() {
     }
   };
 
-  // Claim delivery from pool (with optional inDrive askFee)
-  const handleClaim = async (deliveryId: string, askFee?: number) => {
-    // Accepting a job starts the trip to the kitchen: open Google Maps (window opened inside the tap, see handleAdvanceStatus).
+  // Take a job from New jobs at its standard fee.
+  const handleClaim = async (deliveryId: string) => {
+    // Accepting a job starts the trip to the kitchen: open Google Maps (window opened inside the tap, see handleAdvanceStatus),
+    // but only when the kitchen can be found on a map; otherwise the job card says to call the kitchen.
     const job = available.find((a) => a.id === deliveryId);
-    const nav = job ? reserveExternal() : null;
+    const toKitchen = job ? { ...job, status: 'assigned' as const } : null;
+    const nav = toKitchen && canNavigateTo(navDestinationFor(toKitchen)) ? reserveExternal() : null;
     try {
       setBusyId(deliveryId);
-      await riderService.claimDelivery(deliveryId, askFee);
-      if (nav && job) nav.open(navUrlFor({ ...job, status: 'assigned' } as Delivery));
-      showToast(
-        askFee
-          ? t('claimedCustom', { fee: askFee })
-          : t('claimed'),
-        'success'
-      );
+      await riderService.claimDelivery(deliveryId);
+      if (nav && toKitchen) nav.open(navUrlFor(toKitchen));
+      showToast(t('claimed'), 'success');
       setActiveTab('active');
       loadAll(true);
     } catch (error) {
@@ -285,7 +303,7 @@ export default function RiderDashboardPage() {
 
   // Hand a job back to the pool before the food is picked up
   const handleRelease = async (delivery: Delivery) => {
-    if (!(await confirmDialog({ message: t('handBackConfirm'), variant: 'warning' }))) return;
+    if (!(await confirmDialog({ title: t('handBackTitle'), message: t('handBackConfirm'), confirmText: t('handBack'), variant: 'warning' }))) return;
     try {
       setBusyId(delivery.id);
       await riderService.releaseDelivery(delivery.id);
@@ -300,11 +318,12 @@ export default function RiderDashboardPage() {
 
   // The leg the rider is on: to the kitchen until the food is picked up, then to the customer.
   const headingToCustomer = (d: Delivery) => ['picked_up', 'in_transit', 'arrived_at_customer'].includes(d.status);
-  // Where this leg goes: the saved map pin when there is one, otherwise the address text.
+  // Where this leg goes: the saved map pin when there is one, otherwise the address text. A kitchen without a street
+  // address has no text worth searching for (its name finds nothing on a map), so it has no destination.
   const navDestinationFor = (d: Delivery): NavDestination =>
     headingToCustomer(d)
       ? { latitude: d.deliveryLatitude ?? null, longitude: d.deliveryLongitude ?? null, text: d.deliveryAddress }
-      : { latitude: d.pickupLatitude ?? null, longitude: d.pickupLongitude ?? null, text: d.pickupAddress };
+      : { latitude: d.pickupLatitude ?? null, longitude: d.pickupLongitude ?? null, text: d.pickup?.address ? d.pickupAddress : '' };
   const navUrlFor = (d: Delivery) =>
     (headingToCustomer(d) ? d.dropoffMapsUrl : d.pickupMapsUrl) ?? googleMapsDirectionsUrl(navDestinationFor(d));
   // Navigation is offered while the rider is travelling: to the kitchen, or with the food to the customer.
@@ -325,7 +344,7 @@ export default function RiderDashboardPage() {
     setNavBusyId(delivery.id);
     const nav = reserveExternal();
     try {
-      const fresh = (await riderService.getMyDeliveries({ history: 0 })).data?.find((d: Delivery) => d.id === delivery.id);
+      const fresh = ((await riderService.getMyDeliveries({ history: 0 })).data)?.find((d) => d.id === delivery.id);
       if (!fresh || !NAVIGABLE_STATUSES.includes(fresh.status)) {
         nav.cancel();
         showToast(t('navNotAvailable'), 'error');
@@ -347,38 +366,44 @@ export default function RiderDashboardPage() {
   };
 
   // Advance delivery along the real fulfillment lifecycle
+  const openPinSheet = (delivery: Delivery) => {
+    setPinModalDelivery(delivery);
+    setPinLocked(false);
+    setPinError(null);
+    setPinDigits(['', '', '', '']);
+    setTimeout(() => pinInputRefs[0].current?.focus(), 150);
+  };
+
   const handleAdvanceStatus = async (delivery: Delivery) => {
     // Leaving the kitchen with the food: open directions to the customer. The window is opened now,
     // inside the tap, because browsers block pop-ups opened after a network call.
-    const nav = delivery.status === 'picked_up' ? reserveExternal() : null;
+    const toCustomer = { ...delivery, status: 'in_transit' as const };
+    const leaving = delivery.status === 'arrived_at_pickup' || delivery.status === 'picked_up';
+    let nav = leaving && canNavigateTo(navDestinationFor(toCustomer)) ? reserveExternal() : null;
     try {
       setBusyId(delivery.id);
       if (delivery.status === 'assigned') {
         await riderService.updateDeliveryStatus(delivery.id, 'arrived_at_pickup');
         showToast(t('toastArrivedKitchen'), 'info');
-      } else if (delivery.status === 'arrived_at_pickup') {
-        await riderService.updateDeliveryStatus(delivery.id, 'picked_up');
-        showToast(t('toastPickedUp'), 'success');
-      } else if (delivery.status === 'picked_up') {
+      } else if (leaving) {
+        // Picked up, then on the way: two steps for the server (each with its own checks), one tap for the rider.
+        if (delivery.status === 'arrived_at_pickup') await riderService.updateDeliveryStatus(delivery.id, 'picked_up');
         await riderService.updateDeliveryStatus(delivery.id, 'in_transit');
         showToast(t('toastDeparted'), 'info');
-        if (nav) nav.open(navUrlFor(delivery));
+        nav?.open(navUrlFor(toCustomer));
+        nav = null;
       } else if (delivery.status === 'in_transit') {
         await riderService.updateDeliveryStatus(delivery.id, 'arrived_at_customer');
         showToast(t('toastArrivedDoor'), 'info');
-        setPinModalDelivery(delivery);
-        setPinLocked(false);
-        setPinDigits(['', '', '', '']);
-        setTimeout(() => pinInputRefs[0].current?.focus(), 150);
+        openPinSheet(delivery);
       } else if (delivery.status === 'arrived_at_customer') {
-        setPinModalDelivery(delivery);
-        setPinLocked(false);
-        setPinDigits(['', '', '', '']);
-        setTimeout(() => pinInputRefs[0].current?.focus(), 150);
+        openPinSheet(delivery);
       }
       loadAll(true);
     } catch (error) {
       nav?.cancel();
+      // A pickup that went through before the second step failed: the card must show where the job is now.
+      if (leaving) loadAll(true);
       showToast(apiErrorMessage(error, t('statusUpdateFailed')), 'error');
     } finally {
       setBusyId(null);
@@ -387,14 +412,25 @@ export default function RiderDashboardPage() {
 
   // PIN modal digit input
   const handlePinDigitChange = (index: number, val: string) => {
-    if (!/^\d*$/.test(val)) return;
-    const char = val.slice(-1);
+    const digits = val.replace(/\D/g, '');
+    if (val && !digits) return;
+    setPinError(null);
     const updated = [...pinDigits];
-    updated[index] = char;
+    if (digits.length > 1) {
+      // A pasted or autofilled code fills the boxes from here on.
+      digits.slice(0, 4 - index).split('').forEach((d, i) => (updated[index + i] = d));
+    } else {
+      updated[index] = digits;
+    }
     setPinDigits(updated);
 
-    if (char && index < 3) {
-      pinInputRefs[index + 1].current?.focus();
+    const next = updated.findIndex((d) => !d);
+    if (next === -1) {
+      // The fourth digit sends the code: on a phone the keyboard covers the confirm button.
+      pinInputRefs[Math.min(3, index + digits.length - 1)].current?.blur();
+      void handleVerifyPinSubmit(updated);
+    } else if (digits && next > index) {
+      pinInputRefs[next].current?.focus();
     }
   };
 
@@ -405,8 +441,9 @@ export default function RiderDashboardPage() {
   };
 
   // Submit Handshake PIN
-  const handleVerifyPinSubmit = async () => {
-    const fullPin = pinDigits.join('');
+  const handleVerifyPinSubmit = async (digits: string[] = pinDigits) => {
+    if (verifyingPin) return;
+    const fullPin = digits.join('');
     if (fullPin.length !== 4) {
       showToast(t('pinIncomplete'), 'error');
       return;
@@ -426,8 +463,15 @@ export default function RiderDashboardPage() {
       setActiveTab('history');
       loadAll(true);
     } catch (error) {
-      if (apiErrorCode(error) === 'HANDOVER_LOCKED') setPinLocked(true);
-      showToast(apiErrorMessage(error, t('pinInvalid')), 'error');
+      const code = apiErrorCode(error);
+      if (code === 'HANDOVER_LOCKED') {
+        setPinLocked(true);
+      } else {
+        // Clear the boxes and start again from the first, with the reason under them where the rider is looking.
+        setPinDigits(['', '', '', '']);
+        setPinError(code === 'INVALID_DELIVERY_OTP' ? t('pinTryAgain') : apiErrorMessage(error, t('pinInvalid')));
+        setTimeout(() => pinInputRefs[0].current?.focus(), 50);
+      }
     } finally {
       setVerifyingPin(false);
     }
@@ -475,16 +519,20 @@ export default function RiderDashboardPage() {
   // Nothing about the rider could be read: the bar would say "Vehicle: Not set", "0 / 2 Active" and "ON DUTY" about someone it knows nothing about.
   const couldNotRead = Boolean(loadError) && !loading && !blockedReason && !profile && mine.length === 0 && available.length === 0;
 
-  const statusLabel = (status: string) => {
-    const k = riderKeyFor('dstatus', status);
-    return k ? t(k) : status.replace(/_/g, ' ');
+  // The card's headline is what to do next, not the job's status name.
+  const nextStepLabel = (d: Delivery) => {
+    const k = riderKeyFor('next', d.status);
+    return k ? t(k, { customer: d.customer?.name || t('next.theCustomer') }) : d.status.replace(/_/g, ' ');
   };
   const sharingLabel: RiderMessageKey =
     inApp && locationSharing === 'denied' ? 'loc.deniedApp' : inApp && locationSharing === 'unavailable' ? 'loc.unavailableApp' : SHARING_BADGE[locationSharing].labelKey;
   const openLocationSettings = () => {
     void nativePlugins(window as unknown as NativeWindow)?.BackgroundGeolocation?.openSettings().catch(() => undefined);
   };
-  const onDuty = profile?.isAvailable !== false;
+  const onDuty = profile?.isAvailable === true;
+  // An applicant (or a paused account) is not a working rider yet: no duty switch, location or job counts.
+  const showRiderStrip = !couldNotRead && !blockedReason && !(loading && !profile);
+  const applying = blockedReason?.code === 'RIDER_NOT_APPROVED' || blockedReason?.code === 'RIDER_REJECTED';
   const riderName = profile?.name || user?.profile?.fullName || t('nameNotSet');
   const tabCounts: Record<(typeof TABS)[number], number> = {
     active: activeDeliveries.length,
@@ -495,17 +543,17 @@ export default function RiderDashboardPage() {
 
   return (
     <DashboardLayout
-      title={t('title')}
-      subtitle={t('subtitle')}
+      title={applying ? t('app.pageTitle') : t('title')}
       sidebarItems={RIDER_SIDEBAR_ITEMS}
       userType="rider"
     >
       <div className="max-w-6xl mx-auto">
 
         {/* Who is riding, whether they take new jobs, and whether their position is reaching the customer */}
-        {!couldNotRead && (
-          <section className="flex flex-wrap items-center justify-between gap-x-6 gap-y-4 pb-5 mb-6 border-b border-line">
-            <div className="flex items-center gap-3 min-w-0">
+        {showRiderStrip && (
+          <section className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 pb-3 mb-4 sm:pb-5 sm:mb-6 border-b border-line">
+            {/* Who is riding: on a phone the job comes first, so this is in the menu and on Earnings instead. */}
+            <div className="hidden sm:flex items-center gap-3 min-w-0">
               <span aria-hidden="true" className="w-11 h-11 rounded-full bg-brand-soft text-brand-soft-ink flex items-center justify-center text-base font-semibold shrink-0">
                 {riderName.trim().charAt(0).toUpperCase() || <Bike className="w-5 h-5" />}
               </span>
@@ -519,10 +567,10 @@ export default function RiderDashboardPage() {
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
-              <div className="flex items-center gap-2 text-sm" data-testid="location-sharing">
-                <span aria-hidden="true" className={`w-2 h-2 rounded-full ${SHARING_BADGE[locationSharing].dot}`} />
-                <span className={`font-medium ${SHARING_BADGE[locationSharing].tone}`}>{t(sharingLabel)}</span>
+            <div className="flex flex-1 sm:flex-none flex-wrap items-center justify-between gap-x-5 gap-y-2 min-w-0">
+              <div className="flex flex-1 sm:flex-none items-center gap-2 text-sm min-w-0" data-testid="location-sharing">
+                <span aria-hidden="true" className={`w-2 h-2 rounded-full shrink-0 ${SHARING_BADGE[locationSharing].dot}`} />
+                <span className={`font-medium leading-snug ${SHARING_BADGE[locationSharing].tone}`}>{t(sharingLabel)}</span>
                 {inApp && locationSharing === 'denied' && (
                   <button type="button" onClick={openLocationSettings} className="font-semibold text-brand-ink underline underline-offset-2">
                     {t('openSettings')}
@@ -542,7 +590,7 @@ export default function RiderDashboardPage() {
                 aria-checked={onDuty}
                 onClick={handleToggleDuty}
                 disabled={togglingDuty}
-                className="flex items-center gap-3 min-h-11 ps-1 pe-1 rounded-full disabled:opacity-60 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-brand/40"
+                className="flex items-center gap-3 min-h-11 ps-1 pe-1 rounded-full shrink-0 disabled:opacity-60 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-brand/40"
               >
                 <span className={`text-sm font-semibold ${onDuty ? 'text-ink' : 'text-muted'}`}>{onDuty ? t('onDuty') : t('offDuty')}</span>
                 <span aria-hidden="true" className={`relative w-12 h-7 rounded-full transition-colors ${onDuty ? 'bg-brand-600' : 'bg-line-strong'}`}>
@@ -617,17 +665,34 @@ export default function RiderDashboardPage() {
                       const toCustomer = headingToCustomer(delivery) || delivery.status === 'arrived_at_customer';
                       const kitchenDone = step >= 2;
                       const busy = busyId === delivery.id;
+                      const ready = foodReady(delivery);
+                      // At the kitchen with the food still cooking: nothing to pick up yet.
+                      const waitingForFood = delivery.status === 'arrived_at_pickup' && !ready;
+                      const beforePickup = delivery.status === 'assigned' || delivery.status === 'arrived_at_pickup';
+                      const kitchen = delivery.pickup;
+                      const kitchenLine =
+                        kitchen?.address && kitchen.area && kitchen.address.toLowerCase().includes(kitchen.area.toLowerCase())
+                          ? kitchen.address
+                          : [kitchen?.address, kitchen?.area].filter(Boolean).join(', ');
                       return (
                         <article
                           key={delivery.id}
                           data-testid={`run-${delivery.orderNumber ?? delivery.id}`}
-                          className="rounded-[20px] bg-surface border border-line shadow-[var(--shadow-card)] overflow-hidden"
+                          className="rounded-[20px] bg-surface border border-line shadow-[var(--shadow-card)]"
                         >
                           <header className="px-5 pt-5 flex items-start justify-between gap-4">
                             <div className="min-w-0">
                               <p className="text-sm text-muted">{t('orderNo', { number: delivery.orderNumber || delivery.orderId.slice(0, 8) })}</p>
-                              <p className="text-lg font-semibold text-ink first-letter:uppercase">{statusLabel(delivery.status)}</p>
-                              {delivery.assignmentMode === 'auto' && <p className="text-xs text-muted mt-0.5">{t('autoAssigned')}</p>}
+                              <h2 className="text-lg font-semibold text-ink">{nextStepLabel(delivery)}</h2>
+                              {beforePickup && (
+                                <span
+                                  data-testid="food-status"
+                                  className={`inline-block mt-1 px-2 py-0.5 rounded-full text-xs font-medium ${ready ? 'bg-brand-soft text-brand-soft-ink' : 'bg-accent-soft text-accent-soft-ink'}`}
+                                >
+                                  {ready ? t('foodReady') : delivery.estimatedReadyAt && new Date(delivery.estimatedReadyAt).getTime() > Date.now() ? t('foodCookingUntil', { time: clockTime(delivery.estimatedReadyAt) }) : t('foodCooking')}
+                                </span>
+                              )}
+                              {delivery.assignmentMode === 'auto' && <p className="text-xs text-muted mt-1">{t('autoAssigned')}</p>}
                             </div>
                             {delivery.riderFee != null && (
                               <div className="text-end shrink-0">
@@ -639,11 +704,11 @@ export default function RiderDashboardPage() {
 
                           <div className="px-5 mt-4">
                             <div className="flex gap-1" aria-hidden="true">
-                              {ROAD_STEPS.slice(0, 5).map((s, idx) => (
-                                <span key={s.id} className={`h-1.5 flex-1 rounded-full ${idx < step ? 'bg-brand-600' : idx === step ? 'bg-brand-300' : 'bg-raised'}`} />
+                              {Array.from({ length: STEP_COUNT }, (_, idx) => (
+                                <span key={idx} className={`h-1.5 flex-1 rounded-full ${idx < step ? 'bg-brand-600' : idx === step ? 'bg-brand-300' : 'bg-raised'}`} />
                               ))}
                             </div>
-                            <p className="text-xs text-muted mt-1.5">{t('stepOf', { step: Math.min(step + 1, 5), total: 5 })}</p>
+                            <p className="text-xs text-muted mt-1.5">{t('stepOf', { step: Math.min(step + 1, STEP_COUNT), total: STEP_COUNT })}</p>
                           </div>
 
                           {delivery.paymentMethod === 'cod' && !!delivery.totalAmount && (
@@ -663,9 +728,32 @@ export default function RiderDashboardPage() {
                                 {kitchenDone ? <Check className="w-3.5 h-3.5" strokeWidth={3} /> : <span className="w-2 h-2 rounded-full bg-brand-600" />}
                               </span>
                               <div className="flex-1 min-w-0">
-                                <p className="text-sm text-muted">{t('pickupKitchen')}</p>
-                                <p className={`text-[15px] leading-snug ${kitchenDone ? 'text-muted' : 'text-ink font-medium'}`}>{delivery.pickupAddress}</p>
-                                {!kitchenDone && <p className="text-sm text-muted mt-1">{t('prepVerify')}</p>}
+                                <p className="text-sm text-muted">{kitchen?.name || t('pickupKitchen')}</p>
+                                <p className={`text-[15px] leading-snug ${kitchenDone ? 'text-muted' : 'text-ink font-medium'}`}>{kitchen ? kitchenLine || kitchen.name : delivery.pickupAddress}</p>
+                                {!kitchenDone && kitchen?.landmark && (
+                                  <p className="mt-1 text-sm text-muted">{t('landmark')}: <span className="text-ink">{kitchen.landmark}</span></p>
+                                )}
+                                {!kitchenDone && kitchen && !kitchen.address && delivery.pickupLatitude == null ? (
+                                  <p className="mt-2 text-sm text-accent-soft-ink" data-testid="no-kitchen-address">{t('noKitchenAddress')}</p>
+                                ) : !kitchenDone && delivery.pickupLatitude == null ? (
+                                  <p className="mt-2 text-sm text-accent-soft-ink" data-testid="no-kitchen-pin">{t('noKitchenPin')}</p>
+                                ) : null}
+                                {!kitchenDone && kitchen?.phone && (
+                                  <a
+                                    href={`tel:${kitchen.phone}`}
+                                    data-testid="call-kitchen"
+                                    aria-label={`${t('callKitchen')} ${kitchen.phone}`}
+                                    className="mt-3 inline-flex items-center gap-2 min-h-11 px-3 rounded-xl bg-brand-soft text-brand-soft-ink text-sm font-semibold"
+                                  >
+                                    <Phone className="w-4 h-4" aria-hidden="true" />
+                                    <span>{t('callKitchen')}</span>
+                                  </a>
+                                )}
+                                {waitingForFood ? (
+                                  <p className="text-sm text-muted mt-2">{t('waitingForKitchenHelp')}</p>
+                                ) : !kitchenDone ? (
+                                  <p className="text-sm text-muted mt-2">{t('prepVerify')}</p>
+                                ) : null}
                               </div>
                             </li>
 
@@ -696,6 +784,7 @@ export default function RiderDashboardPage() {
                                 {delivery.customer?.phone && (
                                   <a
                                     href={`tel:${delivery.customer.phone}`}
+                                    aria-label={`${t('callCustomer')} ${delivery.customer.phone}`}
                                     className="mt-3 inline-flex items-center gap-2 min-h-11 px-3 rounded-xl bg-brand-soft text-brand-soft-ink text-sm font-semibold"
                                   >
                                     <Phone className="w-4 h-4" aria-hidden="true" />
@@ -707,9 +796,8 @@ export default function RiderDashboardPage() {
                             </li>
                           </ol>
 
-                          <div className="px-5 pt-6 pb-5 space-y-3">
-                            {NAVIGABLE_STATUSES.includes(delivery.status) && (
-                              <div>
+                          {NAVIGABLE_STATUSES.includes(delivery.status) && (
+                            <div className="px-5 pt-6">
                                 <ExternalLink
                                   href={navUrlFor(delivery)}
                                   data-testid="start-navigation"
@@ -732,40 +820,78 @@ export default function RiderDashboardPage() {
                                     </ExternalLink>
                                   ) : null;
                                 })()}
-                              </div>
-                            )}
-
-                            <Button size="lg" onClick={() => handleAdvanceStatus(delivery)} disabled={busy} className="w-full min-h-12 text-[15px]">
-                              {busy
-                                ? t('processing')
-                                : delivery.status === 'assigned'
-                                ? t('actArrivedKitchen')
-                                : delivery.status === 'arrived_at_pickup'
-                                ? t('actPickUp')
-                                : delivery.status === 'picked_up'
-                                ? t('actDepart')
-                                : delivery.status === 'in_transit'
-                                ? t('actArrivedDoor')
-                                : t('actVerifyPin')}
-                            </Button>
-
-                            <div className="flex justify-center">
-                              {delivery.status === 'assigned' ? (
-                                <button type="button" onClick={() => handleRelease(delivery)} disabled={busy} className="min-h-11 px-3 text-sm font-medium text-muted hover:text-ink disabled:opacity-50">
-                                  {t('handBack')}
-                                </button>
-                              ) : (
-                                <button type="button" onClick={() => setReportModalDelivery(delivery)} disabled={busy} className="min-h-11 px-3 text-sm font-medium text-red-700 hover:underline disabled:opacity-50">
-                                  {t('reportIssue')}
-                                </button>
-                              )}
                             </div>
+                          )}
+
+                          {/* The next action stays at the bottom of the screen while the rest of the card is scrolled past. */}
+                          <div className="sticky bottom-0 z-10 px-5 pt-3 pb-[calc(0.5rem+var(--safe-bottom))] bg-surface rounded-b-[20px]">
+                              <Button
+                                size="lg"
+                                onClick={() => handleAdvanceStatus(delivery)}
+                                disabled={busy || waitingForFood}
+                                data-testid="advance-job"
+                                className="w-full min-h-12 text-[15px]"
+                              >
+                                {busy
+                                  ? t('processing')
+                                  : delivery.status === 'assigned'
+                                  ? t('actArrivedKitchen')
+                                  : waitingForFood
+                                  ? t('waitingForKitchen')
+                                  : delivery.status === 'arrived_at_pickup'
+                                  ? t('actPickUp')
+                                  : delivery.status === 'picked_up'
+                                  ? t('actDepart')
+                                  : delivery.status === 'in_transit'
+                                  ? t('actArrivedDoor')
+                                  : t('actVerifyPin')}
+                              </Button>
+                          </div>
+
+                          <div className="px-5 pb-4 flex flex-wrap justify-center gap-2">
+                              {beforePickup && (
+                                <Button variant="ghost" onClick={() => handleRelease(delivery)} disabled={busy} className="min-h-11 text-muted hover:text-ink hover:bg-raised">
+                                  {t('handBack')}
+                                </Button>
+                              )}
+                              {delivery.status !== 'assigned' && (
+                                <Button variant="ghost" onClick={() => setReportModalDelivery(delivery)} disabled={busy} className="min-h-11 text-red-700 hover:bg-red-50">
+                                  {t('reportIssue')}
+                                </Button>
+                              )}
                           </div>
                         </article>
                       );
                     })}
                   </div>
                 )
+              )}
+
+              {/* A job reported as not delivered: the rider still has the food, so say what to do with it. */}
+              {activeTab === 'active' && recentlyFailed.length > 0 && (
+                <div className="space-y-3 mt-5">
+                  {recentlyFailed.map((d) => (
+                    <section key={d.id} data-testid={`failed-${d.orderNumber ?? d.id}`} className="rounded-xl bg-red-50 text-red-800 px-4 py-3.5">
+                      <p className="text-sm font-semibold">{t('failedNoticeTitle', { number: d.orderNumber || d.orderId.slice(0, 8) })}</p>
+                      <p className="text-sm mt-0.5">{t('failedNoticeBody', { kitchen: d.pickup?.name || t('failedNoticeKitchen') })}</p>
+                      <div className="flex flex-wrap gap-2 mt-2.5">
+                        {canNavigateTo(navDestinationFor({ ...d, status: 'assigned' })) && (
+                          <ExternalLink
+                            href={navUrlFor({ ...d, status: 'assigned' })}
+                            className="inline-flex items-center gap-2 min-h-11 px-3 rounded-xl bg-surface border border-line text-sm font-semibold text-ink"
+                          >
+                            <Navigation className="w-4 h-4" aria-hidden="true" />
+                            {t('maps')}
+                          </ExternalLink>
+                        )}
+                        <Link href="/support" className="inline-flex items-center gap-2 min-h-11 px-3 rounded-xl bg-surface border border-line text-sm font-semibold text-ink">
+                          <LifeBuoy className="w-4 h-4" aria-hidden="true" />
+                          {t('sos')}
+                        </Link>
+                      </div>
+                    </section>
+                  ))}
+                </div>
               )}
 
               {/* Jobs the rider can take */}
@@ -785,12 +911,19 @@ export default function RiderDashboardPage() {
                     </div>
                   ) : null}
 
-                  {available.length === 0 ? (
+                  {!onDuty && profile ? (
+                    <div className="py-2" data-testid="off-duty-jobs">
+                      <p className="text-sm text-muted">{t('offDutyBody')}</p>
+                      <Button onClick={handleToggleDuty} disabled={togglingDuty} className="mt-4 min-h-11">
+                        {t('goOnDuty')}
+                      </Button>
+                    </div>
+                  ) : available.length === 0 ? (
                     <p className="py-2 text-sm text-muted">{t('scanningBody')}</p>
                   ) : (
                     <ul className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {available.map((d) => {
-                        const ready = ['ready', 'dispatched', 'in_transit'].includes(d.orderStatus ?? '');
+                        const ready = foodReady(d);
                         return (
                           <li
                             key={d.id}
@@ -801,7 +934,7 @@ export default function RiderDashboardPage() {
                               <div className="min-w-0">
                                 <p className="text-sm text-muted">{t('orderNo', { number: d.orderNumber || d.orderId.slice(0, 8) })}</p>
                                 <p className="text-lg font-semibold text-ink tabular-nums">
-                                  Rs {d.standardFee}
+                                  {formatPrice(d.standardFee)}
                                   {d.isRouteMatch && <span className="text-sm font-medium text-brand-ink ms-1.5">{t('bonusSuffix', { bonus: d.batchBonus })}</span>}
                                 </p>
                               </div>
@@ -820,6 +953,12 @@ export default function RiderDashboardPage() {
                               </dd>
                               <dt className="text-muted">{t('deliverLabel')}</dt>
                               <dd className="text-ink truncate">{d.deliveryAddress}</dd>
+                              {d.distanceKm != null && (
+                                <>
+                                  <dt className="text-muted">{t('tripLabel')}</dt>
+                                  <dd className="text-ink tabular-nums">{t('tripKm', { km: d.distanceKm })}</dd>
+                                </>
+                              )}
                               {d.totalAmount ? (
                                 <>
                                   <dt className="text-muted">{t('orderValue')}</dt>
@@ -829,8 +968,6 @@ export default function RiderDashboardPage() {
                                   </dd>
                                 </>
                               ) : null}
-                              <dt className="text-muted">{t('corridor')}</dt>
-                              <dd className="text-ink tabular-nums">{t('corridorRange', { min: d.minAskFee, max: d.maxAskFee })}</dd>
                             </dl>
 
                             <div className="mt-auto">
@@ -841,26 +978,13 @@ export default function RiderDashboardPage() {
                                   <strong>{t('cashLimitTitle')}</strong> {t('cashLimitBody', { limit: formatPrice(floatingLimit) })}
                                 </p>
                               ) : (
-                                <div className="flex gap-2">
-                                  <Button onClick={() => handleClaim(d.id)} disabled={busyId === d.id} className="flex-1 min-h-11">
-                                    {busyId === d.id
-                                      ? t('claiming')
-                                      : d.isRouteMatch
-                                      ? t('claimBatched', { bonus: d.batchBonus })
-                                      : t('claim', { fee: d.standardFee })}
-                                  </Button>
-                                  {(d.maxAskFee ?? 0) > (d.standardFee ?? 0) && (
-                                    <Button
-                                      variant="outline"
-                                      onClick={() => handleClaim(d.id, d.maxAskFee)}
-                                      disabled={busyId === d.id}
-                                      className="min-h-11 whitespace-nowrap"
-                                      title={t('askMaxTitle')}
-                                    >
-                                      {t('askFee', { fee: d.maxAskFee })}
-                                    </Button>
-                                  )}
-                                </div>
+                                <Button onClick={() => handleClaim(d.id)} disabled={busyId === d.id} className="w-full min-h-11">
+                                  {busyId === d.id
+                                    ? t('claiming')
+                                    : d.isRouteMatch
+                                    ? t('claimBatched', { bonus: d.batchBonus })
+                                    : t('claim', { fee: formatPrice(d.standardFee) })}
+                                </Button>
                               )}
                             </div>
                           </li>
@@ -886,17 +1010,21 @@ export default function RiderDashboardPage() {
                             <p className="text-sm text-muted truncate">{d.deliveryAddress}</p>
                           </div>
                           <div className="text-end shrink-0">
-                            {d.riderFee != null && (
+                            {d.riderFee != null && d.status === 'delivered' && (
                               <p className="text-[15px] font-semibold text-ink tabular-nums">{formatPrice(d.riderFee + (d.riderBonus ?? 0))}</p>
                             )}
-                            <p className="text-xs text-muted flex items-center justify-end gap-1">
-                              <Check className="w-3 h-3" aria-hidden="true" />
-                              {t('pinVerified')}
-                            </p>
+                            {d.status === 'delivery_failed' ? (
+                              <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-red-50 text-red-700">{t('notDelivered')}</span>
+                            ) : (
+                              <p className="text-xs text-muted flex items-center justify-end gap-1">
+                                <Check className="w-3 h-3" aria-hidden="true" />
+                                {t('pinVerified')}
+                              </p>
+                            )}
                           </div>
                         </li>
                       ))}
-                      {!olderShown && deliveredTotal > completedDeliveries.length && (
+                      {!olderShown && deliveredTotal > completedDeliveries.filter((d) => d.status === 'delivered').length && (
                         <li className="px-4 py-2 text-center">
                           <button type="button" onClick={showOlderDeliveries} className="min-h-11 text-sm font-semibold text-brand-ink hover:underline">
                             {t('showOlder')}
@@ -934,7 +1062,7 @@ export default function RiderDashboardPage() {
                     {(profile?.balance ?? 0) >= 0 ? t('nurayOwesYou') : t('youOweNuray')}{' '}
                     <strong className="text-ink font-semibold tabular-nums">{formatPrice(Math.abs(profile?.balance ?? 0))}</strong>
                   </span>
-                  <Link href="/riders/earnings" className="font-semibold text-brand-ink hover:underline">
+                  <Link href="/riders/earnings" className="inline-flex min-h-11 items-center font-semibold text-brand-ink hover:underline">
                     {t('earningsLink')}
                   </Link>
                 </div>
@@ -945,11 +1073,11 @@ export default function RiderDashboardPage() {
                 <dl className="mt-3 grid grid-cols-2 gap-4">
                   <div>
                     <dt className="text-sm text-muted">{t('runsDelivered')}</dt>
-                    <dd className="text-2xl font-semibold text-ink tabular-nums">{completedDeliveries.length}</dd>
+                    <dd className="text-2xl font-semibold text-ink tabular-nums" data-testid="delivered-today">{deliveredToday.length}</dd>
                   </div>
                   <div>
-                    <dt className="text-sm text-muted">{t('activeNow')}</dt>
-                    <dd className="text-2xl font-semibold text-ink tabular-nums">{activeDeliveries.length}</dd>
+                    <dt className="text-sm text-muted">{t('earnedToday')}</dt>
+                    <dd className="text-2xl font-semibold text-ink tabular-nums">{formatPrice(earnedToday)}</dd>
                   </div>
                 </dl>
               </section>
@@ -988,6 +1116,14 @@ export default function RiderDashboardPage() {
               </button>
             </div>
 
+            {pinModalDelivery.paymentMethod === 'cod' && !!pinModalDelivery.totalAmount && (
+              <p className="mt-5 flex items-center gap-2 rounded-xl bg-accent-soft text-accent-soft-ink px-3.5 py-3 text-sm">
+                <Banknote className="w-4 h-4 shrink-0" aria-hidden="true" />
+                {t('codReminder')}
+                <strong className="ms-auto text-base tabular-nums">{formatPrice(pinModalDelivery.totalAmount)}</strong>
+              </p>
+            )}
+
             <p className="text-[15px] text-ink mt-5">
               {t('pinAsk1')}<strong>{t('pinAskBold')}</strong>{t('pinAsk2')}
             </p>
@@ -1001,14 +1137,21 @@ export default function RiderDashboardPage() {
                   inputMode="numeric"
                   autoComplete="one-time-code"
                   aria-label={`${t('pinAskBold')} ${idx + 1}`}
-                  maxLength={1}
+                  maxLength={idx === 0 ? 4 : 1}
                   value={digit}
+                  disabled={verifyingPin || pinLocked}
+                  aria-invalid={Boolean(pinError)}
+                  aria-describedby={pinError ? 'pin-error' : undefined}
                   onChange={(e) => handlePinDigitChange(idx, e.target.value)}
                   onKeyDown={(e) => handlePinKeyDown(idx, e)}
                   className="w-14 h-16 text-center text-2xl font-semibold text-ink tabular-nums bg-raised border border-line rounded-2xl focus:border-brand-600 focus:bg-surface focus:outline-none focus:ring-3 focus:ring-brand/30"
                 />
               ))}
             </div>
+
+            {pinError && !pinLocked && (
+              <p id="pin-error" role="alert" className="mt-3 text-center text-sm text-red-700">{pinError}</p>
+            )}
 
             {pinLocked && (
               <div className="mt-5 rounded-xl bg-red-50 text-red-800 p-3.5 text-sm space-y-1.5">
@@ -1017,17 +1160,10 @@ export default function RiderDashboardPage() {
               </div>
             )}
 
-            {pinModalDelivery.paymentMethod === 'cod' && !!pinModalDelivery.totalAmount && (
-              <p className="mt-5 flex items-center gap-2 rounded-xl bg-accent-soft text-accent-soft-ink px-3.5 py-3 text-sm">
-                <Banknote className="w-4 h-4 shrink-0" aria-hidden="true" />
-                {t('codReminder')}
-                <strong className="ms-auto text-base tabular-nums">{formatPrice(pinModalDelivery.totalAmount)}</strong>
-              </p>
-            )}
 
             <Button
               size="lg"
-              onClick={handleVerifyPinSubmit}
+              onClick={() => void handleVerifyPinSubmit()}
               disabled={verifyingPin || pinDigits.some((d) => !d)}
               className="w-full min-h-12 mt-6 text-[15px]"
             >
@@ -1067,6 +1203,8 @@ export default function RiderDashboardPage() {
               placeholder={t('notesPlaceholder')}
               className="w-full bg-surface border border-line-strong rounded-xl px-3 py-2.5 text-[15px] text-ink focus:outline-none focus:ring-3 focus:ring-brand/30 focus:border-brand-600"
             />
+
+            <p className="mt-4 rounded-xl bg-raised px-3.5 py-3 text-sm text-ink">{t('reportNext')}</p>
 
             <div className="flex flex-col-reverse sm:flex-row gap-3 mt-6">
               <Button variant="outline" onClick={() => setReportModalDelivery(null)} className="min-h-11 sm:flex-none">

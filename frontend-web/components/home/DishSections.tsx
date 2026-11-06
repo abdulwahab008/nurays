@@ -50,12 +50,15 @@ export function DishCard({ dish, onAdd, note }: { dish: HomeDish; onAdd: AddDish
         )}
 
         <button
+          type="button"
           onClick={(e) => onAdd(dish, e)}
-          className="absolute bottom-2 end-2 w-9 h-9 rounded-full bg-brand hover:bg-brand-500 text-on-brand shadow-md flex items-center justify-center transition-transform active:scale-95"
+          className="group/add absolute bottom-0 end-0 w-11 h-11 flex items-center justify-center"
           title={t('addToTray')}
           aria-label={t('addNameToTray', { name: dish.name })}
         >
-          <Plus className="w-4 h-4" strokeWidth={3} />
+          <span className="w-9 h-9 rounded-full bg-brand group-hover/add:bg-brand-500 text-on-brand shadow-md flex items-center justify-center transition-transform group-active/add:scale-95">
+            <Plus className="w-4 h-4" strokeWidth={3} aria-hidden />
+          </span>
         </button>
       </div>
 
