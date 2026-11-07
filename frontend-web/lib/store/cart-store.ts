@@ -5,6 +5,7 @@ import { cartService, type CartItem as ServerCartItem } from '../services/cart.s
 export interface CartItem {
   id: string;
   productId: string;
+  variantId?: string;
   productName: string;
   productImage?: string;
   sellerId: string;
@@ -38,7 +39,7 @@ export const useCartStore = create<CartState>()(
       setItems: (items) => set({ items }),
       addItem: (item) => {
         const existingItem = get().items.find(
-          (i) => i.productId === item.productId && i.stockType === item.stockType && i.hubId === item.hubId
+          (i) => i.productId === item.productId && i.variantId === item.variantId && i.stockType === item.stockType && i.hubId === item.hubId
         );
         if (existingItem) {
           set({
@@ -91,6 +92,7 @@ export function trayFromServer(items: ServerCartItem[]): CartItem[] {
   return items.map((i) => ({
     id: i.id,
     productId: i.product.id,
+    variantId: i.variant?.id,
     productName: i.product.name,
     productImage: i.product.image,
     sellerId: i.seller.id,
@@ -104,7 +106,11 @@ export function trayFromServer(items: ServerCartItem[]): CartItem[] {
 }
 
 export type GuestTrayMerge =
-  | { kind: 'done' }
+  | {
+      kind: 'done';
+      /** Dishes added before signing in that could not go into the account's tray (sold out, off the menu). */
+      skipped: number;
+    }
   | {
       kind: 'conflict';
       /** The kitchen the dishes added before signing in come from. */
@@ -112,7 +118,7 @@ export type GuestTrayMerge =
       /** The kitchen the account's tray already holds. */
       accountKitchen: string;
       /** Replace the account's tray with the dishes added before signing in. */
-      keepGuest: () => Promise<void>;
+      keepGuest: () => Promise<{ skipped: number }>;
       /** Keep the account's tray; the dishes added before signing in are dropped. */
       keepAccount: () => void;
     };
@@ -121,20 +127,23 @@ async function readServerTray(): Promise<ServerCartItem[]> {
   return (await cartService.getCart()).data?.items ?? [];
 }
 
-async function addLines(lines: CartItem[], clearFirst: boolean): Promise<void> {
-  for (const [n, line] of lines.entries()) {
+async function addLines(lines: CartItem[]): Promise<number> {
+  let skipped = 0;
+  for (const line of lines) {
     try {
       await cartService.addToCart({
         productId: line.productId,
+        variantId: line.variantId,
         quantity: line.quantity,
         stockType: line.stockType || 'direct',
         hubId: line.hubId,
-        clearAndAdd: clearFirst && n === 0 ? true : undefined,
       });
     } catch {
       // A dish that can no longer be ordered (sold out, off the menu) is left out; the rest still go in.
+      skipped += 1;
     }
   }
+  return skipped;
 }
 
 /**
@@ -149,7 +158,7 @@ export async function mergeGuestTray(): Promise<GuestTrayMerge> {
     server = await readServerTray();
   } catch {
     // The tray could not be read: the browser keeps what it has, and the tray page syncs it later.
-    return { kind: 'done' };
+    return { kind: 'done', skipped: 0 };
   }
   // Lines that came from the server carry its ids; the rest were added while signed out.
   const added = store.items.filter((line) => !server.some((s) => s.id === line.id));
@@ -164,20 +173,27 @@ export async function mergeGuestTray(): Promise<GuestTrayMerge> {
 
   if (guest.length === 0) {
     store.setItems(trayFromServer(server));
-    return { kind: 'done' };
+    return { kind: 'done', skipped: 0 };
   }
   if (server.length === 0 || server[0].seller.id === guest[0].sellerId) {
-    await addLines(guest, false);
+    const skipped = await addLines(guest);
     await sync();
-    return { kind: 'done' };
+    return { kind: 'done', skipped };
   }
   return {
     kind: 'conflict',
     guestKitchen: guest[0].sellerName,
     accountKitchen: server[0].seller.businessName,
     keepGuest: async () => {
-      await addLines(guest, true);
+      let skipped = guest.length;
+      try {
+        await cartService.clearCart();
+        skipped = await addLines(guest);
+      } catch {
+        // The account's tray could not be emptied, so no dish from another kitchen can go in: it stays as it was.
+      }
       await sync();
+      return { skipped };
     },
     keepAccount: () => useCartStore.getState().setItems(trayFromServer(server)),
   };

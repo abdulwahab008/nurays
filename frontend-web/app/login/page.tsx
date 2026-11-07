@@ -64,14 +64,19 @@ export default function LoginPage() {
         setTrayChoice({ ...merge, dest });
         return;
       }
+      if (merge.skipped > 0) showToast(ts('trayMergeSkipped', { count: merge.skipped }), 'error');
     }
     router.push(dest);
   };
   const chooseTray = async (keepGuest: boolean) => {
     if (!trayChoice) return;
     setTrayBusy(true);
-    if (keepGuest) await trayChoice.keepGuest();
-    else trayChoice.keepAccount();
+    if (keepGuest) {
+      const { skipped } = await trayChoice.keepGuest();
+      if (skipped > 0) showToast(ts('trayMergeSkipped', { count: skipped }), 'error');
+    } else {
+      trayChoice.keepAccount();
+    }
     setTrayBusy(false);
     router.push(trayChoice.dest);
   };

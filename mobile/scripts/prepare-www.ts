@@ -14,9 +14,11 @@ const app = resolveAppUrl(process.env);
 if (process.argv.includes('--release')) assertReleasable(app);
 
 const platform = process.env.CAPACITOR_PLATFORM_NAME;
-if (platform) {
+if (platform === 'web') {
+  // `cap sync` with no platform named also copies for web, which has no native offline page.
+} else if (platform) {
   const page = COPIED_OFFLINE_PAGE[platform];
-  if (!page) throw new Error(`No offline page location known for platform ${platform}.`);
+  if (!page) throw new Error(`No offline page known for platform "${platform}"`);
   const file = join(import.meta.dirname, '..', page);
   writeFileSync(file, withAppUrl(readFileSync(file, 'utf8'), app.url));
 } else {

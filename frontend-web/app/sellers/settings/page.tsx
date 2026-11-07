@@ -293,6 +293,18 @@ export default function SellerSettingsPage() {
     }
   };
 
+  // Other pages link to a section, e.g. #payout-heading.
+  useEffect(() => {
+    const fromHash = () => {
+      const id = window.location.hash.replace('#', '').replace(/-heading$/, '');
+      const match = TABS.find((x) => x.id === id);
+      if (match) setTab(match.id);
+    };
+    fromHash();
+    window.addEventListener('hashchange', fromHash);
+    return () => window.removeEventListener('hashchange', fromHash);
+  }, []);
+
   useEffect(() => {
     if (!isAuthenticated) {
       router.replace(loginUrlHere());

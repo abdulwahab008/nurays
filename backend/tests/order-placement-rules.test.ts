@@ -63,4 +63,10 @@ describe('createOrderSchema delivery slot', () => {
     expect(createOrderSchema.safeParse({ ...base, deliverySlotDate: '2026-11-07' }).success).toBe(true);
     expect(createOrderSchema.safeParse({ ...base, deliverySlotDate: 'tomorrow' }).success).toBe(false);
   });
+
+  it('rejects impossible calendar days instead of rolling them over', () => {
+    expect(createOrderSchema.safeParse({ ...base, deliverySlotDate: '2026-13-01' }).success).toBe(false);
+    expect(createOrderSchema.safeParse({ ...base, deliverySlotDate: '2026-02-30' }).success).toBe(false);
+    expect(createOrderSchema.safeParse({ ...base, deliverySlotDate: '2026-11-07T99:00' }).success).toBe(false);
+  });
 });

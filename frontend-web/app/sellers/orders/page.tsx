@@ -25,6 +25,7 @@ import {
   KitchenOrderRider,
   OrderNo,
   PrepTimePicker,
+  fitPrepMinutes,
   ReadyBy,
   RiderStatus,
   useAge,
@@ -317,7 +318,7 @@ export default function SellerOrdersPage() {
     const isActionBusy = actionLoadingId === ord.id;
     const isNew = ord.orderStatus === 'pending' || ord.orderStatus === 'confirmed';
     const since = ord.orderStatus === 'ready' && ord.readyAt ? readyFor(ord.readyAt, now) : age(ord.createdAt, now);
-    const suggested = ord.suggestedPrepMinutes ?? 20;
+    const suggested = fitPrepMinutes(ord.suggestedPrepMinutes ?? 20);
     const prep = prepChoice[ord.id] ?? suggested;
     const area = [ord.deliveryAddress?.addressLine1, ord.deliveryAddress?.area].filter(Boolean).join(', ');
 

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { loginUrlHere } from '@/lib/auth-redirect';
+import { loginUrlHere, safeNextPath } from '@/lib/auth-redirect';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { userProfileService, Address } from '@/lib/services/user-profile.service';
@@ -89,11 +89,6 @@ const popularAreasByCity: Record<string, string[]> = {
 const getAreasForCity = (city: string): string[] => {
   return popularAreasByCity[city] || [];
 };
-
-/** Where to go once an address is saved: only a page of this app (`/checkout`), never another site. */
-function safeNext(value: string | null): string | null {
-  return value && value.startsWith('/') && !value.startsWith('//') ? value : null;
-}
 
 /**
  * The address form with what the map said about a pin filled in; whatever it did not say stays as the person had it.
@@ -188,7 +183,7 @@ export default function AddressesPage() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    setNextPath(safeNext(params.get('next')));
+    setNextPath(safeNextPath(params.get('next')));
     requestedRef.current = { open: params.get('new') === '1', editId: params.get('edit') };
   }, []);
 

@@ -21,7 +21,7 @@ import { historyNote, kitchenOrderMessages, kitchenStatusLabel, paymentMethodLab
 import { ExternalLink } from '@/components/ExternalLink';
 import { RejectOrderDialog } from '@/components/sellers/RejectOrderDialog';
 import { NewOrderAlertSlot } from '@/components/sellers/new-order-alert';
-import { KitchenOrderRider, PrepTimePicker, ReadyBy, RiderStatus, dateClock, useNow } from '@/components/sellers/order-timing';
+import { KitchenOrderRider, PrepTimePicker, ReadyBy, RiderStatus, dateClock, fitPrepMinutes, useNow } from '@/components/sellers/order-timing';
 import { useShallow } from 'zustand/react/shallow';
 
 interface SellerOrderDetail {
@@ -144,7 +144,7 @@ export default function SellerOrderDetailPage() {
 
   if (!isAuthenticated) return null;
 
-  const suggested = order?.suggestedPrepMinutes ?? 20;
+  const suggested = fitPrepMinutes(order?.suggestedPrepMinutes ?? 20);
   const total = (order?.sellerTotals?.payout ?? 0) + (order?.sellerTotals?.deliveryFeeKept || 0) - (order?.sellerTotals?.deliveryFeePaid || 0);
   const isPickup = order?.deliveryType === 'self_pickup';
   const closed = ['cancelled', 'refunded'].includes(order?.orderStatus ?? '');

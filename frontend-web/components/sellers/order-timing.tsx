@@ -122,6 +122,11 @@ export function RiderStatus({ rider, className = '' }: { rider: KitchenOrderRide
 
 const PREP_CHOICES = [15, 20, 30, 45, 60];
 
+/** The accept endpoint takes 5 to 240 minutes, so a suggestion outside that is pulled into range. */
+export function fitPrepMinutes(min: number): number {
+  return Math.min(240, Math.max(5, Math.round(min)));
+}
+
 /** The minutes the kitchen says it needs, chosen with one tap before it accepts; the dishes' own time is picked first. */
 export function PrepTimePicker({
   suggested,
@@ -137,7 +142,7 @@ export function PrepTimePicker({
   idPrefix: string;
 }) {
   const t = useT(kitchenOrderMessages);
-  const fitted = Math.min(240, Math.max(5, Math.round(suggested)));
+  const fitted = fitPrepMinutes(suggested);
   const options = Array.from(new Set([...PREP_CHOICES, fitted])).sort((a, b) => a - b);
   return (
     <fieldset disabled={disabled}>

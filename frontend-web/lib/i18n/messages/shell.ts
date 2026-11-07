@@ -75,6 +75,7 @@ export const shellMessages = defineMessages({
     trayMergeBody: 'You added dishes from {guest} before signing in, and your tray already has dishes from {account}. Each order comes from one kitchen.',
     trayMergeUseNew: 'Keep {guest}',
     trayMergeKeepOld: 'Keep {account}',
+    trayMergeSkipped: '{count} dish(es) added before signing in could not go in your tray: sold out or no longer on the menu.',
     passwordNotPersonal: 'Not your name, email or phone',
   },
   ur: {
@@ -146,6 +147,7 @@ export const shellMessages = defineMessages({
     trayMergeBody: 'آپ نے سائن اِن سے پہلے {guest} سے کھانے شامل کیے، اور آپ کی ٹرے میں پہلے سے {account} کے کھانے ہیں۔ ہر آرڈر ایک ہی کچن سے آتا ہے۔',
     trayMergeUseNew: '{guest} رکھیں',
     trayMergeKeepOld: '{account} رکھیں',
+    trayMergeSkipped: 'سائن اِن سے پہلے شامل کیے گئے {count} کھانے آپ کی ٹرے میں نہیں جا سکے: ختم ہو گئے یا اب مینو پر نہیں۔',
     passwordNotPersonal: 'اپنا نام، ای میل یا فون نہیں',
   },
 });

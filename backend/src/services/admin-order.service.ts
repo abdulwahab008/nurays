@@ -800,6 +800,7 @@ export class AdminOrderService {
         _sum: {
           totalAmount: true,
         },
+        _count: true,
       }),
 
       // Customers with a working account (not suspended, banned or deleted)
@@ -865,18 +866,18 @@ export class AdminOrderService {
         },
       }),
 
-      // Revenue by day (last 30 days)
+      // created_at holds UTC wall time; the days are Pakistan calendar days, as the dashboard shows them.
       prisma.$queryRaw`
-        SELECT 
-          DATE(created_at) as date,
+        SELECT
+          (created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Karachi')::date as date,
           COUNT(*) as orders,
           SUM(total_amount) as revenue
         FROM orders
         WHERE created_at >= ${dateFrom}
           AND created_at <= ${dateTo}
           AND payment_status = 'paid'
-        GROUP BY DATE(created_at)
-        ORDER BY date ASC
+        GROUP BY 1
+        ORDER BY 1 ASC
       `,
 
       // Orders today
@@ -934,6 +935,7 @@ export class AdminOrderService {
         totalOrders: allTimeOrders,
         totalRevenue: Number(allTimeRevenue._sum.totalAmount || 0),
         periodRevenue: totalRevenueNum,
+        periodPaidOrders: totalRevenue._count,
         totalUsers,
         totalSellers,
         newUsersThisWeek: newCustomersThisWeek,

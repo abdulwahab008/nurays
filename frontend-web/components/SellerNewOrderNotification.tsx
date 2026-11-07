@@ -175,6 +175,7 @@ export function SellerNewOrderNotification() {
       handledOrderIdsRef.current.add(orderId);
     }
     setActiveOrder(null);
+    setRejecting(false);
   }, []);
 
   // If user leaves seller studio, stop ringing and dismiss immediately
@@ -199,6 +200,7 @@ export function SellerNewOrderNotification() {
       activeOrderIdRef.current = data.orderId;
       playNewOrderSound();
       setActiveOrder(data);
+      setRejecting(false);
       void kitchenEarningsOf(data.orderId).then((kitchenEarns) => {
         if (kitchenEarns === null) return;
         setActiveOrder((current) => (current?.orderId === data.orderId ? { ...current, kitchenEarns } : current));

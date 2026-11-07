@@ -21,6 +21,7 @@ interface AnalyticsData {
     totalRevenue: number;
     periodOrders: number;
     periodRevenue: number;
+    periodPaidOrders: number;
     activeUsers: number;
     activeSellers: number;
     totalCommission: number;
@@ -38,14 +39,21 @@ const PERIODS: ReadonlyArray<{ id: Period; label: string }> = [
 
 const STATUS_ORDER = ['pending', 'confirmed', 'preparing', 'ready', 'dispatched', 'in_transit', 'delivered', 'delivery_failed', 'cancelled', 'refunded'];
 
+const karachiToday = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Karachi' }).format(new Date());
+
+/** The Pakistan calendar date `back` days before today, as YYYY-MM-DD: the days the backend groups paid sales by. */
+function karachiDaysAgo(back: number) {
+  const d = new Date(`${karachiToday()}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - back);
+  return d.toISOString().slice(0, 10);
+}
+
 /** Paid sales for every day of the period, with the days that had none as zero. */
 function dailySeries(rows: AnalyticsData['revenueByDay'], days: number) {
   const byDate = new Map((rows ?? []).map((r) => [r.date, r]));
   const out: Array<{ date: string; revenue: number; orders: number }> = [];
-  const today = new Date();
   for (let i = days - 1; i >= 0; i--) {
-    const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() - i);
-    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const key = karachiDaysAgo(i);
     const row = byDate.get(key);
     out.push({ date: key, revenue: row?.revenue ?? 0, orders: row?.orders ?? 0 });
   }
@@ -92,7 +100,8 @@ export default function AdminAnalyticsPage() {
     try {
       setLoading(true);
       const now = new Date();
-      const from = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (Number(period) - 1));
+      // Pakistan has no daylight saving, so its midnight is always +05:00.
+      const from = new Date(`${karachiDaysAgo(Number(period) - 1)}T00:00:00+05:00`);
       const response = await apiClient.get('/admin/analytics', { params: { dateFrom: from.toISOString(), dateTo: now.toISOString() } });
       if (!response.data.success) throw new Error('The analytics answer carried no figures');
       setAnalytics(response.data.data);
@@ -113,7 +122,6 @@ export default function AdminAnalyticsPage() {
   if (!isAuthenticated || !isAdmin) return null;
 
   const o = analytics?.overview;
-  const paidOrders = series.reduce((n, d) => n + d.orders, 0);
   const statuses = analytics
     ? Object.entries(analytics.ordersByStatus).sort(([a], [b]) => STATUS_ORDER.indexOf(a) - STATUS_ORDER.indexOf(b))
     : [];
@@ -142,7 +150,7 @@ export default function AdminAnalyticsPage() {
                 <Figure label="Commission earned" value={formatPrice(o.totalCommission)} />
                 <Figure label="Customers who ordered" value={o.activeUsers} />
                 <Figure label="Kitchens with orders" value={o.activeSellers} />
-                <Figure label="Average paid order" value={formatPrice(paidOrders ? Math.round(o.periodRevenue / paidOrders) : 0)} />
+                <Figure label="Average paid order" value={formatPrice(o.periodPaidOrders ? Math.round(o.periodRevenue / o.periodPaidOrders) : 0)} />
               </div>
             </section>
 

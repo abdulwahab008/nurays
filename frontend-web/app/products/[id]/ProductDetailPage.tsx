@@ -343,6 +343,7 @@ export default function ProductDetailPage({ initial }: { initial?: RawProduct })
     const trayLine = (): CartItem => ({
       id: `${product.id}-${selectedVariant?.id ?? stockType}-${Date.now()}`,
       productId: product.id,
+      variantId: selectedVariant?.id,
       productName: selectedVariant ? `${product.name} — ${selectedVariant.name}` : product.name,
       productImage: product.images[0]?.url,
       sellerId: product.seller.id,

@@ -26,7 +26,9 @@ type FieldErrors = Partial<Record<'orderId' | 'subject' | 'message', string>>;
 
 export default function SupportPage() {
   const router = useRouter();
-  const { isAuthenticated } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated })));
+  const { isAuthenticated, userType } = useAuthStore(
+    useShallow((s) => ({ isAuthenticated: s.isAuthenticated, userType: s.user?.userType ?? s.user?.user_type }))
+  );
   const { showToast } = useToast();
   const t = useT(accountMessages);
   const [activeTab, setActiveTab] = useState<'faq' | 'contact' | 'tickets'>('faq');
@@ -34,13 +36,16 @@ export default function SupportPage() {
   const [formData, setFormData] = useState(EMPTY_FORM);
   const [errors, setErrors] = useState<FieldErrors>({});
   const [recentOrders, setRecentOrders] = useState<Order[]>([]);
-  const orderNeeded = NEEDS_ORDER.includes(formData.category);
+  // Only customer orders can be picked here, so other accounts may raise these without one.
+  const isCustomer = !userType || userType === 'customer';
+  const needsOrder = (category: Category) => isCustomer && NEEDS_ORDER.includes(category);
+  const orderNeeded = needsOrder(formData.category);
 
   const sidebarItems = CUSTOMER_SIDEBAR_ITEMS;
 
   const validate = (data: typeof formData): FieldErrors => {
     const next: FieldErrors = {};
-    if (NEEDS_ORDER.includes(data.category) && !data.orderId) next.orderId = t('orderRequired');
+    if (needsOrder(data.category) && !data.orderId) next.orderId = t('orderRequired');
     if (data.subject.trim().length < 5) next.subject = t('subjectMin5');
     if (data.message.trim().length < 10) next.message = t('messageMin10');
     return next;
