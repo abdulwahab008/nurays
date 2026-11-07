@@ -147,3 +147,25 @@ What the run showed, in the order to look at it:
   database pool past its wait: 41 requests failed with Prisma's "Unable to start a transaction in the given time". They
   are now answered `503` with `Retry-After: 2` (`SERVICE_BUSY`) instead of a bare 500. Size `connection_limit` for the
   number of instances (see the deployment guide) and treat any 503 in a run as a failed run.
+
+## PgBouncer on one machine (2026-11-07)
+
+Five runs of the same steady test: `ladder.ts --sessions --vus 5000 --duration 240 --ramp 90 --workers 4`, two
+production-mode API instances, `frozennuray_load`, PostgreSQL 15 (`max_connections` 100) and PgBouncer 1.26 on the same
+8-core laptop.
+
+| Setup | Requests/s | p95 | 5xx or no answer |
+|---|---|---|---|
+| Direct, `connection_limit=20` per instance | 532 | 8.2 s | 0.02 % |
+| PgBouncer pool 80, `pgbouncer=true`, `connection_limit=100` | 378 | 13.2 s | 6.3 % |
+| Same, `connection_limit=40` | 376 | 12.6 s | 7.8 % |
+| Same, role `statement_timeout` raised to the app's 30 s | 364 | 14.8 s | 12.0 % |
+| PgBouncer `max_prepared_statements = 500`, no `pgbouncer=true` | 435 | 11.0 s | 0.9 % |
+
+What it shows: on one machine the database is short of CPU, not of connections, so a pooler only adds work. With
+`pgbouncer=true` Prisma gives up prepared statements and PostgreSQL plans every query again, which made it the slowest
+setup. PgBouncer's own prepared-statement support recovers most of that. Use a pooler when many instances on separate
+machines would exceed `max_connections`, configured as in the deployment guide. The way to more users is less database
+work per request (the auth/session cache, search and listing counts, the per-rider cash total: LOAD-4, LOAD-5, LOAD-7 in
+PRODUCTION_READINESS_REPORT.md) and a database on its own hardware. These numbers come from a shared laptop with other
+software running, so treat them as a comparison between setups, not as capacity.

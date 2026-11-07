@@ -324,7 +324,7 @@ In order. The effects are estimates from the measurements above, not measured re
 |---|---|---|
 | 1 | **Redis auth/session cache** (LOAD-4) | Removes 2 DB queries from every signed-in request. At 1,500 req/s that is about 3,000 queries/s off the pool. |
 | 2 | **Fix the remaining slow statements**: cache search results and the product listing count; bounded nearest-N rider pool; cached per-rider cash total (LOAD-5, LOAD-7) | These were the top long-running statements holding connections at 5,000 users. |
-| 3 | **PgBouncer (transaction mode) + more API instances** | The code is already PgBouncer-safe. Size to `instances × connection_limit + 10 ≤ max_connections`. 4 instances give about 190 sign-ins/s, so a full 10,000-user re-login takes about 50 s. |
+| 3 | **More API instances, and PgBouncer only once they outgrow `max_connections`** | A local test (LOAD_TESTING.md, 2026-11-07) found PgBouncer slower than direct connections on one machine, and `pgbouncer=true` the slowest; use PgBouncer 1.21+ with `max_prepared_statements` and no `pgbouncer=true`. Size to `instances × connection_limit + 10 ≤ max_connections`. 4 instances give about 190 sign-ins/s, so a full 10,000-user re-login takes about 50 s. |
 | 4 | **`seller_id` on orders** + running kitchen balance (DB-2, DB-5) | Kitchen screens stop scaling with total platform history. |
 | 5 | **CDN-cacheable public pages and media** (FP-02, FP-09) | Home, kitchen and dish pages served from the edge instead of 88–158 renders/s per Node process. |
 | 6 | **Metrics + alerts** (OBS-1, OBS-8) | Lets you see the pool, event loop, queue depth and p95 per route during the test and in production. |
