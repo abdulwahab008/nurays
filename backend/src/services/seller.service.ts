@@ -195,11 +195,13 @@ export class SellerService {
           pickupAddress: pickupAddressFrom(data) ?? existingSeller.pickupAddress,
           mealCategories: data.mealCategories || existingSeller.mealCategories,
           deliveryModes: data.deliveryModes || existingSeller.deliveryModes,
-          bankAccountName: data.bankAccountName,
-          bankAccountNumber: data.bankAccountNumber,
-          bankName: data.bankName,
-          jazzcashNumber: data.jazzcashNumber,
-          easypaisaNumber: data.easypaisaNumber,
+          // A payout field left blank keeps the one on file: the form did not always show them, and a resubmission must not
+          // wipe where the kitchen gets paid. (Clearing one is done in Settings, which asks for the password.)
+          bankAccountName: data.bankAccountName?.trim() || existingSeller.bankAccountName,
+          bankAccountNumber: data.bankAccountNumber?.trim() || existingSeller.bankAccountNumber,
+          bankName: data.bankName?.trim() || existingSeller.bankName,
+          jazzcashNumber: data.jazzcashNumber?.trim() || existingSeller.jazzcashNumber,
+          easypaisaNumber: data.easypaisaNumber?.trim() || existingSeller.easypaisaNumber,
           verificationStatus: 'pending',
           rejectionReason: null,
         },

@@ -125,6 +125,18 @@ export default function SellerRegisterPage() {
           coverImageUrl: seller.coverImageUrl || '',
           kitchenVideoUrl: seller.kitchenVideoUrl || '',
         }));
+        // The payout accounts are not on the dashboard answer: the kitchen's own profile has them, so a resubmission shows them.
+        const profile = (await apiClient.get('/sellers/me')).data?.data;
+        if (profile) {
+          setFormData((prev) => ({
+            ...prev,
+            jazzcashNumber: profile.jazzcashNumber || '',
+            easypaisaNumber: profile.easypaisaNumber || '',
+            bankName: profile.bankName || '',
+            bankAccountName: profile.bankAccountName || '',
+            bankAccountNumber: profile.bankAccountNumber || '',
+          }));
+        }
       }
     } catch (error) {
       // A 404 means the user is not a registered seller yet, and the registration form is the right page. Anything else is a read

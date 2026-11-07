@@ -86,6 +86,17 @@ describe('a kitchen that is still waiting', () => {
     expect(out.message).toBe('Application resubmitted for review');
     expect(db.seller.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ rejectionReason: null }) }));
   });
+
+  it('keeps the payout accounts on file when the resubmission leaves them blank, and takes new ones it is given', async () => {
+    const onFile = { jazzcashNumber: '03001234567', easypaisaNumber: '03111234567', bankName: 'HBL', bankAccountName: 'Zainab Bibi', bankAccountNumber: 'PK36SCBL0000001123456702' };
+    givenSeller({ verificationStatus: 'rejected', ...onFile }, ['cnic_front', 'cnic_back']);
+    await sellerService.registerAsSeller('u1', { ...details, jazzcashNumber: '', easypaisaNumber: '  ', bankName: '', bankAccountName: '', bankAccountNumber: '' });
+    expect(db.seller.update.mock.calls[0][0].data).toMatchObject(onFile);
+
+    givenSeller({ verificationStatus: 'rejected', ...onFile }, ['cnic_front', 'cnic_back']);
+    await sellerService.registerAsSeller('u1', { ...details, jazzcashNumber: '03009876543' });
+    expect(db.seller.update.mock.calls[0][0].data).toMatchObject({ ...onFile, jazzcashNumber: '03009876543' });
+  });
 });
 
 describe('the administrator\'s decision on a kitchen', () => {
