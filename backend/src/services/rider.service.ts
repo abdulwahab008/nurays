@@ -7,6 +7,7 @@ import realtimeOrderService from './realtime-order.service';
 import ledgerService from './ledger.service';
 import { dispatchSoon, postDeliverySoon } from './dispatch.service';
 import { haversineKm, calculateDeliveryFeeCorridor } from '../utils/deliveryFee';
+import { getPlatformDeliveryPricing } from './delivery-pricing.service';
 import { endsOf, cashToCollect, PAYMENT_INCLUDE, routeMatch } from '../utils/riderJobs';
 import { finiteOrNull } from '../utils/numbers';
 import { isCashAtDoor } from '../utils/paymentCustody';
@@ -121,11 +122,11 @@ function formatDelivery(delivery: DeliveryWithOrder & {
   corridorDistanceKm?: number;
   riderAskFee?: number | null;
   exceedsCashLimit?: boolean;
-}) {
+}, maxKm: number) {
   const ends = endsOf(delivery);
   const { deliveryLat, deliveryLng } = ends;
   // The fee is priced from the points saved on the job, the same ones the claim fixes the pay from.
-  const corridor = calculateDeliveryFeeCorridor(ends.pickupLat, ends.pickupLng, deliveryLat, deliveryLng);
+  const corridor = calculateDeliveryFeeCorridor(ends.pickupLat, ends.pickupLng, deliveryLat, deliveryLng, maxKm);
 
   // Who to call and where exactly: only for the rider who holds a job that is still running.
   const o = delivery.order;
@@ -342,6 +343,7 @@ export class RiderService {
     // Cash in hand plus cash still to collect on jobs already taken, against the limit.
     const cashCommitted = (await riderMoney(prisma, rider.id)).cashHeld + cashToCollect(activeDeliveries);
     const cashLimit = cashLimitOf(rider);
+    const { maxKm } = await getPlatformDeliveryPricing();
 
     let here = position ?? null;
     if (!here) {
@@ -361,7 +363,7 @@ export class RiderService {
         batchBonus: match?.bonus ?? 0,
         corridorDistanceKm: match?.corridorDistanceKm,
         exceedsCashLimit: cashOrder && cashCommitted + Number(d.order.totalAmount) > cashLimit,
-      });
+      }, maxKm);
       const pickupDistanceKm =
         here && job.pickupLatitude != null && job.pickupLongitude != null
           ? Math.round(haversineKm(here.lat, here.lng, job.pickupLatitude, job.pickupLongitude) * 10) / 10
@@ -414,7 +416,8 @@ export class RiderService {
     // older one; a job handed to them a moment ago never pushes it down. Finished jobs follow, newest first.
     const step = (status: string) => ACTIVE_DELIVERY_STATUSES.indexOf(status);
     running.sort((a, b) => step(b.status) - step(a.status) || a.createdAt.getTime() - b.createdAt.getTime());
-    return [...running, ...finished].map(formatDelivery);
+    const { maxKm } = await getPlatformDeliveryPricing();
+    return [...running, ...finished].map((d) => formatDelivery(d, maxKm));
   }
 
   async claimDelivery(userId: string, deliveryId: string) {
@@ -432,7 +435,8 @@ export class RiderService {
     // An ask above it is not honoured: nobody approves asks yet, so taking a job at the rider's own price
     // would just pay the highest fee on every job. Older apps still send one; it is ignored, not refused.
     const ends = endsOf(delivery);
-    const corridor = calculateDeliveryFeeCorridor(ends.pickupLat, ends.pickupLng, ends.deliveryLat, ends.deliveryLng);
+    const { maxKm } = await getPlatformDeliveryPricing();
+    const corridor = calculateDeliveryFeeCorridor(ends.pickupLat, ends.pickupLng, ends.deliveryLat, ends.deliveryLng, maxKm);
 
     // One claim at a time per rider (their row locked), so two quick claims can't both pass
     // the two-job and cash limits.
@@ -505,7 +509,7 @@ export class RiderService {
       where: { id: deliveryId },
       include: DELIVERY_INCLUDE,
     });
-    return formatDelivery(updated);
+    return formatDelivery(updated, maxKm);
   }
 
   async updateDeliveryStatus(
@@ -655,7 +659,7 @@ export class RiderService {
       }
     }
 
-    return formatDelivery(result.updated);
+    return formatDelivery(result.updated, (await getPlatformDeliveryPricing()).maxKm);
   }
 
   /**
@@ -856,7 +860,7 @@ export class RiderService {
     }
 
     return {
-      delivery: formatDelivery(current),
+      delivery: formatDelivery(current, (await getPlatformDeliveryPricing()).maxKm),
       currentLocation: { latitude, longitude },
       distanceToPickupMeters: toPickupKm != null ? Math.round(toPickupKm * 1000) : null,
       distanceToDeliveryMeters: toDropoffKm != null ? Math.round(toDropoffKm * 1000) : null,
