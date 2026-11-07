@@ -24,6 +24,7 @@ import { riderMessages, riderKeyFor, type RiderMessageKey } from '@/lib/i18n/mes
 import { ExternalLink } from '@/components/ExternalLink';
 import { reserveExternal } from '@/lib/open-external';
 import { useShallow } from 'zustand/react/shallow';
+import { useNow } from '@/components/sellers/order-timing';
 
 const SHARING_BADGE: Record<LocationSharing, { labelKey: RiderMessageKey; tone: string; dot: string }> = {
   sharing: { labelKey: 'loc.sharing', tone: 'text-brand-ink', dot: 'bg-brand-600 motion-safe:animate-pulse' },
@@ -83,6 +84,7 @@ export default function RiderDashboardPage() {
   const { confirm: confirmDialog } = useDialogs();
   const t = useT(riderMessages);
   const tc = useT(commonMessages);
+  const now = useNow();
 
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'active' | 'available' | 'history'>('active');
@@ -245,7 +247,7 @@ export default function RiderDashboardPage() {
   const deliveredToday = mine.filter((d) => d.status === 'delivered' && isToday(d.deliveryTime));
   const earnedToday = deliveredToday.reduce((sum, d) => sum + (d.riderFee ?? 0) + (d.riderBonus ?? 0), 0);
   // Reported in the last day: the rider still has the food and needs to know what to do with it.
-  const recentlyFailed = mine.filter((d) => d.status === 'delivery_failed' && Date.now() - new Date(d.createdAt).getTime() < FAILED_NOTICE_MS);
+  const recentlyFailed = mine.filter((d) => d.status === 'delivery_failed' && now - new Date(d.createdAt).getTime() < FAILED_NOTICE_MS);
   // Every delivery the rider has made, from their profile: the list below only holds the latest ones.
   const deliveredTotal = profile?.totalDeliveries ?? mine.filter((d) => d.status === 'delivered').length;
 
@@ -913,7 +915,7 @@ export default function RiderDashboardPage() {
                                     data-testid="food-status"
                                     className={`px-2 py-0.5 rounded-full text-xs font-medium ${ready ? 'bg-brand-soft text-brand-soft-ink' : 'bg-accent-soft text-accent-soft-ink'}`}
                                   >
-                                    {ready ? t('foodReady') : delivery.estimatedReadyAt && new Date(delivery.estimatedReadyAt).getTime() > Date.now() ? t('foodCookingUntil', { time: formatTime(delivery.estimatedReadyAt) }) : t('foodCooking')}
+                                    {ready ? t('foodReady') : delivery.estimatedReadyAt && new Date(delivery.estimatedReadyAt).getTime() > now ? t('foodCookingUntil', { time: formatTime(delivery.estimatedReadyAt) }) : t('foodCooking')}
                                   </span>
                                   <span className="text-muted">{waitingForFood ? t('waitingForKitchenHelp') : ready ? t('prepVerify') : t('cookingHelp')}</span>
                                 </p>
