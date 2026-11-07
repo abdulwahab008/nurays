@@ -22,8 +22,8 @@ function assertLegalDetails() {
 assertLegalDetails();
 
 /**
- * Browser security headers. The Content-Security-Policy is not here: proxy.ts sends it, report-only until
- * CSP_ENFORCE=true in the server's environment (lib/csp.ts), so enforcing it needs a restart, not a new build.
+ * Browser security headers. The Content-Security-Policy is not here: proxy.ts sends it with a nonce per request,
+ * enforced unless CSP_ENFORCE=false in the server's environment (lib/csp.ts).
  */
 const SECURITY_HEADERS = [
   { key: 'X-Content-Type-Options', value: 'nosniff' },

@@ -36,7 +36,7 @@ ARG NEXT_PUBLIC_LEGAL_REVIEWED
 ARG NEXT_PUBLIC_SENTRY_DSN
 ARG NEXT_PUBLIC_SENTRY_ENVIRONMENT
 ARG NEXT_PUBLIC_SENTRY_RELEASE
-# false (default): the Content-Security-Policy is report-only; true: enforced.
+# Unset or true (default): the Content-Security-Policy is enforced; false: report-only.
 ARG CSP_ENFORCE
 # Map tiles: a provider of your own for production (the public OpenStreetMap servers are for development).
 ARG NEXT_PUBLIC_MAP_TILE_URL
@@ -67,7 +67,7 @@ FROM node:22-bookworm-slim AS runner
 WORKDIR /app
 
 # The build argument is only the default: proxy.ts reads CSP_ENFORCE when the server starts, so
-# `docker run -e CSP_ENFORCE=true` (or the compose environment) switches the policy without a rebuild.
+# `docker run -e CSP_ENFORCE=false` (or the compose environment) switches the policy without a rebuild.
 ARG CSP_ENFORCE
 ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \

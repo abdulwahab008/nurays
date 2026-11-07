@@ -1,6 +1,6 @@
 import { ImageFallback } from '@/components/ImageFallback';
 import type { Metadata, Viewport } from "next";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { GoogleOAuthProvider } from "@react-oauth/google";
 import { ToastProvider } from "@/components/ui/toast";
 import { DialogProvider } from "@/components/ui/Dialogs";
@@ -56,6 +56,7 @@ export default async function RootLayout({
 }>) {
   const googleClientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '';
   const saved = (await cookies()).get(LOCALE_COOKIE)?.value;
+  const nonce = (await headers()).get('x-nonce') ?? undefined;
   const locale = isLocale(saved) ? saved : DEFAULT_LOCALE;
 
   return (
@@ -63,7 +64,7 @@ export default async function RootLayout({
     <html lang={locale} dir={dirFor(locale)} className="scroll-smooth" suppressHydrationWarning>
       <head>
         {/* Before the page paints, so a dark page never flashes white first (lib/theme.ts). */}
-        <script dangerouslySetInnerHTML={{ __html: THEME_BOOT_SCRIPT }} />
+        <script nonce={nonce} dangerouslySetInnerHTML={{ __html: THEME_BOOT_SCRIPT }} />
       </head>
       <body className="font-sans antialiased bg-page text-ink">
         <LocaleProvider initialLocale={locale}>

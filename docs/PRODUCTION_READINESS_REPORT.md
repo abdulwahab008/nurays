@@ -242,7 +242,7 @@ Effort: S = under a day, M = 1–3 days, L = a week or more.
 |---|---|---|---|
 | LOAD-4 / AS-4 / ARCH-3 | 2 auth queries on every signed-in request and socket handshake | Cache user status and session state in Redis for 30–60 s; clear it on sign-out, suspension and role change | M |
 | LOAD-5 rest, LOAD-7, listing count | Slowest statements at 5,000: search, product `COUNT(*)`, per-rider cash count. The rider pool list is unbounded (107 KB per call at 1,227 open jobs). | Cache popular searches and counts; nearest-N rider pool with paging; cache per-rider cash totals | M |
-| AS-1 | Tokens in `localStorage`; CSP report-only with `unsafe-inline` (see F) | HttpOnly refresh cookie + in-memory access token; enforce CSP with a hash | M |
+| AS-1 | Tokens in `localStorage`; CSP report-only with `unsafe-inline` (see F) | **Done (2026-11-07):** HttpOnly refresh cookie + in-memory access token (branch `feat/auth-refresh-cookie`), and an enforced nonce-based CSP (branch `feat/csp-enforce`) | M |
 | OBS-1 / OBS-8 | No metrics endpoint, no alerts | prom-client (needs approval) + alert rules (drafted in the observability audit) | M |
 | ARCH-6 / DB-13 | No IaC, load balancer config, PgBouncer or backups/PITR | See F and G | L |
 | FP-02 | Every page dynamic and `no-store`; HTML cannot be cached by a CDN (one process: 88 req/s on `/`) | Stop reading cookies in the root layout; make catalogue pages static/ISR; add a CDN | M |
@@ -294,7 +294,7 @@ Critical items first.
 
 | # | Decision | Context |
 |---|---|---|
-| 1 | **Tokens in `localStorage` + report-only CSP (AS-1)** | One XSS could read every visitor's 30-day refresh token. Fixing it means moving to an HttpOnly cookie, which touches web, native and API, plus `CSP_ENFORCE=true` with a hash for the one inline script. Decide before launch. |
+| 1 | **Tokens in `localStorage` + report-only CSP (AS-1)** | **Done (2026-11-07), pending merge:** the refresh token is an HttpOnly cookie and the access token lives in memory (branch `feat/auth-refresh-cookie`); the CSP is enforced with a per-request nonce and no `'unsafe-inline'` for scripts (branch `feat/csp-enforce`). Left: check cookie persistence on a real Android phone. |
 | 2 | **No production infrastructure, IaC or backups** | Nothing in the repo provisions the load balancer, PgBouncer, Redis, S3, migrations or backups/PITR. Choose the hosting and who owns it. |
 | 3 | **`POST /orders` now requires `Idempotency-Key`** | The web app sends it. Any older native build or outside client that does not will get 400 and cannot order. Confirm no such build is live, or add a grace period. |
 | 4 | **Publish workflow defaults to a localhost API + sandbox payments** | `docker-publish.yml` falls back to `http://localhost:3001` and Safepay sandbox when repo variables are empty, including on `v*` release tags. Make it fail instead. |
