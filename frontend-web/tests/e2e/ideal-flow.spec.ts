@@ -2,35 +2,36 @@ import { test, expect } from '@playwright/test';
 import { execSync } from 'node:child_process';
 
 const USERS = {
-  customer: { email: 'customer@nuray.test', pass: 'Password123!', dashboardUrl: '/dashboard' },
-  seller:   { email: 'seller@nuray.test',   pass: 'Password123!', dashboardUrl: '/sellers/dashboard' },
-  rider:    { email: 'rider@nuray.test',    pass: 'Password123!', dashboardUrl: '/riders/dashboard' },
-  admin:    { email: 'admin@frozennuray.com', pass: 'Password123!', dashboardUrl: '/admin/dashboard' },
+  customer: { email: 'customer@nuray.test', pass: 'Password123!' },
+  seller:   { email: 'seller@nuray.test',   pass: 'Password123!' },
+  rider:    { email: 'rider@nuray.test',    pass: 'Password123!' },
+  admin:    { email: 'admin@frozennuray.com', pass: 'Password123!' },
 };
 
 import * as path from 'node:path';
 
 const backendDir = path.resolve(__dirname, '../../../backend');
+const scriptEnv = { ...process.env, DATABASE_URL: process.env.E2E_DB_URL ?? process.env.DATABASE_URL };
 
 test.beforeAll(async () => {
   // Ensure all 4 test users are seeded with standard credentials
   execSync('npx ts-node scripts/seed-ideal-flow-users.ts', {
     cwd: backendDir,
+    env: scriptEnv,
     stdio: 'inherit',
   });
 });
 
 test.describe('Nuray Multi-Role Login Verification', () => {
-  test('Customer UI login redirects to /dashboard', async ({ page }) => {
+  test('Customer UI login lands on the home page', async ({ page }) => {
     await page.goto('/login');
     await page.getByRole('button', { name: 'Email', exact: true }).click();
     await page.getByLabel('Email', { exact: true }).fill(USERS.customer.email);
     await page.getByLabel('Password').fill(USERS.customer.pass);
     await page.getByRole('button', { name: 'Sign in', exact: true }).click();
 
-    // Verify redirected away from /login to customer dashboard
-    await expect(page).toHaveURL(/\/dashboard/, { timeout: 15_000 });
-    await expect(page.getByText(/Customer Dashboard|My Orders|Welcome/i).first()).toBeVisible({ timeout: 10_000 });
+    await expect(page).toHaveURL(/localhost:\d+\/$/, { timeout: 15_000 });
+    await expect(page.getByText(/Hi Ayesha/).first()).toBeVisible({ timeout: 10_000 });
   });
 
   test('Seller (Home Chef) UI login redirects to /sellers/dashboard', async ({ page }) => {
@@ -75,6 +76,7 @@ test.describe('Nuray Ideal E2E Operational Flow & Doorstep Handshake', () => {
     // 1. Run the backend orchestrated lifecycle
     const flowOutput = execSync('npx ts-node scripts/run-ideal-flow.ts', {
       cwd: backendDir,
+      env: scriptEnv,
       encoding: 'utf-8',
     });
 

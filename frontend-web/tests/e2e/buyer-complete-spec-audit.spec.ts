@@ -108,7 +108,7 @@ test.describe.serial('Buyer / Customer Specification Complete 27-Section Audit',
 
     // Query 2 verified sellers with active products from DB
     const s1Raw = dbQuery(
-      `SELECT s.id || '|' || s.business_name || '|' || p.id FROM sellers s JOIN products p ON p.seller_id = s.id AND p.is_active = true AND p.stock_quantity >= 10 WHERE s.is_verified = true AND s.status = 'active' LIMIT 1`,
+      `SELECT s.id || '|' || s.business_name || '|' || p.id FROM sellers s JOIN products p ON p.seller_id = s.id AND p.is_active = true AND p.stock_quantity >= 10 WHERE s.business_name = 'Saima''s Craft Kitchen' ORDER BY p.created_at LIMIT 1`,
     );
     const [s1Id, s1Name, p1Id] = s1Raw.split('|');
     seller1Id = s1Id;
@@ -116,7 +116,7 @@ test.describe.serial('Buyer / Customer Specification Complete 27-Section Audit',
     product1Id = p1Id;
 
     const s2Raw = dbQuery(
-      `SELECT s.id || '|' || s.business_name || '|' || p.id FROM sellers s JOIN products p ON p.seller_id = s.id AND p.is_active = true AND p.stock_quantity >= 10 WHERE s.is_verified = true AND s.status = 'active' AND s.id != '${seller1Id}' LIMIT 1`,
+      `SELECT s.id || '|' || s.business_name || '|' || p.id FROM sellers s JOIN products p ON p.seller_id = s.id AND p.is_active = true AND p.stock_quantity >= 10 WHERE s.business_name = 'Tahira''s Clay Pot Meetha' ORDER BY p.created_at LIMIT 1`,
     );
     const [s2Id, s2Name, p2Id] = s2Raw.split('|');
     seller2Id = s2Id;
@@ -145,8 +145,7 @@ test.describe.serial('Buyer / Customer Specification Complete 27-Section Audit',
     await expect(page.locator('#email')).toBeVisible();
     await expect(page.locator('#password')).toBeVisible();
     await expect(page.locator('#full_name')).toBeVisible();
-    await expect(page.locator('#community')).toBeVisible();
-    await expect(page.locator('#house_apt')).toBeVisible();
+    await expect(page.locator('#city')).toBeVisible();
     await expect(page.locator('#termsAccepted')).toBeVisible();
 
     // Fill form without checking T&C
@@ -154,14 +153,13 @@ test.describe.serial('Buyer / Customer Specification Complete 27-Section Audit',
     await page.locator('#password').fill('Lantern-Quartz-71!');
     await page.locator('#confirmPassword').fill('Lantern-Quartz-71!');
     await page.locator('#full_name').fill('Terms Validator');
-    await page.locator('#community').selectOption('Askari 11');
-    await page.locator('#house_apt').fill('Apt 101, Block A');
+    await page.locator('#city').fill('Karachi');
 
     // Attempt to submit with terms unchecked
     await page.getByRole('button', { name: /create account/i }).click();
 
-    // Verify HTML5 validation or application error prevents submission without terms
     const termsCheckbox = page.locator('#termsAccepted');
+    await expect(page).toHaveURL(/\/register/);
     const isChecked = await termsCheckbox.isChecked();
     expect(isChecked).toBe(false);
 
@@ -180,15 +178,13 @@ test.describe.serial('Buyer / Customer Specification Complete 27-Section Audit',
     await page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
     await page.waitForLoadState('domcontentloaded');
 
-    // Assert community context or switcher is rendered
-    await expect(page.locator('text=Karachi').first()).toBeVisible();
-    await expect(page.locator('text=Total Orders').first()).toBeVisible();
-    await expect(page.locator('text=Active Platform Deals').first()).toBeVisible();
-    await expect(page.locator("text=Tonight's Cravings").first()).toBeVisible();
+    await expect(page.getByText(/^Verified home kitchens and their menus in /)).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Explore by cuisine' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Top 10 dishes' })).toBeVisible();
 
-    // Verify category shortcuts
-    await expect(page.locator('text=Biryani').first()).toBeVisible();
-    await expect(page.locator('text=Kebabs').first()).toBeVisible();
+    // Cuisine shortcuts
+    await expect(page.getByRole('link', { name: /Dum biryani/ })).toBeVisible();
+    await expect(page.getByRole('link', { name: /Charcoal kebabs/ })).toBeVisible();
 
     await page.screenshot({
       path: path.join(ARTIFACT_SCREENSHOT_DIR, '02_home_dashboard.png'),
@@ -205,11 +201,11 @@ test.describe.serial('Buyer / Customer Specification Complete 27-Section Audit',
     const searchInput = page.locator('input[placeholder*="Search"]').first();
     await expect(searchInput).toBeVisible();
 
-    // Verify community pill / filter is displayed
-    await expect(page.locator('text=Askari 11').first()).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Dishes near you' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Change delivery area' }).first()).toBeVisible();
 
-    // Verify at least one product card displays community tag and distance
-    await expect(page.locator('text=In Your Community').or(page.locator('text=Karachi Kitchen')).or(page.locator('text=Askari 11')).first()).toBeVisible();
+    // Dish cards show how far the kitchen is
+    await expect(page.getByText(/\d+(\.\d+)? km away/).first()).toBeVisible();
 
     await page.screenshot({
       path: path.join(ARTIFACT_SCREENSHOT_DIR, '03_search_and_discovery.png'),
@@ -219,12 +215,14 @@ test.describe.serial('Buyer / Customer Specification Complete 27-Section Audit',
   // TEST 4: Section 8 — Seller Detail Page & Profile Header
   test('4. Section 8: Kitchen Profile, Chef Bio, Community Tag & Chat Trigger', async ({ page }) => {
     await signIn(page, session);
-    await page.goto('/kitchens/k-saima', { waitUntil: 'domcontentloaded' });
+    await page.goto(`/kitchens/${seller1Id}`, { waitUntil: 'domcontentloaded' });
     await page.waitForLoadState('domcontentloaded');
 
-    await expect(page.locator("text=Saima's Craft Kitchen").first()).toBeVisible();
-    await expect(page.locator('text=Chef Saima Akhtar').first()).toBeVisible();
-    await expect(page.locator('text=Gulshan-e-Iqbal').first()).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: /Saima's Craft Kitchen/ })).toBeVisible();
+    await expect(page.getByText(/^By Chef Saima Akhtar/)).toBeVisible();
+    await expect(page.getByText(/Gulshan-e-Iqbal/).first()).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Save kitchen' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Menu' })).toBeVisible();
 
     await page.screenshot({
       path: path.join(ARTIFACT_SCREENSHOT_DIR, '04_kitchen_profile_page.png'),
@@ -238,7 +236,7 @@ test.describe.serial('Buyer / Customer Specification Complete 27-Section Audit',
     await page.waitForLoadState('domcontentloaded');
 
     // Assert special instructions textarea exists
-    const instructionsInput = page.locator('#specialInstructions');
+    const instructionsInput = page.getByLabel('Note for the kitchen (optional)');
     await expect(instructionsInput).toBeVisible();
     await instructionsInput.fill('Please make it mild spicy with extra raita.');
 
@@ -246,9 +244,8 @@ test.describe.serial('Buyer / Customer Specification Complete 27-Section Audit',
     await expect(page.getByLabel('Increase quantity')).toBeVisible();
     await expect(page.getByLabel('Decrease quantity')).toBeVisible();
 
-    // Assert both Add to Bag and Buy Now buttons exist
-    await expect(page.getByRole('button', { name: /add to bag/i })).toBeVisible();
-    await expect(page.getByRole('button', { name: /instant buy now/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /^Add to tray/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Order now' })).toBeVisible();
 
     await page.screenshot({
       path: path.join(ARTIFACT_SCREENSHOT_DIR, '05_dish_detail_and_customization.png'),
@@ -267,7 +264,7 @@ test.describe.serial('Buyer / Customer Specification Complete 27-Section Audit',
     if (await directBtn1.isVisible({ timeout: 2000 }).catch(() => false)) {
       await directBtn1.click();
     }
-    const addBtn1 = page.getByRole('button', { name: /add to bag/i });
+    const addBtn1 = page.getByRole('button', { name: /^Add to tray/ });
     await expect(addBtn1).toBeEnabled({ timeout: 15000 });
     await addBtn1.click();
     await page.waitForTimeout(1000);
@@ -280,26 +277,25 @@ test.describe.serial('Buyer / Customer Specification Complete 27-Section Audit',
     if (await directBtn2.isVisible({ timeout: 2000 }).catch(() => false)) {
       await directBtn2.click();
     }
-    const addBtn2 = page.getByRole('button', { name: /add to bag/i });
+    const addBtn2 = page.getByRole('button', { name: /^Add to tray/ });
     await expect(addBtn2).toBeEnabled({ timeout: 15000 });
     await addBtn2.click();
 
     // 3. Assert Conflict Modal appears
-    await expect(page.locator('text=Start Order from a New Kitchen?')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('heading', { name: 'Start an order from a new kitchen?' })).toBeVisible({ timeout: 10000 });
     await expect(page.locator(`text=${seller2Name}`).first()).toBeVisible();
 
     await page.screenshot({
       path: path.join(ARTIFACT_SCREENSHOT_DIR, '06_cart_conflict_modal.png'),
     });
 
-    // 4. Click "Clear Cart & Add New Dish"
-    await page.getByRole('button', { name: /clear cart & add new dish/i }).click();
+    await page.getByRole('button', { name: 'Clear tray and add dish' }).click();
     await page.waitForTimeout(1500);
 
     // 5. Navigate to /cart and assert only Seller 2's dish is in the cart
     await page.goto('/cart', { waitUntil: 'domcontentloaded' });
     await page.waitForLoadState('domcontentloaded');
-    await expect(page.locator(`text=${seller2Name}`).first()).toBeVisible();
+    await expect(page.getByText(`1 item from ${seller2Name}`)).toBeVisible();
 
     await page.screenshot({
       path: path.join(ARTIFACT_SCREENSHOT_DIR, '07_cart_single_seller_active.png'),
@@ -323,19 +319,15 @@ test.describe.serial('Buyer / Customer Specification Complete 27-Section Audit',
     if (await directBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
       await directBtn.click();
     }
-    const addBtn = page.getByRole('button', { name: /add to bag/i });
+    const addBtn = page.getByRole('button', { name: /^Add to tray/ });
     await expect(addBtn).toBeEnabled({ timeout: 15000 });
 
     // Go to checkout
     await page.goto('/checkout', { waitUntil: 'domcontentloaded' });
     await page.waitForLoadState('domcontentloaded');
-    await expect(page.locator('text=Order Summary').first()).toBeVisible({ timeout: 15000 });
+    await expect(page.getByRole('heading', { name: 'Order summary' })).toBeVisible({ timeout: 15000 });
 
-    // Select Manual Online Payment (JazzCash / EasyPaisa / Bank)
-    const manualRadio = page.locator('input[value="jazzcash"]').or(page.locator('input[value="bank"]')).or(page.locator('input[value="easypaisa"]')).first();
-    if (await manualRadio.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await manualRadio.check();
-    }
+    await page.locator('input[value="jazzcash"]').check();
 
     await page.screenshot({
       path: path.join(ARTIFACT_SCREENSHOT_DIR, '08_checkout_payment_selection.png'),
@@ -363,11 +355,10 @@ test.describe.serial('Buyer / Customer Specification Complete 27-Section Audit',
     await page.locator('button:has-text("I Have Paid")').first().click();
     await expect(page.locator('text=Submit Payment Proof').first()).toBeVisible();
 
-    await page.locator('input[placeholder*="19284729103"]').or(page.locator('input[required]')).first().fill('JC-AUDIT-998877');
-    await page.getByRole('button', { name: /submit verification/i }).first().click();
+    await page.getByPlaceholder('e.g. 19284729103 or FT26259...').fill('JC-AUDIT-998877');
+    await page.getByRole('button', { name: /Submit Payment Verification/ }).click();
 
-    // Verify status updates to submitted
-    await expect(page.locator('text=Payment Submitted').or(page.locator('text=Verification in Progress')).first()).toBeVisible({ timeout: 8000 });
+    await expect(page.getByText('Payment Proof Submitted').first()).toBeVisible({ timeout: 8000 });
 
     await page.screenshot({
       path: path.join(ARTIFACT_SCREENSHOT_DIR, '10_tid_proof_submitted.png'),
@@ -408,9 +399,10 @@ test.describe.serial('Buyer / Customer Specification Complete 27-Section Audit',
 
     // 2. Advance order status to 'preparing' via DB
     dbQuery(`UPDATE orders SET order_status = 'preparing' WHERE id = '${orderId}'`);
+    dbQuery(`UPDATE order_items SET status = 'preparing' WHERE order_id = '${orderId}'`);
     await page.reload();
     await page.waitForLoadState('domcontentloaded');
-    await expect(page.locator('text=PREPARING').first()).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('Your food is being cooked')).toBeVisible({ timeout: 10000 });
 
     // 3. Assert Cancel button is now blocked / hidden (Rule 9)
     await expect(page.getByRole('button', { name: /cancel order/i })).not.toBeVisible();
@@ -444,15 +436,15 @@ test.describe.serial('Buyer / Customer Specification Complete 27-Section Audit',
     const orderData = await orderResp.json();
     const orderId = orderData.data?.order?.id || orderData.data?.id;
 
-    // Advance to delivered in DB
     dbQuery(`UPDATE orders SET order_status = 'delivered', payment_status = 'paid' WHERE id = '${orderId}'`);
+    dbQuery(`UPDATE order_items SET status = 'delivered' WHERE order_id = '${orderId}'`);
 
     await page.goto(`/orders/${orderId}`, { waitUntil: 'domcontentloaded' });
     await page.waitForLoadState('domcontentloaded');
 
     // 1. Open In-App Chat
-    await page.getByRole('button', { name: /chat with/i }).first().click();
-    await expect(page.locator('text=Live coordination with kitchen').first()).toBeVisible({ timeout: 5000 });
+    await page.getByRole('button', { name: `Chat with ${seller1Name}` }).click();
+    await expect(page.locator('#order-chat-title')).toBeVisible({ timeout: 5000 });
 
     // Send a message
     const msgInput = page.locator('input[placeholder*="Message"]').first();
@@ -465,25 +457,27 @@ test.describe.serial('Buyer / Customer Specification Complete 27-Section Audit',
     });
 
     // Close chat drawer
-    await page.getByLabel('Close Chat').click();
+    await page.getByRole('button', { name: 'Close chat' }).click();
 
     // 2. Open Tri-Partite Review Modal
-    await page.getByRole('button', { name: /rate experience/i }).first().click();
-    await expect(page.locator('text=Rate Your Experience').first()).toBeVisible();
-    await expect(page.locator('text=Food Quality & Taste')).toBeVisible();
-    await expect(page.locator('text=Kitchen & Packaging')).toBeVisible();
-    await expect(page.locator('text=Delivery & Rider Courtesy')).toBeVisible();
+    await page.getByRole('button', { name: 'Rate this order' }).click();
+    const review = page.getByRole('dialog', { name: 'Rate your order' });
+    await expect(review).toBeVisible();
+    await expect(review.getByText('Food', { exact: true })).toBeVisible();
+    await expect(review.getByText('Kitchen and packaging', { exact: true })).toBeVisible();
+    await expect(review.getByText('Delivery', { exact: true })).toBeVisible();
 
     await page.screenshot({
       path: path.join(ARTIFACT_SCREENSHOT_DIR, '13_tri_partite_review_modal.png'),
     });
 
     // Submit review
-    await page.locator('textarea[placeholder*="flavor"]').or(page.locator('textarea')).first().fill('Crispy and warm, authentic flavors!');
-    await page.getByRole('button', { name: /submit.*review/i }).first().click();
+    const fiveStars = review.getByRole('button', { name: '5 stars' });
+    for (let i = 0; i < 3; i++) await fiveStars.nth(i).click();
+    await review.getByPlaceholder('How was the taste, the portion and the packing?').fill('Crispy and warm, authentic flavors!');
+    await review.getByRole('button', { name: 'Submit review' }).click();
 
-    // Verify confirmation
-    await expect(page.locator('text=Review Submitted!').first()).toBeVisible({ timeout: 8000 });
+    await expect(review.getByRole('heading', { name: 'Thanks for your review' })).toBeVisible({ timeout: 8000 });
 
     await page.screenshot({
       path: path.join(ARTIFACT_SCREENSHOT_DIR, '14_tri_partite_review_submitted.png'),
@@ -523,23 +517,23 @@ test.describe.serial('Buyer / Customer Specification Complete 27-Section Audit',
     const orderData = await orderResp.json();
     const orderId = orderData.data?.order?.id || orderData.data?.id;
     dbQuery(`UPDATE orders SET order_status = 'delivered', payment_status = 'paid' WHERE id = '${orderId}'`);
+    dbQuery(`UPDATE order_items SET status = 'delivered' WHERE order_id = '${orderId}'`);
 
     // 4. Visit /orders and test 1-Click Reorder
     await page.goto('/orders', { waitUntil: 'domcontentloaded' });
     await page.waitForLoadState('domcontentloaded');
 
-    // Click "Past Orders" tab
-    await page.getByRole('button', { name: /past orders/i }).click();
+    await page.getByRole('tab', { name: /^Past/ }).click();
     await page.waitForTimeout(500);
 
     // Assert Reorder button exists and click it
-    const reorderBtn = page.getByRole('button', { name: /↻ reorder/i }).first();
+    const reorderBtn = page.getByRole('button', { name: /Reorder/ }).first();
     await expect(reorderBtn).toBeVisible({ timeout: 10000 });
     await reorderBtn.click();
 
     // Should redirect to /cart with items populated
     await page.waitForURL(/\/cart/, { timeout: 10000 });
-    await expect(page.locator('text=Order Summary')).toBeVisible();
+    await expect(page.getByText('Order summary', { exact: true })).toBeVisible();
 
     await page.screenshot({
       path: path.join(ARTIFACT_SCREENSHOT_DIR, '16_one_click_reorder_to_cart.png'),
@@ -551,10 +545,9 @@ test.describe.serial('Buyer / Customer Specification Complete 27-Section Audit',
     await signIn(page, session);
 
     // 1. Support
-    page.on('pageerror', (err) => console.log('SUPPORT PAGE EXCEPTION:', err));
     await page.goto('/support', { waitUntil: 'domcontentloaded' });
     await page.waitForLoadState('domcontentloaded');
-    await expect(page.locator('text=Help & Support').first()).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Help and support' })).toBeVisible();
     await page.screenshot({
       path: path.join(ARTIFACT_SCREENSHOT_DIR, '17_support_page.png'),
     });
@@ -563,7 +556,7 @@ test.describe.serial('Buyer / Customer Specification Complete 27-Section Audit',
     await page.goto('/notifications', { waitUntil: 'domcontentloaded' });
     await page.waitForLoadState('domcontentloaded');
     await expect(page.getByRole('heading', { name: 'Notifications' }).first()).toBeVisible();
-    await expect(page.locator('text=Notification Preferences').first()).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Settings' }).or(page.getByRole('tab', { name: 'Settings' })).or(page.getByRole('link', { name: 'Settings' })).first()).toBeVisible();
     await page.screenshot({
       path: path.join(ARTIFACT_SCREENSHOT_DIR, '18_notifications_page.png'),
     });
@@ -572,7 +565,7 @@ test.describe.serial('Buyer / Customer Specification Complete 27-Section Audit',
     await page.goto('/profile', { waitUntil: 'domcontentloaded' });
     await page.waitForLoadState('domcontentloaded');
     await expect(page.locator('text=Zainab Ahmed').first()).toBeVisible();
-    await expect(page.locator('text=Personal Information').or(page.locator('input[value*="Zainab"]')).first()).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('Personal information', { exact: true })).toBeVisible({ timeout: 10000 });
     await page.screenshot({
       path: path.join(ARTIFACT_SCREENSHOT_DIR, '19_profile_page.png'),
     });

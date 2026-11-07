@@ -32,7 +32,7 @@ export async function newCustomer(): Promise<Customer> {
 // Signs the page's browser in the way the website keeps a session: the login goes through the browser context's own request client, which
 // shares the browser's cookie jar, so the API's httpOnly refresh cookie lands there; the user is put where the website remembers who is
 // signed in. The access token lives only in page memory, so the app gets one through the cookie on its first request.
-export async function signIn(page: Page, session: { email: string; user: unknown; password?: string }) {
+export async function signIn(page: Page, session: { email: string; user?: unknown; password?: string }) {
   // The API sets the cookie only for a request from the website's own origin, which a browser always sends and Playwright's
   // request client does not.
   const login = await page.context().request.post(`${API_BASE}/auth/login`, {
@@ -41,7 +41,8 @@ export async function signIn(page: Page, session: { email: string; user: unknown
   });
   if (!login.ok()) throw new Error(`signIn: login for ${session.email} answered ${login.status()}`);
   if (!(await page.context().cookies()).some((c) => c.name === 'nuray_rt')) throw new Error(`signIn: no refresh cookie for ${session.email}`);
-  await page.addInitScript((user: unknown) => {
-    window.localStorage.setItem('auth-storage', JSON.stringify({ state: { user, isAuthenticated: true }, version: 0 }));
-  }, session.user);
+  const user = session.user ?? (await login.json()).data?.user;
+  await page.addInitScript((u: unknown) => {
+    window.localStorage.setItem('auth-storage', JSON.stringify({ state: { user: u, isAuthenticated: true }, version: 0 }));
+  }, user);
 }

@@ -27,7 +27,7 @@ const axios = {
   patch: (url: string, body?: unknown, options?: Options) => send('PATCH', url, body, options),
 };
 
-const API_BASE = 'http://localhost:3001/api/v1';
+const API_BASE = process.env.API_BASE ?? 'http://localhost:3001/api/v1';
 const prisma = new PrismaClient();
 
 const USERS = {
@@ -83,7 +83,7 @@ async function runIdealFlow() {
   console.log(`1.2 Delivery address verified: ${addressId} (DHA Phase 5, Karachi)`);
 
   const sampleProduct = await prisma.product.findFirst({
-    where: { name: 'E2E Zafrani Chicken Biryani', isActive: true },
+    where: { slug: 'saima-zafrani-chicken-biryani', isActive: true },
   });
   if (!sampleProduct) throw new Error('Sample product not found');
   console.log(`1.3 Selected product: ${sampleProduct.name} (Rs ${sampleProduct.price})`);
@@ -111,7 +111,7 @@ async function runIdealFlow() {
   const sellerJwt = await login('seller');
   console.log('2.1 Home Chef (Saima\'s Craft Kitchen) logged in.');
 
-  const sellerOrdersRes = await axios.get(`${API_BASE}/sellers/orders`, {
+  const sellerOrdersRes = await axios.get(`${API_BASE}/seller/orders`, {
     headers: { Authorization: `Bearer ${sellerJwt}` },
   });
   const ordersList = sellerOrdersRes.data.data.orders;
@@ -124,7 +124,7 @@ async function runIdealFlow() {
   // Seller accepts order: pending -> confirmed
   console.log('2.3a Chef accepts incoming order (status: "confirmed")...');
   await axios.patch(
-    `${API_BASE}/sellers/orders/items/${orderItemId}/status`,
+    `${API_BASE}/seller/orders/items/${orderItemId}/status`,
     { status: 'confirmed', notes: 'Order accepted by chef' },
     { headers: { Authorization: `Bearer ${sellerJwt}` } }
   );
@@ -132,7 +132,7 @@ async function runIdealFlow() {
   // Seller moves item to 'preparing' -> Triggers JIT Dispatch!
   console.log('2.3b Chef starts cooking (status: "preparing")...');
   await axios.patch(
-    `${API_BASE}/sellers/orders/items/${orderItemId}/status`,
+    `${API_BASE}/seller/orders/items/${orderItemId}/status`,
     { status: 'preparing', notes: 'Chicken marinated with pure saffron, biryani pot on dum' },
     { headers: { Authorization: `Bearer ${sellerJwt}` } }
   );
@@ -145,14 +145,13 @@ async function runIdealFlow() {
 
   console.log(`✅ JIT Lookahead Dispatch Triggered!`);
   console.log(`    Delivery ID:         ${deliveryRecord.id}`);
-  console.log(`    Customer OTP:        ${deliveryRecord.deliveryOtp} (Hidden from rider)`);
   console.log(`    Estimated Ready At:  ${deliveryRecord.estimatedReadyAt?.toISOString()}`);
   console.log(`    Delivery Status:     ${deliveryRecord.status}`);
 
   // Seller marks food 'ready'
   console.log('2.4 Chef finishes packing meal (status: "ready").');
   await axios.patch(
-    `${API_BASE}/sellers/orders/items/${orderItemId}/status`,
+    `${API_BASE}/seller/orders/items/${orderItemId}/status`,
     { status: 'ready', notes: 'Packaged in thermal container' },
     { headers: { Authorization: `Bearer ${sellerJwt}` } }
   );
@@ -217,7 +216,7 @@ async function runIdealFlow() {
   const custOrderCheck = await axios.get(`${API_BASE}/orders/${order.id}`, {
     headers: { Authorization: `Bearer ${customerJwt}` },
   });
-  const customerVisibleOtp = custOrderCheck.data.data.delivery?.deliveryOtp;
+  const customerVisibleOtp = custOrderCheck.data.data.handoverCode;
   console.log(`4.1 Customer opens order tracker: Doorstep PIN is [${customerVisibleOtp}]`);
 
   // Rider tries wrong OTP
