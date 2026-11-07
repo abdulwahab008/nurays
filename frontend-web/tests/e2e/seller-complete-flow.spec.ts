@@ -6,6 +6,9 @@ import { signIn } from './support/customer';
 
 const API_BASE = (process.env.API_BASE ?? 'http://localhost:3001/api/v1').replace(/\/$/, '');
 const DB_URL = process.env.E2E_DB_URL ?? 'postgresql://localhost:5432/frozennuray_dev';
+// A 1x1 PNG for the CNIC photos the application asks for.
+const PIXEL_PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
+
 const ARTIFACT_SCREENSHOT_DIR = process.env.ARTIFACT_SCREENSHOT_DIR ?? path.join(process.cwd(), 'test-results', 'seller_spec_audit');
 
 if (!fs.existsSync(ARTIFACT_SCREENSHOT_DIR)) {
@@ -151,6 +154,8 @@ test.describe.serial('Complete Seller End-to-End Workflow (Sections 1-14)', () =
 
   // 1. SECTION 1: Seller Registration with GPS, Community, Docs & T&C -> Pending
   test('1. Section 1: Seller Registration wizard with GPS, community detection & submission', async ({ page }) => {
+    await page.context().grantPermissions(['geolocation']);
+    await page.context().setGeolocation({ latitude: 24.9207, longitude: 67.0882 });
     await signIn(page, sellerSession);
     await page.goto('/sellers/register');
     await page.waitForLoadState('networkidle');
@@ -160,10 +165,14 @@ test.describe.serial('Complete Seller End-to-End Workflow (Sections 1-14)', () =
     await expect(bizInput).toBeVisible();
     await bizInput.fill(`Tariq Gourmet Burgers ${uniqueSuffix}`);
     await page.fill('#house-unit-input', 'Shop #3, Commercial Avenue');
-    await page.selectOption('#community-select', { label: 'Askari 11, Karachi' });
+    await page.selectOption('#community-select', { label: 'Gulshan-e-Iqbal, Karachi' });
 
-    // Click Auto-Detect GPS
-    await page.click('#detect-gps-btn');
+    await page.getByRole('button', { name: 'Detect my location' }).click();
+    await expect(page.getByText('24.9207, 67.0882').first()).toBeVisible();
+
+    for (const side of ['front', 'back']) {
+      await page.locator(`[data-testid="cnic-${side}-upload"] input[type="file"]`).first().setInputFiles({ name: `cnic-${side}.png`, mimeType: 'image/png', buffer: PIXEL_PNG });
+    }
 
     // Fill Bank & Wallet Details
     await page.fill('#bank-name-input', 'Meezan Bank');
@@ -229,7 +238,7 @@ test.describe.serial('Complete Seller End-to-End Workflow (Sections 1-14)', () =
     await expect(page.locator('#business-name-input')).toBeVisible();
 
     // Resubmit application
-    await page.fill('#house-unit-input', 'Shop #3-B (Updated with clear board), Commercial Avenue');
+    await page.fill('#house-unit-input', 'Shop #3-B, Commercial Avenue');
     await page.check('#agree-terms-checkbox');
     await page.click('#submit-registration-btn');
     await page.waitForTimeout(2000);
@@ -408,7 +417,7 @@ test.describe.serial('Complete Seller End-to-End Workflow (Sections 1-14)', () =
     // Verify Order Ticket Card appears
     const orderCard = page.locator(`#order-card-${orderId}`);
     await expect(orderCard).toBeVisible();
-    await expect(orderCard).toContainText(`Order #${orderNumber}`);
+    await expect(orderCard).toContainText(`#${orderNumber}`);
     await expect(orderCard).toContainText('2 × Chef Special Smash Burger');
     await expect(orderCard).toContainText('Askari 11');
 
@@ -450,9 +459,9 @@ test.describe.serial('Complete Seller End-to-End Workflow (Sections 1-14)', () =
     // Reject Modal appears
     const modal = page.locator('#reject-order-modal');
     await expect(modal).toBeVisible();
-    await expect(modal).toContainText('Reject Order');
-    await expect(modal).toContainText('Item unavailable');
-    await expect(modal).toContainText('Too busy / High kitchen load');
+    await expect(modal).toContainText('Reject order');
+    await expect(modal).toContainText('Dish not available');
+    await expect(modal).toContainText('Too busy right now');
 
     // Select "Too busy" and submit
     await page.check('input[value="too_busy"]');
@@ -484,8 +493,8 @@ test.describe.serial('Complete Seller End-to-End Workflow (Sections 1-14)', () =
 
     // Verify state transitioned to Preparing
     const orderCard = page.locator(`#order-card-${orderId}`);
-    await expect(orderCard).toContainText('Preparing');
-    await expect(orderCard).toContainText('Currently cooking in kitchen');
+    await expect(orderCard).toContainText(/Ready by \d/);
+    expect(dbQuery(`SELECT status FROM order_items WHERE order_id = '${orderId}' LIMIT 1`)).toBe('preparing');
     await expect(page.locator(`#ready-pickup-btn-${orderId}`)).toBeVisible();
 
     await page.screenshot({
@@ -506,9 +515,10 @@ test.describe.serial('Complete Seller End-to-End Workflow (Sections 1-14)', () =
     await readyBtn.click();
     await page.waitForTimeout(1200);
 
-    // Verify state transitioned to Ready
-    const orderCard = page.locator(`#order-card-${orderId}`);
-    await expect(orderCard).toContainText('Ready on Kitchen Counter');
+    // A ready order leaves the full cards for the short Ready list
+    const readyRow = page.getByRole('region', { name: /^Ready/ }).getByRole('link', { name: new RegExp(`#${orderNumber}`) });
+    await expect(readyRow).toContainText(/Ready (just now|\d+ min ago)/);
+    await expect(page.locator(`#order-card-${orderId}`)).toHaveCount(0);
 
     await page.screenshot({
       path: path.join(ARTIFACT_SCREENSHOT_DIR, '10_seller_ready_for_pickup.png'),
@@ -540,8 +550,8 @@ test.describe.serial('Complete Seller End-to-End Workflow (Sections 1-14)', () =
     await page.goto('/sellers/orders');
     await page.waitForLoadState('networkidle');
 
-    const orderCard = page.locator(`#order-card-${orderId}`);
-    await expect(orderCard).toContainText('Delivered Successfully');
+    await page.getByRole('tab', { name: 'Delivered' }).click();
+    await expect(page.getByRole('main').getByText(new RegExp(`#${orderNumber}`)).first()).toBeVisible();
 
     await page.screenshot({
       path: path.join(ARTIFACT_SCREENSHOT_DIR, '11_seller_order_delivered_completed.png'),

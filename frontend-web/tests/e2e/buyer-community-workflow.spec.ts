@@ -38,6 +38,12 @@ interface TestUserSession {
   addressId: string;
 }
 
+function productOf(kitchen: string): string {
+  return dbQuery(
+    `SELECT p.id FROM products p JOIN sellers s ON s.id = p.seller_id WHERE s.business_name = '${kitchen.replace(/'/g, "''")}' AND p.is_active AND p.approval_status = 'approved' AND p.stock_quantity >= 5 ORDER BY p.created_at LIMIT 1`,
+  );
+}
+
 async function createVerifiedCustomer(): Promise<TestUserSession> {
   const ctx = await api();
   const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -93,9 +99,13 @@ test.describe('Buyer Hyperlocal Workflow & Operations', () => {
 
   let session: TestUserSession;
   let placedOrderId: string = '';
+  let prod1Id = '';
+  let prod2Id = '';
 
   test.beforeAll(async () => {
     session = await createVerifiedCustomer();
+    prod1Id = productOf("Saima's Craft Kitchen");
+    prod2Id = productOf("Tahira's Clay Pot Meetha");
     if (!fs.existsSync(ARTIFACT_SCREENSHOT_DIR)) {
       fs.mkdirSync(ARTIFACT_SCREENSHOT_DIR, { recursive: true });
     }
@@ -126,11 +136,10 @@ test.describe('Buyer Hyperlocal Workflow & Operations', () => {
     });
 
     // Step A: Add Product 1 from Claude Test Kitchen (Askari 11)
-    const prod1Id = 'a0500ed2-9260-4543-a7c7-bf96397644f6'; // Biryani
     await page.goto(`/products/${prod1Id}`);
     await page.waitForLoadState('networkidle');
 
-    const addBtn = page.locator('button:has-text("Add to bag"), button:has-text("Add to Cart")').first();
+    const addBtn = page.getByRole('button', { name: /^Add to tray/ });
     await addBtn.waitFor({ state: 'visible' });
     await addBtn.click();
     await page.waitForTimeout(1000);
@@ -141,16 +150,15 @@ test.describe('Buyer Hyperlocal Workflow & Operations', () => {
     });
 
     // Step B: Attempt to Add Product 2 from E2E Test Kitchen (Askari 10)
-    const prod2Id = '6101a4c2-616c-4cd7-9aee-74f056f9989c'; // Samosa
     await page.goto(`/products/${prod2Id}`);
     await page.waitForLoadState('networkidle');
 
-    const addBtn2 = page.locator('button:has-text("Add to bag"), button:has-text("Add to Cart")').first();
+    const addBtn2 = page.getByRole('button', { name: /^Add to tray/ });
     await addBtn2.waitFor({ state: 'visible' });
     await addBtn2.click();
 
     // The CartConflictModal should appear!
-    const modalHeading = page.locator('text=Start Order from a New Kitchen?');
+    const modalHeading = page.getByRole('heading', { name: 'Start an order from a new kitchen?' });
     await expect(modalHeading).toBeVisible({ timeout: 8000 });
 
     // Capture screenshot of the Cart Conflict Dialog
@@ -158,8 +166,7 @@ test.describe('Buyer Hyperlocal Workflow & Operations', () => {
       path: path.join(ARTIFACT_SCREENSHOT_DIR, 'buyer_03_cart_conflict_modal.png'),
     });
 
-    // Click "Clear Cart & Add New Dish"
-    const confirmClearBtn = page.locator('button:has-text("Clear Cart & Add New Dish")');
+    const confirmClearBtn = page.getByRole('button', { name: 'Clear tray and add dish' });
     await expect(confirmClearBtn).toBeVisible();
     await confirmClearBtn.click();
     await page.waitForTimeout(1500);
@@ -168,7 +175,8 @@ test.describe('Buyer Hyperlocal Workflow & Operations', () => {
     await page.goto('/cart');
     await page.waitForLoadState('networkidle');
 
-    await expect(page.locator('text=Single-Kitchen Order')).toBeVisible({ timeout: 6000 });
+    await expect(page.getByText(/^\d+ items? from Tahira's Clay Pot Meetha$/)).toBeVisible({ timeout: 6000 });
+    await expect(page.getByText("Saima's Craft Kitchen")).toHaveCount(0);
     await page.screenshot({
       path: path.join(ARTIFACT_SCREENSHOT_DIR, 'buyer_04_cart_single_seller.png'),
     });
@@ -178,23 +186,18 @@ test.describe('Buyer Hyperlocal Workflow & Operations', () => {
     await signIn(page, session);
 
     // Go to product of Claude Test Kitchen
-    const prod1Id = 'a0500ed2-9260-4543-a7c7-bf96397644f6';
     await page.goto(`/products/${prod1Id}`);
     await page.waitForLoadState('networkidle');
 
-    // Click favorite heart button
-    const favBtn = page.locator('button[title="Save Kitchen to Favorites"]');
-    if (await favBtn.isVisible()) {
-      await favBtn.click();
-      await page.waitForTimeout(1000);
-    }
+    const favBtn = page.getByRole('button', { name: 'Save Kitchen to Favorites' });
+    await favBtn.click();
+    await expect(favBtn).toHaveAttribute('aria-pressed', 'true');
 
-    // Navigate to /favorites
     await page.goto('/favorites');
     await page.waitForLoadState('networkidle');
 
-    // Verify page title and header
-    await expect(page.locator('text=Favorite Kitchens').or(page.locator('text=Your Saved Kitchens')).first()).toBeVisible({ timeout: 6000 });
+    await expect(page.getByRole('heading', { name: 'Saved kitchens', level: 1 })).toBeVisible({ timeout: 6000 });
+    await expect(page.getByRole('main').getByText("Saima's Craft Kitchen").first()).toBeVisible();
 
     await page.screenshot({
       path: path.join(ARTIFACT_SCREENSHOT_DIR, 'buyer_05_favorites_page.png'),
@@ -212,7 +215,7 @@ test.describe('Buyer Hyperlocal Workflow & Operations', () => {
     await postJson(
       ctx,
       '/cart/items',
-      { productId: '6101a4c2-616c-4cd7-9aee-74f056f9989c', quantity: 2 },
+      { productId: prod1Id, quantity: 2 },
       session.jwt,
     );
 
@@ -220,7 +223,6 @@ test.describe('Buyer Hyperlocal Workflow & Operations', () => {
     await page.goto('/checkout');
     await page.waitForLoadState('networkidle');
 
-    // Select JazzCash Direct Transfer
     const jazzcashRadio = page.locator('input[type="radio"][value="jazzcash"]');
     await jazzcashRadio.waitFor({ state: 'visible' });
     await jazzcashRadio.check();
@@ -229,9 +231,7 @@ test.describe('Buyer Hyperlocal Workflow & Operations', () => {
       path: path.join(ARTIFACT_SCREENSHOT_DIR, 'buyer_06_checkout_manual_payment.png'),
     });
 
-    // Click Place Order
-    const placeOrderBtn = page.locator('button:has-text("Place Order")');
-    await placeOrderBtn.click();
+    await page.getByRole('button', { name: /^Place order/ }).click();
 
     // Should redirect to /orders/:id
     await page.waitForURL(/\/orders\/[a-f0-9-]+/, { timeout: 15000 });
@@ -243,36 +243,31 @@ test.describe('Buyer Hyperlocal Workflow & Operations', () => {
     if (match) placedOrderId = match[1];
 
     // Verify Manual Payment Card is visible with payment details
-    await expect(page.locator('text=Pay Directly to Kitchen').or(page.locator('text=Direct Domestic Chef Payment')).first()).toBeVisible({ timeout: 8000 });
-    await expect(page.locator('button:has-text("I Have Paid"), button:has-text("Submit Transaction ID")').first()).toBeVisible();
+    await expect(page.getByText("Pay Directly to Saima's Craft Kitchen")).toBeVisible({ timeout: 8000 });
+    const iHavePaid = page.getByRole('button', { name: /I Have Paid/ });
+    await expect(iHavePaid).toBeVisible();
 
     await page.screenshot({
       path: path.join(ARTIFACT_SCREENSHOT_DIR, 'buyer_07_manual_payment_card.png'),
     });
 
-    // Click "I Have Paid / Submit Transaction ID"
-    await page.locator('button:has-text("I Have Paid"), button:has-text("Submit Transaction ID")').first().click();
+    await iHavePaid.click();
 
     // Modal opens
-    const tidInput = page.locator('input[placeholder*="19284729103"], input[placeholder*="FT26259"], input[placeholder*="TID"]');
+    const tidInput = page.getByPlaceholder('e.g. 19284729103 or FT26259...');
     await expect(tidInput).toBeVisible();
     await tidInput.fill('JC-99882211443');
 
-    const senderNameInput = page.locator('input[placeholder*="Muhammad Ali"], input[placeholder*="Account Name"]');
-    if (await senderNameInput.isVisible()) {
-      await senderNameInput.fill('Sara Khan');
-    }
+    await page.getByPlaceholder('e.g. Muhammad Ali').fill('Sara Khan');
 
     await page.screenshot({
       path: path.join(ARTIFACT_SCREENSHOT_DIR, 'buyer_08_tid_submission_modal.png'),
     });
 
-    // Click "Submit Verification"
-    await page.locator('button:has-text("Submit Verification"), button:has-text("Submit Payment Proof")').click();
-    await page.waitForTimeout(2000);
+    await page.getByRole('button', { name: /Submit Payment Verification/ }).click();
 
-    // Verification banner / proof submitted text
-    await expect(page.locator('text=Payment Submitted — Verification in Progress').or(page.locator('text=payment submitted')).first()).toBeVisible({ timeout: 8000 });
+    await expect(page.getByText('Payment Proof Submitted').first()).toBeVisible({ timeout: 8000 });
+    await expect(page.getByText('JC-99882211443').first()).toBeVisible();
 
     await page.screenshot({
       path: path.join(ARTIFACT_SCREENSHOT_DIR, 'buyer_09_payment_proof_submitted.png'),
@@ -290,13 +285,12 @@ test.describe('Buyer Hyperlocal Workflow & Operations', () => {
     await page.goto(`/orders/${orderId}`);
     await page.waitForLoadState('networkidle');
 
-    // Click "Chat with Kitchen"
-    const chatBtn = page.locator('button:has-text("Chat with")');
+    const chatBtn = page.getByRole('button', { name: "Chat with Saima's Craft Kitchen" });
     await expect(chatBtn).toBeVisible();
     await chatBtn.click();
 
     // Verify chat drawer opens
-    await expect(page.locator('h3:has-text("Chat with")')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('#order-chat-title')).toBeVisible({ timeout: 5000 });
 
     // Send a message
     const msgInput = page.locator('input[placeholder*="Message"]');
@@ -321,34 +315,35 @@ test.describe('Buyer Hyperlocal Workflow & Operations', () => {
     const orderId = placedOrderId || dbQuery(
       `SELECT id FROM orders WHERE customer_id = '${session.user.id}' ORDER BY created_at DESC LIMIT 1`,
     );
-    // Mark order as delivered so the review button is enabled
-    dbQuery(`UPDATE orders SET order_status = 'delivered' WHERE id = '${orderId}'`);
+    // Delivered and paid, so the order can be rated
+    dbQuery(`UPDATE orders SET order_status = 'delivered', payment_status = 'paid' WHERE id = '${orderId}'`);
+    dbQuery(`UPDATE order_items SET status = 'delivered' WHERE order_id = '${orderId}'`);
 
     await page.goto(`/orders/${orderId}`);
     await page.waitForLoadState('networkidle');
 
-    // "Rate Experience" button should appear
-    const rateBtn = page.locator('button:has-text("Rate Experience")');
+    const rateBtn = page.getByRole('button', { name: 'Rate this order' });
     await expect(rateBtn).toBeVisible({ timeout: 5000 });
     await rateBtn.click();
 
-    // Verify Tri-Partite Review modal with 3 rating dimensions
-    await expect(page.locator('h3:has-text("Rate Your Experience")')).toBeVisible();
-    await expect(page.locator('text=Food Quality & Taste')).toBeVisible();
-    await expect(page.locator('text=Kitchen & Packaging')).toBeVisible();
-    await expect(page.locator('text=Delivery & Rider Courtesy')).toBeVisible();
+    const dialog = page.getByRole('dialog', { name: 'Rate your order' });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByText('How were the food, the kitchen and the delivery?')).toBeVisible();
+    await expect(dialog.getByText('Food', { exact: true })).toBeVisible();
+    await expect(dialog.getByText('Kitchen and packaging', { exact: true })).toBeVisible();
+    await expect(dialog.getByText('Delivery', { exact: true })).toBeVisible();
 
     await page.screenshot({
       path: path.join(ARTIFACT_SCREENSHOT_DIR, 'buyer_11_tripartite_review_modal.png'),
     });
 
-    // Submit review
-    const commentInput = page.locator('textarea[placeholder*="flavor"], textarea[placeholder*="review"]');
-    if (await commentInput.isVisible()) {
-      await commentInput.fill('The chicken samosas were crispy, fresh, and piping hot! Outstanding packaging.');
-    }
-    await page.locator('button:has-text("Submit Tri-Partite Review")').click();
-    await expect(page.locator('h4:has-text("Review Submitted!")')).toBeVisible({ timeout: 5000 });
+    const fiveStars = dialog.getByRole('button', { name: '5 stars' });
+    await fiveStars.nth(0).click();
+    await fiveStars.nth(1).click();
+    await fiveStars.nth(2).click();
+    await dialog.getByPlaceholder('How was the taste, the portion and the packing?').fill('Rich, fresh and well packed.');
+    await dialog.getByRole('button', { name: 'Submit review' }).click();
+    await expect(dialog.getByRole('heading', { name: 'Thanks for your review' })).toBeVisible({ timeout: 5000 });
 
     await page.screenshot({
       path: path.join(ARTIFACT_SCREENSHOT_DIR, 'buyer_12_review_submitted.png'),

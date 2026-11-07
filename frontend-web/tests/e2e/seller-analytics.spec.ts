@@ -1,13 +1,10 @@
 import { test, expect } from '@playwright/test';
+import { signIn } from './support/customer';
 
 test.describe('Seller Studio Analytics Section', () => {
   test('should display complete analytics dashboard with interactive periods, chart, and KPIs', async ({ page }) => {
-    // 1. Log in via dev-login auto-login URL
-    await page.goto('/dev-login?role=seller&autologin=1');
-
-    // Should redirect to /sellers/dashboard
-    await page.waitForURL('**/sellers/dashboard', { timeout: 20000 });
-    await expect(page).toHaveURL(/\/sellers\/dashboard/);
+    await signIn(page, { email: 'e2e-seller@nuray.test', password: 'SellerPass123!' });
+    await page.goto('/sellers/dashboard');
 
     // 2. Navigate to Analytics via sidebar
     const analyticsLink = page.locator('aside a[href="/sellers/analytics"]');
@@ -21,10 +18,10 @@ test.describe('Seller Studio Analytics Section', () => {
     await expect(page.locator('h1', { hasText: /Reports/i })).toBeVisible();
 
     // 4. Verify the four figures are rendered
-    await expect(page.getByText('Earned', { exact: true })).toBeVisible();
+    await expect(page.getByText('Earned in this period', { exact: true })).toBeVisible();
     await expect(page.getByText('Dishes sold', { exact: true })).toBeVisible();
     await expect(page.getByText('Orders delivered', { exact: true })).toBeVisible();
-    await expect(page.getByText('Average order', { exact: true })).toBeVisible();
+    await expect(page.getByText('Average you earn per order', { exact: true })).toBeVisible();
 
     // 5. Verify the earnings chart section exists (a kitchen with no sales sees one line instead of the drawing)
     await expect(page.getByText(/Earnings by day/i)).toBeVisible();
@@ -68,7 +65,7 @@ test.describe('Seller Studio Analytics Section', () => {
       await expect(svgChart.locator('path[fill="none"]')).toBeVisible();
       await page.getByRole('button', { name: 'Bars' }).click();
     } else {
-      await expect(page.getByText(/No sales in the last 30 days/i)).toBeVisible();
+      await expect(page.getByText('No sales in this time.')).toBeVisible();
     }
 
     // 8. Verify the orders section

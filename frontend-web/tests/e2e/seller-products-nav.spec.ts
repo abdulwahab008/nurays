@@ -1,39 +1,21 @@
 import { test, expect } from '@playwright/test';
+import { signIn } from './support/customer';
 
-test.describe('Seller Products & Sub-sections Navigation', () => {
-  test('should display Products with nested Inventory and Discounts sub-items', async ({ page }) => {
-    // 1. Log in via dev-login auto-login URL
-    await page.goto('/dev-login?role=seller&autologin=1');
-    await page.waitForURL('**/sellers/dashboard', { timeout: 20000 });
+test.describe('Seller menu navigation', () => {
+  test('Menu opens the dishes, whose Stock tab and the Discounts sub-item each open their page', async ({ page }) => {
+    await signIn(page, { email: 'e2e-seller@nuray.test', password: 'SellerPass123!' });
+    await page.goto('/sellers/dashboard');
 
-    // 2. Take screenshot of dashboard sidebar
-    await page.screenshot({ path: '../products-sidebar-dashboard.png', fullPage: false });
-
-    // 3. Click Products in the sidebar
-    const productsMenu = page.locator('aside a[href="/sellers/products"]').first();
-    await expect(productsMenu).toBeVisible();
-    await productsMenu.click();
-
+    await page.locator('aside a[href="/sellers/products"]').first().click();
     await page.waitForURL('**/sellers/products', { timeout: 15000 });
 
-    // 4. Take screenshot of Products page
-    await page.screenshot({ path: '../products-page-current.png', fullPage: false });
-
-    // 5. Check if sub-items are visible in sidebar under Products
-    const inventorySubItem = page.locator('aside a[href="/sellers/products?view=inventory"]');
-    const discountsSubItem = page.locator('aside a[href="/sellers/promotions"]');
-
-    await expect(inventorySubItem).toBeVisible();
-    await expect(discountsSubItem).toBeVisible();
-
-    // 6. Click on Inventory sub-item
-    await inventorySubItem.click();
+    const stockTab = page.getByRole('link', { name: /^Stock/ });
+    await expect(page.getByRole('link', { name: /^All dishes/ })).toHaveAttribute('aria-current', 'page');
+    await stockTab.click();
     await page.waitForURL('**/sellers/products?view=inventory', { timeout: 15000 });
-    await page.screenshot({ path: '../inventory-view-current.png', fullPage: false });
+    await expect(stockTab).toHaveAttribute('aria-current', 'page');
 
-    // 7. Click on Discounts sub-item
-    await discountsSubItem.click();
+    await page.locator('aside a[href="/sellers/promotions"]').click();
     await page.waitForURL('**/sellers/promotions', { timeout: 15000 });
-    await page.screenshot({ path: '../promotions-view-current.png', fullPage: false });
   });
 });
