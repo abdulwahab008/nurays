@@ -15,7 +15,7 @@ import { issueRefund, IssuedRefund } from './refund.service';
 import ledgerService from './ledger.service';
 import { postDeliveryEntries } from './rider-ledger.service';
 import { releaseHubAllocations } from './hub-allocation.service';
-import { logger } from '../utils/logger';
+import { logEvent, logger } from '../utils/logger';
 
 // The main happy-path order pipeline — admin can only move an order exactly
 // one step forward at a time (no skipping straight to 'dispatched'/'delivered',
@@ -377,71 +377,77 @@ export class AdminOrderService {
     // Update order status. Guarded on the status we validated against, so a
     // concurrent change can't be silently overwritten. Delivery carries the same
     // side effects as the seller/rider paths: delivery time, and COD is paid
-    // at the door.
+    // at the door. Everything below commits together: a failure part-way must not leave
+    // a delivered order with open items, an open rider job or an unpaid rider.
     const isDelivered = status === 'delivered';
     const isCodDelivery = isDelivered && isCashAtDoor(order);
-    const applied = await prisma.order.updateMany({
-      where: { id: orderId, orderStatus: order.orderStatus },
-      data: {
-        orderStatus: status,
-        ...(isDelivered ? { deliveredAt: new Date() } : {}),
-        ...(isCodDelivery ? { paymentStatus: 'paid', paymentCollectedBy: codCollectorOf(order), paidAt: new Date() } : {}),
-      },
-    });
-    if (applied.count === 0) {
-      throw new AppError('Order status changed while updating; please retry', 409, 'ORDER_STATUS_CONFLICT');
-    }
-    if (isDelivered) {
-      await prisma.orderItem.updateMany({
-        where: { orderId, status: { notIn: ['cancelled', 'delivered'] } },
-        data: { status: 'delivered' },
+    const updatedOrder = await prisma.$transaction(async (tx) => {
+      if (isDelivered) {
+        // Same lock order as the rider's own "delivered" (order, then its job).
+        await tx.$queryRaw`SELECT id FROM orders WHERE id = ${orderId} FOR UPDATE`;
+      }
+      const applied = await tx.order.updateMany({
+        where: { id: orderId, orderStatus: order.orderStatus },
+        data: {
+          orderStatus: status,
+          ...(isDelivered ? { deliveredAt: new Date() } : {}),
+          ...(isCodDelivery ? { paymentStatus: 'paid', paymentCollectedBy: codCollectorOf(order), paidAt: new Date() } : {}),
+        },
       });
-    }
-    const updatedOrder = await prisma.order.findUniqueOrThrow({ where: { id: orderId } });
-    if (isDelivered) {
-      // The rider's job closes with the order (otherwise it keeps taking one of their two
-      // slots), and they are paid their fee and charged the cash as if they had delivered it.
-      try {
-        await prisma.$transaction(async (tx) => {
-          const job = await tx.delivery.findFirst({
-            where: { orderId, riderId: { not: null }, status: { notIn: ['cancelled', 'delivered', 'delivery_failed'] } },
-          });
-          if (!job || !job.riderId) return;
+      if (applied.count === 0) {
+        throw new AppError('Order status changed while updating; please retry', 409, 'ORDER_STATUS_CONFLICT');
+      }
+      const updated = await tx.order.findUniqueOrThrow({ where: { id: orderId } });
+      if (isDelivered) {
+        await tx.orderItem.updateMany({
+          where: { orderId, status: { notIn: ['cancelled', 'delivered'] } },
+          data: { status: 'delivered' },
+        });
+        // The rider's job closes with the order (otherwise it keeps taking one of their two
+        // slots), and they are paid their fee and charged the cash as if they had delivered it.
+        const job = await tx.delivery.findFirst({
+          where: { orderId, riderId: { not: null }, status: { notIn: ['cancelled', 'delivered', 'delivery_failed'] } },
+        });
+        if (job?.riderId) {
           const closed = await tx.delivery.updateMany({
             where: { id: job.id, status: job.status },
             data: { status: 'delivered', deliveryTime: new Date() },
           });
-          if (closed.count === 0) return;
-          await tx.rider.update({ where: { id: job.riderId }, data: { totalDeliveries: { increment: 1 } } });
-          await postDeliveryEntries(tx, {
-            riderId: job.riderId,
-            deliveryId: job.id,
-            orderId,
-            orderNumber: updatedOrder.orderNumber,
-            fee: Number(job.riderFee ?? 0),
-            bonus: Number(job.riderBonus ?? 0),
-            cashCollected: isCodDelivery && codCollectorOf(order) === 'rider' ? Number(updatedOrder.totalAmount) : 0,
-          });
-        });
-      } catch (jobErr) {
-        logger.error({ err: jobErr, orderId }, 'Failed to close the rider job');
+          if (closed.count > 0) {
+            await tx.rider.update({ where: { id: job.riderId }, data: { totalDeliveries: { increment: 1 } } });
+            await postDeliveryEntries(tx, {
+              riderId: job.riderId,
+              deliveryId: job.id,
+              orderId,
+              orderNumber: updated.orderNumber,
+              fee: Number(job.riderFee ?? 0),
+              bonus: Number(job.riderBonus ?? 0),
+              cashCollected: isCodDelivery && codCollectorOf(order) === 'rider' ? Number(updated.totalAmount) : 0,
+            });
+          }
+        }
       }
+      await tx.orderStatusHistory.create({
+        data: {
+          orderId,
+          status,
+          notes: notes || `Status updated by admin`,
+          changedBy: adminId,
+        },
+      });
+      return updated;
+    });
+
+    logEvent(`order.${status}`, { orderId, orderNumber: updatedOrder.orderNumber, actor: 'admin', from: order.orderStatus });
+
+    if (isDelivered) {
+      // Runs its own transaction that locks this order, so it cannot run inside the one above.
       try {
         await ledgerService.recordOrderCompletion(orderId);
       } catch (ledgerErr) {
         logger.error({ err: ledgerErr, orderId }, 'Failed to record ledger entries');
       }
     }
-
-    // Add status history
-    await prisma.orderStatusHistory.create({
-      data: {
-        orderId,
-        status,
-        notes: notes || `Status updated by admin`,
-        changedBy: adminId,
-      },
-    });
 
     // Emit order status update
     await realtimeOrderService.emitOrderStatusUpdate(orderId, status, adminId);
@@ -460,7 +466,7 @@ export class AdminOrderService {
     const order = await prisma.order.findUnique({
       where: { id: orderId },
       include: {
-        items: true,
+        items: { include: { seller: { select: { deliveryProvider: true } } } },
       },
     });
 
@@ -469,9 +475,19 @@ export class AdminOrderService {
     }
 
     // Check if order can be cancelled — a failed delivery is included since
-    // the alternative to cancelling+refunding it is retryDelivery below.
+    // the alternative to cancelling+refunding it is retryDelivery below. An admin can also
+    // cancel a 'ready' order no rider has taken (rider shortage); that is checked under lock below.
     const cancellableStatuses = ['pending', 'confirmed', 'preparing', 'delivery_failed'];
-    if (!cancellableStatuses.includes(order.orderStatus)) {
+    // Only an order waiting on a platform rider: a self-pickup or kitchen-delivered order has no rider job, so the
+    // no-rider check below would always pass. Mirrors riderService.ensureDeliveryForOrder's needsPlatformRider.
+    const uncancelledItems = order.items.filter((i) => i.status !== 'cancelled');
+    const awaitsPlatformRider =
+      order.deliveryType === 'home_delivery' &&
+      (order.deliveryProvider
+        ? order.deliveryProvider === 'platform' && uncancelledItems.length > 0
+        : uncancelledItems.some((i) => i.fulfillmentType === 'hub' || i.seller?.deliveryProvider !== 'self'));
+    const cancellingReady = by === 'admin' && order.orderStatus === 'ready' && awaitsPlatformRider;
+    if (!cancellableStatuses.includes(order.orderStatus) && !cancellingReady) {
       throw new AppError(
         `Order cannot be cancelled. Current status: ${order.orderStatus}`,
         400,
@@ -483,11 +499,20 @@ export class AdminOrderService {
     let refundIssued = null as IssuedRefund | null;
     let cancelledDelivery = null as CancelledDelivery | null;
     const cancelledOrder = await prisma.$transaction(async (tx) => {
+      if (cancellingReady) {
+        // Same lock order as the rider path (order, then its job). Holding the job row makes a
+        // concurrent rider claim wait and then miss it, as cancelOpenDelivery below closes it.
+        await tx.$queryRaw`SELECT id FROM orders WHERE id = ${orderId} FOR UPDATE`;
+        const [job] = await tx.$queryRaw<{ rider_id: string | null }[]>`SELECT rider_id FROM deliveries WHERE "orderId" = ${orderId} FOR UPDATE`;
+        if (job?.rider_id) {
+          throw new AppError('A rider has already taken this order, so it can no longer be cancelled', 409, 'RIDER_ASSIGNED');
+        }
+      }
       // Claim the cancellation: only one of any concurrent cancel/accept/ready
       // transitions can move the order out of a cancellable status. Without this
       // a stale read let a cancel revive-or-double-restock an order.
       const claimed = await tx.order.updateMany({
-        where: { id: orderId, orderStatus: { in: cancellableStatuses } },
+        where: { id: orderId, orderStatus: { in: cancellingReady ? ['ready'] : cancellableStatuses } },
         data: {
           orderStatus: 'cancelled',
           cancellationReason: reason,
@@ -502,9 +527,12 @@ export class AdminOrderService {
 
       // Items already cancelled (e.g. by their seller) were restocked when that
       // happened; only restock what is still live. Read before the cascade below.
-      const liveItems = await tx.orderItem.findMany({
-        where: { orderId, status: { notIn: ['cancelled', 'delivered'] } },
-      });
+      // Restocked in the same product/variant order placement takes stock in, so the two can't deadlock.
+      const liveItems = (
+        await tx.orderItem.findMany({
+          where: { orderId, status: { notIn: ['cancelled', 'delivered'] } },
+        })
+      ).sort((a, b) => ((a.productId ?? '') + (a.variantId ?? '')).localeCompare((b.productId ?? '') + (b.variantId ?? '')));
 
       // Cascade cancellation to all order items so the seller UI doesn't
       // show stale "Pending/Confirmed/Preparing" rows with action buttons
@@ -534,7 +562,6 @@ export class AdminOrderService {
         }
       }
 
-
       // A cancelled order shouldn't keep consuming the promo's quota.
       await releasePromotionUsage(tx, orderId);
 
@@ -560,6 +587,10 @@ export class AdminOrderService {
 
       return updatedOrder;
     });
+
+    logEvent('order.cancelled', { orderId, orderNumber: order.orderNumber, actor: by, from: order.orderStatus });
+    // Written out rather than through refund.service's logRefundIssued, which tests that mock that module would lose.
+    if (refundIssued) logEvent('refund.issued', { orderId, orderNumber: order.orderNumber, actor: by, refundId: refundIssued.refundId, method: refundIssued.method, status: refundIssued.status, fullyRefunded: refundIssued.fullyRefunded, amountMinor: Math.round(refundIssued.amount * 100) });
 
     // Emit order status update
     await realtimeOrderService.emitOrderStatusUpdate(cancelledOrder.id, 'cancelled', adminId ?? 'system');
@@ -623,6 +654,7 @@ export class AdminOrderService {
       });
       return previous;
     });
+    logEvent('order.delivery_retried', { orderId, orderNumber: order.orderNumber, actor: 'admin', deliveryId: reopened?.id, previousRiderId: reopened?.riderId });
 
     if (previousRider?.rider?.userId) socketManager.removeUserFromOrder(previousRider.rider.userId, orderId);
     await realtimeOrderService.emitOrderStatusUpdate(orderId, 'ready', adminId);
@@ -687,6 +719,7 @@ export class AdminOrderService {
       }
       return r;
     });
+    logEvent('refund.issued', { orderId, orderNumber: order.orderNumber, actor: 'admin', refundId: issued.refundId, method: issued.method, status: issued.status, fullyRefunded: issued.fullyRefunded, amountMinor: Math.round(issued.amount * 100) });
     const result = await prisma.order.findUniqueOrThrow({ where: { id: orderId } });
 
     await realtimeOrderService.emitOrderStatusUpdate(

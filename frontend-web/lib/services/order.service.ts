@@ -174,11 +174,11 @@ export const orderService = {
    * key again (a retry after a timeout) returns the order already placed instead of
    * creating a second one.
    */
-  createOrder: async (data: CreateOrderRequest, idempotencyKey?: string) => {
+  createOrder: async (data: CreateOrderRequest, idempotencyKey: string) => {
     const response = await apiClient.post<ApiResponse<{ order: PlacedOrder; payment?: { gateway: string; status: string } }>>(
       '/orders',
       data,
-      idempotencyKey ? { headers: { 'Idempotency-Key': idempotencyKey } } : undefined
+      { headers: { 'Idempotency-Key': idempotencyKey } }
     );
     return response.data;
   },

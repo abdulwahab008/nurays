@@ -41,29 +41,33 @@ import {
 } from '../validators/auth.validator';
 import { authenticate, optionalAuthenticate } from '../middleware/auth.middleware';
 import {
+  admitPasswordWork,
   forgotIpLimiter,
   forgotTargetLimiter,
+  loginAccountLimiter,
   loginAddressLimiter,
   loginLimiter,
   otpIpLimiter,
   otpTargetLimiter,
   phoneVerifyRequestLimiter,
+  refreshLimiter,
   registerLimiter,
   resendVerificationLimiter,
+  verifyEmailLimiter,
 } from '../middleware/rateLimiter';
 
 const router = Router();
 
 // Public routes
 router.post('/otp/request', otpIpLimiter, otpTargetLimiter, validate(requestOTPSchema), requestOTP);
-router.post('/register', registerLimiter, validate(registerSchema), register);
-router.post('/login', loginAddressLimiter, loginLimiter, validate(loginSchema), login);
+router.post('/register', registerLimiter, validate(registerSchema), admitPasswordWork(register));
+router.post('/login', loginAddressLimiter, loginLimiter, loginAccountLimiter, validate(loginSchema), admitPasswordWork(login));
 router.post('/google', loginAddressLimiter, loginLimiter, validate(googleLoginSchema), loginWithGoogle);
 router.post('/apple', loginAddressLimiter, loginLimiter, validate(appleLoginSchema), loginWithApple);
-router.post('/verify-email', validate(verifyEmailSchema), verifyEmail);
+router.post('/verify-email', verifyEmailLimiter, validate(verifyEmailSchema), verifyEmail);
 router.post('/forgot-password', forgotIpLimiter, forgotTargetLimiter, validate(forgotPasswordSchema), forgotPassword);
-router.post('/reset-password', loginLimiter, validate(resetPasswordSchema), resetPassword);
-router.post('/refresh', validate(refreshTokenSchema), refreshToken);
+router.post('/reset-password', loginLimiter, validate(resetPasswordSchema), admitPasswordWork(resetPassword));
+router.post('/refresh', refreshLimiter, validate(refreshTokenSchema), refreshToken);
 // Staff two-step sign-in (SEC-3): the second step, and setting the authenticator app up (by the sign-in's challenge
 // token, or signed in).
 router.post('/2fa/verify', loginLimiter, verifyTwoFactor);
@@ -80,7 +84,7 @@ router.get('/2fa', authenticate, getTwoFactorStatus);
 router.post('/2fa/backup-codes', authenticate, loginLimiter, renewBackupCodes);
 router.delete('/sessions/:id', authenticate, deleteSession);
 // Asks for the current password again; wrong ones are counted per account (services/reauth.service.ts).
-router.post('/change-password', authenticate, validate(changePasswordSchema), changePassword);
+router.post('/change-password', authenticate, validate(changePasswordSchema), admitPasswordWork(changePassword));
 
 // Phone verification for the signed-in account (also how an account adds a real number)
 router.post('/phone/request', authenticate, phoneVerifyRequestLimiter, otpTargetLimiter, validate(requestPhoneVerificationSchema), requestPhoneVerification);

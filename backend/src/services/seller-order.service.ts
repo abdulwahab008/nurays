@@ -1,4 +1,4 @@
-import type { Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { codCollectorOf, deliveryProviderOf, isCashAtDoor } from '../utils/paymentCustody';
 import { assertMayHandOver, verifyHandoverCode } from './handover.service';
 import { presentFile } from '../storage';
@@ -9,11 +9,11 @@ import { AppError } from '../middleware/errorHandler';
 import realtimeOrderService from './realtime-order.service';
 import riderService from './rider.service';
 import { releasePromotionUsage } from './promotion.service';
-import { refundForCancelledItems } from './refund.service';
+import { logRefundIssued, refundForCancelledItems } from './refund.service';
 import ledgerService from './ledger.service';
 import { releaseHubAllocations } from './hub-allocation.service';
 import { firstName, kitchenContactRule, kitchenOrderSelect, presentKitchenOrder, withoutDoor } from '../utils/kitchenOrderView';
-import { logger } from '../utils/logger';
+import { logEvent, logger } from '../utils/logger';
 import { selfDeliveryFeeFor, sellerPaidDeliveryFor } from '../utils/deliveryEarnings';
 import { roundMoney } from '../utils/pricing';
 
@@ -120,35 +120,57 @@ export class SellerOrderService {
 
     const { page, limit, skip } = pageArgs(filters.page, filters.limit);
 
-    // Build where clause for order items
-    const where: Prisma.OrderItemWhereInput = {
-      sellerId: seller.id,
-    };
+    const where: Prisma.OrderItemWhereInput = { sellerId: seller.id };
+    if (filters.status) where.status = filters.status;
 
-    if (filters.status) {
-      where.status = filters.status;
-    }
+    const statuses: readonly string[] | null = filters.orderStatus ? [filters.orderStatus] : filters.view ? ORDER_VIEWS[filters.view] : null;
+    // created_at is a UTC timestamp without a zone; the bound is converted explicitly so the session time zone cannot shift it.
+    const utc = (at: string) => Prisma.sql`(${new Date(at).toISOString()}::timestamptz AT TIME ZONE 'UTC')`;
+    const conditions = [
+      statuses ? Prisma.sql`o.order_status IN (${Prisma.join(statuses)})` : null,
+      filters.dateFrom ? Prisma.sql`o.created_at >= ${utc(filters.dateFrom)}` : null,
+      filters.dateTo ? Prisma.sql`o.created_at <= ${utc(filters.dateTo)}` : null,
+    ].filter((c): c is Prisma.Sql => c !== null);
+    const pageFilter = conditions.length ? Prisma.join(conditions, ' AND ') : Prisma.sql`TRUE`;
 
-    // Build order where clause
-    const orderWhere: Prisma.OrderWhereInput = {};
-    if (filters.orderStatus) {
-      orderWhere.orderStatus = filters.orderStatus;
-    } else if (filters.view) {
-      orderWhere.orderStatus = { in: [...ORDER_VIEWS[filters.view]] };
-    }
-    if (filters.dateFrom || filters.dateTo) {
-      orderWhere.createdAt = {};
-      if (filters.dateFrom) orderWhere.createdAt.gte = new Date(filters.dateFrom);
-      if (filters.dateTo) orderWhere.createdAt.lte = new Date(filters.dateTo);
-    }
+    // The kitchen's orders are found from its own dishes (order_items by seller_id) and MATERIALIZED, so the planner cannot
+    // turn this back into a semi-join that walks every order on the platform newest-first: that took ~2 s per load for a
+    // small kitchen at 500k orders, and grew with the platform's order count rather than the kitchen's.
+    const kitchenOrders = (itemStatus?: string) => Prisma.sql`
+      WITH mine AS MATERIALIZED (
+        SELECT DISTINCT order_id FROM order_items
+        WHERE seller_id = ${seller.id}${itemStatus ? Prisma.sql` AND status = ${itemStatus}` : Prisma.empty}
+      )`;
 
     // A page is a page of orders, not of dishes: paging the dishes split one order's dishes across pages and counted
     // dishes as orders. The orders come first, then all of this kitchen's matching dishes on them.
-    const pageWhere: Prisma.OrderWhereInput = { ...orderWhere, items: { some: where } };
-    const [pageOrders, total] = await Promise.all([
-      prisma.order.findMany({ where: pageWhere, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], skip, take: limit, select: { id: true } }),
-      prisma.order.count({ where: pageWhere }),
+    const [pageOrders, byStatus, activeOrders] = await Promise.all([
+      prisma.$queryRaw<Array<{ id: string }>>`${kitchenOrders(filters.status)}
+        SELECT o.id FROM mine JOIN orders o ON o.id = mine.order_id
+        WHERE ${pageFilter}
+        ORDER BY o.created_at DESC, o.id DESC
+        LIMIT ${limit} OFFSET ${skip}`,
+      // How many orders each tab holds, whatever tab is open.
+      prisma.$queryRaw<Array<{ orderStatus: string; n: number }>>`${kitchenOrders()}
+        SELECT o.order_status AS "orderStatus", COUNT(*)::int AS n FROM mine JOIN orders o ON o.id = mine.order_id
+        GROUP BY o.order_status`,
+      prisma.$queryRaw<Array<{ orderStatus: string; deliveryType: string; deliveryProvider: string | null; deliveryFeeBreakdown: Prisma.JsonValue }>>`${kitchenOrders()}
+        SELECT o.order_status AS "orderStatus", o.delivery_type AS "deliveryType", o.delivery_provider AS "deliveryProvider",
+               o.delivery_fee_breakdown AS "deliveryFeeBreakdown"
+        FROM mine JOIN orders o ON o.id = mine.order_id
+        WHERE o.order_status IN (${Prisma.join(ORDER_VIEWS.active)})`,
     ]);
+    const countOf = (list: readonly string[]) => byStatus.filter((row) => list.includes(row.orderStatus)).reduce((sum, row) => sum + row.n, 0);
+    // Filtered by status alone, the page's total is already in the per-status counts; dates or a dish status need a count.
+    const total =
+      filters.status || filters.dateFrom || filters.dateTo
+        ? (
+            await prisma.$queryRaw<Array<{ n: number }>>`${kitchenOrders(filters.status)}
+              SELECT COUNT(*)::int AS n FROM mine JOIN orders o ON o.id = mine.order_id WHERE ${pageFilter}`
+          )[0].n
+        : statuses
+          ? countOf(statuses)
+          : byStatus.reduce((sum, row) => sum + row.n, 0);
     const pageOrderIds = pageOrders.map((o) => o.id);
     const riders = await ridersFor(pageOrderIds);
 
@@ -302,18 +324,6 @@ export class SellerOrderService {
     // Payment receipts are private: this seller gets short-lived links to their orders' receipts.
     for (const o of orders) o.order.paymentProofUrl = await presentFile(o.order.paymentProofUrl);
 
-    // How many orders each tab holds, whatever tab is open.
-    const byStatus = await prisma.order.groupBy({
-      by: ['orderStatus'],
-      where: { items: { some: { sellerId: seller.id } } },
-      _count: { _all: true },
-    });
-    const countOf = (statuses: readonly string[]) =>
-      byStatus.filter((row) => statuses.includes(row.orderStatus)).reduce((sum, row) => sum + row._count._all, 0);
-    const activeOrders = await prisma.order.findMany({
-      where: { orderStatus: { in: [...ORDER_VIEWS.active] }, items: { some: { sellerId: seller.id } } },
-      select: { orderStatus: true, deliveryType: true, deliveryProvider: true, deliveryFeeBreakdown: true },
-    });
     const counts = {
       active: countOf(ORDER_VIEWS.active),
       needYou: activeOrders.filter((o) => needsKitchen({ orderStatus: o.orderStatus, sellerHandsOver: handsOverItself(o, seller.deliveryProvider) })).length,
@@ -445,10 +455,16 @@ export class SellerOrderService {
       // a 500). One lock order everywhere: order, then items.
       await tx.$queryRaw`SELECT id FROM orders WHERE id = ${orderItem.orderId} FOR UPDATE`;
 
-      const updatedItem = await tx.orderItem.update({
-        where: { id: orderItemId },
+      // The status read before the lock may be stale: a cancel that won the lock has since cancelled the item, and
+      // moving it on from there would revive it (and could later deliver a cancelled order with a ledger credit).
+      const moved = await tx.orderItem.updateMany({
+        where: { id: orderItemId, status: orderItem.status },
         data: { status },
       });
+      if (moved.count === 0) {
+        throw new AppError('This item changed while updating; please refresh', 409, 'ORDER_STATUS_CONFLICT');
+      }
+      const updatedItem = await tx.orderItem.findUniqueOrThrow({ where: { id: orderItemId } });
 
       const allItems = await tx.orderItem.findMany({
         where: { orderId: orderItem.orderId },
@@ -496,6 +512,10 @@ export class SellerOrderService {
         historyNote = 'Self-delivered by seller';
       }
 
+      if (currentOrderStatus === 'cancelled' || currentOrderStatus === 'refunded') {
+        derivedOrderStatus = null;
+      }
+
       if (derivedOrderStatus) {
         // COD payment is collected at the door — delivered IS the payment
         // confirmation for COD (online payments are already 'paid' via the
@@ -530,6 +550,16 @@ export class SellerOrderService {
 
       return { updatedItem, derivedOrderStatus };
     });
+
+    if (result.derivedOrderStatus) {
+      logEvent(result.derivedOrderStatus === 'confirmed' ? 'order.accepted' : result.derivedOrderStatus === 'dispatched' ? 'order.picked_up' : `order.${result.derivedOrderStatus}`, {
+        orderId: orderItem.orderId,
+        orderNumber: orderItem.order.orderNumber,
+        sellerId: seller.id,
+        actor: 'seller',
+        orderItemId,
+      });
+    }
 
     // A seller-completed delivery (self-delivery) never passes through the rider
     // flow that posts the ledger, so post it here (idempotent).
@@ -656,7 +686,7 @@ export class SellerOrderService {
 
       // The customer paid for this item: refund its share (or everything left if
       // this was the last live item and the whole order is now cancelled).
-      await refundForCancelledItems(tx, orderItem.orderId, [orderItemId], {
+      const refund = await refundForCancelledItems(tx, orderItem.orderId, [orderItemId], {
         reason: `Item cancelled by seller (${orderItem.productName})`,
         createdBy: sellerId,
         orderFullyCancelled: allCancelled,
@@ -680,9 +710,17 @@ export class SellerOrderService {
         });
       }
 
-      return { updatedItem, allCancelled, cancelledDelivery };
+      return { updatedItem, allCancelled, cancelledDelivery, refund };
     });
 
+    logEvent(result.allCancelled ? 'order.cancelled' : 'order.item_cancelled', {
+      orderId: orderItem.orderId,
+      orderNumber: orderItem.order.orderNumber,
+      sellerId: seller.id,
+      actor: 'seller',
+      orderItemId,
+    });
+    logRefundIssued(result.refund, { orderId: orderItem.orderId, orderNumber: orderItem.order.orderNumber, sellerId: seller.id, actor: 'seller' });
     if (result.allCancelled) {
       await realtimeOrderService.emitOrderStatusUpdate(orderItem.orderId, 'cancelled', sellerId);
       notifyDeliveryCancelled(result.cancelledDelivery);
@@ -779,6 +817,14 @@ export class SellerOrderService {
       });
 
       return updatedOrder;
+    });
+
+    logEvent('order.accepted', {
+      orderId: order.id,
+      orderNumber: order.orderNumber,
+      sellerId: seller.id,
+      actor: seller.userId === sellerUserId ? 'seller' : 'admin',
+      preparationMinutes: maxPrepMinutes,
     });
 
     // JIT rider dispatch lookahead
@@ -918,7 +964,7 @@ export class SellerOrderService {
 
       // The customer paid for these items: give it back (their share if other
       // kitchens' items remain, everything if the whole order is now cancelled).
-      await refundForCancelledItems(tx, order.id, liveItems.map((i) => i.id), {
+      const refund = await refundForCancelledItems(tx, order.id, liveItems.map((i) => i.id), {
         reason: `Rejected by ${seller.businessName}: ${rejectionNote}`,
         createdBy: sellerUserId,
         orderFullyCancelled: allGone,
@@ -935,9 +981,17 @@ export class SellerOrderService {
         },
       });
 
-      return { allGone, cancelledDelivery };
+      return { allGone, cancelledDelivery, refund };
     });
 
+    logEvent('order.rejected', {
+      orderId: order.id,
+      orderNumber: order.orderNumber,
+      sellerId: seller.id,
+      actor: seller.userId === sellerUserId ? 'seller' : 'admin',
+      orderCancelled: outcome.allGone,
+    });
+    logRefundIssued(outcome.refund, { orderId: order.id, orderNumber: order.orderNumber, sellerId: seller.id, actor: seller.userId === sellerUserId ? 'seller' : 'admin' });
     if (outcome.allGone) {
       await realtimeOrderService.emitOrderStatusUpdate(order.id, 'cancelled', sellerUserId);
       notifyDeliveryCancelled(outcome.cancelledDelivery);
@@ -1090,6 +1144,13 @@ export class SellerOrderService {
           changedBy: sellerUserId,
         },
       });
+    });
+
+    logEvent('order.ready', {
+      orderId: order.id,
+      orderNumber: order.orderNumber,
+      sellerId: seller.id,
+      actor: seller.userId === sellerUserId ? 'seller' : 'admin',
     });
 
     // Make sure a rider job exists (idempotent). Accepting normally creates it, but if that

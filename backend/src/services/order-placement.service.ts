@@ -22,7 +22,7 @@ import { assertKitchenTakesCash } from './kitchen-owing.service';
 import { onlinePaymentsAvailable } from './online-payment.service';
 import { newHandoverCode } from './handover.service';
 import { debitWallet } from './wallet.service';
-import { logger } from '../utils/logger';
+import { logEvent, logger } from '../utils/logger';
 import { thrownMessage, thrown } from '../utils/thrown';
 
 /** When each delivery window closes, in minutes after midnight Pakistan time (the windows checkout offers). */
@@ -809,6 +809,14 @@ export class OrderPlacement {
 
     // The order is committed: nothing after this point may fail the request (a client
     // that saw an error would retry and, without a key, place it twice).
+    logEvent('order.placed', {
+      orderId: order.order.id,
+      orderNumber: order.order.orderNumber,
+      sellerIds: Array.from(new Set(order.items.map((item) => item.sellerId))),
+      actor: 'customer',
+      paymentMethod: order.order.paymentMethod,
+      amountMinor: Math.round(Number(order.order.totalAmount) * 100),
+    });
     try {
       await realtimeOrderService.emitNewOrderNotification(order.order.id);
     } catch (err) {

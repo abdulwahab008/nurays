@@ -110,6 +110,9 @@ payment receipts, seller and rider documents, chat media) are never public; the 
 | `AUTO_ASSIGN_ENABLED` | no | Automatic rider assignment (see "Background jobs"). Anything but `false` leaves it on; `false` keeps every job in the open pool for riders to claim by hand. |
 | `SENTRY_DSN`, `SENTRY_ENVIRONMENT`, `SENTRY_RELEASE`, `SENTRY_TRACES_SAMPLE_RATE` | no | Sentry is off when `SENTRY_DSN` is empty. The traces rate is the share of requests traced, 0 to 1; default 0. |
 | `SHUTDOWN_DRAIN_MS`, `SHUTDOWN_GRACE_MS` | no | See "Graceful shutdown". |
+| `SCHEDULER_CONCURRENCY` | no | Scheduled jobs one instance runs at the same time (default 2). See "Background jobs". |
+| `PASSWORD_HASH_CONCURRENCY`, `PASSWORD_HASH_QUEUE` | no | Admission control for the routes that hash a password (register, login, reset-password, change-password; `middleware/rateLimiter.ts`). At most `PASSWORD_HASH_CONCURRENCY` (default 4) hash at once per instance and `PASSWORD_HASH_QUEUE` (default 50) more wait; beyond that the answer is an immediate 503 `SERVICE_BUSY` with `Retry-After: 2`. Keep the concurrency below `UV_THREADPOOL_SIZE`. |
+| `UV_THREADPOOL_SIZE` | no | Node's libuv thread pool, which runs bcrypt alongside file, DNS and gzip work (Node's default is 4). The backend image sets 8, sized for an 8-core host. Raise it together with `PASSWORD_HASH_CONCURRENCY` on a bigger machine; more threads than cores adds no hashing speed. |
 | `MIGRATE_ON_START` | no | Docker image only; see "Migrations". |
 
 ## Frontend variables
@@ -211,7 +214,7 @@ in the same release as the code that stops using the old shape).
 
 | File | What it does |
 |---|---|
-| `backend/Dockerfile` | Builds TypeScript, then a runtime image with production dependencies only, running as a non-root user. `NODE_ENV=production`, `PORT=3001`, `UPLOADS_DIR=/app/uploads`, a `HEALTHCHECK` on `/api/v1/health`. `exec node dist/index.js` keeps node as PID 1 so SIGTERM reaches it. The image contains `dist` and `prisma`, not `scripts/`. |
+| `backend/Dockerfile` | Builds TypeScript, then a runtime image with production dependencies only, running as a non-root user. `NODE_ENV=production`, `PORT=3001`, `UV_THREADPOOL_SIZE=8`, `UPLOADS_DIR=/app/uploads`, a `HEALTHCHECK` on `/api/v1/health`. `exec node dist/index.js` keeps node as PID 1 so SIGTERM reaches it. The image contains `dist` and `prisma`, not `scripts/`. |
 | `frontend-web/Dockerfile` | Next.js standalone build with the `NEXT_PUBLIC_*` build args, non-root, port 3000, healthcheck on `/`. |
 | `docker-compose.yml` | Builds both images for local use. Expects PostgreSQL and Redis on the host (`host.docker.internal`), mounts a named `uploads` volume, `stop_grace_period: 30s`, and starts the frontend after the backend is healthy. It is not a full production stack: it has no database, Redis, TLS or proxy. |
 | `.github/workflows/docker-publish.yml` | On pushes to `main` and `v*` tags (or manually), builds both images and pushes them to GitHub Container Registry as `ghcr.io/<owner>/nuray-backend` and `nuray-frontend`. Tags: `main` and `sha-<short>` on `main`; the version, `major.minor` and `latest` on `v*` tags. Frontend build args come from repository variables (`vars.NEXT_PUBLIC_API_URL`, and so on). Without them it bakes in `http://localhost:3001/api/v1`, so set the variables before using these images in production. |
@@ -231,9 +234,10 @@ requests and on `main`. The scan fails on fixable high and critical vulnerabilit
 |---|---|---|
 | `GET /api/v1/health/live` | The process is up. Always 200. | Liveness probe. |
 | `GET /api/v1/health/ready` | 200 if the database answers; 503 when it does not or while shutting down. | Load balancer / readiness probe. |
-| `GET /api/v1/health` | Database, Redis and payment gateway status. 503 only if the database is down; a Redis outage reports `degraded` with 200. | Monitoring and the container `HEALTHCHECK`. |
+| `GET /api/v1/health` | Database and Redis status (`redis` is `not_configured` without `REDIS_URL`). 503 only if the database is down; a Redis outage reports `degraded` with 200. With an admin's bearer token the answer also carries `payment_gateways`, the job queue counts (`jobs`: waiting, active, failed, delayed; `null` without Redis) and `version`; without one those are left out. | Monitoring and the container `HEALTHCHECK`. |
 
-These routes sit outside the API rate limit.
+These routes sit outside the API rate limit. Each instance probes the database and Redis for them at most about once
+a second, however often they are called.
 
 ## Graceful shutdown
 
@@ -242,7 +246,8 @@ On SIGTERM or SIGINT (`backend/src/index.ts`): readiness starts answering 503, t
 stops accepting connections, closes Socket.IO sockets (clients reconnect to another instance), finishes in-flight
 requests (a keep-alive connection is closed as soon as its request is done, not after `KEEP_ALIVE_TIMEOUT_MS`), stops
 job workers and disconnects Prisma, Redis and Sentry. If that takes longer than `SHUTDOWN_GRACE_MS`
-(default 25000) the process exits with code 1. Keep the orchestrator's kill timeout above the grace period
+(default 25000) the process exits with code 1; if the process is too busy to run even that timer (an overload
+with thousands of requests in flight), a separate thread kills it 5 seconds later. Keep the orchestrator's kill timeout above the grace period
 (compose uses 30s), and `SHUTDOWN_DRAIN_MS` at least your load balancer's health-check interval. An uncaught
 exception also triggers this shutdown (exit code 1); unhandled promise rejections are logged and reported only.
 
@@ -264,7 +269,10 @@ mandatory in production):
   retry with backoff (5 attempts); every instance runs a worker. If Redis is unreachable at enqueue time the job runs
   in the process that queued it and is lost if that process dies. (A job that arrives in the first moments after a
   start waits, for at most 2 seconds, for the queue's connection to open instead of taking that route.)
-- Timed sweeps (below) take a Postgres advisory lock per job, so only one instance runs a given sweep at a time.
+- Timed sweeps (below) take a Redis lease per job (`lock:job:<name>`, 60 s, renewed while the job runs), so only
+  one instance runs a given sweep at a time, and a crashed instance frees it within a minute. The lease holds no
+  database connection. If Redis is unreachable when a sweep is due, that run fails (logged as `Job <name> failed`)
+  and the next one tries again.
 - Files: with `STORAGE_DRIVER=local` every instance needs the same volume. Use `s3` once you run more than one.
 - Behind a load balancer or CDN: `TRUST_PROXY` is the number of proxy hops in front of the API (default `1`; `2`
   behind a CDN plus a load balancer; `0` when exposed directly; or an address list such as `loopback, 10.0.0.0/8`).
@@ -276,18 +284,25 @@ mandatory in production):
   than append to what the client sent. Idle keep-alive
   connections are held for `KEEP_ALIVE_TIMEOUT_MS` (default 65 000 ms): keep it above the balancer's idle timeout
   (60 s on AWS ALB and most nginx setups) or the balancer will hit sockets the API has just closed and answer 502.
-- Database connections: Prisma opens a pool per instance, sized by default from the host's CPU count
-  (`2 × cores + 1`), not from how many instances run. Set it explicitly on `DATABASE_URL`
-  (`?connection_limit=10&pool_timeout=10`) and keep `instances × connection_limit + 10` below PostgreSQL's
-  `max_connections` (100 by default). Beyond about five instances put PgBouncer (transaction mode) in front
+  Proxies and CDNs must pass the `Idempotency-Key` header through: `POST /api/v1/orders` refuses an order without it
+  (400 `IDEMPOTENCY_KEY_REQUIRED`; the key must be 8 to 100 letters, digits, `-` or `_`, otherwise 400
+  `INVALID_IDEMPOTENCY_KEY`; a body field no longer counts). The website sends one key per checkout attempt; any other client (a script, a native screen) must too.
+- Database connections: Prisma opens a pool per instance. Left to itself it sizes the pool from the host's CPU
+  count (`2 × cores + 1`, 17 on 8 cores), not from how many instances run, so the app adds `connection_limit=10`
+  when `DATABASE_URL` names none. Set it explicitly (`?connection_limit=10&pool_timeout=10`) and keep
+  `instances × connection_limit + 10` (migrations, psql, monitoring) at or below PostgreSQL's `max_connections`
+  (100 by default): 9 instances at 10, or 4 at 20. Check with `SHOW max_connections;`. Each instance's
+  scheduled jobs use at most `SCHEDULER_CONCURRENCY` (default 2) jobs' worth of those connections at a time.
+  Beyond about five instances put PgBouncer (transaction mode) in front
   and add `&pgbouncer=true` (the app then does not send `DB_STATEMENT_TIMEOUT_MS`: set it on the role). The load
   test in `docs/PRODUCTION_READINESS_AUDIT.md` showed that a larger pool does not make the API faster on 4 cores:
   the limit there is CPU, so scale instances, not the pool.
 
 ## Background jobs
 
-Scheduled in `backend/src/index.ts` through `jobs/scheduler.ts`; each starts about 5 seconds after boot and then
-repeats.
+Scheduled in `backend/src/index.ts` through `jobs/scheduler.ts`; each first runs at a random moment 5 to 65 seconds
+after boot (so they do not all start together, then or on every later boundary) and then repeats. At most
+`SCHEDULER_CONCURRENCY` (default 2) run at once per instance; the others wait their turn.
 
 | Job | Every | What it does |
 |---|---|---|
@@ -298,7 +313,7 @@ repeats.
 | `hub-expiry` | 1 h | Hides expired hub batches. |
 | `stock-alerts` | 6 h | Safety-net stock alert check. |
 | `purge-expired-secrets` | 6 h | Deletes old OTP codes and used or expired reset tokens. |
-| `ops-snapshot` | 5 min | Writes one structured log line (`metric: "ops_snapshot"`) with open deliveries and how long the oldest has waited, riders on duty, orders and cancellations in the last hour, failed payments, pending approvals, refunds, payouts and open tickets. Chart or alert on it in the log tool. |
+| `ops-snapshot` | 5 min | Writes one structured log line (`metric: "ops_snapshot"`) with open deliveries and how long the oldest has waited, riders on duty, orders and cancellations in the last hour, failed payments, pending approvals, refunds, payouts and open tickets, ready orders no rider has taken for 20 minutes, and the job queue counts (a rise in failed jobs since the previous snapshot is also logged as a warning, `metric: "jobs_failed"`). Chart or alert on it in the log tool. |
 
 ## Logs and error tracking
 

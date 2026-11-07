@@ -1,11 +1,12 @@
+import { randomUUID } from 'crypto';
 import { Server as HTTPServer } from 'http';
 import { Server as SocketIOServer, type Socket } from 'socket.io';
 import { createAdapter } from '@socket.io/redis-adapter';
 import { redisUrl, newRedisConnection } from './redis';
-import { verifyToken, isTokenRevoked } from '../utils/jwt';
+import { verifyToken, isTokenRevoked, type JWTPayload } from '../utils/jwt';
 import prisma from './database';
 import { canTakePoolJobs } from '../utils/riderDuty';
-import { logger } from '../utils/logger';
+import { logger, requestContext } from '../utils/logger';
 import { isSessionActive } from '../services/session.service';
 
 /**
@@ -48,14 +49,27 @@ export function withinEventLimit(userId: string): boolean {
  * whatever goes wrong in a handler is logged here instead.
  */
 function onClientEvent(socket: Socket, userId: string, event: string, handler: (...args: unknown[]) => unknown) {
-  socket.on(event, async (...args: unknown[]) => {
-    try {
-      await handler(...args);
-    } catch (err) {
-      logger.error({ err, userId }, `${event} failed`);
-    }
-  });
+  socket.on(event, (...args: unknown[]) =>
+    // Each event gets its own id in the request-id field, like an HTTP request, so its log lines can be found together.
+    requestContext.run({ requestId: `socket:${randomUUID()}`, userId }, async () => {
+      try {
+        await handler(...args);
+      } catch (err) {
+        logger.error({ err, userId }, `${event} failed`);
+      }
+    })
+  );
 }
+
+/** Sent with a handshake refused for a server-side failure, so the client knows to retry it (see frontend lib/realtime/socket.ts). */
+export const RETRYABLE_HANDSHAKE_ERROR = 'Server unavailable: retry later';
+
+function retryableError(): Error & { data: { retryable: true } } {
+  return Object.assign(new Error(RETRYABLE_HANDSHAKE_ERROR), { data: { retryable: true as const } });
+}
+
+// Clients only send short events (an order id); a frame this size or more closes that connection.
+const MAX_CLIENT_FRAME_BYTES = 16_384;
 
 class SocketManager {
   private io: SocketIOServer | null = null;
@@ -68,6 +82,7 @@ class SocketManager {
         credentials: true,
       },
       transports: ['websocket', 'polling'],
+      maxHttpBufferSize: MAX_CLIENT_FRAME_BYTES,
     });
 
     // With Redis, events emitted on any instance reach clients connected to every instance
@@ -80,18 +95,20 @@ class SocketManager {
       this.io.adapter(createAdapter(pub, sub));
     }
 
-    // Authentication middleware
+    // Authentication middleware. A bad token is refused for good; a database or session-store failure while
+    // checking a good one is marked retryable, so the client tries again later instead of staying offline.
     this.io.use(async (socket, next) => {
+      const token = socket.handshake.auth.token || socket.handshake.headers.authorization?.replace('Bearer ', '');
+      if (!token) return next(new Error('Authentication error: No token provided'));
+
+      let payload: JWTPayload;
       try {
-        const token = socket.handshake.auth.token || socket.handshake.headers.authorization?.replace('Bearer ', '');
+        payload = verifyToken(token);
+      } catch {
+        return next(new Error('Authentication error: Invalid token'));
+      }
 
-        if (!token) {
-          return next(new Error('Authentication error: No token provided'));
-        }
-
-        const payload = verifyToken(token);
-
-        // Verify user exists and is active
+      try {
         const user = await prisma.user.findUnique({
           where: { id: payload.userId },
           select: { id: true, status: true, userType: true, tokensValidAfter: true },
@@ -118,8 +135,9 @@ class SocketManager {
         if (payload.sid) socket.join(`session:${payload.sid}`);
 
         next();
-      } catch (error) {
-        next(new Error('Authentication error: Invalid token'));
+      } catch (err) {
+        logger.warn({ err, userId: payload.userId }, 'Socket handshake could not be checked');
+        next(retryableError());
       }
     });
 

@@ -14,7 +14,7 @@ export interface OrderStatusEvent {
   updatedAt?: string;
 }
 
-/** `order:delivery:tracking`: where the rider is, sent to the customer and to admins. */
+/** `order:delivery:tracking`: where the rider is, sent to the order's customer only. */
 export interface DeliveryTrackingEvent {
   orderId?: string;
   location?: { latitude: number; longitude: number };

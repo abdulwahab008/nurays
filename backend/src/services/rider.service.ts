@@ -19,7 +19,7 @@ import { presentFile } from '../storage';
 import { notifyApprovers } from './approvals.service';
 import { ACTIVE_DELIVERY_STATUSES, BEFORE_PICKUP_STATUSES, ON_THE_WAY_STATUSES, canMoveDelivery, ORDER_STATUS_FOR_DELIVERY_STATUS, refuseDeliveryMove } from '../utils/deliveryStatus';
 import { doorField } from '../utils/addressSnapshot';
-import { logger } from '../utils/logger';
+import { logEvent, logger } from '../utils/logger';
 
 // The delivery status machine (which status follows which, and what the order must look like) is in utils/deliveryStatus.ts.
 
@@ -35,6 +35,9 @@ const PICKUP_SELLER_SELECT = {
   deliveryProvider: true,
   user: { select: { phone: true } },
 } as const;
+
+// No rider job for an order that is finished or called off.
+const ORDER_CLOSED_FOR_DELIVERY = ['cancelled', 'refunded', 'delivered', 'completed'];
 
 type PickupSeller = Prisma.SellerGetPayload<{ select: typeof PICKUP_SELLER_SELECT }>;
 type PickupItem = { status: string; fulfillmentType: string | null; seller: PickupSeller | null };
@@ -226,8 +229,7 @@ export class RiderService {
       },
     });
     if (!order || order.deliveryType !== 'home_delivery') return;
-    // No job for an order that is finished or called off.
-    if (['cancelled', 'refunded', 'delivered', 'completed'].includes(order.orderStatus)) return;
+    if (ORDER_CLOSED_FOR_DELIVERY.includes(order.orderStatus)) return;
 
     // Sellers who deliver themselves don't post to the rider pool; they drive the
     // order to delivered / delivery_failed from their own dashboard. The provider is
@@ -239,9 +241,6 @@ export class RiderService {
       : liveItems.some((i) => i.fulfillmentType === 'hub' || i.seller?.deliveryProvider !== 'self');
     if (!needsPlatformRider) return;
 
-    const existing = await prisma.delivery.findUnique({ where: { orderId } });
-    if (existing) return;
-
     // The address the order was placed to, not the saved address as edited since (see utils/addressSnapshot).
     const deliveryAddress =
       (['addressLine1', 'area', 'city'] as const)
@@ -249,9 +248,6 @@ export class RiderService {
         .filter((part): part is string => typeof part === 'string' && part.trim() !== '')
         .join(', ') || 'Address unavailable';
 
-    // The customer's handover code lives on the order. Older orders created without
-    // one get it now, before a rider can be assigned.
-    await prisma.order.updateMany({ where: { id: orderId, handoverCode: null }, data: { handoverCode: newHandoverCode() } });
     const estimatedReadyAt = new Date(Date.now() + estimatedPrepMinutes * 60 * 1000);
 
     const pickupSeller = pickupSellerOf(order.items);
@@ -262,21 +258,34 @@ export class RiderService {
     const deliveryLng = finiteOrNull(doorField(order.deliveryAddressSnapshot, order.deliveryAddress, 'longitude') as number | null | undefined);
 
     try {
-      const created = await prisma.delivery.create({
-        data: {
-          orderId,
-          pickupAddress: pickupLineOf(pickupSeller),
-          deliveryAddress,
-          pickupLatitude: pickupLat,
-          pickupLongitude: pickupLng,
-          deliveryLatitude: deliveryLat,
-          deliveryLongitude: deliveryLng,
-          status: 'pending',
-          estimatedReadyAt,
-        },
+      const created = await prisma.$transaction(async (tx) => {
+        // The status read above was unlocked, so a reject or cancel could have committed since. Re-read it under the
+        // order's row lock (which every reject and cancel takes): one that won is seen here, and one that comes after
+        // finds this job and cancels it, so a cancelled order is never left with a live job.
+        const [locked] = await tx.$queryRaw<Array<{ order_status: string }>>`SELECT order_status FROM orders WHERE id = ${orderId} FOR UPDATE`;
+        if (!locked || ORDER_CLOSED_FOR_DELIVERY.includes(locked.order_status)) return null;
+        if (await tx.delivery.findUnique({ where: { orderId }, select: { id: true } })) return null;
+
+        // The customer's handover code lives on the order. Older orders created without
+        // one get it now, before a rider can be assigned.
+        await tx.order.updateMany({ where: { id: orderId, handoverCode: null }, data: { handoverCode: newHandoverCode() } });
+        return tx.delivery.create({
+          data: {
+            orderId,
+            pickupAddress: pickupLineOf(pickupSeller),
+            deliveryAddress,
+            pickupLatitude: pickupLat,
+            pickupLongitude: pickupLng,
+            deliveryLatitude: deliveryLat,
+            deliveryLongitude: deliveryLng,
+            status: 'pending',
+            estimatedReadyAt,
+          },
+          select: { id: true },
+        });
       });
       // Offered to the best rider first; the pool hears of it only if nobody can take it.
-      postDeliverySoon(created.id, orderId);
+      if (created) postDeliverySoon(created.id, orderId);
     } catch (err) {
       const isDuplicate = err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002';
       if (!isDuplicate) throw err;
@@ -426,7 +435,7 @@ export class RiderService {
 
     // One claim at a time per rider (their row locked), so two quick claims can't both pass
     // the two-job and cash limits.
-    await prisma.$transaction(async (tx) => {
+    const claimedOrderNumber = await prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM riders WHERE id = ${rider.id} FOR UPDATE`;
 
       // At most two jobs at once.
@@ -441,7 +450,7 @@ export class RiderService {
 
       const liveOrder = await tx.order.findFirst({
         where: { id: delivery.orderId, orderStatus: { notIn: ['cancelled', 'refunded', 'delivered', 'completed'] } },
-        select: { id: true, paymentMethod: true, paymentStatus: true, totalAmount: true },
+        select: { id: true, paymentMethod: true, paymentStatus: true, totalAmount: true, orderNumber: true },
       });
       if (!liveOrder || delivery.status !== 'pending') {
         throw new AppError('This job is no longer available', 409, 'DELIVERY_UNAVAILABLE');
@@ -479,6 +488,15 @@ export class RiderService {
       if (claim.count === 0) {
         throw new AppError('Delivery already claimed by another rider', 409, 'ALREADY_CLAIMED');
       }
+      return liveOrder.orderNumber;
+    });
+    logEvent('delivery.claimed', {
+      orderId: delivery.orderId,
+      orderNumber: claimedOrderNumber,
+      deliveryId,
+      riderId: rider.id,
+      actor: 'rider',
+      riderFeeMinor: Math.round(corridor.standardFee * 100),
     });
     void realtimeOrderService.emitDeliveryClaimed(deliveryId, delivery.orderId);
 
@@ -609,7 +627,17 @@ export class RiderService {
         where: { id: deliveryId },
         include: DELIVERY_INCLUDE,
       });
-      return { updated, newOrderStatus, orderId: delivery.orderId };
+      return { updated, newOrderStatus, orderId: delivery.orderId, orderNumber: order.orderNumber };
+    });
+
+    const orderEvent: Record<string, string> = { picked_up: 'order.picked_up', delivered: 'order.delivered', delivery_failed: 'order.delivery_failed' };
+    logEvent(orderEvent[status] ?? `delivery.${status}`, {
+      orderId: result.orderId,
+      orderNumber: result.orderNumber,
+      deliveryId,
+      riderId: rider.id,
+      actor: 'rider',
+      orderStatus: result.newOrderStatus,
     });
 
     // Side effects only after the commit.

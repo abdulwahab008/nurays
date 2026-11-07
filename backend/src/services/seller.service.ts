@@ -708,8 +708,16 @@ export class SellerService {
     const owing = await refreshOwing(prisma, sellerId, new Date(), balance.available);
 
     // The latest orders, one row each with this kitchen's dishes in it (an order with two dishes is one order, not two rows).
+    // Found from the kitchen's own dishes and MATERIALIZED: as a semi-join the planner walks every order on the platform
+    // newest-first looking for this kitchen's (the same trap as the kitchen orders list, seller-order.service.ts).
+    const recentIds = await prisma.$queryRaw<Array<{ id: string }>>`
+      WITH mine AS MATERIALIZED (SELECT DISTINCT order_id FROM order_items WHERE seller_id = ${sellerId})
+      SELECT o.id FROM mine JOIN orders o ON o.id = mine.order_id
+      ORDER BY o.created_at DESC, o.id DESC
+      LIMIT 8
+    `;
     const recentOrders = await prisma.order.findMany({
-      where: { items: { some: { sellerId } } },
+      where: { id: { in: recentIds.map((r) => r.id) } },
       select: {
         id: true,
         orderNumber: true,
@@ -720,8 +728,7 @@ export class SellerService {
           select: { quantity: true, totalPrice: true, productName: true, productImage: true, product: { select: { name: true } } },
         },
       },
-      orderBy: { createdAt: 'desc' },
-      take: 8,
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     });
 
     // Get low stock products
@@ -881,12 +888,19 @@ export class SellerService {
     }
 
     // Get order items in period
+    // Only the columns the figures below read: a year of a busy kitchen's lines is tens of thousands of rows.
     const orderItems = await prisma.orderItem.findMany({
       where: {
         sellerId,
         createdAt: { gte: startDate },
       },
-      include: {
+      select: {
+        status: true,
+        quantity: true,
+        sellerPayout: true,
+        totalPrice: true,
+        productId: true,
+        productName: true,
         order: {
           select: {
             id: true,
@@ -896,12 +910,7 @@ export class SellerService {
             deliveryFeeBreakdown: true,
           },
         },
-        product: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
+        product: { select: { name: true } },
       },
     });
 

@@ -99,9 +99,11 @@ export default function AdminDashboardPage() {
     void load();
   }, [isAuthenticated, isAdmin, user?.permissions, router, load]);
 
+  // Every order on the platform sends events here, and each reload is three of the heaviest reads: at most one per 30 s.
   useLiveRefresh(() => void load(), {
     events: ['order:new', 'order:status:update', 'notification:new', 'delivery:new'],
     intervalMs: 60_000,
+    coalesceMs: 30_000,
     enabled: isAuthenticated && isAdmin,
   });
 

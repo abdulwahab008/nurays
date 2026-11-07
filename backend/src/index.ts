@@ -10,6 +10,7 @@ routeConsoleToLogger();
 
 import express from 'express';
 import { createServer } from 'http';
+import { Worker } from 'worker_threads';
 import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
@@ -36,6 +37,7 @@ import { sweepStaleOrders, purgeExpiredSecrets } from './services/order-maintena
 import { purgeOldAuditLogs } from './services/audit-retention.service';
 import { expireAbandonedAttempts } from './services/online-payment.service';
 import { errorHandler } from './middleware/errorHandler';
+import { flushProductViews } from './services/product.service';
 import { notFoundHandler } from './middleware/notFoundHandler';
 import healthRoutes from './routes/health.routes';
 import statsRoutes from './routes/stats.routes';
@@ -159,8 +161,8 @@ app.use(errorHandler);
 httpServer.listen(PORT, () => {
   logger.info({ port: PORT, env: process.env.NODE_ENV || 'development', api: `http://localhost:${PORT}/api/${API_VERSION}` }, 'Server running (WebSocket server initialized)');
 
-  // Background jobs. Each run holds a Postgres advisory lock, so with several app
-  // instances only one runs a given job at a time (jobs/scheduler.ts).
+  // Background jobs. Each run holds a Redis lease, so with several app instances only one
+  // runs a given job at a time (jobs/scheduler.ts).
   // Safety-net sweep for stock alerts an order-time check might have missed
   // (e.g. a threshold lowered after the fact); real-time alerting on order creation
   // is the primary path.
@@ -210,6 +212,9 @@ async function shutdown(signal: string, exitCode = 0) {
     process.exit(1);
   }, SHUTDOWN_GRACE_MS);
   forced.unref();
+  // That timer needs this thread's event loop, which an overloaded process (thousands of requests
+  // in flight) did not reach for minutes. A thread of its own kills the process regardless.
+  new Worker(`setTimeout(() => process.kill(${process.pid}, 'SIGKILL'), ${SHUTDOWN_GRACE_MS + 5_000})`, { eval: true }).unref();
 
   stopScheduler();
   if (SHUTDOWN_DRAIN_MS > 0) await new Promise((resolve) => setTimeout(resolve, SHUTDOWN_DRAIN_MS));
@@ -219,6 +224,7 @@ async function shutdown(signal: string, exitCode = 0) {
   await socketManager.close().catch((err) => logger.error({ err }, 'Closing sockets failed'));
   await httpClosed;
   await stopWorkers().catch((err) => logger.error({ err }, 'Stopping job workers failed'));
+  await flushProductViews();
   await Promise.allSettled([prisma.$disconnect(), closeRedis(), flushSentry()]);
   logger.info('Shutdown complete');
   process.exit(exitCode);

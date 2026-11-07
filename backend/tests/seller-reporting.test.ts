@@ -87,7 +87,11 @@ beforeEach(() => {
     { id: 'order-earned', total_amount: 1150, payment_method: 'card', payment_collected_by: 'platform', payment_status: 'paid', has_paid_at: true, order_status: 'delivered', delivery_type: 'home_delivery', delivery_provider: 'platform', delivery_fee_breakdown: riderFee, live_payout: 900, first_seller_id: SELLER, refunds_failed: 0, refunds_completed: 0 },
     { id: 'order-refunded', total_amount: 1800, payment_method: 'card', payment_collected_by: 'platform', payment_status: 'refunded', has_paid_at: true, order_status: 'delivered', delivery_type: 'home_delivery', delivery_provider: 'platform', delivery_fee_breakdown: [], live_payout: 1620, first_seller_id: SELLER, refunds_failed: 0, refunds_completed: 1800 },
   ];
-  mockPrisma.$queryRaw.mockImplementation(async (sql: TemplateStringsArray) => (sql.join('').includes('first_seller_id') ? balanceRows : stats));
+  mockPrisma.$queryRaw.mockImplementation(async (sql: TemplateStringsArray) => {
+    const text = sql.join('');
+    if (text.includes('LIMIT 8')) return [{ id: 'order-cooking' }, { id: 'order-earned' }];
+    return text.includes('first_seller_id') ? balanceRows : stats;
+  });
   mockPrisma.orderItem.findMany.mockResolvedValue(lines);
   mockPrisma.sellerPayout.findMany.mockResolvedValue([]);
   mockPrisma.riderLedgerEntry.findMany.mockResolvedValue([]);
@@ -130,4 +134,21 @@ it('counts only the delivered, still-paid order as earned, net of the delivery f
   expect(ov.deliveryPaid).toBe(150);
   expect(ov.grossSales - ov.platformFees - ov.sellerDiscounts + ov.deliveryEarned - ov.deliveryPaid).toBe(ov.netEarnings);
   expect(ov.netEarnings).toBe(750);
+});
+
+it("lists the latest orders found from the kitchen's own dishes, not by walking every order", async () => {
+  await sellerService.getSellerDashboard(SELLER);
+  const recent = mockPrisma.$queryRaw.mock.calls.find(([sql]: [TemplateStringsArray]) => sql.join('').includes('LIMIT 8'));
+  expect(recent[0].join('')).toContain('WITH mine AS MATERIALIZED (SELECT DISTINCT order_id FROM order_items WHERE seller_id = ');
+  expect(recent.slice(1)).toEqual([SELLER]);
+  expect(mockPrisma.order.findMany).toHaveBeenCalledWith(
+    expect.objectContaining({ where: { id: { in: ['order-cooking', 'order-earned'] } }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }] })
+  );
+});
+
+it('reads only the line columns the analytics figures use', async () => {
+  await sellerService.getSellerAnalytics(SELLER, '1y');
+  const args = mockPrisma.orderItem.findMany.mock.calls[0][0];
+  expect(args.include).toBeUndefined();
+  expect(Object.keys(args.select).sort()).toEqual(['order', 'product', 'productId', 'productName', 'quantity', 'sellerPayout', 'status', 'totalPrice']);
 });

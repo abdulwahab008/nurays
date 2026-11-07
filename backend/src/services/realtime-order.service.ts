@@ -64,9 +64,18 @@ async function orderAudience(
 
 export class RealtimeOrderService {
   /**
-   * Emit order status update to relevant parties
+   * Tell an order's parties its status changed. Called after the change is committed, so it never throws:
+   * a failure here (the database blipping) must not turn the committed change into an error for the caller.
    */
   async emitOrderStatusUpdate(orderId: string, status: string, changedBy?: string) {
+    try {
+      await this.sendOrderStatusUpdate(orderId, status, changedBy);
+    } catch (err) {
+      logger.error({ err, orderId, status }, 'order:status:update event failed');
+    }
+  }
+
+  private async sendOrderStatusUpdate(orderId: string, status: string, changedBy?: string) {
     const audience = await orderAudience(orderId);
     if (!audience) {
       return;
@@ -121,29 +130,27 @@ export class RealtimeOrderService {
     }
   }
 
-  /**
-   * Emit order item status update
-   */
+  /** A dish's status changed (after the change is committed, so this never throws, like emitOrderStatusUpdate). */
   async emitOrderItemStatusUpdate(orderItemId: string, status: string, _sellerId?: string) {
-    const orderItem = await prisma.orderItem.findUnique({
-      where: { id: orderItemId },
-      select: { id: true, orderId: true },
-    });
-    if (!orderItem) {
-      return;
-    }
-    const audience = await orderAudience(orderItem.orderId);
-    if (!audience) {
-      return;
-    }
+    try {
+      const orderItem = await prisma.orderItem.findUnique({
+        where: { id: orderItemId },
+        select: { id: true, orderId: true },
+      });
+      if (!orderItem) return;
+      const audience = await orderAudience(orderItem.orderId);
+      if (!audience) return;
 
-    socketManager.emitToRooms(audience.rooms, 'order:item:status:update', {
-      orderItemId: orderItem.id,
-      orderId: orderItem.orderId,
-      orderNumber: audience.orderNumber,
-      status,
-      updatedAt: new Date().toISOString(),
-    });
+      socketManager.emitToRooms(audience.rooms, 'order:item:status:update', {
+        orderItemId: orderItem.id,
+        orderId: orderItem.orderId,
+        orderNumber: audience.orderNumber,
+        status,
+        updatedAt: new Date().toISOString(),
+      });
+    } catch (err) {
+      logger.error({ err, orderItemId, status }, 'order:item:status:update event failed');
+    }
   }
 
   // The emitters below are best-effort and never throw: a lost live update is caught up by
@@ -398,7 +405,9 @@ export class RealtimeOrderService {
   }
 
   /**
-   * Emit delivery tracking update
+   * Where the rider is, for the customer only (wherever they are in the app). The order's room also holds the
+   * kitchens, who see the status but not where the rider is (see getOrderDetails), and no admin screen shows a
+   * rider's position, so admins are not sent a sample every few seconds for every delivery on the platform.
    */
   async emitDeliveryTrackingUpdate(
     orderId: string,
@@ -414,17 +423,11 @@ export class RealtimeOrderService {
       updatedAt: new Date().toISOString(),
     };
 
-    // The customer (wherever they are in the app) and admins: the order's room also holds the
-    // kitchens, who see the status but not where the rider is (see getOrderDetails).
     const order = await prisma.order.findUnique({
       where: { id: orderId },
       select: { customerId: true },
     });
-    socketManager.emitToRooms(
-      [...(order?.customerId ? [`user:${order.customerId}`] : []), 'role:admin'],
-      'order:delivery:tracking',
-      trackingData
-    );
+    if (order?.customerId) socketManager.emitToUser(order.customerId, 'order:delivery:tracking', trackingData);
   }
 }
 

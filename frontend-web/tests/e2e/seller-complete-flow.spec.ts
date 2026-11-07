@@ -26,10 +26,11 @@ async function postJson(
   endpoint: string,
   body: unknown,
   jwt?: string,
+  extraHeaders: Record<string, string> = {},
 ) {
   const url = `${API_BASE}/${endpoint.replace(/^\//, '')}`;
   return ctx.post(url, {
-    headers: jwt ? { Authorization: `Bearer ${jwt}` } : {},
+    headers: { ...(jwt ? { Authorization: `Bearer ${jwt}` } : {}), ...extraHeaders },
     data: body,
   });
 }
@@ -435,6 +436,7 @@ test.describe.serial('Complete Seller End-to-End Workflow (Sections 1-14)', () =
         deliveryInstructions: 'Askari 11 Sector C Villa 14, please ring doorbell.',
       },
       buyerSession.jwt,
+      { 'Idempotency-Key': crypto.randomUUID() },
     );
 
     const orderBody = await orderResp.json();
@@ -477,6 +479,7 @@ test.describe.serial('Complete Seller End-to-End Workflow (Sections 1-14)', () =
         paymentMethod: 'cod',
       },
       buyerSession.jwt,
+      { 'Idempotency-Key': crypto.randomUUID() },
     );
     const tempOrderBody = await tempOrderResp.json();
     const tempOrderId = tempOrderBody.data?.order?.id;

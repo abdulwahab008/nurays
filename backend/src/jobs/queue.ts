@@ -1,6 +1,6 @@
 import { Queue, Worker, type Job } from 'bullmq';
 import { redisUrl, newRedisConnection } from '../config/redis';
-import { logger } from '../utils/logger';
+import { logger, requestContext } from '../utils/logger';
 
 /**
  * Background jobs: work that shouldn't hold up a request and must be retried when it fails
@@ -16,6 +16,23 @@ import { logger } from '../utils/logger';
  */
 
 const QUEUE_NAME = 'nuray-jobs';
+
+// The id of the request that queued a job travels in its data, so the worker's log lines carry it too.
+const REQUEST_ID_KEY = '_requestId';
+
+function withRequestId<T>(payload: T): T | (T & { [REQUEST_ID_KEY]: string }) {
+  const requestId = requestContext.getStore()?.requestId;
+  if (!requestId || payload === null || typeof payload !== 'object' || Array.isArray(payload)) return payload;
+  return { ...payload, [REQUEST_ID_KEY]: requestId };
+}
+
+/** Split a queued job's data into the handler's payload and the request id it was queued under. */
+export function unpackJobData(job: { name: string; id?: string; data: unknown }): { payload: unknown; requestId: string } {
+  const fallback = `job:${job.name}:${job.id ?? 'local'}`;
+  if (job.data === null || typeof job.data !== 'object' || Array.isArray(job.data)) return { payload: job.data, requestId: fallback };
+  const { [REQUEST_ID_KEY]: requestId, ...payload } = job.data as Record<string, unknown>;
+  return { payload, requestId: typeof requestId === 'string' ? requestId : fallback };
+}
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Handler = (payload: any) => Promise<void>;
@@ -107,7 +124,7 @@ export async function enqueue<T>(name: string, payload: T, opts: EnqueueOptions 
   // While Redis is unreachable the job runs here at once rather than holding the request
   // for the enqueue timeout on every call.
   if (q && queueReady()) {
-    const added = q.add(name, payload, {
+    const added = q.add(name, withRequestId(payload), {
       attempts: opts.attempts ?? 5,
       backoff: { type: 'exponential', delay: 15_000 },
       delay: opts.delayMs,
@@ -139,6 +156,27 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
+export interface QueueCounts {
+  waiting: number;
+  active: number;
+  failed: number;
+  delayed: number;
+}
+
+/** Job counts of the durable queue; null without Redis or while it is unreachable (jobs then run in this process). */
+export async function getQueueCounts(): Promise<QueueCounts | null> {
+  const q = getQueue();
+  if (connecting) await connecting;
+  if (!q || !queueReady()) return null;
+  try {
+    const counts = await withTimeout(q.getJobCounts('waiting', 'active', 'failed', 'delayed'), ENQUEUE_TIMEOUT_MS);
+    return { waiting: counts.waiting ?? 0, active: counts.active ?? 0, failed: counts.failed ?? 0, delayed: counts.delayed ?? 0 };
+  } catch (err) {
+    logger.warn({ err }, 'Could not read the job queue counts');
+    return null;
+  }
+}
+
 /** Start processing queued jobs in this process (no-op without Redis: jobs run inline). */
 export function startWorkers(concurrency = 5) {
   if (!redisUrl() || worker) return;
@@ -148,14 +186,16 @@ export function startWorkers(concurrency = 5) {
     async (job: Job) => {
       const handler = handlers.get(job.name);
       if (!handler) throw new Error(`No handler for background job "${job.name}"`);
-      await handler(job.data);
+      const { payload, requestId } = unpackJobData(job);
+      await requestContext.run({ requestId }, () => handler(payload));
     },
     { connection: newRedisConnection('queue-worker', { maxRetriesPerRequest: null }), concurrency }
   );
   worker.on('failed', (job, err) => {
     const attempts = job?.opts.attempts ?? 1;
     const final = (job?.attemptsMade ?? 0) >= attempts;
-    logger.error({ err, job: job?.name, jobId: job?.id, attempt: job?.attemptsMade, attempts, final }, final ? 'Job failed; giving up' : 'Job failed; will retry');
+    const requestId = job ? unpackJobData(job).requestId : undefined;
+    logger.error({ err, requestId, job: job?.name, jobId: job?.id, attempt: job?.attemptsMade, attempts, final }, final ? 'Job failed; giving up' : 'Job failed; will retry');
   });
   worker.on('error', (err) => logger.error({ err }, 'Job worker error'));
 }

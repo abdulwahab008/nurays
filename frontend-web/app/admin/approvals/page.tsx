@@ -58,7 +58,12 @@ export default function AdminApprovalsPage() {
     load();
   }, [load]);
   // Refreshes when something new arrives for a decision, when the tab comes back, and on a slow timer.
-  useLiveRefresh(load, { events: ['order:new', 'order:status:update', 'notification:new', 'delivery:new'], intervalMs: 60_000 });
+  // Every order on the platform sends events here: at most one reload per 30 s.
+  useLiveRefresh(load, {
+    events: ['order:new', 'order:status:update', 'notification:new', 'delivery:new'],
+    intervalMs: 60_000,
+    coalesceMs: 30_000,
+  });
 
   const waitingQueues = queues.filter((q) => q.count > 0).sort((a, b) => Number(PROBLEM_QUEUES.has(b.key)) - Number(PROBLEM_QUEUES.has(a.key)));
   const clearQueues = queues.filter((q) => q.count === 0);

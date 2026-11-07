@@ -16,6 +16,7 @@ const mockRes = () => {
     return res;
   }) as any;
   res.json = jest.fn().mockReturnValue(res) as any;
+  res.locals = {};
   return res;
 };
 const req = (over: Partial<Request> = {}) => ({ path: '/api/v1/x', method: 'GET', id: 'req-1', ...over }) as unknown as Request;

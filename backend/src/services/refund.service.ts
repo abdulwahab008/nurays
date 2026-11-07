@@ -5,6 +5,7 @@ import { notify } from './notify.service';
 import { AppError } from '../middleware/errorHandler';
 import { parseBreakdown } from '../utils/deliveryEarnings';
 import { GST_RATE, priceOrder, roundMoney } from '../utils/pricing';
+import { logEvent } from '../utils/logger';
 
 type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
 
@@ -15,6 +16,19 @@ export interface IssuedRefund {
   status: 'pending' | 'completed';
   /** True when this refund brought the order to fully refunded. */
   fullyRefunded: boolean;
+}
+
+/** Log a refund that issueRefund created, once the caller's transaction has committed. */
+export function logRefundIssued(refund: IssuedRefund | null, fields: { orderId: string; orderNumber?: string; actor: string; sellerId?: string }) {
+  if (!refund) return;
+  logEvent('refund.issued', {
+    ...fields,
+    refundId: refund.refundId,
+    method: refund.method,
+    status: refund.status,
+    fullyRefunded: refund.fullyRefunded,
+    amountMinor: Math.round(refund.amount * 100),
+  });
 }
 
 
@@ -256,6 +270,7 @@ export async function refundForCancelledItems(
  */
 export async function completeRefund(refundId: string, adminId: string, reference?: string) {
   const refund = await completeRefundRecord(refundId, adminId, reference);
+  logEvent('refund.completed', { orderId: refund.orderId, refundId, actor: 'admin', amountMinor: Math.round(Number(refund.amount) * 100) });
   // After the commit: tell the customer the money is on its way.
   const order = await prisma.order.findUnique({ where: { id: refund.orderId }, select: { orderNumber: true, customerId: true } });
   if (order?.customerId) {
@@ -320,7 +335,7 @@ async function completeRefundRecord(refundId: string, adminId: string, reference
  * recorded as failed rather than left pending a refund that will never be sent.
  */
 export async function dismissRefund(refundId: string, adminId: string, reason: string) {
-  return prisma.$transaction(async (tx) => {
+  const dismissed = await prisma.$transaction(async (tx) => {
     const claimed = await tx.refund.updateMany({
       where: { id: refundId, status: 'pending' },
       data: { status: 'failed', reference: reason.trim(), processedBy: adminId, processedAt: new Date() },
@@ -355,6 +370,8 @@ export async function dismissRefund(refundId: string, adminId: string, reason: s
     });
     return refund;
   });
+  logEvent('refund.dismissed', { orderId: dismissed.orderId, refundId, actor: 'admin', amountMinor: Math.round(Number(dismissed.amount) * 100) });
+  return dismissed;
 }
 
 /** The admin's queue of refunds still waiting for the money to be sent. */

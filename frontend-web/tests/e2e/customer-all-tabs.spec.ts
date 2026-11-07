@@ -22,10 +22,11 @@ async function postJson(
   endpoint: string,
   body: unknown,
   jwt?: string,
+  extraHeaders: Record<string, string> = {},
 ) {
   const url = `${API_BASE}/${endpoint.replace(/^\//, '')}`;
   return ctx.post(url, {
-    headers: jwt ? { Authorization: `Bearer ${jwt}` } : {},
+    headers: { ...(jwt ? { Authorization: `Bearer ${jwt}` } : {}), ...extraHeaders },
     data: body,
   });
 }
@@ -110,6 +111,7 @@ async function createVerifiedCustomerWithData() {
       paymentMethod: 'cod',
     },
     jwt,
+    { 'Idempotency-Key': crypto.randomUUID() },
   );
   expect(orderResp.status()).toBe(201);
   const orderBody = await orderResp.json();

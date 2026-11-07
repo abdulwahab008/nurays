@@ -1,5 +1,5 @@
 import type { Request, Response } from 'express';
-import { toAppError, errorHandler, AppError } from '../src/middleware/errorHandler';
+import { toAppError, errorHandler, AppError, ERROR_LOGGED } from '../src/middleware/errorHandler';
 import { logger } from '../src/utils/logger';
 import { reportError } from '../src/config/sentry';
 
@@ -93,7 +93,7 @@ describe('toAppError', () => {
 
 describe('errorHandler', () => {
   const send = (err: Error) => {
-    const res = { setHeader: jest.fn(), status: jest.fn().mockReturnThis(), json: jest.fn() };
+    const res = { setHeader: jest.fn(), status: jest.fn().mockReturnThis(), json: jest.fn(), locals: {} };
     errorHandler(err, { path: '/x', method: 'GET' } as Request, res as unknown as Response, jest.fn());
     return res;
   };
@@ -130,6 +130,9 @@ describe('errorHandler', () => {
     expect(logger.error).not.toHaveBeenCalled();
     expect(reportError).not.toHaveBeenCalled();
     expect(logger.warn).toHaveBeenCalled();
+    // Logged here only as a warning, so the request line keeps the one error-level line for it.
+    expect(res.locals).not.toHaveProperty(ERROR_LOGGED);
+    expect(send(new AppError('Google is down', 503, 'GOOGLE_UNAVAILABLE')).locals).toHaveProperty(ERROR_LOGGED, true);
   });
 
   it('does not ask for a retry on other errors', () => {

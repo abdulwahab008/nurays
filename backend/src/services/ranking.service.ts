@@ -117,6 +117,13 @@ export async function searchRankedProductIds(terms: string[], max = 500): Promis
   if (clean.length === 0) return [];
   const likes = clean.map((t) => `%${t.replace(/[\\%_]/g, (c) => `\\${c}`)}%`);
   const prefixes = clean.map((t) => `${t.replace(/[\\%_]/g, (c) => `\\${c}`)}%`);
+  // The per-term filter below spans the unnest and the kitchen join, so on its own it only gets a
+  // sequential scan. This prefilter is plain column predicates the trigram indexes (and
+  // seller_id) answer with one bitmap scan each.
+  const candidates = Prisma.join(
+    clean.map((term, i) => Prisma.sql`p.name ILIKE ${likes[i]} OR p.name_urdu ILIKE ${likes[i]} OR p.description ILIKE ${likes[i]} OR ${term}::text <% p.name`),
+    ' OR '
+  );
   // Short dish names need a looser match than pg_trgm's default 0.6 ("biryni" vs "biryani"
   // is 0.57); set for this query only, so the trigram index still serves the search.
   const rows = await prisma.$transaction(async (tx) => {
@@ -135,7 +142,9 @@ export async function searchRankedProductIds(terms: string[], max = 500): Promis
         FROM products p
         JOIN sellers s ON s.id = p.seller_id
         CROSS JOIN unnest(${clean}::text[], ${likes}::text[], ${prefixes}::text[]) AS q(term, pattern, prefix)
-        WHERE p.is_active AND p.approval_status = 'approved'
+        WHERE (${candidates}
+            OR p.seller_id = ANY(ARRAY(SELECT id FROM sellers WHERE business_name ILIKE ANY(${likes}::text[]) OR business_name_urdu ILIKE ANY(${likes}::text[]))))
+          AND p.is_active AND p.approval_status = 'approved'
           AND (p.name ILIKE q.pattern OR COALESCE(p.name_urdu, '') ILIKE q.pattern
                OR COALESCE(p.description, '') ILIKE q.pattern OR q.term <% p.name
                OR s.business_name ILIKE q.pattern OR COALESCE(s.business_name_urdu, '') ILIKE q.pattern)

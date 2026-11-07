@@ -5,7 +5,11 @@
 
 jest.mock('../src/config/database', () => ({
   __esModule: true,
-  default: { seller: { findMany: jest.fn() } },
+  default: {
+    seller: { findMany: jest.fn() },
+    product: { groupBy: jest.fn().mockResolvedValue([]) },
+    review: { groupBy: jest.fn().mockResolvedValue([]) },
+  },
 }));
 jest.mock('../src/services/product.service', () => ({
   computeCustomerFacingSellerInfo: jest.fn(),
@@ -35,7 +39,6 @@ const row = (id: string) => ({
   communityDeliveries: [],
   user: { profile: null },
   products: [],
-  _count: { products: 0, reviews: 0 },
 });
 
 beforeEach(() => {

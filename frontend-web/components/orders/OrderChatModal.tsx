@@ -263,7 +263,9 @@ export default function OrderChatModal({
     events: ['order:message', 'order:messages:read'],
     match: (data) => data?.orderId === orderId,
     intervalMs: 30_000,
-    offlineMs: 5_000,
+    // Without the socket: 15 s, then 30 s, never more often than that (it used to be every 5 s, 6x the live rate).
+    offlineMs: 15_000,
+    offlineMaxMs: 30_000,
     enabled: isOpen,
   });
 

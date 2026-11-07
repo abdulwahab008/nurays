@@ -97,7 +97,7 @@ async function runIdealFlow() {
       deliveryAddressId: addressId,
       paymentMethod: 'cod',
     },
-    { headers: { Authorization: `Bearer ${customerJwt}` } }
+    { headers: { Authorization: `Bearer ${customerJwt}`, 'Idempotency-Key': crypto.randomUUID() } }
   );
   const order = orderRes.data.data.order;
   console.log(`1.4 Order placed successfully!`);

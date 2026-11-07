@@ -319,6 +319,73 @@ export function contentChanged(existing: Record<string, unknown>, data: Record<s
   return false;
 }
 
+/** Approved reviews and order lines per dish, counted only for these dishes. */
+async function productCounts(ids: string[]) {
+  const counts = new Map(ids.map((id) => [id, { reviews: 0, orderItems: 0 }]));
+  if (ids.length === 0) return counts;
+  const [reviews, orderItems] = await Promise.all([
+    prisma.review.groupBy({ by: ['productId'], where: { productId: { in: ids }, isApproved: true }, _count: { _all: true } }),
+    prisma.orderItem.groupBy({ by: ['productId'], where: { productId: { in: ids } }, _count: { _all: true } }),
+  ]);
+  for (const r of reviews) {
+    const c = r.productId ? counts.get(r.productId) : undefined;
+    if (c) c.reviews = r._count._all;
+  }
+  for (const r of orderItems) {
+    const c = r.productId ? counts.get(r.productId) : undefined;
+    if (c) c.orderItems = r._count._all;
+  }
+  return counts;
+}
+
+/*
+ * Dish views are counted in memory and written in one statement every VIEW_FLUSH_MS. A per-view
+ * UPDATE queued behind the stock-decrement row locks of order placement and held a pool
+ * connection while it waited; the batch skips rows an order has locked and retries them next time.
+ */
+const VIEW_FLUSH_MS = 30_000;
+const pendingViews = new Map<string, number>();
+let viewFlushTimer: NodeJS.Timeout | null = null;
+
+function scheduleViewFlush() {
+  if (!viewFlushTimer) viewFlushTimer = setTimeout(() => void flushProductViews(), VIEW_FLUSH_MS).unref();
+}
+
+export function recordProductView(productId: string) {
+  pendingViews.set(productId, (pendingViews.get(productId) ?? 0) + 1);
+  scheduleViewFlush();
+}
+
+export async function flushProductViews() {
+  if (viewFlushTimer) clearTimeout(viewFlushTimer);
+  viewFlushTimer = null;
+  if (pendingViews.size === 0) return;
+  const batch = [...pendingViews];
+  pendingViews.clear();
+  const ids = batch.map(([id]) => id);
+  let retry: Set<string>;
+  try {
+    const written = await prisma.$queryRaw<Array<{ id: string }>>`
+      WITH v AS (SELECT * FROM unnest(${ids}::text[], ${batch.map(([, n]) => n)}::int[]) AS v(id, n)),
+      free AS (SELECT p.id FROM products p JOIN v ON v.id = p.id FOR UPDATE OF p SKIP LOCKED)
+      UPDATE products p SET views_count = p.views_count + v.n
+      FROM v JOIN free ON free.id = v.id
+      WHERE p.id = v.id
+      RETURNING p.id`;
+    const done = new Set(written.map((r) => r.id));
+    const missed = ids.filter((id) => !done.has(id));
+    // Only rows that still exist were skipped for a lock; a deleted dish's views are dropped.
+    retry = new Set(missed.length === 0 ? [] : (await prisma.product.findMany({ where: { id: { in: missed } }, select: { id: true } })).map((p) => p.id));
+  } catch (err) {
+    logger.warn({ err, products: ids.length }, 'view counts not recorded, retrying');
+    retry = new Set(ids);
+  }
+  for (const [id, n] of batch) {
+    if (retry.has(id)) pendingViews.set(id, (pendingViews.get(id) ?? 0) + n);
+  }
+  if (pendingViews.size > 0) scheduleViewFlush();
+}
+
 export class ProductService {
   /**
    * Get all products with filters and pagination
@@ -733,12 +800,6 @@ export class ProductService {
           where: { isActive: true },
           orderBy: { sortOrder: 'asc' },
         },
-        _count: {
-          select: {
-            reviews: { where: { isApproved: true } },
-            orderItems: true,
-          },
-        },
       },
     });
 
@@ -751,15 +812,16 @@ export class ProductService {
 
     // Count the view without holding the response or rewriting the row (updated_at stays
     // what the kitchen last changed); a kitchen looking at its own dish is not a view.
-    if (!isOwner) {
-      void prisma
-        .$executeRaw`UPDATE products SET views_count = views_count + 1 WHERE id = ${product.id}`
-        .catch((err: unknown) => logger.warn({ err, productId: product.id }, 'view count not recorded'));
-    }
+    if (!isOwner) recordProductView(product.id);
 
     // Format images with full URLs
     const baseUrl = process.env.BASE_URL || 'http://localhost:3001';
-    const sellerInfo = await computeCustomerFacingSellerInfo(product.seller, customerLat, customerLng, customerCommunityId);
+    // Scoped by product: Prisma's relation _count aggregates the whole child table before joining.
+    const [sellerInfo, reviewCount, orderItemCount] = await Promise.all([
+      computeCustomerFacingSellerInfo(product.seller, customerLat, customerLng, customerCommunityId),
+      prisma.review.count({ where: { productId: product.id, isApproved: true } }),
+      prisma.orderItem.count({ where: { productId: product.id } }),
+    ]);
 
     // This endpoint is public. `product.seller` is the full Seller row (bank and
     // wallet numbers, commission rate, home coordinates, the seller's phone), so
@@ -800,6 +862,7 @@ export class ProductService {
 
     return {
       ...productFields,
+      _count: { reviews: reviewCount, orderItems: orderItemCount },
       // Whether the dish can be ordered today, and when it is on the menu (for the page to say so).
       availableToday,
       menuLabel,
@@ -1109,21 +1172,17 @@ export class ProductService {
         include: {
           category: true,
           images: true,
-          _count: {
-            select: {
-              reviews: { where: { isApproved: true } },
-              orderItems: true,
-            },
-          },
         },
       }),
       prisma.product.count({ where }),
     ]);
+    const counts = await productCounts(products.map((p) => p.id));
 
     // Format products with full image URLs
     const baseUrl = process.env.BASE_URL || 'http://localhost:3001';
     const formattedProducts = products.map((product) => ({
       ...product,
+      _count: counts.get(product.id) ?? { reviews: 0, orderItems: 0 },
       price: Number(product.price),
       originalPrice: product.originalPrice ? Number(product.originalPrice) : null,
       images: product.images.map((img) => ({

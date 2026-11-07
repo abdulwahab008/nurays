@@ -2,6 +2,17 @@
 
 import { useEffect, useRef } from 'react';
 import { useSocket } from './use-socket';
+import { eventReloadDelay, nextPollDelay } from '../realtime/backoff';
+
+/** Bursts of events within this long become one reload. */
+const COALESCE_MS = 250;
+/**
+ * After a reconnection every client of a restarted server catches up: each waits a random part of this long
+ * first, so the reloads arrive over seconds instead of all in the same instant.
+ */
+const CATCH_UP_SPREAD_MS = 5_000;
+/** Coming back to a tab reloads only when the last reload is older than this. */
+const FRESH_FOR_MS = 15_000;
 
 interface LiveRefreshOptions {
   /** Socket events after which the data may have changed. */
@@ -11,10 +22,14 @@ interface LiveRefreshOptions {
   match?: (data: any) => boolean;
   /**
    * Safety-net reload interval while the realtime connection is up, for changes that send
-   * no event. While it is down the page reloads every `offlineMs` instead.
+   * no event. While it is down the first reload comes after `offlineMs` (or `intervalMs` if sooner)
+   * and the wait then doubles up to `offlineMaxMs` (see nextPollDelay).
    */
   intervalMs?: number;
   offlineMs?: number;
+  offlineMaxMs?: number;
+  /** At most one event-driven reload this often: the first after a quiet spell is not held back, later ones wait their turn. */
+  coalesceMs?: number;
   /** Off: no reloading at all (nothing on screen yet, or nothing left that can change). */
   enabled?: boolean;
   /**
@@ -31,7 +46,16 @@ interface LiveRefreshOptions {
  * never run while the tab is hidden.
  */
 export function useLiveRefresh(refresh: () => void, options: LiveRefreshOptions) {
-  const { events, match, intervalMs = 60_000, offlineMs = 15_000, enabled = true, eventsOnly = false } = options;
+  const {
+    events,
+    match,
+    intervalMs = 60_000,
+    offlineMs = 30_000,
+    offlineMaxMs = Math.max(intervalMs, 120_000),
+    coalesceMs = COALESCE_MS,
+    enabled = true,
+    eventsOnly = false,
+  } = options;
   const { socket, connected } = useSocket();
 
   const refreshRef = useRef(refresh);
@@ -42,18 +66,30 @@ export function useLiveRefresh(refresh: () => void, options: LiveRefreshOptions)
     matchRef.current = match;
   });
 
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const triggerRef = useRef(() => {
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => {
-      debounceRef.current = null;
-      refreshRef.current();
-    }, 250);
+  const lastRunRef = useRef(0);
+  const pendingRef = useRef<{ timer: ReturnType<typeof setTimeout>; at: number } | null>(null);
+  const runRef = useRef(() => {
+    lastRunRef.current = Date.now();
+    refreshRef.current();
+  });
+  // One reload pending at a time: a later request joins it, an earlier one brings it forward.
+  const scheduleRef = useRef((delayMs: number) => {
+    const at = Date.now() + delayMs;
+    const pending = pendingRef.current;
+    if (pending && pending.at <= at) return;
+    if (pending) clearTimeout(pending.timer);
+    pendingRef.current = {
+      at,
+      timer: setTimeout(() => {
+        pendingRef.current = null;
+        runRef.current();
+      }, delayMs),
+    };
   });
 
   useEffect(
     () => () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
+      if (pendingRef.current) clearTimeout(pendingRef.current.timer);
     },
     []
   );
@@ -65,35 +101,41 @@ export function useLiveRefresh(refresh: () => void, options: LiveRefreshOptions)
     if (!socket || !enabled) return;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const onEvent = (data: any) => {
-      if (!matchRef.current || matchRef.current(data)) triggerRef.current();
+      if (!matchRef.current || matchRef.current(data)) scheduleRef.current(eventReloadDelay(Date.now(), lastRunRef.current, coalesceMs, COALESCE_MS));
     };
     const names = eventKey.split('|').filter(Boolean);
     names.forEach((name) => socket.on(name, onEvent));
-    const onReconnect = () => triggerRef.current();
+    const onReconnect = () => scheduleRef.current(Math.round(Math.random() * CATCH_UP_SPREAD_MS));
     if (!eventsOnly) socket.io.on('reconnect', onReconnect);
     return () => {
       names.forEach((name) => socket.off(name, onEvent));
       socket.io.off('reconnect', onReconnect);
     };
-  }, [socket, enabled, eventKey, eventsOnly]);
+  }, [socket, enabled, eventKey, eventsOnly, coalesceMs]);
 
-  // Coming back to the tab.
+  // Coming back to the tab, unless what is on screen was loaded moments ago.
   useEffect(() => {
     if (!enabled || eventsOnly) return;
     const onVisible = () => {
-      if (document.visibilityState === 'visible') triggerRef.current();
+      if (document.visibilityState === 'visible' && Date.now() - lastRunRef.current >= FRESH_FOR_MS) scheduleRef.current(COALESCE_MS);
     };
     document.addEventListener('visibilitychange', onVisible);
     return () => document.removeEventListener('visibilitychange', onVisible);
   }, [enabled, eventsOnly]);
 
-  // Safety net: slow while live updates flow, faster while they can't.
+  // Safety net: slow while live updates flow; while they can't, a poll that backs off instead of speeding up.
   useEffect(() => {
     if (!enabled || eventsOnly) return;
-    const every = connected ? intervalMs : Math.min(intervalMs, offlineMs);
-    const timer = setInterval(() => {
-      if (document.visibilityState === 'visible') refreshRef.current();
-    }, every);
-    return () => clearInterval(timer);
-  }, [enabled, eventsOnly, connected, intervalMs, offlineMs]);
+    let offlinePolls = 0;
+    let timer: ReturnType<typeof setTimeout>;
+    const next = () => {
+      timer = setTimeout(() => {
+        if (document.visibilityState === 'visible') runRef.current();
+        if (!connected) offlinePolls += 1;
+        next();
+      }, nextPollDelay({ connected, offlinePolls, intervalMs, offlineMs, offlineMaxMs }));
+    };
+    next();
+    return () => clearTimeout(timer);
+  }, [enabled, eventsOnly, connected, intervalMs, offlineMs, offlineMaxMs]);
 }

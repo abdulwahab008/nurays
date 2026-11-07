@@ -20,10 +20,11 @@ async function postJson(
   path: string,
   body: unknown,
   jwt?: string,
+  extraHeaders: Record<string, string> = {},
 ) {
   const url = `${API_BASE}/${path.replace(/^\//, '')}`;
   return ctx.post(url, {
-    headers: jwt ? { Authorization: `Bearer ${jwt}` } : {},
+    headers: { ...(jwt ? { Authorization: `Bearer ${jwt}` } : {}), ...extraHeaders },
     data: body,
   });
 }
@@ -109,6 +110,7 @@ test.describe('Nuray customer purchase', () => {
         paymentMethod: 'cod',
       },
       jwt,
+      { 'Idempotency-Key': crypto.randomUUID() },
     );
     expect(orderResp.status()).toBe(201);
     const orderBody = await orderResp.json();
@@ -141,6 +143,7 @@ test.describe('Nuray customer purchase', () => {
         paymentMethod: 'cod',
       },
       jwt,
+      { 'Idempotency-Key': crypto.randomUUID() },
     );
     const order = (await orderResp.json()).data.order as {
       orderNumber: string;

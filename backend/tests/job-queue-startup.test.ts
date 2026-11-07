@@ -130,3 +130,30 @@ describe('without Redis', () => {
     expect(mockOpened).not.toHaveBeenCalled();
   });
 });
+
+describe('the request id of a queued job', () => {
+  it('travels in the job data and is the request id while the worker runs it', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { requestContext } = require('../src/utils/logger') as typeof import('../src/utils/logger');
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { Worker } = require('bullmq') as { Worker: jest.Mock };
+    const seen: Array<{ payload: unknown; requestId?: string }> = [];
+    jobs.defineJob<{ n: number }>('trace', async (payload) => {
+      seen.push({ payload, requestId: requestContext.getStore()?.requestId });
+    });
+    jobs.startWorkers();
+    mockConnection.becomeReady();
+
+    await requestContext.run({ requestId: 'rid-42' }, () => jobs.enqueue('trace', { n: 7 }));
+    const queued = mockAdd.mock.calls[mockAdd.mock.calls.length - 1][1];
+    expect(queued).toEqual({ n: 7, _requestId: 'rid-42' });
+
+    const processor = Worker.mock.calls[Worker.mock.calls.length - 1][1] as (job: unknown) => Promise<void>;
+    await processor({ name: 'trace', id: '9', data: queued });
+    await processor({ name: 'trace', id: '10', data: { n: 8 } });
+    expect(seen).toEqual([
+      { payload: { n: 7 }, requestId: 'rid-42' },
+      { payload: { n: 8 }, requestId: 'job:trace:10' },
+    ]);
+  });
+});

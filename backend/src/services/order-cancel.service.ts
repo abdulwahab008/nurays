@@ -2,9 +2,10 @@ import prisma from '../config/database';
 import { AppError } from '../middleware/errorHandler';
 import realtimeOrderService from './realtime-order.service';
 import { releasePromotionUsage } from './promotion.service';
-import { issueRefund, IssuedRefund } from './refund.service';
+import { issueRefund, IssuedRefund, logRefundIssued } from './refund.service';
 import { releaseHubAllocations } from './hub-allocation.service';
 import { cancelOpenDelivery, notifyDeliveryCancelled, CancelledDelivery } from './delivery-lifecycle.service';
+import { logEvent } from '../utils/logger';
 
 /** Cancelling an order, and what a cancellation sets right (stock, promotions, money, the delivery job). */
 export class OrderCancellation {
@@ -116,6 +117,9 @@ export class OrderCancellation {
 
       return updatedOrder;
     });
+
+    logEvent('order.cancelled', { orderId, orderNumber: order.orderNumber, actor: 'customer' });
+    logRefundIssued(refundIssued, { orderId, orderNumber: order.orderNumber, actor: 'customer' });
 
     // Emit order status update
     await realtimeOrderService.emitOrderStatusUpdate(cancelledOrder.id, 'cancelled', userId);

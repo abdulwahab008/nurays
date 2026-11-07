@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { loginUrlHere } from '@/lib/auth-redirect';
 import { getPromotionLabel, getStackedDiscountedPrice } from '@/lib/pricing';
 import { useRouter } from 'next/navigation';
@@ -46,6 +46,7 @@ import { ExternalLink } from '@/components/ExternalLink';
 import { useDeliveryEstimate } from '@/lib/hooks/use-delivery-estimate';
 import { useShallow } from 'zustand/react/shallow';
 import { SLOT_TIMES, openSlotsToday, pktDateString, slotDays, type SlotTime } from './delivery-slots';
+import { attemptMayExist, checkoutKeyFor, forgetCheckoutKey, sessionStore } from './checkout-key';
 
 type CopyField = 'iban' | 'jazzcash' | 'easypaisa';
 type PaymentMethod = 'cod' | 'safepay' | 'wallet' | 'bank' | 'jazzcash' | 'easypaisa';
@@ -126,7 +127,6 @@ export default function CheckoutPage() {
   const [loading, setLoading] = useState(true);
   // Why the tray and addresses could not be read; shown instead of "Your Tray is Empty", which would be untrue.
   const [loadError, setLoadError] = useState<unknown>(null);
-  const checkoutKeyRef = useRef<{ key: string; signature: string } | null>(null);
   const [processing, setProcessing] = useState(false);
   const [updatingItemId, setUpdatingItemId] = useState<string | null>(null);
   const [copiedField, setCopiedField] = useState<CopyField | null>(null);
@@ -428,17 +428,12 @@ export default function CheckoutPage() {
         expectedTotal,
       };
 
-      // One key per checkout attempt, reused if this same order is retried, so a
-      // timeout followed by "Place order" again can never create two orders.
-      const signature = JSON.stringify(orderData);
-      if (!checkoutKeyRef.current || checkoutKeyRef.current.signature !== signature) {
-        checkoutKeyRef.current = {
-          key: typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-          signature,
-        };
-      }
-      const response = await orderService.createOrder(orderData, checkoutKeyRef.current.key);
-      checkoutKeyRef.current = null;
+      const store = sessionStore();
+      const idempotencyKey = checkoutKeyFor(store, JSON.stringify(orderData), () =>
+        typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`
+      );
+      const response = await orderService.createOrder(orderData, idempotencyKey);
+      forgetCheckoutKey(store);
 
       // Clear cart. The order already exists at this point, so a failure here
       // must not surface as "failed to place order" (the customer would retry
@@ -457,8 +452,10 @@ export default function CheckoutPage() {
         return;
       }
 
-      if (typeof window !== 'undefined') {
-        sessionStorage.setItem('lastPlacedOrderId', orderId);
+      try {
+        sessionStore()?.setItem('lastPlacedOrderId', orderId);
+      } catch {
+        // Storage full or blocked: the order is placed regardless, so carry on to it.
       }
 
       if (paymentMethod === 'safepay') {
@@ -476,13 +473,11 @@ export default function CheckoutPage() {
 
       router.push(`/orders/${orderId}?placed=1`);
     } catch (error) {
-      if (apiErrorStatus(error) === undefined) {
-        // No answer (timeout / connection lost): the order may or may not exist. Keep the
-        // key so pressing "Place order" again returns the same order, never a duplicate.
+      const status = apiErrorStatus(error);
+      if (!attemptMayExist(status)) forgetCheckoutKey(sessionStore());
+      if (status === undefined) {
         showToast(t('connectionProblem'), 'error');
       } else {
-        // The server refused it, so nothing was placed: a new attempt gets a new key.
-        checkoutKeyRef.current = null;
         const code = apiErrorCode(error);
         if (code === 'GATEWAY_UNAVAILABLE') {
           // The gateway went away after the page loaded: take the option off, so the next press does not fail the same way.

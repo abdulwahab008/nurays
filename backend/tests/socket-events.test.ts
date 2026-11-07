@@ -13,7 +13,7 @@ jest.mock('../src/config/database', () => ({
 }));
 
 import prisma from '../src/config/database';
-import socketManager, { withinEventLimit } from '../src/config/socket';
+import socketManager, { RETRYABLE_HANDSHAKE_ERROR, withinEventLimit } from '../src/config/socket';
 import { generateToken } from '../src/utils/jwt';
 import { logger } from '../src/utils/logger';
 
@@ -90,7 +90,7 @@ const wrongKinds: Array<[string, unknown]> = [
   ['an object', { id: orderId }],
   ['an empty string', ''],
   ['a string longer than any order id', 'x'.repeat(65)],
-  ['a string of 900 KB', 'x'.repeat(900_000)],
+  ['a string of 15 KB', 'x'.repeat(15_000)],
 ];
 
 describe('events a client sends with the wrong kind of argument', () => {
@@ -121,9 +121,9 @@ describe('events a client sends with the wrong kind of argument', () => {
     await waitFor(() => inRoom() === 0);
   });
 
-  it('survives an "error" event whose payload is nested deep enough to overflow the logger', async () => {
+  it('survives an "error" event whose payload is nested as deep as a frame allows', async () => {
     const client = await connected();
-    const nested = '{"message":"x","errors":['.repeat(20_000) + '{"message":"leaf"}' + ']}'.repeat(20_000);
+    const nested = '{"message":"x","errors":['.repeat(550) + '{"message":"leaf"}' + ']}'.repeat(550);
     const logged = jest.spyOn(logger, 'error');
     client.io.engine.send(`2["error",${nested}]`); // a raw packet: the client library would overflow encoding it
     client.emit('error', { toString: 1 });
@@ -148,6 +148,54 @@ describe('events a client sends with the wrong kind of argument', () => {
     }
     expect(logged).toHaveBeenCalledWith({ err: boom, userId }, 'leave:order failed');
     expect(client.connected).toBe(true);
+  });
+});
+
+describe('a frame larger than any client event', () => {
+  it('closes only the connection that sent it, before it reaches a handler', async () => {
+    const sender = await connected();
+    const bystander = await connected(crypto.randomUUID());
+    const closed = new Promise<string>((resolve) => sender.once('disconnect', resolve));
+    sender.emit('join:order', 'x'.repeat(20_000));
+    expect(await closed).toBe('transport close');
+    expect(countOrders).not.toHaveBeenCalled();
+    bystander.emit('join:order', orderId);
+    await waitFor(() => inRoom() === 1);
+  });
+});
+
+describe('the handshake', () => {
+  const handshakeError = (token: string) =>
+    new Promise<Error & { data?: { retryable?: boolean } }>((resolve, reject) => {
+      const client = connect(url, { auth: { token }, transports: ['websocket'], reconnection: false });
+      clients.push(client);
+      client.once('connect', () => reject(new Error('connected')));
+      client.once('connect_error', resolve);
+    });
+  const token = () => generateToken({ userId, userType: 'customer', phone: '+923001234567' });
+
+  it('marks a database failure while checking a valid token as retryable, and logs it', async () => {
+    const down = Object.assign(new Error("Can't reach database server"), { code: 'P1001' });
+    findUser.mockRejectedValue(down);
+    const warned = jest.spyOn(logger, 'warn');
+    const err = await handshakeError(token());
+    expect(err.message).toBe(RETRYABLE_HANDSHAKE_ERROR);
+    expect(err.data).toEqual({ retryable: true });
+    expect(warned).toHaveBeenCalledWith({ err: down, userId }, 'Socket handshake could not be checked');
+  });
+
+  it('refuses a bad token for good, without asking the database', async () => {
+    const err = await handshakeError('not-a-token');
+    expect(err.message).toBe('Authentication error: Invalid token');
+    expect(err.data).toBeUndefined();
+    expect(findUser).not.toHaveBeenCalled();
+  });
+
+  it('refuses an inactive user for good', async () => {
+    findUser.mockResolvedValue({ id: userId, status: 'suspended', userType: 'customer', tokensValidAfter: null });
+    const err = await handshakeError(token());
+    expect(err.message).toBe('Authentication error: User not found or inactive');
+    expect(err.data).toBeUndefined();
   });
 });
 

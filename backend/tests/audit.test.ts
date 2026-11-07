@@ -46,6 +46,12 @@ describe('auditWrites', () => {
     expect(mockCreate).not.toHaveBeenCalled();
   });
 
+  it('records an unmatched URL under one fixed action, not its raw path', async () => {
+    run(auditWrites('admin'), { user: { userId: 'a1', userType: 'admin' }, route: undefined, path: '/eee04872-1/cancel', originalUrl: '/api/v1/admin/eee04872-1/cancel' }, 404);
+    await settle();
+    expect(mockCreate.mock.calls[0][0].data).toMatchObject({ action: 'admin:POST unmatched', entityType: null, entityId: null, responseStatus: 404 });
+  });
+
   it('on a shared route, records an admin but not a seller (onlyAdmins)', async () => {
     run(auditWrites('admin-as-seller', { onlyAdmins: true }), { user: { userId: 's1', userType: 'seller' } }, 200);
     await settle();

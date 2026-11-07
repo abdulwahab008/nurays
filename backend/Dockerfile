@@ -26,8 +26,13 @@ RUN npm run build
 FROM node:22-bookworm-slim AS runner
 WORKDIR /app
 
+# UV_THREADPOOL_SIZE: libuv's pool (default 4 threads) runs bcrypt alongside file, DNS and gzip work. A sign-in storm
+# filled all four with password hashes and stalled the rest (LOAD-3). 8 assumes an 8-core host (as load-tested);
+# at most PASSWORD_HASH_CONCURRENCY (4) of them hash passwords (middleware/rateLimiter.ts), so the others stay free.
+# Raise both together on a bigger machine: more threads than cores adds no hashing speed.
 ENV NODE_ENV=production \
-    PORT=3001
+    PORT=3001 \
+    UV_THREADPOOL_SIZE=8
 
 # Debian security fixes the upstream Node image has not picked up yet (the CI image scan
 # fails on fixable high and critical issues). Nothing new is installed.

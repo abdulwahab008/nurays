@@ -128,11 +128,6 @@ export class OrderQueries {
               seller: { select: { id: true, businessName: true, businessNameUrdu: true } },
             },
           },
-          _count: {
-            select: {
-              items: true,
-            },
-          },
         },
       }),
       prisma.order.count({ where }),
@@ -162,7 +157,7 @@ export class OrderQueries {
           deliveryType: order.deliveryType,
           createdAt: order.createdAt,
           estimatedDeliveryAt: order.estimatedDeliveryAt,
-          itemsCount: order._count.items,
+          itemsCount: order.items.length,
           items: order.items.slice(0, 3),
         };
       }),
