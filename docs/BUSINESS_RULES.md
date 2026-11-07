@@ -132,7 +132,7 @@ If a kitchen's items on an order are all cancelled, a delivery fee the customer 
 
 ## 4. Rider pay, route bonus and cash limit
 
-Code: `utils/deliveryFee.ts` (`calculateDeliveryFeeCorridor`), `services/rider.service.ts`, `services/rider-ledger.service.ts`.
+Code: `utils/deliveryFee.ts` (`calculateDeliveryFeeCorridor`), `services/rider.service.ts`, `services/dispatch.service.ts`, `services/rider-ledger.service.ts`.
 
 ### Pay for a job
 
@@ -144,7 +144,7 @@ maxCeiling   = min( standardFee + 120, round(standardFee x 1.4) )
 ```
 
 - A rider who claims a job is paid `standardFee`, or a number they ask for between `minFloor` and `maxCeiling` (outside that range the claim is refused, `BID_OUT_OF_BOUNDS`). The amount is fixed at claim time on `Delivery.riderFee`.
-- `calculateDeliveryFeeCorridor` accepts a city and would use Rs 150 as the base in Karachi, Lahore and Islamabad, but both callers in `rider.service.ts` call it without a city, so the base is always Rs 100 in practice.
+- `calculateDeliveryFeeCorridor` accepts a city and would use Rs 150 as the base in Karachi, Lahore and Islamabad, but every caller (`rider.service.ts` for the job cards and claims, `dispatch.service.ts` for automatic assignment) calls it without a city, so the base is always Rs 100 in practice.
 - Km beyond `deliveryMaxKm` (section 3, default 20) are not paid, so a wrong pin far away cannot price a job at thousands of rupees; the real distance is still shown. The other numbers are constants in code.
 
 ### Route bonus
