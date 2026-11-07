@@ -117,7 +117,13 @@ export default async function security() {
   ok('a spent refresh token that comes back later is refused with 401 REFRESH_TOKEN_REUSED', replay.status === 401 && replay.code === 'REFRESH_TOKEN_REUSED', replay.code);
   const afterReplay = [await call(t1?.accessToken ?? 'none', 'GET', '/auth/me'), await call(null, 'POST', '/auth/refresh', { refreshToken: t1?.refreshToken ?? 'none' })];
   ok('and the whole session ends: the newest access and refresh tokens stop working too', afterReplay.every((r) => r.status === 401), afterReplay.map((r) => r.code).join());
-  ok('the reuse leaves a trail', (await prisma.auditLog.count({ where: { userId: rotator.id, action: 'auth:REFRESH_REUSE' } })) === 1);
+  // The audit row is written after the answer is sent, so a busy runner may not have it yet: wait a little for it.
+  let reuseRows = 0;
+  for (let i = 0; i < 40 && reuseRows === 0; i++) {
+    reuseRows = await prisma.auditLog.count({ where: { userId: rotator.id, action: 'auth:REFRESH_REUSE' } });
+    if (reuseRows === 0) await sleep(250);
+  }
+  ok('the reuse leaves a trail', reuseRows === 1, `rows=${reuseRows}`);
 
   // 4c. the signed-in devices list (SEC-2)
   const owner2 = await makeUser('customer');
