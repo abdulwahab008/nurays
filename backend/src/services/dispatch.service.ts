@@ -6,6 +6,7 @@ import realtimeOrderService from './realtime-order.service';
 import { notify } from './notify.service';
 import { cashLimitOf, riderMoney, riderMoneyMany } from './rider-ledger.service';
 import { calculateDeliveryFeeCorridor } from '../utils/deliveryFee';
+import { getPlatformDeliveryPricing } from './delivery-pricing.service';
 import { cashToCollect, dropoffAreaOf, endsOf, routeMatch } from '../utils/riderJobs';
 import { cashAtDoor, isCashAtDoor } from '../utils/paymentCustody';
 import { ACTIVE_DELIVERY_STATUSES } from '../utils/deliveryStatus';
@@ -119,7 +120,8 @@ export async function dispatchDelivery(deliveryId: string, opts: { announced?: b
 
   const rider = riders.find((r) => r.id === choice.riderId)!;
   const e = endsOf(job);
-  const corridor = calculateDeliveryFeeCorridor(e.pickupLat, e.pickupLng, e.deliveryLat, e.deliveryLng);
+  const { maxKm } = await getPlatformDeliveryPricing();
+  const corridor = calculateDeliveryFeeCorridor(e.pickupLat, e.pickupLng, e.deliveryLat, e.deliveryLng, maxKm);
 
   // One assignment at a time per rider (their row locked), re-checking what the choice assumed.
   const done = await prisma.$transaction(async (tx) => {

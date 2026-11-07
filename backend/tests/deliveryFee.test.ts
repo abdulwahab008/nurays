@@ -1,4 +1,4 @@
-import { getDeliveryFeeForSeller, haversineKm, PlatformDeliveryPricing } from '../src/utils/deliveryFee';
+import { calculateDeliveryFeeCorridor, getDeliveryFeeForSeller, haversineKm, PlatformDeliveryPricing } from '../src/utils/deliveryFee';
 
 // Karachi Saddar (seller) ~24.85,67.02 vs a nearby address ~5km away vs a very far address (Lahore, ~1180km) and Dubai (~1250km, different country).
 const SELLER_LAT = 24.85;
@@ -312,5 +312,36 @@ describe('getDeliveryFeeForSeller — the order amount that waives a fee that is
     const result = getDeliveryFeeForSeller(seller({ freeDeliveryThreshold: 1200, maxDeliveryDistanceKm: 1 }), { ...addr(null), latitude: 31.5, longitude: 74.3 }, 24.8, 67.0, 300);
     expect(result.deliverable).toBe(false);
     expect(result).not.toHaveProperty('freeAbove');
+  });
+});
+
+describe('calculateDeliveryFeeCorridor — the rider fee stops growing at the platform max distance', () => {
+  const MAX_KM = 20;
+  const KM_PER_DEGREE_AT_EQUATOR = 111.195;
+
+  it('pays every km of a job inside the max distance', () => {
+    const corridor = calculateDeliveryFeeCorridor(0, 0, 0, 10 / KM_PER_DEGREE_AT_EQUATOR, MAX_KM);
+    expect(corridor.distanceKm).toBe(10);
+    expect(corridor.standardFee).toBe(100 + 10 * 20);
+  });
+
+  it('prices a wrong pin a thousand km away as a job at the max distance, and still reports the real distance', () => {
+    const corridor = calculateDeliveryFeeCorridor(SELLER_LAT, SELLER_LNG, LAHORE_ADDR.latitude, LAHORE_ADDR.longitude, MAX_KM);
+    expect(corridor.distanceKm).toBeGreaterThan(1000);
+    expect(corridor.standardFee).toBe(100 + MAX_KM * 20);
+    expect(corridor.minFloor).toBe(Math.round(corridor.standardFee * 0.85));
+    expect(corridor.maxCeiling).toBe(corridor.standardFee + 120);
+  });
+
+  it('is the same fee as a job exactly at the max distance', () => {
+    const atMax = calculateDeliveryFeeCorridor(0, 0, 0, MAX_KM / KM_PER_DEGREE_AT_EQUATOR, MAX_KM);
+    const beyond = calculateDeliveryFeeCorridor(0, 0, 0, 1, MAX_KM);
+    expect(atMax.distanceKm).toBe(MAX_KM);
+    expect(beyond.standardFee).toBe(atMax.standardFee);
+  });
+
+  it('follows the admin max distance setting', () => {
+    const corridor = calculateDeliveryFeeCorridor(SELLER_LAT, SELLER_LNG, LAHORE_ADDR.latitude, LAHORE_ADDR.longitude, 35);
+    expect(corridor.standardFee).toBe(100 + 35 * 20);
   });
 });

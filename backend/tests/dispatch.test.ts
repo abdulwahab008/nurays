@@ -2,7 +2,19 @@
  * Which rider gets a new job: a rider already on the way gets nearby work, then the community's own
  * riders, then anyone with room; nobody over their limits.
  */
-jest.mock('../src/config/database', () => ({ __esModule: true, default: { delivery: { count: jest.fn() } } }));
+jest.mock('../src/config/database', () => ({
+  __esModule: true,
+  default: {
+    delivery: { count: jest.fn(), findUnique: jest.fn(), findMany: jest.fn(), groupBy: jest.fn(), updateMany: jest.fn() },
+    rider: { findMany: jest.fn(), findUnique: jest.fn() },
+    riderLedgerEntry: { groupBy: jest.fn() },
+    $queryRaw: jest.fn(),
+    $transaction: jest.fn(),
+  },
+}));
+jest.mock('../src/services/delivery-pricing.service', () => ({
+  getPlatformDeliveryPricing: jest.fn(async () => ({ perKm: 20, includedKm: 3, maxKm: 20, fallbackBaseFee: 150, communities: new Map() })),
+}));
 jest.mock('../src/config/socket', () => ({ __esModule: true, default: { emitToUser: jest.fn() } }));
 jest.mock('../src/services/notify.service', () => ({ notify: jest.fn() }));
 jest.mock('../src/services/realtime-order.service', () => ({ __esModule: true, default: { emitDeliveryClaimed: jest.fn() } }));
@@ -10,7 +22,7 @@ jest.mock('../src/services/realtime-order.service', () => ({ __esModule: true, d
 import prisma from '../src/config/database';
 import socketManager from '../src/config/socket';
 import { notify } from '../src/services/notify.service';
-import { announceAssignment, JobRow } from '../src/services/dispatch.service';
+import { announceAssignment, dispatchDelivery, JobRow } from '../src/services/dispatch.service';
 import { canShareTrip, chooseRider, DispatchCandidate, DispatchJob, JobEnds } from '../src/utils/dispatch';
 import { dropoffAreaOf } from '../src/utils/riderJobs';
 import { notificationText, renderNotification } from '../src/utils/notificationText';
@@ -173,5 +185,53 @@ describe('announcing an automatic assignment', () => {
     const offered = (socketManager as any).emitToUser.mock.calls.find((c: unknown[]) => c[1] === 'delivery:offered');
     expect(offered[0]).toBe('rider-user');
     expect(offered[2]).toMatchObject({ deliveryId: 'd1', deliveryAddress: 'House 9, Street 5, Askari 11, Lahore', riderFee: 150, cashToCollect: 1250, activeJobs: 1 });
+  });
+});
+
+describe('automatic assignment pay', () => {
+  const db = prisma as any;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    db.$transaction.mockImplementation((fn: (tx: unknown) => unknown) => fn(db));
+    db.$queryRaw.mockResolvedValue([{ id: 'rider-1' }]);
+    db.rider.findMany.mockResolvedValue([{ id: 'rider-1', userId: 'user-1', communityId: null, cashLimit: null }]);
+    db.rider.findUnique.mockResolvedValue({ isAvailable: true, status: 'active', cashLimit: null });
+    db.delivery.findMany.mockResolvedValue([]);
+    db.delivery.groupBy.mockResolvedValue([]);
+    db.delivery.updateMany.mockResolvedValue({ count: 1 });
+    db.delivery.count.mockResolvedValue(1);
+    db.riderLedgerEntry.groupBy.mockResolvedValue([]);
+  });
+
+  it('fixes no more than the fee at the max delivery distance when a pin is a thousand km off, as a claim does', async () => {
+    // Karachi kitchen, drop-off pinned in Lahore.
+    db.delivery.findUnique.mockResolvedValue({
+      id: 'd1',
+      orderId: 'o1',
+      riderId: null,
+      status: 'pending',
+      releasedRiderIds: [],
+      pickupAddress: 'Kitchen',
+      deliveryAddress: 'Home',
+      pickupLatitude: 24.85,
+      pickupLongitude: 67.02,
+      deliveryLatitude: 31.52,
+      deliveryLongitude: 74.35,
+      order: {
+        orderNumber: 'FN1',
+        orderStatus: 'confirmed',
+        paymentMethod: 'safepay',
+        paymentStatus: 'paid',
+        totalAmount: 3000,
+        deliveryAddress: { communityId: null, area: 'Askari 11', city: 'Lahore' },
+        deliveryAddressSnapshot: null,
+        items: [],
+      },
+    });
+
+    await expect(dispatchDelivery('d1')).resolves.toMatchObject({ assigned: true, riderId: 'rider-1' });
+    const { data } = db.delivery.updateMany.mock.calls[0][0];
+    expect(data).toMatchObject({ riderId: 'rider-1', assignmentMode: 'auto', riderFee: 100 + 20 * 20 });
   });
 });
