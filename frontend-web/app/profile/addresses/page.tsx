@@ -158,6 +158,53 @@ export default function AddressesPage() {
 
   const sidebarItems = CUSTOMER_SIDEBAR_ITEMS;
 
+  const handleEditAddress = (address: Address) => {
+    const typeId = addressTypes.find(a => a.label.toLowerCase() === address.label?.toLowerCase())?.id || 'other';
+    setFormData({
+      label: typeId,
+      addressLine1: address.addressLine1 || '',
+      addressLine2: address.addressLine2 || '',
+      houseNumber: address.houseNumber || '',
+      area: address.area || '',
+      city: address.city || '',
+      postalCode: address.postalCode || '',
+      landmark: address.landmark || '',
+      isDefault: address.isDefault || false,
+      latitude: address.coordinates ? String(address.coordinates.latitude) : '',
+      longitude: address.coordinates ? String(address.coordinates.longitude) : '',
+    });
+    setEditingAddress(address);
+    setShowAddForm(true);
+  };
+
+  /** A fresh form; the first address someone saves is their default, so checkout picks it. */
+  const openNewForm = (isFirst = addresses.length === 0) => {
+    resetForm();
+    setFormData((prev) => ({ ...prev, isDefault: isFirst }));
+    setShowMap(true);
+    setShowAddForm(true);
+  };
+
+  const resetForm = () => {
+    setShowAddForm(false);
+    setEditingAddress(null);
+    setShowMap(false);
+    setPinMissing(false);
+    setFormData({
+      label: 'home',
+      addressLine1: '',
+      addressLine2: '',
+      houseNumber: '',
+      area: '',
+      city: '',
+      postalCode: '',
+      landmark: '',
+      isDefault: false,
+      latitude: '',
+      longitude: '',
+    });
+  };
+
   const loadAddresses = async () => {
     setLoading(true);
     setLoadError(null);
@@ -195,7 +242,6 @@ export default function AddressesPage() {
     }
     loadAddresses();
   }, [isAuthenticated]);
-
 
   // Detect current location using GPS
   const detectCurrentLocation = useCallback(() => {
@@ -333,53 +379,6 @@ export default function AddressesPage() {
     } catch (error) {
       showToast(apiErrorMessage(error, t('updateFailed')), 'error');
     }
-  };
-
-  const handleEditAddress = (address: Address) => {
-    const typeId = addressTypes.find(a => a.label.toLowerCase() === address.label?.toLowerCase())?.id || 'other';
-    setFormData({
-      label: typeId,
-      addressLine1: address.addressLine1 || '',
-      addressLine2: address.addressLine2 || '',
-      houseNumber: address.houseNumber || '',
-      area: address.area || '',
-      city: address.city || '',
-      postalCode: address.postalCode || '',
-      landmark: address.landmark || '',
-      isDefault: address.isDefault || false,
-      latitude: address.coordinates ? String(address.coordinates.latitude) : '',
-      longitude: address.coordinates ? String(address.coordinates.longitude) : '',
-    });
-    setEditingAddress(address);
-    setShowAddForm(true);
-  };
-
-  /** A fresh form; the first address someone saves is their default, so checkout picks it. */
-  const openNewForm = (isFirst = addresses.length === 0) => {
-    resetForm();
-    setFormData((prev) => ({ ...prev, isDefault: isFirst }));
-    setShowMap(true);
-    setShowAddForm(true);
-  };
-
-  const resetForm = () => {
-    setShowAddForm(false);
-    setEditingAddress(null);
-    setShowMap(false);
-    setPinMissing(false);
-    setFormData({
-      label: 'home',
-      addressLine1: '',
-      addressLine2: '',
-      houseNumber: '',
-      area: '',
-      city: '',
-      postalCode: '',
-      landmark: '',
-      isDefault: false,
-      latitude: '',
-      longitude: '',
-    });
   };
 
   if (loading) {

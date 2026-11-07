@@ -143,24 +143,6 @@ function SellerDashboardContent() {
     }
   }, []);
 
-  // A delivered order changes what the kitchen earned as well as its list: both are read again.
-  useLiveRefresh(() => {
-    void loadLiveOrders();
-    void loadDashboard(true);
-  }, {
-    events: ['order:new', 'order:status:update', 'order:item:status:update', 'delivery:assigned'],
-    enabled: isAuthenticated && dashboard?.verificationStatus === 'approved',
-  });
-
-  useEffect(() => {
-    window.addEventListener('seller-orders-updated', loadLiveOrders);
-    window.addEventListener('seller-order-status-changed', loadLiveOrders);
-    return () => {
-      window.removeEventListener('seller-orders-updated', loadLiveOrders);
-      window.removeEventListener('seller-order-status-changed', loadLiveOrders);
-    };
-  }, [loadLiveOrders]);
-
   const loadDashboard = async (silent = false) => {
     try {
       if (!silent) setLoading(true);
@@ -183,6 +165,24 @@ function SellerDashboardContent() {
       if (!silent) setLoading(false);
     }
   };
+
+  // A delivered order changes what the kitchen earned as well as its list: both are read again.
+  useLiveRefresh(() => {
+    void loadLiveOrders();
+    void loadDashboard(true);
+  }, {
+    events: ['order:new', 'order:status:update', 'order:item:status:update', 'delivery:assigned'],
+    enabled: isAuthenticated && dashboard?.verificationStatus === 'approved',
+  });
+
+  useEffect(() => {
+    window.addEventListener('seller-orders-updated', loadLiveOrders);
+    window.addEventListener('seller-order-status-changed', loadLiveOrders);
+    return () => {
+      window.removeEventListener('seller-orders-updated', loadLiveOrders);
+      window.removeEventListener('seller-order-status-changed', loadLiveOrders);
+    };
+  }, [loadLiveOrders]);
 
   useEffect(() => {
     if (!isAuthenticated) {
