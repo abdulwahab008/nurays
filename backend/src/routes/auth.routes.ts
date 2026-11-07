@@ -40,6 +40,7 @@ import {
   appleLoginSchema,
 } from '../validators/auth.validator';
 import { authenticate, optionalAuthenticate } from '../middleware/auth.middleware';
+import { refreshCookieOnSignIn } from '../utils/refresh-cookie';
 import {
   admitPasswordWork,
   forgotIpLimiter,
@@ -57,6 +58,7 @@ import {
 } from '../middleware/rateLimiter';
 
 const router = Router();
+router.use(refreshCookieOnSignIn);
 
 // Public routes
 router.post('/otp/request', otpIpLimiter, otpTargetLimiter, validate(requestOTPSchema), requestOTP);
@@ -77,7 +79,7 @@ router.post('/2fa/setup/confirm', loginLimiter, optionalAuthenticate, confirmTwo
 // Protected routes
 router.get('/me', authenticate, getCurrentUser);
 router.post('/resend-verification', authenticate, resendVerificationLimiter, resendVerificationEmail);
-router.post('/logout', authenticate, logout);
+router.post('/logout', optionalAuthenticate, logout);
 router.post('/logout-all', authenticate, logoutAll);
 router.get('/sessions', authenticate, getSessions);
 router.get('/2fa', authenticate, getTwoFactorStatus);
