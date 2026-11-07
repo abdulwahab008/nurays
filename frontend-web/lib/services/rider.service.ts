@@ -67,6 +67,7 @@ export interface RiderProfile {
   phone: string | null;
   vehicleType: string | null;
   vehicleNumber: string | null;
+  licenseNumber: string | null;
   city: string | null;
   ratingAverage: number;
   totalDeliveries: number;
@@ -149,6 +150,11 @@ export const riderService = {
   getRiderProfile: async () => {
     const response = await apiClient.get<ApiResponse<RiderProfile>>('/riders/me');
     return response.data;
+  },
+
+  updateVehicle: async (vehicle: { vehicleType: string; vehicleNumber: string }) => {
+    const response = await apiClient.patch<ApiResponse<{ vehicleType: string; vehicleNumber: string }>>('/riders/me/vehicle', vehicle);
+    return response.data.data!;
   },
 
   getEarnings: async (page = 1) => {

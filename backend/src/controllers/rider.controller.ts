@@ -88,3 +88,9 @@ export const submitApplication = async (req: Request, res: Response) => {
   const data = await riderService.submitApplication(req.user.userId, req.body);
   res.status(200).json({ success: true, data, message: 'Application sent for review' });
 };
+
+export const updateVehicle = async (req: Request, res: Response) => {
+  if (!req.user) throw new AppError('Authentication required', 401, 'AUTH_REQUIRED');
+  const data = await riderService.updateVehicle(req.user.userId, req.body);
+  res.status(200).json({ success: true, data, message: 'Vehicle details saved' });
+};
