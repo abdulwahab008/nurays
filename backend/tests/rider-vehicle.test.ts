@@ -4,7 +4,7 @@
  */
 jest.mock('../src/config/database', () => ({
   __esModule: true,
-  default: { rider: { findUnique: jest.fn(), update: jest.fn() } },
+  default: { rider: { findUnique: jest.fn(), update: jest.fn() }, delivery: { count: jest.fn() } },
 }));
 jest.mock('../src/middleware/audit', () => ({ recordAudit: jest.fn() }));
 
@@ -15,6 +15,7 @@ import { riderVehicleSchema } from '../src/validators/rider.validator';
 
 const findRider = jest.mocked(prisma.rider.findUnique);
 const updateRider = jest.mocked(prisma.rider.update);
+const activeDeliveries = jest.mocked(prisma.delivery.count);
 const audit = jest.mocked(recordAudit);
 
 function givenRider(over: Record<string, unknown> = {}) {
@@ -25,6 +26,8 @@ beforeEach(() => {
   findRider.mockReset();
   updateRider.mockReset();
   audit.mockReset();
+  activeDeliveries.mockReset();
+  activeDeliveries.mockResolvedValue(0);
 });
 
 describe('riderVehicleSchema', () => {
@@ -79,6 +82,14 @@ describe('riderService.updateVehicle', () => {
   ])('refuses a rider who is not approved and active (%o)', async (over, code) => {
     givenRider(over);
     await expect(riderService.updateVehicle('u1', { vehicleType: 'car', vehicleNumber: 'ABC-12' })).rejects.toMatchObject({ statusCode: 403, code });
+    expect(updateRider).not.toHaveBeenCalled();
+    expect(audit).not.toHaveBeenCalled();
+  });
+
+  it('refuses a change while the rider is on a delivery, so the waiting customer never sees the plate change', async () => {
+    givenRider();
+    activeDeliveries.mockResolvedValue(1);
+    await expect(riderService.updateVehicle('u1', { vehicleType: 'car', vehicleNumber: 'LHR-777' })).rejects.toMatchObject({ statusCode: 409, code: 'VEHICLE_LOCKED_ON_DELIVERY' });
     expect(updateRider).not.toHaveBeenCalled();
     expect(audit).not.toHaveBeenCalled();
   });

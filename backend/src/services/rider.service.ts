@@ -791,6 +791,10 @@ export class RiderService {
     const rider = await this.requireRider(userId);
     const next = { vehicleType: data.vehicleType, vehicleNumber: data.vehicleNumber.trim().toUpperCase() };
     if (next.vehicleType !== rider.vehicleType || next.vehicleNumber !== rider.vehicleNumber) {
+      // A customer waiting for this rider is shown the vehicle: it must not change under them.
+      if ((await prisma.delivery.count({ where: { riderId: rider.id, status: { in: ACTIVE_DELIVERY_STATUSES } } })) > 0) {
+        throw new AppError('You can change your vehicle once your current delivery is done.', 409, 'VEHICLE_LOCKED_ON_DELIVERY');
+      }
       await prisma.rider.update({ where: { id: rider.id }, data: next });
       void recordAudit({
         userId,

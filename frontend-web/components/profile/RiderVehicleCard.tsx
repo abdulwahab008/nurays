@@ -7,7 +7,7 @@ import { LoadError } from '@/components/ui/LoadError';
 import { useToast } from '@/components/ui/toast';
 import { VEHICLES } from '@/components/riders/RiderApplicationForm';
 import { fieldClass as field, labelClass as label } from '@/components/sellers/product-form/fields';
-import { apiErrorMessage, apiErrorStatus } from '@/lib/api-client';
+import { apiErrorCode, apiErrorMessage, apiErrorStatus } from '@/lib/api-client';
 import { riderService, type RiderProfile } from '@/lib/services/rider.service';
 import { useT } from '@/lib/i18n';
 import { riderMessages } from '@/lib/i18n/messages/rider';
@@ -64,7 +64,7 @@ export function RiderVehicleCard() {
       setEditing(false);
       showToast(t('vehicleCard.saved'), 'success');
     } catch (err) {
-      showToast(apiErrorMessage(err, t('vehicleCard.saveFailed')), 'error');
+      showToast(apiErrorCode(err) === 'VEHICLE_LOCKED_ON_DELIVERY' ? t('vehicleCard.onDelivery') : apiErrorMessage(err, t('vehicleCard.saveFailed')), 'error');
     } finally {
       setSaving(false);
     }

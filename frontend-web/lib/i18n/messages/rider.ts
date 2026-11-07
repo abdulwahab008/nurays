@@ -314,6 +314,7 @@ export const riderMessages = defineMessages({
     'vehicleCard.saving': 'Saving…',
     'vehicleCard.saved': 'Vehicle details saved',
     'vehicleCard.saveFailed': 'Could not save your vehicle details',
+    'vehicleCard.onDelivery': 'You can change your vehicle once your current delivery is done.',
     'vehicleCard.loadFailed': 'Could not load your vehicle details',
   },
   ur: {
@@ -608,6 +609,7 @@ export const riderMessages = defineMessages({
     'vehicleCard.saving': 'محفوظ ہو رہا ہے…',
     'vehicleCard.saved': 'سواری کی تفصیل محفوظ ہو گئی',
     'vehicleCard.saveFailed': 'سواری کی تفصیل محفوظ نہیں ہو سکی',
+    'vehicleCard.onDelivery': 'موجودہ ڈیلیوری مکمل ہونے کے بعد آپ اپنی سواری تبدیل کر سکتے ہیں۔',
     'vehicleCard.loadFailed': 'سواری کی تفصیل لوڈ نہیں ہو سکی',
   },
 });
