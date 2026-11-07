@@ -14,7 +14,7 @@ import { Bike, Heart, MapPin, Star } from 'lucide-react';
 import { quoteOf, quoteParams, type DeliveryQuote, type QuotedSeller } from '@/components/marketplace/delivery-quote';
 import type { ApiResponse } from '@/lib/api-client';
 import { useT } from '@/lib/i18n';
-import { useAuthStore } from '@/lib/store/auth-store';
+import { useAuthStore, hasSession } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
 import { loginUrlHere } from '@/lib/auth-redirect';
 import { browseMessages, businessTypeKey } from '@/lib/i18n/messages/browse';
@@ -65,7 +65,7 @@ export default function FavoritesPage() {
 
   useEffect(() => {
     // Signed out: go and sign in, without first asking the server for a list it will refuse.
-    if (!isAuthenticated && !apiClient.getAccessToken()) {
+    if (!hasSession()) {
       router.replace(loginUrlHere());
       return;
     }

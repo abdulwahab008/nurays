@@ -3,7 +3,7 @@ import { isHtmlPage } from '@/lib/load-error';
 import { loginUrlHere } from '@/lib/auth-redirect';
 
 import { API_BASE_URL } from './config';
-import { tokenStore } from './token-store';
+import { ISOLATED_TAB_HEADER, tokenStore } from './token-store';
 
 // Endpoints that must never trigger a refresh-token retry. /auth/refresh
 // itself is the obvious one; logging in/out shouldn't retry either.
@@ -16,6 +16,8 @@ class ApiClient {
   // In-flight refresh promise — used so a burst of 401s only triggers ONE
   // refresh call; all of them await the same result.
   private refreshPromise: Promise<string | null> | null = null;
+  // Does this browser hold a signed-in account? The auth store answers (it imports this client, so it registers itself).
+  private sessionHint: () => boolean = () => false;
 
   constructor() {
     this.client = axios.create({
@@ -24,15 +26,28 @@ class ApiClient {
         'Content-Type': 'application/json',
       },
       timeout: 30000,
+      // The refresh token is an httpOnly cookie on the API's auth routes: sign-in answers set it, refresh and logout send it.
+      withCredentials: true,
     });
 
     // Request interceptor - Add auth token
     this.client.interceptors.request.use(
-      (config) => {
-        const token = this.getAccessToken();
+      async (config) => {
+        let token = this.getAccessToken();
+        // After a reload the access token is not back yet: get it through the refresh cookie first, or a request the API
+        // answers for guests too (recommendations, a dish's page) would come back as a guest's, with no 401 to set it right.
+        if (!token && this.sessionHint() && !NO_REFRESH_PATHS.some((p) => (config.url ?? '').includes(p))) {
+          try {
+            token = await this.refreshAccessToken();
+            if (!token) this.handleAuthFailure();
+          } catch {
+            // Offline or a server error: the request goes as it is, and a 401 on it tries again.
+          }
+        }
         if (token) {
           config.headers.Authorization = `Bearer ${token}`;
         }
+        if (tokenStore().tabIsolated()) config.headers[ISOLATED_TAB_HEADER] = '1';
         return config;
       },
       (error) => Promise.reject(error),
@@ -93,23 +108,23 @@ class ApiClient {
 
     this.refreshPromise = (async () => {
       try {
-        // Inside the try so the `finally` below always resets refreshPromise —
-        // returning early before it left a cached `null` forever, which logged
-        // the user out on every later 401 even once a valid refresh token existed.
+        // A tab kept apart sends its own refresh token; every other page relies on the cookie.
         const refreshToken = this.getRefreshToken();
-        if (!refreshToken) return null;
 
         // Use a bare axios call so the response interceptor doesn't recurse.
         const res = await axios.post<{
           success: boolean;
           data?: { accessToken?: string; refreshToken?: string };
-        }>(`${API_BASE_URL}/auth/refresh`, { refreshToken }, { timeout: 15000 });
+        }>(`${API_BASE_URL}/auth/refresh`, refreshToken ? { refreshToken } : {}, {
+          timeout: 15000,
+          withCredentials: true,
+          headers: tokenStore().tabIsolated() ? { [ISOLATED_TAB_HEADER]: '1' } : undefined,
+        });
 
         const accessToken = res.data?.data?.accessToken;
-        const newRefresh = res.data?.data?.refreshToken;
         if (!accessToken) return null;
 
-        this.setTokens(accessToken, newRefresh ?? refreshToken);
+        this.setTokens(accessToken, res.data?.data?.refreshToken);
         return accessToken;
       } catch (err) {
         // null = the server refused the refresh token (expired, revoked, malformed): sign out.
@@ -129,6 +144,8 @@ class ApiClient {
   }
 
   private handleAuthFailure(): void {
+    // The account is dropped first, while a tab kept apart still knows it is (so it writes to its own storage).
+    if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('auth:session-ended'));
     this.clearTokens();
     if (typeof window === 'undefined') return;
     // Only bounce to /login if we're not already on a public page; otherwise
@@ -149,6 +166,16 @@ class ApiClient {
     }
   }
 
+  /** Called once by the auth store. */
+  setSessionHint(hint: () => boolean): void {
+    this.sessionHint = hint;
+  }
+
+  /** A new access token through the refresh cookie; null when there is no session to renew. */
+  renewAccessToken(): Promise<string | null> {
+    return this.refreshAccessToken();
+  }
+
   getAccessToken(): string | null {
     return tokenStore().access();
   }
@@ -162,13 +189,9 @@ class ApiClient {
     this.announceTokens();
   }
 
-  setToken(token: string, isolated = false): void {
-    tokenStore().saveAccess(token, isolated);
-    this.announceTokens();
-  }
-
-  setTokens(accessToken: string, refreshToken: string, isolated = false): void {
-    tokenStore().savePair(accessToken, refreshToken, isolated);
+  /** Keep the tokens a sign-in or refresh answered with. The refresh token is kept only by a tab kept apart. */
+  setTokens(accessToken: string, refreshToken?: string | null, isolated = false): void {
+    tokenStore().save(accessToken, refreshToken, isolated);
     this.announceTokens();
   }
 

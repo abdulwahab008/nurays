@@ -9,8 +9,8 @@ import { Button } from '@/components/ui/button';
 import { LoadError } from '@/components/ui/LoadError';
 import { useToast } from '@/components/ui/toast';
 import { useDialogs } from '@/components/ui/Dialogs';
-import { apiClient, apiErrorMessage } from '@/lib/api-client';
-import { useAuthStore } from '@/lib/store/auth-store';
+import { apiErrorMessage } from '@/lib/api-client';
+import { useAuthStore, hasSession } from '@/lib/store/auth-store';
 import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { useT } from '@/lib/i18n';
 import { commonMessages } from '@/lib/i18n/messages/common';
@@ -189,7 +189,7 @@ export default function AddressesPage() {
 
   useEffect(() => {
     // The saved session loads a moment after the page; a stored token means "signed in".
-    if (!isAuthenticated && !apiClient.getAccessToken()) {
+    if (!hasSession()) {
       router.replace(loginUrlHere());
       return;
     }

@@ -58,9 +58,8 @@ export const useAuthStore = create<AuthState>()(
               }
             : undefined,
         };
-        const hasToken = !!apiClient.getAccessToken();
-        if (hasToken) clearSignOut();
-        set({ user: normalizedUser, isAuthenticated: hasToken });
+        clearSignOut();
+        set({ user: normalizedUser, isAuthenticated: true });
       },
       logout: () => {
         // Fire-and-forget: the UI does not wait for the server. It ends this device's session (its tokens stop working
@@ -83,9 +82,10 @@ export const useAuthStore = create<AuthState>()(
         // their own server cart) the previous user's items.
         useCartStore.getState().clearCart();
         useCartStore.getState().setAppliedPromoCode(null);
-        tokenStore().clear();
         noteSignOut();
+        // Before the tokens go: a tab kept apart writes the signed-out account to its own storage, not every tab's.
         set({ user: null, isAuthenticated: false });
+        tokenStore().clear();
       },
     }),
     {
@@ -111,21 +111,31 @@ export const useAuthStore = create<AuthState>()(
           localStorage.removeItem(name);
         },
       })),
-      // On rehydrate, ensure tokens are valid and set isAuthenticated
+      // The saved account says who is signed in; the access token comes back through the refresh cookie on the first
+      // request, and a session that has ended clears the account then (auth:session-ended below).
       onRehydrateStorage: () => (state) => {
-        if (state && typeof window !== 'undefined') {
-          const hasToken = !!apiClient.getAccessToken();
-          // If we have a token but no user, clear the token (invalid state)
-          if (hasToken && !state.user) {
-            tokenStore().clear();
-            state.isAuthenticated = false;
-          } else {
-            // Update isAuthenticated based on user and token
-            state.isAuthenticated = !!state.user && hasToken;
-          }
-        }
+        if (state) state.isAuthenticated = !!state.user;
       },
     }
   )
 );
+
+/**
+ * Is someone signed in on this browser? Read from the store itself, not a hook: on a page's first render after a load the
+ * hook still gives the server's signed-out snapshot, and an effect acting on that would send a signed-in person to the
+ * sign-in page. (The access token is no help there: it is not back from the refresh cookie yet.)
+ */
+export const hasSession = (): boolean => useAuthStore.getState().isAuthenticated;
+apiClient.setSessionHint(hasSession);
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('auth:session-ended', () => useAuthStore.setState({ user: null, isAuthenticated: false }));
+  // Another tab signed in or out: the shared cookie changed with it, so this tab follows.
+  window.addEventListener('storage', (event) => {
+    if (event.key !== 'auth-storage' || tokenStore().tabIsolated()) return;
+    void Promise.resolve(useAuthStore.persist.rehydrate()).then(() => {
+      if (!useAuthStore.getState().user) apiClient.clearTokens();
+    });
+  });
+}
 

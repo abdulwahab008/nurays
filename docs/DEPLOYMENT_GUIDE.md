@@ -26,7 +26,10 @@ staging host is never locked out). The backend trusts `TRUST_PROXY` hops (defaul
 between the internet and the app must match (`backend/src/index.ts`); rate limits key on the client IP it reports.
 
 Browser-facing hostnames: the website (`FRONTEND_URL`, also `CORS_ORIGIN`) and the API (`BASE_URL`). The backend
-allows exactly one CORS origin, so serve the site from a single origin.
+allows exactly one CORS origin, so serve the site from a single origin. **Put the website and the API on the same
+site** (one registrable domain, e.g. `nuray.pk` and `api.nuray.pk`): the refresh token is a `SameSite=Lax` cookie the
+API sets, which browsers, iOS WKWebView and Android WebView block as a third-party cookie when the two are on
+unrelated domains, and then nobody stays signed in past the access token's hour.
 
 ## Backend environment variables
 

@@ -7,7 +7,7 @@ import Link from 'next/link';
 import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { Button } from '@/components/ui/button';
 import { LoadError } from '@/components/ui/LoadError';
-import { useAuthStore } from '@/lib/store/auth-store';
+import { useAuthStore, hasSession } from '@/lib/store/auth-store';
 import { formatDateTime } from '@/lib/utils';
 import { apiClient, apiErrorCode, apiErrorMessage } from '@/lib/api-client';
 import { useToast } from '@/components/ui/toast';
@@ -77,8 +77,7 @@ export default function NotificationsPage() {
   };
 
   useEffect(() => {
-    const token = apiClient.getAccessToken();
-    if (!token && !isAuthenticated) {
+    if (!hasSession()) {
       router.replace(loginUrlHere());
       return;
     }

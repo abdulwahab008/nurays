@@ -4,6 +4,7 @@ import { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { apiClient, errorMessage } from '@/lib/api-client';
+import { ISOLATED_TAB_HEADER } from '@/lib/token-store';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { Mark, BrandLockup } from '@/components/ui/Mark';
 
@@ -110,11 +111,11 @@ function DevLoginContent() {
     setStatusMessage(`Authenticating as ${role.name}...`);
 
     try {
-      const res = await apiClient.post('/auth/login', {
-        phoneOrEmail: role.email,
-        otpCodeOrPassword: role.pass,
-        loginMethod: 'email',
-      });
+      const res = await apiClient.post(
+        '/auth/login',
+        { phoneOrEmail: role.email, otpCodeOrPassword: role.pass, loginMethod: 'email' },
+        isolate ? { headers: { [ISOLATED_TAB_HEADER]: '1' } } : undefined
+      );
 
       if (res.data?.success && res.data?.data) {
         const { user, tokens } = res.data.data;

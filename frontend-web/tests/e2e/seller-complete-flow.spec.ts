@@ -1,7 +1,8 @@
-import { test, expect, request, APIRequestContext, type Page } from '@playwright/test';
+import { test, expect, request, APIRequestContext } from '@playwright/test';
 import { execSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { signIn } from './support/customer';
 
 const API_BASE = (process.env.API_BASE ?? 'http://localhost:3001/api/v1').replace(/\/$/, '');
 const DB_URL = process.env.E2E_DB_URL ?? 'postgresql://localhost:5432/frozennuray_dev';
@@ -129,53 +130,6 @@ async function createCustomerUser(suffix: string): Promise<TestUserSession> {
   return { email, jwt, user };
 }
 
-async function setSession(page: Page, session: TestUserSession) {
-  await page.addInitScript(
-    ({ token, user }: { token: string; user: TestUserSession['user'] }) => {
-      window.localStorage.setItem('auth_token', token);
-      window.localStorage.setItem('access_token', token);
-      window.localStorage.setItem('refresh_token', token);
-      window.localStorage.setItem('token', token);
-      window.sessionStorage.setItem('access_token', token);
-      window.sessionStorage.setItem('refresh_token', token);
-      window.localStorage.setItem(
-        'auth-storage',
-        JSON.stringify({
-          state: {
-            user,
-            token,
-            tokens: { access_token: token, refresh_token: token },
-            isAuthenticated: true,
-          },
-          version: 0,
-        }),
-      );
-    },
-    { token: session.jwt, user: session.user },
-  );
-
-  await page.context().addCookies([
-    {
-      name: 'access_token',
-      value: session.jwt,
-      domain: 'localhost',
-      path: '/',
-      httpOnly: false,
-      secure: false,
-      sameSite: 'Lax',
-    },
-    {
-      name: 'auth_token',
-      value: session.jwt,
-      domain: 'localhost',
-      path: '/',
-      httpOnly: false,
-      secure: false,
-      sameSite: 'Lax',
-    },
-  ]);
-}
-
 test.describe.serial('Complete Seller End-to-End Workflow (Sections 1-14)', () => {
   let sellerSession: TestUserSession;
   let buyerSession: TestUserSession;
@@ -197,7 +151,7 @@ test.describe.serial('Complete Seller End-to-End Workflow (Sections 1-14)', () =
 
   // 1. SECTION 1: Seller Registration with GPS, Community, Docs & T&C -> Pending
   test('1. Section 1: Seller Registration wizard with GPS, community detection & submission', async ({ page }) => {
-    await setSession(page, sellerSession);
+    await signIn(page, sellerSession);
     await page.goto('/sellers/register');
     await page.waitForLoadState('networkidle');
 
@@ -256,7 +210,7 @@ test.describe.serial('Complete Seller End-to-End Workflow (Sections 1-14)', () =
     `);
 
     // Seller visits registration / status page
-    await setSession(page, sellerSession);
+    await signIn(page, sellerSession);
     await page.goto('/sellers/register');
     await page.waitForLoadState('networkidle');
 
@@ -311,7 +265,7 @@ test.describe.serial('Complete Seller End-to-End Workflow (Sections 1-14)', () =
     sellerSession.user.userType = 'seller';
 
     // Verify seller dashboard loads with active status and store live switch
-    await setSession(page, sellerSession);
+    await signIn(page, sellerSession);
     await page.goto('/sellers/dashboard');
     await page.waitForLoadState('networkidle');
 
@@ -327,7 +281,7 @@ test.describe.serial('Complete Seller End-to-End Workflow (Sections 1-14)', () =
 
   // 4. SECTION 3 & 5: Store Live Switch (Store: OPEN / CLOSED toggle)
   test('4. Section 3 & 5: One-Click Store Live OPEN / CLOSED Toggle', async ({ page }) => {
-    await setSession(page, sellerSession);
+    await signIn(page, sellerSession);
     await page.goto('/sellers/dashboard');
     await page.waitForLoadState('networkidle');
 
@@ -352,7 +306,7 @@ test.describe.serial('Complete Seller End-to-End Workflow (Sections 1-14)', () =
 
   // 5. SECTION 4: Seller Adds Food Item with Kitchen Preparation Time Presets
   test('5. Section 4: Add Food Item with Kitchen Preparation Time Preset (30m Biryani / 15m Burger)', async ({ page }) => {
-    await setSession(page, sellerSession);
+    await signIn(page, sellerSession);
     await page.goto('/sellers/products/new');
     await page.waitForLoadState('networkidle');
 
@@ -447,7 +401,7 @@ test.describe.serial('Complete Seller End-to-End Workflow (Sections 1-14)', () =
     expect(orderId).toBeTruthy();
 
     // Seller views Kitchen Orders Cockpit
-    await setSession(page, sellerSession);
+    await signIn(page, sellerSession);
     await page.goto('/sellers/orders');
     await page.waitForLoadState('networkidle');
 
@@ -484,7 +438,7 @@ test.describe.serial('Complete Seller End-to-End Workflow (Sections 1-14)', () =
     const tempOrderBody = await tempOrderResp.json();
     const tempOrderId = tempOrderBody.data?.order?.id;
 
-    await setSession(page, sellerSession);
+    await signIn(page, sellerSession);
     await page.goto('/sellers/orders');
     await page.waitForLoadState('networkidle');
 
@@ -518,7 +472,7 @@ test.describe.serial('Complete Seller End-to-End Workflow (Sections 1-14)', () =
 
   // 8. SECTION 7 & 8: Seller Accepts Order -> In Preparation with Kitchen Timer
   test('8. Section 7 & 8: Seller Accepts Order & Enters Preparing State', async ({ page }) => {
-    await setSession(page, sellerSession);
+    await signIn(page, sellerSession);
     await page.goto('/sellers/orders');
     await page.waitForLoadState('networkidle');
 
@@ -542,7 +496,7 @@ test.describe.serial('Complete Seller End-to-End Workflow (Sections 1-14)', () =
 
   // 9. SECTION 10: Seller Marks Food "Ready for Pickup"
   test('9. Section 10: Seller Marks Food Ready for Pickup', async ({ page }) => {
-    await setSession(page, sellerSession);
+    await signIn(page, sellerSession);
     await page.goto('/sellers/orders');
     await page.waitForLoadState('networkidle');
 
@@ -582,7 +536,7 @@ test.describe.serial('Complete Seller End-to-End Workflow (Sections 1-14)', () =
     `);
 
     // Verify Seller Orders page shows Delivered Completed
-    await setSession(page, sellerSession);
+    await signIn(page, sellerSession);
     await page.goto('/sellers/orders');
     await page.waitForLoadState('networkidle');
 
@@ -597,7 +551,7 @@ test.describe.serial('Complete Seller End-to-End Workflow (Sections 1-14)', () =
 
   // 11. SECTION 13: Earnings (balance, today, all time, payouts)
   test('11. Section 13: Earnings balance, today, all time and payouts', async ({ page }) => {
-    await setSession(page, sellerSession);
+    await signIn(page, sellerSession);
     await page.goto('/sellers/earnings');
     await page.waitForLoadState('networkidle');
 

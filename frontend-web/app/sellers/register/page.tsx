@@ -8,7 +8,7 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { LoadError } from '@/components/ui/LoadError';
-import { useAuthStore } from '@/lib/store/auth-store';
+import { useAuthStore, hasSession } from '@/lib/store/auth-store';
 import { apiClient, apiErrorMessage } from '@/lib/api-client';
 import { bankAccountIsWrong, walletNumberIsWrong } from '@/lib/payout-account';
 import LocationMap from '@/components/ui/LocationMap';
@@ -136,8 +136,7 @@ export default function SellerRegisterPage() {
   };
 
   useEffect(() => {
-    const token = apiClient.getAccessToken();
-    if (!token && !isAuthenticated) {
+    if (!hasSession()) {
       router.replace(loginUrlHere());
       return;
     }

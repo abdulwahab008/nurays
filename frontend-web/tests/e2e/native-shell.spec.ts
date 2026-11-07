@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { dbQuery, newCustomer, signIn } from './support/customer';
+import { API_BASE, CUSTOMER_PASSWORD, dbQuery, newCustomer, signIn } from './support/customer';
 
 // The website inside the Nuray store app (mobile/): a stand-in for the app's shell gives the page isNativePlatform and
 // the plugins it uses, recording every call (components/NativeBridge.tsx, lib/native-shell.ts).
@@ -77,6 +77,19 @@ const calls = (page: Page) => page.evaluate(() => (window as unknown as { __call
 const fire = (page: Page, event: string, payload: unknown) =>
   page.evaluate(([e, p]) => (window as unknown as { __listeners: Record<string, (x: unknown) => void> }).__listeners[e as string](p), [event, payload]);
 
+// What the phone's secure storage holds now (the stand-in keeps it in sessionStorage across page loads).
+const vault = (page: Page) => page.evaluate(() => JSON.parse(sessionStorage.getItem('__vault') ?? '{}') as Record<string, string>);
+// The localStorage keys that look like a sign-in token or hold one of `secrets`.
+const storedTokens = (page: Page, secrets: string[]) =>
+  page.evaluate(
+    (known) =>
+      Object.keys(localStorage).filter((k) => {
+        const v = localStorage.getItem(k) ?? '';
+        return /token|refresh|jwt/i.test(k) || /eyJ[\w-]+\.eyJ[\w-]+/.test(v) || known.some((t) => v.includes(t));
+      }),
+    secrets
+  );
+
 test.describe('the website inside the store app', () => {
   test('hooks into the app: splash, status bar, links and the back button', async ({ page }) => {
     await asTheApp(page);
@@ -111,14 +124,14 @@ test.describe('the website inside the store app', () => {
     await expect(page.getByTestId('native-sign-in')).toHaveCount(0);
   });
 
-  test('on an iPhone, Sign in with Apple sends the identity token and name and signs the person in', async ({ page }) => {
+  test('on an iPhone, Sign in with Apple sends the identity token and name and signs the person in', async ({ page, request }) => {
     const customer = await newCustomer();
     test.skip(!customer.jwt, 'the API is not running');
-    // A real Apple token cannot be made here, so the API's answer stands in: the tokens of a real customer.
-    const login = await page.request.post(`${process.env.API_BASE ?? 'http://localhost:3001/api/v1'}/auth/login`, {
-      data: { phoneOrEmail: customer.email, otpCodeOrPassword: 'Lantern-Quartz-71!', loginMethod: 'email' },
+    // A real Apple token cannot be made here, so the API's answer stands in: a real customer's sign-in, made outside this browser.
+    const login = await request.post(`${API_BASE}/auth/login`, {
+      data: { phoneOrEmail: customer.email, otpCodeOrPassword: CUSTOMER_PASSWORD, loginMethod: 'email' },
     });
-    const signedIn = (await login.json()).data as { user: { email: string }; tokens: { access_token: string; refresh_token: string } };
+    const signedIn = (await login.json()).data as { user: { email: string }; tokens: { access_token: string; refresh_token?: string } };
     let sent: Record<string, unknown> | null = null;
     await page.route('**/auth/apple', async (route) => {
       sent = route.request().postDataJSON();
@@ -133,28 +146,22 @@ test.describe('the website inside the store app', () => {
     expect(await calls(page)).toEqual(expect.arrayContaining(['social login apple']));
     expect((await calls(page)).find((c) => c.startsWith('social init'))).toContain('"apple":{"clientId":"pk.nuray.app"');
     await expect(page).not.toHaveURL(/\/login/);
-    await expect.poll(() => page.evaluate(() => localStorage.getItem('refresh_token'))).toBe(signedIn.tokens.refresh_token);
     await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('auth-storage') ?? '{}')?.state?.user?.email ?? null)).toBe(customer.email);
+    // The tokens stay out of the page's storage and out of the phone's secure storage.
+    const secrets = [signedIn.tokens.access_token, signedIn.tokens.refresh_token].filter((t): t is string => !!t);
+    expect(await storedTokens(page, secrets)).toEqual([]);
+    expect(await vault(page)).toEqual({});
   });
 
-  test('a page that lost its sign-in gets it back from secure storage', async ({ page }) => {
-    const customer = await newCustomer();
-    test.skip(!customer.jwt, 'the API is not running');
-    const login = await page.request.post(`${process.env.API_BASE ?? 'http://localhost:3001/api/v1'}/auth/login`, {
-      data: { phoneOrEmail: customer.email, otpCodeOrPassword: 'Lantern-Quartz-71!', loginMethod: 'email' },
+  test('tokens an earlier version saved are removed, from secure storage and from the page', async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem('access_token', 'old-access-token');
+      localStorage.setItem('refresh_token', 'old-refresh-token');
     });
-    const tokens = (await login.json()).data.tokens as { access_token: string; refresh_token: string };
-    await asTheApp(page, { nuray_access: tokens.access_token, nuray_refresh: tokens.refresh_token });
+    await asTheApp(page, { nuray_access: 'old-access-token', nuray_refresh: 'old-refresh-token' });
     await page.goto('/terms');
-    const pageRefreshToken = () => page.evaluate(() => localStorage.getItem('refresh_token'));
-    await expect.poll(pageRefreshToken).toBe(tokens.refresh_token);
-    // The account is loaded again (the auth store keeps it), and nothing reloads the page or drops the tokens after.
-    await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('auth-storage') ?? '{}')?.state?.user?.email ?? null)).toBe(customer.email);
-    let loads = 0;
-    page.on('load', () => loads++);
-    await page.waitForTimeout(1500);
-    expect(loads).toBe(0);
-    expect(await pageRefreshToken()).toBe(tokens.refresh_token);
+    await expect.poll(() => vault(page)).toEqual({});
+    expect(await storedTokens(page, ['old-access-token', 'old-refresh-token'])).toEqual([]);
   });
 
   test('push in the Android app: turned on with the phone token, a tap opens its page, turned off again', async ({ page }) => {

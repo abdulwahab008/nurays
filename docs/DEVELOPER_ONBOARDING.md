@@ -147,7 +147,7 @@ Frontend:
   client page beside it (`ProductDetailPage.tsx`, `KitchenStorefrontPage.tsx`): the title and link preview are built by
   `lib/seo.ts` from what `lib/server/public-api.ts` reads. Copy that shape for another public page; never put `metadata` in a
   `'use client'` file. With `NEXT_PUBLIC_SITE_URL` empty every page is `noindex`, which is what you want in development.
-- Sign-in tokens are read and written only through `tokenStore()` in `lib/token-store.ts` (or the API client's `getAccessToken`, `setTokens` and `clearTokens`, which use it), never with `localStorage` directly: a native shell swaps the store.
+- The refresh token is an httpOnly cookie the API sets; the website never sees it. The access token is in memory only, through `tokenStore()` in `lib/token-store.ts` (or the API client's `getAccessToken`, `setTokens` and `clearTokens`). Never put a token in `localStorage`. To ask "is someone signed in?" in an effect, use `hasSession()` from `lib/store/auth-store.ts`, not a token read or the hook's value (on a page's first render after a load the hook still says signed out).
 - State: Zustand stores in `lib/store/` (auth, cart, community); live updates through `lib/hooks/use-socket.ts` and
   `use-live-refresh.ts`.
 

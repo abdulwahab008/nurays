@@ -11,7 +11,7 @@ import { authFieldError, authHeading, authInput, authLabel, authLede, authLink, 
 /** What a finished staff sign-in answers: the account and its tokens. */
 export interface StaffSignIn {
   user: User & { permissions?: string[] };
-  tokens: { access_token: string; refresh_token: string };
+  tokens: { access_token: string; refresh_token?: string };
   backupCodesLeft?: number;
   usedBackupCode?: boolean;
 }

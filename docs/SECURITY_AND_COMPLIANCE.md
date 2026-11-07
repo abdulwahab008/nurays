@@ -11,6 +11,15 @@ Code: `backend/src/services/auth.service.ts`, `utils/jwt.ts`, `middleware/auth.m
   (`JWT_REFRESH_EXPIRES_IN`, default 30d), signed with `JWT_SECRET`. Each carries a `typ` claim, so a refresh token
   is rejected as an API credential and an access token cannot mint refresh tokens. `POST /auth/refresh` issues a
   new pair.
+- **Where the website keeps them** (`backend/src/utils/refresh-cookie.ts`, `frontend-web/lib/token-store.ts`). Every
+  auth answer that hands out a refresh token also sets it as the cookie `nuray_rt`: httpOnly (no page script can read
+  it), `SameSite=Lax`, `Secure` in production, path `/api/v1/auth` (sent to the auth routes only). In production the
+  refresh token is also taken out of the JSON answer. The access token lives in the page's memory only; after a reload
+  the first request is answered 401 and the client renews it through the cookie. `/auth/refresh` and `/auth/logout`
+  act on the cookie only when the request's `Origin` is exactly `CORS_ORIGIN` (403 `ORIGIN_NOT_ALLOWED` otherwise),
+  so another site cannot use it. Every other route still takes the access token from the `Authorization` header
+  only, so it needs no CSRF defence. An injected script can still act as the person while the page is open, but
+  cannot carry a long-lived sign-in away.
 - **Sessions and rotation** (`services/session.service.ts`, table `refresh_tokens`). Each sign-in starts a session
   (one device); every refresh token issued is a row (its `jti`, the session's `familyId`, user agent and address).
   A refresh token works once: refreshing marks it used and hands out a new one in the same session. A used token
@@ -317,8 +326,9 @@ the deployment guide.
 `backend/src/index.ts`: `helmet` with defaults (cross-origin resource policy set to `cross-origin` so images load
 from the CDN); CORS limited to the single `CORS_ORIGIN` with credentials, listed methods and headers; the same
 origin is used for Socket.IO. Error responses never include stack traces outside `NODE_ENV=development`, and 500s
-return a generic message plus a request id. The frontend sends the JWT in the `Authorization` header, not a cookie
-(the API reads only that header), which avoids CSRF on the API.
+return a generic message plus a request id. The frontend sends the access token in the `Authorization` header, which
+every route except `/auth/refresh` and `/auth/logout` requires, so those routes need no CSRF defence; the two that
+read the refresh cookie check the request's `Origin` (see Tokens above).
 
 ## Logging and error tracking
 

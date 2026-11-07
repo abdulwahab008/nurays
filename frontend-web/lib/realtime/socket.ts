@@ -113,10 +113,6 @@ function watchTokens() {
   if (watchingTokens || typeof window === 'undefined') return;
   watchingTokens = true;
   window.addEventListener('auth:tokens-changed', sync);
-  // Another tab logging in or out changes the shared tokens too.
-  window.addEventListener('storage', (event) => {
-    if (event.key === null || event.key === 'access_token') sync();
-  });
 }
 
 /** The shared connection for a signed-in user (opened on first use), or null when signed out. */

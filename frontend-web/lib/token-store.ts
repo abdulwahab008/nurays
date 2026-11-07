@@ -1,26 +1,23 @@
 /**
- * Where the sign-in tokens are kept. The web app keeps them in the browser: in localStorage (shared by every tab and
- * kept when the browser closes), or in sessionStorage for a tab that keeps its own session apart from the others (the
- * developer login page does that, to be signed in as two people at once).
+ * Where the sign-in tokens are kept. The refresh token is an httpOnly cookie the API sets: no page script can read it,
+ * so an injected script cannot carry a long-lived sign-in away. The short-lived access token lives in this page's memory
+ * only; after a reload the first request is answered 401 and the client gets a new one through the cookie.
  *
- * Everything that reads or writes a token goes through the one store `tokenStore()` returns, so a native shell can keep
- * them somewhere safer (the phone's keychain or keystore) by calling `setTokenStore()` once, before the app renders.
- * The interface is synchronous because the request interceptor needs the token at once; a store backed by an
- * asynchronous plugin keeps a copy in memory, loads it before the app starts and writes through on every change.
+ * A tab kept apart from the others (the developer login page, to be signed in as two people at once) cannot share the
+ * one cookie, so it keeps its own pair in sessionStorage. Outside production the API still returns the refresh token
+ * in its answers for that; in production it does not, and such a tab signs in again when its access token expires.
  *
  * No imports, so `npm test` covers it (tests/unit/token-store.test.ts).
  */
 
 export interface TokenStore {
-  /** The access token, or null when signed out. */
+  /** The access token, or null when there is none in this page yet. */
   access(): string | null;
-  /** The refresh token, or null when signed out. */
+  /** A refresh token this page holds itself: only a tab kept apart does. Otherwise the cookie carries it. */
   refresh(): string | null;
-  /** Save a new access token; the refresh token stays. `isolated` keeps it in this tab alone. */
-  saveAccess(token: string, isolated?: boolean): void;
-  /** Save a new pair (after signing in or a refresh). */
-  savePair(access: string, refresh: string, isolated?: boolean): void;
-  /** Forget both tokens, and that this tab was kept apart. */
+  /** Keep a new access token, and the refresh token when this tab is kept apart. */
+  save(access: string, refresh?: string | null, isolated?: boolean): void;
+  /** Forget both, and that this tab was kept apart. */
   clear(): void;
   /** True when this tab keeps its own session apart from the other tabs. */
   tabIsolated(): boolean;
@@ -29,79 +26,62 @@ export interface TokenStore {
 /** The part of the browser's storage the store uses. */
 export type StorageLike = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
 
-export interface BrowserStorages {
-  /** This tab's own storage. */
-  session: StorageLike;
-  /** The storage every tab shares. */
-  local: StorageLike;
-}
+/** Marks a request from a tab kept apart, so the API neither sets nor clears the browser's refresh cookie for it. */
+export const ISOLATED_TAB_HEADER = 'X-Nuray-Isolated-Tab';
 
 const ACCESS = 'access_token';
 const REFRESH = 'refresh_token';
 const ISOLATED = 'tab_isolated';
 
-const inTheBrowser = (): BrowserStorages | null =>
-  typeof window === 'undefined' ? null : { session: sessionStorage, local: localStorage };
+const tabStorage = (): StorageLike | null => (typeof window === 'undefined' ? null : sessionStorage);
 
-/**
- * The store for a browser. `storages` says which storage to use (null when there is none, on the server, where
- * everything reads as signed out and nothing is written); tests pass their own.
- */
-export function browserTokenStore(storages: () => BrowserStorages | null = inTheBrowser): TokenStore {
-  const isolatedTab = (s: BrowserStorages) => s.session.getItem(ISOLATED) === 'true';
+/** The store for a browser; tests pass their own stand-in for sessionStorage. */
+export function browserTokenStore(storage: () => StorageLike | null = tabStorage): TokenStore {
+  let inMemory: string | null = null;
+  const isolatedTab = (s: StorageLike | null) => s?.getItem(ISOLATED) === 'true';
   return {
     access() {
-      const s = storages();
-      return s ? s.session.getItem(ACCESS) || s.local.getItem(ACCESS) : null;
+      const s = storage();
+      return isolatedTab(s) ? s!.getItem(ACCESS) : inMemory;
     },
     refresh() {
-      const s = storages();
-      return s ? s.session.getItem(REFRESH) || s.local.getItem(REFRESH) : null;
+      const s = storage();
+      return isolatedTab(s) ? s!.getItem(REFRESH) : null;
     },
-    saveAccess(token, isolated = false) {
-      const s = storages();
-      if (!s) return;
-      if (isolated || isolatedTab(s)) {
-        s.session.setItem(ISOLATED, 'true');
-        s.session.setItem(ACCESS, token);
-      } else {
-        s.local.setItem(ACCESS, token);
+    save(access, refresh, isolated = false) {
+      const s = storage();
+      if (s && (isolated || isolatedTab(s))) {
+        s.setItem(ISOLATED, 'true');
+        s.setItem(ACCESS, access);
+        if (refresh) s.setItem(REFRESH, refresh);
+        return;
       }
-    },
-    savePair(access, refresh, isolated = false) {
-      const s = storages();
-      if (!s) return;
-      if (isolated || isolatedTab(s)) {
-        s.session.setItem(ISOLATED, 'true');
-        s.session.setItem(ACCESS, access);
-        s.session.setItem(REFRESH, refresh);
-      } else {
-        s.local.setItem(ACCESS, access);
-        s.local.setItem(REFRESH, refresh);
-      }
+      inMemory = access;
     },
     clear() {
-      const s = storages();
-      if (!s) return;
-      s.session.removeItem(ACCESS);
-      s.session.removeItem(REFRESH);
-      s.session.removeItem(ISOLATED);
-      s.local.removeItem(ACCESS);
-      s.local.removeItem(REFRESH);
+      inMemory = null;
+      const s = storage();
+      s?.removeItem(ACCESS);
+      s?.removeItem(REFRESH);
+      s?.removeItem(ISOLATED);
     },
     tabIsolated() {
-      const s = storages();
-      return s ? isolatedTab(s) : false;
+      return isolatedTab(storage());
     },
   };
 }
 
-let current: TokenStore = browserTokenStore();
+// Tokens an earlier version kept in localStorage: a refresh token left there is still readable by any script.
+if (typeof window !== 'undefined') {
+  try {
+    localStorage.removeItem(ACCESS);
+    localStorage.removeItem(REFRESH);
+  } catch {
+    /* storage blocked: there is nothing to remove */
+  }
+}
+
+const current: TokenStore = browserTokenStore();
 
 /** The store every token read and write goes through. */
 export const tokenStore = (): TokenStore => current;
-
-/** Replace the store (a native shell's secure storage), before the app renders. */
-export function setTokenStore(store: TokenStore): void {
-  current = store;
-}

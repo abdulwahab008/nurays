@@ -27,7 +27,7 @@ import { kitchenMessages } from '@/lib/i18n/messages/kitchen';
 import { formatPrice, imageVariant, orderTotals } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { LoadError } from '@/components/ui/LoadError';
-import { useAuthStore } from '@/lib/store/auth-store';
+import { useAuthStore, hasSession } from '@/lib/store/auth-store';
 import { useCartStore, trayFromServer, CartItem as LocalCartItem } from '@/lib/store/cart-store';
 import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { apiClient, apiErrorMessage } from '@/lib/api-client';
@@ -154,10 +154,9 @@ export default function CartPage() {
     setLoading(true);
     setLoadError(null);
     try {
-      const token = apiClient.getAccessToken();
-      const localStoreItems = useCartStore.getState().items || [];
+            const localStoreItems = useCartStore.getState().items || [];
 
-      if (token || isAuthenticated) {
+      if (hasSession()) {
         const response = await cartService.getCart();
         const cartData = response.data;
 
@@ -236,8 +235,7 @@ export default function CartPage() {
       });
       useCartStore.getState().updateItem(itemId, quantity);
 
-      const token = apiClient.getAccessToken();
-      if (token || isAuthenticated) {
+      if (hasSession()) {
         await cartService.updateCartItem(itemId, quantity);
         setTrayVersion((v) => v + 1);
       }
@@ -286,8 +284,7 @@ export default function CartPage() {
       });
       useCartStore.getState().removeItem(itemId);
 
-      const token = apiClient.getAccessToken();
-      if (token || isAuthenticated) {
+      if (hasSession()) {
         await cartService.removeCartItem(itemId);
         setTrayVersion((v) => v + 1);
       }
@@ -302,8 +299,7 @@ export default function CartPage() {
   const handleClearCart = async () => {
     setClearingCart(true);
     try {
-      const token = apiClient.getAccessToken();
-      if (token || isAuthenticated) {
+      if (hasSession()) {
         await cartService.clearCart();
       }
       clearCartStore();

@@ -13,7 +13,7 @@ import {
   ADMIN_SIDEBAR_ITEMS,
   HUB_MANAGER_SIDEBAR_ITEMS,
 } from '@/components/layout/DashboardShell';
-import { useAuthStore } from '@/lib/store/auth-store';
+import { useAuthStore, hasSession } from '@/lib/store/auth-store';
 import { useToast } from '@/components/ui/toast';
 import { LoadError } from '@/components/ui/LoadError';
 import { apiClient, apiErrorMessage } from '@/lib/api-client';
@@ -91,7 +91,7 @@ export default function NotificationSettingsPage() {
   }, []);
 
   useEffect(() => {
-    if (!isAuthenticated && !apiClient.getAccessToken()) {
+    if (!hasSession()) {
       router.replace(loginUrlHere());
       return;
     }

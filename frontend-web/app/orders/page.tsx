@@ -9,12 +9,12 @@ import { orderService, Order, OrderItem } from '@/lib/services/order.service';
 import { formatPrice, formatDateTime } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { LoadError } from '@/components/ui/LoadError';
-import { useAuthStore } from '@/lib/store/auth-store';
+import { useAuthStore, hasSession } from '@/lib/store/auth-store';
 import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { useSocket } from '@/lib/hooks/use-socket';
 import { useToast } from '@/components/ui/toast';
 import { cartService } from '@/lib/services/cart.service';
-import { apiClient, apiErrorMessage } from '@/lib/api-client';
+import { apiErrorMessage } from '@/lib/api-client';
 import { useT } from '@/lib/i18n';
 import { commonMessages, statusKey } from '@/lib/i18n/messages/common';
 import { ordersMessages } from '@/lib/i18n/messages/orders';
@@ -168,8 +168,7 @@ function OrdersContent() {
   };
 
   useEffect(() => {
-    const token = apiClient.getAccessToken();
-    if (!token && !isAuthenticated) {
+    if (!hasSession()) {
       router.replace(loginUrlHere());
       return;
     }
