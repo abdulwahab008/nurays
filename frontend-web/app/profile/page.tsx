@@ -16,6 +16,7 @@ import { useAuthStore, hasSession } from '@/lib/store/auth-store';
 import { PasswordCard } from '@/components/profile/PasswordCard';
 import { SessionsCard } from '@/components/profile/SessionsCard';
 import { TwoFactorCard } from '@/components/profile/TwoFactorCard';
+import { RiderVehicleCard } from '@/components/profile/RiderVehicleCard';
 import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS, RIDER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { ThemeToggle } from '@/components/layout/ThemeToggle';
 import { useT, useLocale, LOCALES, LOCALE_NAMES } from '@/lib/i18n';
@@ -585,6 +586,8 @@ export default function ProfilePage() {
               </div>
             )}
           </div>
+
+          {isRider && <RiderVehicleCard />}
 
           {/* Language */}
           <div className="bg-surface rounded-[20px] border border-line p-6" data-testid="language-setting">

@@ -22,7 +22,7 @@ interface Application {
   documents: Array<{ type: string; url: string | null; uploadedAt: string }>;
 }
 
-const VEHICLES = [
+export const VEHICLES = [
   ['motorcycle', 'vehicle.motorcycle'],
   ['scooter', 'vehicle.scooter'],
   ['bicycle', 'vehicle.bicycle'],
