@@ -97,6 +97,19 @@ const AVAILABILITY_OVERRIDES = [
   { value: 'vacation', label: 'override.vacation' },
 ] as const;
 
+const TABS = [
+  { id: 'hours', label: 'hours' },
+  { id: 'kitchen', label: 'kitchen' },
+  { id: 'location', label: 'location' },
+  { id: 'delivery', label: 'delivery' },
+  { id: 'payout', label: 'accounts' },
+  { id: 'stock', label: 'runningLow' },
+] as const;
+type SettingsTab = (typeof TABS)[number]['id'];
+
+/** Moves focus once the tab just chosen has rendered. */
+const focusSoon = (id: string) => requestAnimationFrame(() => document.getElementById(id)?.focus());
+
 export default function SellerSettingsPage() {
   const router = useRouter();
   const { isAuthenticated, user } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated, user: s.user })));
@@ -104,6 +117,7 @@ export default function SellerSettingsPage() {
   const { ask: askDialog } = useDialogs();
   const t = useT(kitchenSettingsMessages);
   const [loading, setLoading] = useState(false);
+  const [tab, setTab] = useState<SettingsTab>('hours');
   // Why the kitchen's settings could not be read. Until they were read there is no form: it would hold blanks and made-up defaults,
   // and saving them would replace the kitchen's real profile, payout accounts, delivery terms and hours.
   const [loadError, setLoadError] = useState<unknown>(null);
@@ -409,17 +423,19 @@ export default function SellerSettingsPage() {
     const firstHourProblem = Object.keys(hourProblems)[0];
     if (firstHourProblem) {
       showToast(t('err.hoursToast'), 'error');
-      document.getElementById(firstHourProblem.endsWith('-time') ? firstHourProblem : `day-${firstHourProblem}-open`)?.focus();
+      setTab('hours');
+      focusSoon(firstHourProblem.endsWith('-time') ? firstHourProblem : `day-${firstHourProblem}-open`);
       return;
     }
     if (Object.keys(problems).length > 0) {
       showToast(t('err.accountsToast'), 'error');
+      setTab('payout');
       return;
     }
     // Nuray's riders collect from the pin, so a kitchen they deliver for cannot be saved without one.
     if (deliveryModel === 'model_a' && !pin) {
       showToast(t('needPin'), 'error');
-      document.getElementById('location-heading')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      setTab('location');
       return;
     }
 
@@ -536,6 +552,8 @@ export default function SellerSettingsPage() {
 
       if (!rest.businessName || !rest.businessName.trim()) {
         showToast(t('err.name'), 'error');
+        setTab('kitchen');
+        focusSoon('business-name');
         setLoading(false);
         return;
       }
@@ -625,8 +643,8 @@ export default function SellerSettingsPage() {
     `inline-flex items-center gap-1.5 min-h-11 px-4 rounded-full border text-sm transition-colors focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-brand/40 ${
       on ? 'border-brand-600 bg-brand-soft text-brand-soft-ink font-medium' : 'border-line-strong bg-surface text-ink hover:bg-raised'
     }`;
-  const sectionClass = 'py-8 border-t border-line first:border-t-0 first:pt-0';
-  const headingClass = 'text-sm font-semibold text-ink scroll-mt-24';
+  const sectionClass = 'pt-6';
+  const headingClass = 'sr-only';
 
   // No form until the kitchen's own settings were read: the boxes would hold blanks, and saving them would replace the real ones.
   if (!settingsRead) {
@@ -659,19 +677,28 @@ export default function SellerSettingsPage() {
       userType="seller"
     >
       <form onSubmit={handleSubmit} className="max-w-3xl pb-16">
-        {/* A long page on a phone: one tap to the part the kitchen came for. */}
-        <nav aria-label={t('jumpTo')} className="-mx-4 px-4 sm:mx-0 sm:px-0 mb-2 flex gap-2 overflow-x-auto [scrollbar-width:none]">
-          {(['hours', 'kitchen', 'location', 'delivery', 'payout', 'stock'] as const).map((id) => (
-            <a
-              key={id}
-              href={`#${id}-heading`}
-              className="shrink-0 inline-flex items-center min-h-11 px-3.5 rounded-full border border-line text-sm text-ink whitespace-nowrap hover:bg-raised focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-brand/40"
-            >
-              {t(({ hours: 'hours', kitchen: 'kitchen', location: 'location', delivery: 'delivery', payout: 'accounts', stock: 'runningLow' } as const)[id])}
-            </a>
-          ))}
-        </nav>
-        <section aria-labelledby="hours-heading" className={sectionClass}>
+        <div role="tablist" aria-label={t('jumpTo')} className="-mx-4 px-4 sm:mx-0 sm:px-0 flex gap-5 overflow-x-auto border-b border-line [scrollbar-width:none]">
+          {TABS.map(({ id, label }) => {
+            const selected = tab === id;
+            return (
+              <button
+                key={id}
+                type="button"
+                role="tab"
+                id={`${id}-tab`}
+                aria-selected={selected}
+                aria-controls={`${id}-panel`}
+                onClick={() => setTab(id)}
+                className={`relative -mb-px min-h-11 pb-1 text-[15px] whitespace-nowrap border-b-2 transition-colors focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-brand/40 ${
+                  selected ? 'border-brand-600 text-ink font-semibold' : 'border-transparent text-muted hover:text-ink'
+                }`}
+              >
+                {t(label)}
+              </button>
+            );
+          })}
+        </div>
+        <section id="hours-panel" role="tabpanel" aria-labelledby="hours-tab" hidden={tab !== 'hours'} className={sectionClass}>
           <h2 id="hours-heading" className={headingClass}>{t('hours')}</h2>
           <p className="text-sm text-muted mt-1">{t('hoursHint')}</p>
 
@@ -860,7 +887,7 @@ export default function SellerSettingsPage() {
           </div>
         </section>
 
-        <section aria-labelledby="kitchen-heading" className={sectionClass}>
+        <section id="kitchen-panel" role="tabpanel" aria-labelledby="kitchen-tab" hidden={tab !== 'kitchen'} className={sectionClass}>
           <h2 id="kitchen-heading" className={headingClass}>{t('kitchen')}</h2>
           <p className="text-sm text-muted mt-1">{t('kitchenHint')}</p>
 
@@ -874,7 +901,6 @@ export default function SellerSettingsPage() {
                   value={formData.businessName}
                   onChange={(e) => setFormData({ ...formData, businessName: e.target.value })}
                   className={fieldClass}
-                  required
                 />
               </div>
               <div>
@@ -969,7 +995,7 @@ export default function SellerSettingsPage() {
           </div>
         </section>
 
-        <section aria-labelledby="location-heading" className={sectionClass}>
+        <section id="location-panel" role="tabpanel" aria-labelledby="location-tab" hidden={tab !== 'location'} className={sectionClass}>
           <h2 id="location-heading" className={headingClass}>{t('location')}</h2>
           <p className="text-sm text-muted mt-1">
             {t('locationHint')}
@@ -1026,7 +1052,7 @@ export default function SellerSettingsPage() {
               </span>
             </div>
             <div className={`rounded-xl overflow-hidden ${pin ? '' : 'ring-2 ring-accent'}`}>
-              <LocationMap
+              {tab === 'location' && <LocationMap
                 center={mapCentre}
                 markerPosition={pin}
                 height="280px"
@@ -1037,7 +1063,7 @@ export default function SellerSettingsPage() {
                     longitude: Number(coords.lng.toFixed(6)),
                   }))
                 }
-              />
+              />}
             </div>
             <p className={`text-sm mt-1.5 ${pin ? 'text-muted' : 'text-accent-soft-ink'}`}>
               {pin ? t('movePin') : t('needPin')}
@@ -1046,7 +1072,7 @@ export default function SellerSettingsPage() {
           </div>
         </section>
 
-        <section aria-labelledby="delivery-heading" className={sectionClass}>
+        <section id="delivery-panel" role="tabpanel" aria-labelledby="delivery-tab" hidden={tab !== 'delivery'} className={sectionClass}>
           <h2 id="delivery-heading" className={headingClass}>{t('delivery')}</h2>
           <div className="mt-1 flex flex-wrap items-center justify-between gap-x-4">
             <p className="text-sm text-muted">
@@ -1148,7 +1174,7 @@ export default function SellerSettingsPage() {
           )}
         </section>
 
-        <section aria-labelledby="payout-heading" className={sectionClass}>
+        <section id="payout-panel" role="tabpanel" aria-labelledby="payout-tab" hidden={tab !== 'payout'} className={sectionClass}>
           <h2 id="payout-heading" className={headingClass}>{t('accounts')}</h2>
           <p className="text-sm text-muted mt-1">
             {t('accountsHint')}
@@ -1273,7 +1299,7 @@ export default function SellerSettingsPage() {
           </div>
         </section>
 
-        <section aria-labelledby="stock-heading" className={sectionClass}>
+        <section id="stock-panel" role="tabpanel" aria-labelledby="stock-tab" hidden={tab !== 'stock'} className={sectionClass}>
           <h2 id="stock-heading" className={headingClass}>{t('runningLow')}</h2>
           <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2">
             <label htmlFor="low-stock" className="text-[15px] text-ink">{t('lowStockLabel')}</label>

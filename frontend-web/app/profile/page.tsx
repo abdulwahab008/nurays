@@ -16,7 +16,7 @@ import { useAuthStore } from '@/lib/store/auth-store';
 import { PasswordCard } from '@/components/profile/PasswordCard';
 import { SessionsCard } from '@/components/profile/SessionsCard';
 import { TwoFactorCard } from '@/components/profile/TwoFactorCard';
-import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
+import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS, RIDER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { ThemeToggle } from '@/components/layout/ThemeToggle';
 import { useT, useLocale, LOCALES, LOCALE_NAMES } from '@/lib/i18n';
 import { commonMessages } from '@/lib/i18n/messages/common';
@@ -112,7 +112,9 @@ export default function ProfilePage() {
     languagePreference: 'en',
   });
 
-  const sidebarItems = CUSTOMER_SIDEBAR_ITEMS;
+  const isRider = (user?.userType ?? user?.user_type) === 'rider';
+  const sidebarItems = isRider ? RIDER_SIDEBAR_ITEMS : CUSTOMER_SIDEBAR_ITEMS;
+  const layoutRole = isRider ? 'rider' : 'customer';
 
   const hasRealPhone = !!profile?.phone && !profile.phone.startsWith('+999');
 
@@ -249,7 +251,7 @@ export default function ProfilePage() {
         title={t('myProfile')}
         subtitle={t('manageAccount')}
         sidebarItems={sidebarItems}
-        userType="customer"
+        userType={layoutRole}
       >
         <div className="flex items-center justify-center h-64">
           <div className="text-center">
@@ -263,7 +265,7 @@ export default function ProfilePage() {
 
   if (loadError && !profile) {
     return (
-      <DashboardLayout title={t('myProfile')} subtitle={t('manageAccount')} sidebarItems={sidebarItems} userType="customer">
+      <DashboardLayout title={t('myProfile')} subtitle={t('manageAccount')} sidebarItems={sidebarItems} userType={layoutRole}>
         <div className="max-w-xl mx-auto my-12">
           <LoadError error={loadError} onRetry={loadProfile} title={t('profileLoadFailed')} />
         </div>
@@ -276,7 +278,7 @@ export default function ProfilePage() {
       title={t('myProfile')}
       subtitle={t('manageAccountSettings')}
       sidebarItems={sidebarItems}
-      userType="customer"
+      userType={layoutRole}
     >
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Profile Card - Left Side */}
@@ -349,7 +351,11 @@ export default function ProfilePage() {
           <nav aria-labelledby="quick-links" className="bg-surface rounded-[20px] border border-line p-2 mt-6">
             <h3 id="quick-links" className="sr-only">{t('quickLinks')}</h3>
             <ul className="divide-y divide-line">
-              {[
+              {(isRider ? [
+                { href: '/riders/dashboard', icon: Bike, label: t('riderDeliveries') },
+                { href: '/notifications/settings', icon: Bell, label: t('notifications') },
+                { href: '/support', icon: LifeBuoy, label: t('helpSupport') },
+              ] : [
                 { href: '/profile/addresses', icon: MapPin, label: t('addresses') },
                 { href: '/favorites', icon: Heart, label: t('savedKitchens') },
                 { href: '/wallet', icon: Wallet, label: t('walletLink') },
@@ -358,7 +364,7 @@ export default function ProfilePage() {
                 profile?.userType === 'seller'
                   ? { href: '/sellers/dashboard', icon: BarChart3, label: t('sellerDashboard') }
                   : { href: '/sellers/register', icon: Store, label: t('becomeSeller') },
-              ].map(({ href, icon: Icon, label }) => (
+              ]).map(({ href, icon: Icon, label }) => (
                 <li key={href}>
                   <Link href={href} className="flex items-center gap-3 min-h-12 px-3 rounded-xl hover:bg-raised transition-colors">
                     <Icon className="w-5 h-5 text-muted shrink-0" aria-hidden />
