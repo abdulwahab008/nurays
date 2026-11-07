@@ -6,9 +6,12 @@
  *
  *   cd backend && npm run seed:demo
  */
-import { PrismaClient } from '@prisma/client';
+import 'dotenv/config';
+import { Prisma, PrismaClient } from '@prisma/client';
 import bcrypt from 'bcrypt';
 import { seedCommunities } from '../prisma/seed-communities';
+import { isProduction } from '../src/config/env';
+import { MAX_RIDER_CASH_LIMIT } from '../src/validators/admin.validator';
 
 const prisma = new PrismaClient();
 const PASSWORD = 'Password123!';
@@ -28,7 +31,24 @@ async function account(passwordHash: string, a: { email: string; phone: string; 
   return user;
 }
 
+/** The demo accounts share a known password, so this seed refuses to touch a production database. */
+export function assertDemoSeedAllowed(env: NodeJS.ProcessEnv = process.env) {
+  if (isProduction(env)) {
+    throw new Error('The demo seed creates accounts with a known password and never runs in production. Set NODE_ENV=development or test.');
+  }
+}
+
+/**
+ * Demo only: nobody settles the demo rider at a hub, so cash from test orders piles up in their hand and the default
+ * limit would soon stop them being offered cash orders. The demo rider gets the highest per-rider limit an admin can
+ * set instead, and a higher one already set is kept. The production cash-limit rule and the ledger are untouched.
+ */
+export function demoRiderCashLimit(current: Prisma.Decimal | number | null | undefined): number {
+  return Math.max(MAX_RIDER_CASH_LIMIT, Number(current ?? 0));
+}
+
 async function main() {
+  assertDemoSeedAllowed();
   const passwordHash = await bcrypt.hash(PASSWORD, 10);
   await seedCommunities();
   const community = await prisma.community.findUnique({ where: { slug: 'gulshan-e-iqbal' } });
@@ -107,6 +127,7 @@ async function main() {
   }
 
   const riderUser = await account(passwordHash, { email: 'rider@nuray.test', phone: '+923007770888', userType: 'rider', name: 'Imran Ali' });
+  const existingRider = await prisma.rider.findUnique({ where: { userId: riderUser.id }, select: { cashLimit: true } });
   const rider = {
     city: 'Karachi',
     vehicleType: 'motorcycle',
@@ -115,6 +136,7 @@ async function main() {
     status: 'active',
     verificationStatus: 'approved',
     isAvailable: true,
+    cashLimit: demoRiderCashLimit(existingRider?.cashLimit),
   };
   await prisma.rider.upsert({ where: { userId: riderUser.id }, update: rider, create: { userId: riderUser.id, ...rider } });
 
@@ -139,9 +161,11 @@ async function main() {
   console.log('seller.rejected@nuray.test, rider@nuray.test, admin@frozennuray.com (the super admin when no other account is; it gets two-step sign-in where STAFF_2FA_REQUIRED is on, always in production).');
 }
 
-main()
-  .catch((e) => {
-    console.error('Seeding the demo accounts failed:', e);
-    process.exit(1);
-  })
-  .finally(() => prisma.$disconnect());
+if (require.main === module) {
+  main()
+    .catch((e) => {
+      console.error('Seeding the demo accounts failed:', e);
+      process.exit(1);
+    })
+    .finally(() => prisma.$disconnect());
+}
