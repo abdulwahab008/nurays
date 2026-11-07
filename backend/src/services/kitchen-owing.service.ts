@@ -19,6 +19,7 @@ import { pktDate } from '../utils/payoutWeek';
 import { logger } from '../utils/logger';
 import { computeSellerBalance } from './seller-balance.service';
 import { notify } from './notify.service';
+import { notificationText } from '../utils/notificationText';
 
 type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
 type Client = typeof prisma | Tx;
@@ -90,10 +91,9 @@ export async function refreshAllOwing(now: Date = new Date()): Promise<{ owing: 
         userId: s.userId,
         category: 'payments',
         type: 'payout',
-        title: state.cashPaused ? 'Cash orders are paused' : 'You owe Nuray commission',
-        message: state.cashPaused
-          ? `You owe Nuray Rs ${state.owed.toLocaleString('en-PK')}. New cash orders are paused until it is paid; online orders still come in and pay it off.`
-          : `You owe Nuray Rs ${state.owed.toLocaleString('en-PK')} in commission on cash orders. It is taken from your online earnings; if it is still owed on ${pktDate(state.cashPausesAt!)}, cash orders pause until it is paid.`,
+        text: state.cashPaused
+          ? notificationText('owing.cashPaused', { owed: `Rs ${state.owed.toLocaleString('en-PK')}` })
+          : notificationText('owing.reminder', { owed: `Rs ${state.owed.toLocaleString('en-PK')}`, pausesOn: pktDate(state.cashPausesAt!) }),
         actionUrl: '/sellers/earnings',
         dedupeKey: `owing:${s.id}:${pktDate(now)}`,
       });
@@ -170,8 +170,10 @@ export async function recordPaymentToNuray(input: { sellerId: string; amount: nu
       userId: owner.userId,
       category: 'payments',
       type: 'payout',
-      title: 'Payment to Nuray received',
-      message: `We received your payment of Rs ${amount.toLocaleString('en-PK')}.${row.state.owed === 0 ? ' You owe nothing now, and cash orders are open.' : ` Still owed: Rs ${row.state.owed.toLocaleString('en-PK')}.`}`,
+      text: notificationText('owing.paid', {
+        amount: `Rs ${amount.toLocaleString('en-PK')}`,
+        stillOwed: row.state.owed === 0 ? null : `Rs ${row.state.owed.toLocaleString('en-PK')}`,
+      }),
       actionUrl: '/sellers/earnings',
       dedupeKey: `paid-nuray:${row.created.id}`,
     });

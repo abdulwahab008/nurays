@@ -25,6 +25,7 @@ import { PAYOUT_METHOD_ORDER, addDays, payoutWeek, pktDate } from '../utils/payo
 import { computeSellerBalance, sellerBalanceLines, type BalanceLine } from './seller-balance.service';
 import { notify } from './notify.service';
 import adminService from './admin.service';
+import { notificationText } from '../utils/notificationText';
 
 type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
 
@@ -156,8 +157,7 @@ export async function runWeeklyPayouts(now: Date = new Date()): Promise<WeeklyRu
         userId: seller.userId,
         category: 'payments',
         type: 'payout',
-        title: 'Your weekly payout is on its way',
-        message: `Rs ${amount.toLocaleString('en-PK')} for the week to ${week.periodEnd} is being sent to your ${methodName(destination.payoutMethod)} account. The statement lists every order.`,
+        text: notificationText('payout.weekly', { amount: `Rs ${amount.toLocaleString('en-PK')}`, periodEnd: week.periodEnd, method: destination.payoutMethod }),
         actionUrl: '/sellers/earnings',
         channels: ['push', 'email'],
         dedupeKey: `payout:${outcome.id}:weekly`,
@@ -176,8 +176,7 @@ export async function runWeeklyPayouts(now: Date = new Date()): Promise<WeeklyRu
         userId: admin.id,
         category: 'payments',
         type: 'payout',
-        title: 'Weekly kitchen payouts to send',
-        message: `${result.created.length} kitchen payout${result.created.length === 1 ? '' : 's'} (Rs ${total.toLocaleString('en-PK')}) are waiting to be sent.`,
+        text: notificationText('admin.weeklyPayouts', { count: result.created.length, total: `Rs ${total.toLocaleString('en-PK')}` }),
         actionUrl: '/admin/payouts',
         dedupeKey: `weekly-payouts:${week.runDate}:${admin.id}:${result.created.length}`,
       });
@@ -186,8 +185,6 @@ export async function runWeeklyPayouts(now: Date = new Date()): Promise<WeeklyRu
   logger.info({ runDate: week.runDate, created: result.created.length, skipped: result.skipped }, 'Weekly payouts');
   return result;
 }
-
-const methodName = (m: string) => (m === 'bank_transfer' ? 'bank' : m === 'jazzcash' ? 'JazzCash' : m === 'easypaisa' ? 'EasyPaisa' : m);
 
 export interface StatementLine {
   orderNumber: string;

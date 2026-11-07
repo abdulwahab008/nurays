@@ -1,6 +1,7 @@
 import prisma from '../config/database';
 import socketManager from '../config/socket';
 import { notify } from './notify.service';
+import { notificationText } from '../utils/notificationText';
 
 type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
 
@@ -71,8 +72,7 @@ export function notifyDeliveryCancelled(cancelled: CancelledDelivery | null): vo
           userId: riderUserId,
           category: 'deliveries',
           type: 'delivery',
-          title: 'Job cancelled',
-          message: `Order #${order?.orderNumber ?? ''} was cancelled. Don't pick it up; if you already have the food, contact support.`,
+          text: notificationText('delivery.cancelled', { orderNumber: order?.orderNumber ?? '' }),
           actionUrl: '/riders/dashboard',
           data: { orderId: cancelled.orderId, deliveryId: cancelled.deliveryId },
           channels: ['push'],

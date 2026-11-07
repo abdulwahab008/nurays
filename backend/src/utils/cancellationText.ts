@@ -8,11 +8,3 @@ export function cancellationReasonForCustomer(cancelledBy: string | null | undef
   const text = (reason ?? '').replace(/^Rejected by kitchen:\s*/i, '').trim();
   return text || null;
 }
-
-/** The notification sentence for a cancelled order. */
-export function cancelledNotice(orderNumber: string, cancelledBy: string | null | undefined, reason: string | null | undefined): string {
-  const why = cancellationReasonForCustomer(cancelledBy, reason);
-  if (cancelledBy === 'seller') return `The kitchen could not take your order #${orderNumber}${why ? `: ${why}` : ''}. It has been cancelled.`;
-  if (cancelledBy === 'system') return `Your order #${orderNumber} was cancelled automatically${why ? `: ${why}` : ''}.`;
-  return `Your order #${orderNumber} has been cancelled.`;
-}

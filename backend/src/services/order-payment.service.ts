@@ -6,6 +6,7 @@ import { SELLER_DIRECT_METHODS } from '../utils/paymentCustody';
 import ledgerService from './ledger.service';
 import { notify } from './notify.service';
 import { logger } from '../utils/logger';
+import { notificationText } from '../utils/notificationText';
 
 /** The kitchen a customer pays directly by transfer (the first item's seller). */
 async function payeeSellerUserId(orderId: string): Promise<string | null> {
@@ -194,8 +195,11 @@ export class OrderPayments {
         userId: payee,
         category: 'payments',
         type: 'payment',
-        title: `Check a payment: order #${updated.orderNumber}`,
-        message: `The customer says they sent Rs ${Number(updated.totalAmount).toLocaleString()} (reference ${data.referenceNumber}). Confirm it once it's in your account.`,
+        text: notificationText('kitchen.checkPayment', {
+          orderNumber: updated.orderNumber,
+          amount: `Rs ${Number(updated.totalAmount).toLocaleString()}`,
+          reference: data.referenceNumber,
+        }),
         actionUrl: `/sellers/orders/${orderId}`,
         data: { orderId },
         channels: ['push', 'email'],
@@ -299,8 +303,7 @@ export class OrderPayments {
               userId: updated.customerId,
               category: 'payments',
               type: 'payment',
-              title: 'Payment confirmed',
-              message: `The kitchen confirmed your payment for order #${updated.orderNumber}.`,
+              text: notificationText('payment.confirmedByKitchen', { orderNumber: updated.orderNumber }),
               actionUrl: `/orders/${orderId}`,
               data: { orderId },
               channels: ['push'],
@@ -309,8 +312,7 @@ export class OrderPayments {
               userId: updated.customerId,
               category: 'payments',
               type: 'payment',
-              title: "The kitchen couldn't find your payment",
-              message: `For order #${updated.orderNumber}: "${disputeReason || 'Payment not received'}". Check the transfer and send the receipt again, or contact support.`,
+              text: notificationText('payment.disputed', { orderNumber: updated.orderNumber, reason: disputeReason || null }),
               actionUrl: `/orders/${orderId}`,
               data: { orderId },
               channels: ['push', 'email', 'sms'],
@@ -371,8 +373,7 @@ export class OrderPayments {
         userId: settled.customerId,
         category: 'payments',
         type: 'payment',
-        title: 'Payment confirmed',
-        message: `Nuray support confirmed your payment for order #${settled.orderNumber}.`,
+        text: notificationText('payment.confirmedBySupport', { orderNumber: settled.orderNumber }),
         actionUrl: `/orders/${orderId}`,
         data: { orderId },
         channels: ['push', 'email'],
@@ -384,8 +385,7 @@ export class OrderPayments {
         userId: payee,
         category: 'payments',
         type: 'payment',
-        title: `Payment confirmed: order #${settled.orderNumber}`,
-        message: `Nuray support checked the transfer for order #${settled.orderNumber}: it reached your account, so the order is paid.`,
+        text: notificationText('kitchen.paymentConfirmedBySupport', { orderNumber: settled.orderNumber }),
         actionUrl: `/sellers/orders/${orderId}`,
         data: { orderId },
         channels: ['push', 'email'],

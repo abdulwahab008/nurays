@@ -10,6 +10,7 @@ import { DELIVERY_SETTING_DEFAULTS, invalidateDeliveryPricing } from './delivery
 import socketManager from '../config/socket';
 import { realPhoneOrNull } from '../utils/otp';
 import { computeSellerAvailability } from './availability.service';
+import { NotificationText, notificationText } from '../utils/notificationText';
 
 const DAY_NAMES = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'] as const;
 
@@ -54,15 +55,14 @@ async function presentDocuments(docs: Array<{ id: string; documentType: string; 
 
 const RIDER_REQUIRED_DOCUMENTS = ['cnic_front', 'cnic_back', 'license'];
 
-async function notifySellerOfPayout(sellerId: string, n: { title: string; message: string; dedupeKey: string }) {
+async function notifySellerOfPayout(sellerId: string, n: { text: NotificationText; dedupeKey: string }) {
   const seller = await prisma.seller.findUnique({ where: { id: sellerId }, select: { userId: true } });
   if (!seller) return;
   await notify({
     userId: seller.userId,
     category: 'payments',
     type: 'payout',
-    title: n.title,
-    message: n.message,
+    text: n.text,
     actionUrl: '/sellers/earnings',
     channels: ['push', 'email'],
     dedupeKey: n.dedupeKey,
@@ -186,8 +186,7 @@ export class AdminService {
       userId: seller.userId,
       category: 'orders',
       type: 'account',
-      title: approved ? 'Your kitchen was approved' : 'Your kitchen application was not approved',
-      message: approved ? 'You can now list dishes and take orders.' : `Reason: ${notes!.trim()}`,
+      text: approved ? notificationText('kitchen.approved', {}) : notificationText('kitchen.rejected', { reason: notes!.trim() }),
       actionUrl: '/sellers/dashboard',
       data: { sellerId },
       channels: ['push', 'email'],
@@ -503,8 +502,8 @@ export class AdminService {
     });
 
     await notifySeller(product.sellerId, approved
-      ? { title: 'Dish approved', message: `"${product.name}" is live. Customers can order it now.`, actionUrl: `/products/${product.id}`, dedupeKey: `product:${product.id}:approved:${Date.now()}` }
-      : { title: 'Dish not approved', message: `"${product.name}" wasn't approved: ${why}`, actionUrl: `/sellers/products/${product.id}/edit`, dedupeKey: `product:${product.id}:rejected:${Date.now()}` });
+      ? { text: notificationText('dish.approved', { name: product.name }), actionUrl: `/products/${product.id}`, dedupeKey: `product:${product.id}:approved:${Date.now()}` }
+      : { text: notificationText('dish.rejected', { name: product.name, reason: why! }), actionUrl: `/sellers/products/${product.id}/edit`, dedupeKey: `product:${product.id}:rejected:${Date.now()}` });
 
     return {
       productId: updatedProduct.id,
@@ -599,8 +598,7 @@ export class AdminService {
       userId: rider.userId,
       category: 'deliveries',
       type: 'account',
-      title: approved ? 'Your rider application was approved' : 'Your rider application was not approved',
-      message: approved ? 'You can go on duty and take deliveries.' : `Reason: ${reason!.trim()}. You can fix it and apply again.`,
+      text: approved ? notificationText('rider.approved', {}) : notificationText('rider.rejected', { reason: reason!.trim() }),
       actionUrl: '/riders/dashboard',
       data: { riderId },
       channels: ['push', 'email'],
@@ -634,8 +632,7 @@ export class AdminService {
       userId: seller.userId,
       category: 'orders',
       type: 'account',
-      title: status === 'suspended' ? 'Your kitchen was suspended' : 'Your kitchen is active again',
-      message: status === 'suspended' ? 'Your dishes are hidden and you cannot take new orders. Contact support for details.' : 'You can take orders again.',
+      text: notificationText(status === 'suspended' ? 'kitchen.suspended' : 'kitchen.reactivated', {}),
       actionUrl: '/sellers/dashboard',
       data: { sellerId },
       channels: ['push', 'email'],
@@ -820,8 +817,7 @@ export class AdminService {
       }
     });
     await notifySellerOfPayout(payout.sellerId, {
-      title: 'Payout sent',
-      message: `We sent your payout of Rs ${Number(payout.netAmount ?? payout.amount).toLocaleString()}${transactionId ? ` (transaction ${transactionId})` : ''}.`,
+      text: notificationText('payout.sent', { amount: `Rs ${Number(payout.netAmount ?? payout.amount).toLocaleString()}`, transactionId: transactionId || null }),
       dedupeKey: `payout:${payoutId}:completed`,
     });
 
@@ -852,8 +848,7 @@ export class AdminService {
       throw new AppError('Payout is no longer pending', 409, 'PAYOUT_NOT_PENDING');
     }
     await notifySellerOfPayout(payout.sellerId, {
-      title: "Your payout didn't go through",
-      message: `Your payout of Rs ${Number(payout.netAmount ?? payout.amount).toLocaleString()} could not be sent: ${reason}. The amount is back in your balance; check your payout details and request it again.`,
+      text: notificationText('payout.failed', { amount: `Rs ${Number(payout.netAmount ?? payout.amount).toLocaleString()}`, reason }),
       dedupeKey: `payout:${payoutId}:failed`,
     });
 

@@ -12,7 +12,11 @@ import socketManager from '../src/config/socket';
 import { notify } from '../src/services/notify.service';
 import { announceAssignment, JobRow } from '../src/services/dispatch.service';
 import { canShareTrip, chooseRider, DispatchCandidate, DispatchJob, JobEnds } from '../src/utils/dispatch';
-import { assignmentMessage, dropoffAreaOf } from '../src/utils/riderJobs';
+import { dropoffAreaOf } from '../src/utils/riderJobs';
+import { notificationText, renderNotification } from '../src/utils/notificationText';
+
+const assignmentMessage = (p: { orderNumber: string; pickupAddress: string; dropoffArea: string; cashToCollect: number }) =>
+  renderNotification(notificationText('delivery.assigned', p), 'en').message;
 
 const pt = (lat: number, lng: number) => ({ lat, lng });
 const none = { lat: null, lng: null };
@@ -163,7 +167,7 @@ describe('announcing an automatic assignment', () => {
 
     const stored = (notify as jest.Mock).mock.calls[0][0];
     expect(stored).toMatchObject({ userId: 'rider-user', type: 'delivery', channels: ['push'] });
-    expect(stored.message).toBe('Order #FN1: pick up from Block 3, Gulshan, deliver to Askari 11, Lahore. Collect Rs 1250 in cash.');
+    expect(renderNotification(stored.text, 'en').message).toBe('Order #FN1: pick up from Block 3, Gulshan, deliver to Askari 11, Lahore. Collect Rs 1250 in cash.');
     expect(JSON.stringify(stored)).not.toMatch(/House 9|Street 5/);
 
     const offered = (socketManager as any).emitToUser.mock.calls.find((c: unknown[]) => c[1] === 'delivery:offered');

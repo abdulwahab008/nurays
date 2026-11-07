@@ -2,6 +2,8 @@
 
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 import { usePathname } from 'next/navigation';
+import { hasSession } from '@/lib/store/auth-store';
+import { userProfileService } from '@/lib/services/user-profile.service';
 import { DEFAULT_LOCALE, dirFor, LOCALE_COOKIE, type Locale } from './config';
 
 export * from './config';
@@ -47,6 +49,8 @@ export function LocaleProvider({ initialLocale, children }: { initialLocale: Loc
     document.documentElement.lang = next;
     document.documentElement.dir = dirFor(next);
     setLocaleState(next);
+    // The server writes notifications in the profile's language. The page has already switched, so a failed save only leaves those behind.
+    if (hasSession()) userProfileService.updateProfile({ languagePreference: next }).catch(() => undefined);
   }, []);
 
   const value = useMemo(() => ({ locale, dir: dirFor(locale), setLocale }), [locale, setLocale]);

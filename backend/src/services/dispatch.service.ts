@@ -6,11 +6,12 @@ import realtimeOrderService from './realtime-order.service';
 import { notify } from './notify.service';
 import { cashLimitOf, riderMoney, riderMoneyMany } from './rider-ledger.service';
 import { calculateDeliveryFeeCorridor } from '../utils/deliveryFee';
-import { assignmentMessage, cashToCollect, dropoffAreaOf, endsOf, routeMatch } from '../utils/riderJobs';
+import { cashToCollect, dropoffAreaOf, endsOf, routeMatch } from '../utils/riderJobs';
 import { cashAtDoor, isCashAtDoor } from '../utils/paymentCustody';
 import { ACTIVE_DELIVERY_STATUSES } from '../utils/deliveryStatus';
 import { chooseRider, DispatchCandidate, JobEnds, MAX_ACTIVE_JOBS } from '../utils/dispatch';
 import { ON_DUTY_RIDER } from '../utils/riderDuty';
+import { notificationText } from '../utils/notificationText';
 
 /**
  * Automatic assignment of delivery jobs to Nuray's own riders (see utils/dispatch.ts for the rules).
@@ -166,9 +167,8 @@ export async function announceAssignment(job: JobRow, riderUserId: string, rider
     userId: riderUserId,
     category: 'deliveries',
     type: 'delivery',
-    title: 'New delivery assigned to you',
     // Stored and pushed: the area only. The street is in the job, which the rider can open while it is theirs.
-    message: assignmentMessage({
+    text: notificationText('delivery.assigned', {
       orderNumber: job.order.orderNumber,
       pickupAddress: job.pickupAddress,
       dropoffArea: dropoffAreaOf(job.order),

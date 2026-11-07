@@ -52,10 +52,3 @@ export function dropoffAreaOf(order: {
   const city = text(snap?.city) ?? text(order.deliveryAddress?.city);
   return [area, city].filter(Boolean).join(', ');
 }
-
-/** The text of the "new delivery assigned to you" notification. */
-export function assignmentMessage(input: { orderNumber: string; pickupAddress: string; dropoffArea: string; cashToCollect: number }): string {
-  const to = input.dropoffArea ? `deliver to ${input.dropoffArea}` : 'open the job for the drop-off';
-  const cash = input.cashToCollect > 0 ? ` Collect Rs ${Math.round(input.cashToCollect)} in cash.` : '';
-  return `Order #${input.orderNumber}: pick up from ${input.pickupAddress}, ${to}.${cash}`;
-}

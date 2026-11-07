@@ -5,32 +5,27 @@ import { notify, notifyMany } from './notify.service';
 import type { DeliveryChannel } from '../jobs/notify.jobs';
 import { ONLINE_GATEWAY_METHODS } from '../utils/paymentCustody';
 import { logger } from '../utils/logger';
-import { cancelledNotice } from '../utils/cancellationText';
 import { roundMoney } from '../utils/pricing';
+import { notificationText } from '../utils/notificationText';
 
-// What each order status tells the customer, and which channels besides the app it is worth.
+// Which order statuses the customer hears about (the words are in utils/notificationText), and which channels besides the app each is worth.
 const ORDER_STATUS_MESSAGES: Record<
   string,
-  { title: string; message: (orderNumber: string, pickup: boolean, cancelled?: { by: string | null; reason: string | null }) => string; channels: (pickup: boolean) => DeliveryChannel[] }
+  {
+    kind: 'order.confirmed' | 'order.preparing' | 'order.ready' | 'order.dispatched' | 'order.in_transit' | 'order.delivered' | 'order.delivery_failed' | 'order.completed' | 'order.cancelled' | 'order.refunded';
+    channels: (pickup: boolean) => DeliveryChannel[];
+  }
 > = {
-  confirmed: { title: 'Order confirmed', message: (n) => `The kitchen accepted your order #${n}.`, channels: () => ['push'] },
-  preparing: { title: 'Order being prepared', message: (n) => `Your order #${n} is being prepared.`, channels: () => [] },
-  ready: {
-    title: 'Order ready',
-    message: (n, pickup) => (pickup ? `Your order #${n} is ready for you to collect.` : `Your order #${n} is packed and waiting for its rider.`),
-    channels: (pickup) => (pickup ? ['push'] : []),
-  },
-  dispatched: { title: 'Order picked up', message: (n) => `Your order #${n} has left the kitchen.`, channels: () => ['push'] },
-  in_transit: { title: 'Order on the way', message: (n) => `Your order #${n} is on its way!`, channels: () => ['push'] },
-  delivered: { title: 'Order delivered', message: (n) => `Your order #${n} has been delivered. Enjoy!`, channels: () => ['push', 'email'] },
-  delivery_failed: {
-    title: 'Delivery unsuccessful',
-    message: (n) => `We couldn't deliver order #${n}. Our team will reach out shortly.`,
-    channels: () => ['push', 'email', 'sms'],
-  },
-  completed: { title: 'Order completed', message: (n) => `Your order #${n} is complete. Thanks for ordering!`, channels: () => [] },
-  cancelled: { title: 'Order cancelled', message: (n, _pickup, why) => cancelledNotice(n, why?.by, why?.reason), channels: () => ['push', 'email', 'sms'] },
-  refunded: { title: 'Order refunded', message: (n) => `Your order #${n} has been refunded.`, channels: () => ['push', 'email'] },
+  confirmed: { kind: 'order.confirmed', channels: () => ['push'] },
+  preparing: { kind: 'order.preparing', channels: () => [] },
+  ready: { kind: 'order.ready', channels: (pickup) => (pickup ? ['push'] : []) },
+  dispatched: { kind: 'order.dispatched', channels: () => ['push'] },
+  in_transit: { kind: 'order.in_transit', channels: () => ['push'] },
+  delivered: { kind: 'order.delivered', channels: () => ['push', 'email'] },
+  delivery_failed: { kind: 'order.delivery_failed', channels: () => ['push', 'email', 'sms'] },
+  completed: { kind: 'order.completed', channels: () => [] },
+  cancelled: { kind: 'order.cancelled', channels: () => ['push', 'email', 'sms'] },
+  refunded: { kind: 'order.refunded', channels: () => ['push', 'email'] },
 };
 
 /**
@@ -101,8 +96,7 @@ export class RealtimeOrderService {
         userId: audience.customerId,
         category: 'orders',
         type: 'order',
-        title: statusMessage.title,
-        message: statusMessage.message(audience.orderNumber, pickup, { by: audience.cancelledBy, reason: audience.cancellationReason }),
+        text: notificationText(statusMessage.kind, { orderNumber: audience.orderNumber, pickup, cancelledBy: audience.cancelledBy, reason: audience.cancellationReason }),
         actionUrl: `/orders/${orderId}`,
         data: { orderId, orderNumber: audience.orderNumber, status },
         // A change the customer made themselves (cancelling) needs no alert.
@@ -113,14 +107,13 @@ export class RealtimeOrderService {
 
     // Kitchens hear about a cancellation they didn't make themselves.
     if (status === 'cancelled') {
-      const by = changedBy === audience.customerId ? 'the customer' : changedBy === 'system' ? 'automatically' : 'Nuray support';
+      const by = changedBy === audience.customerId ? 'customer' : changedBy === 'system' ? 'system' : 'support';
       await notifyMany(
         audience.sellerUserIds.filter((id) => id !== changedBy),
         (sellerUserId) => ({
           category: 'orders',
           type: 'order',
-          title: `Order #${audience.orderNumber} cancelled`,
-          message: by === 'automatically' ? `Order #${audience.orderNumber} was cancelled automatically. Don't prepare it.` : `Order #${audience.orderNumber} was cancelled by ${by}. Don't prepare it.`,
+          text: notificationText('kitchen.orderCancelled', { orderNumber: audience.orderNumber, by }),
           actionUrl: `/sellers/orders/${orderId}`,
           data: { orderId, orderNumber: audience.orderNumber, status },
           channels: ['push', 'email'],
@@ -259,8 +252,7 @@ export class RealtimeOrderService {
         userId: order.customerId,
         category: 'orders',
         type: 'order',
-        title: 'Order placed',
-        message: `Your order #${order.orderNumber} (${totalAmountFormatted}) has been placed.`,
+        text: notificationText('order.placed', { orderNumber: order.orderNumber, total: totalAmountFormatted }),
         actionUrl: `/orders/${order.id}`,
         data: { orderId: order.id, orderNumber: order.orderNumber },
         channels: ['email'],
@@ -295,10 +287,7 @@ export class RealtimeOrderService {
         userId: sellerUserId,
         category: 'orders',
         type: 'order',
-        title: awaitingOnlinePayment ? 'New order (awaiting payment)' : 'New order received',
-        message: awaitingOnlinePayment
-          ? `Order #${order.orderNumber} (${dishesFormatted} of your dishes) is waiting for the customer's online payment. Don't start it yet.`
-          : `New order #${order.orderNumber}: ${dishesFormatted} of your dishes. Please accept it within 30 minutes.`,
+        text: notificationText(awaitingOnlinePayment ? 'kitchen.newOrderAwaitingPayment' : 'kitchen.newOrder', { orderNumber: order.orderNumber, dishesTotal: dishesFormatted }),
         actionUrl: `/sellers/orders/${order.id}`,
         data: { orderId: order.id, orderNumber: order.orderNumber },
         // A kitchen must act fast on a new order: push, email and a text message.

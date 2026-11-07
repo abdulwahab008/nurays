@@ -10,6 +10,7 @@ import { ONLINE_GATEWAY_METHODS, PAYABLE_STATUSES } from '../utils/paymentCustod
 import { logEvent, logger } from '../utils/logger';
 import { reportError } from '../config/sentry';
 import { roundMoney } from '../utils/pricing';
+import { notificationText } from '../utils/notificationText';
 
 /**
  * Online payments through Safepay's hosted checkout, for orders and wallet top-ups.
@@ -240,8 +241,7 @@ export async function settleAttempt(tracker: string, via: 'return' | 'webhook', 
             (sellerUserId) => ({
               category: 'orders',
               type: 'order',
-              title: 'New paid order',
-              message: `Order #${order.orderNumber} has been paid online. Please accept it within 30 minutes.`,
+              text: notificationText('kitchen.newPaidOrder', { orderNumber: order.orderNumber }),
               actionUrl: `/sellers/orders/${result.orderId}`,
               data: { orderId: result.orderId },
               channels: ['push', 'email', 'sms'],
@@ -253,8 +253,7 @@ export async function settleAttempt(tracker: string, via: 'return' | 'webhook', 
               userId: order.customerId,
               category: 'payments',
               type: 'payment',
-              title: 'Payment received',
-              message: `We received your payment for order #${order.orderNumber}.`,
+              text: notificationText('payment.received', { orderNumber: order.orderNumber }),
               actionUrl: `/orders/${result.orderId}`,
               data: { orderId: result.orderId },
               channels: ['email'],
@@ -266,8 +265,7 @@ export async function settleAttempt(tracker: string, via: 'return' | 'webhook', 
             userId: order.customerId,
             category: 'payments',
             type: 'payment',
-            title: 'Payment credited to your wallet',
-            message: `An online payment for order #${order.orderNumber} wasn't needed, so it is in your Nuray Wallet.`,
+            text: notificationText('payment.creditedToWallet', { orderNumber: order.orderNumber }),
             actionUrl: '/wallet',
             data: { orderId: result.orderId },
             channels: ['push', 'email'],
@@ -286,8 +284,7 @@ export async function settleAttempt(tracker: string, via: 'return' | 'webhook', 
         userId: attempt.userId,
         category: 'payments',
         type: 'payment',
-        title: 'Wallet topped up',
-        message: `Rs ${Number(attempt.amount).toLocaleString()} was added to your Nuray Wallet.`,
+        text: notificationText('wallet.toppedUp', { amount: `Rs ${Number(attempt.amount).toLocaleString()}` }),
         actionUrl: '/wallet',
         channels: ['push', 'email'],
         dedupeKey: `topup:${tracker}`,

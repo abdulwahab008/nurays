@@ -6,6 +6,7 @@ import { AppError } from '../middleware/errorHandler';
 import { parseBreakdown } from '../utils/deliveryEarnings';
 import { GST_RATE, priceOrder, roundMoney } from '../utils/pricing';
 import { logEvent } from '../utils/logger';
+import { notificationText } from '../utils/notificationText';
 
 type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
 
@@ -278,8 +279,7 @@ export async function completeRefund(refundId: string, adminId: string, referenc
       userId: order.customerId,
       category: 'payments',
       type: 'payment',
-      title: 'Refund sent',
-      message: `We sent your refund of Rs ${Number(refund.amount).toLocaleString()} for order #${order.orderNumber}${refund.reference ? ` (reference ${refund.reference})` : ''}.`,
+      text: notificationText('refund.sent', { amount: `Rs ${Number(refund.amount).toLocaleString()}`, orderNumber: order.orderNumber, reference: refund.reference || null }),
       actionUrl: `/orders/${refund.orderId}`,
       data: { orderId: refund.orderId, refundId },
       channels: ['push', 'email'],

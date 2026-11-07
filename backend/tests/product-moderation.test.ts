@@ -12,6 +12,7 @@ jest.mock('../src/services/notify.service', () => ({ notify: jest.fn(), notifySe
 
 import adminService from '../src/services/admin.service';
 import { moderateProductSchema } from '../src/validators/admin.validator';
+import { NotificationText, renderNotification } from '../src/utils/notificationText';
 
 beforeEach(() => {
   notifySeller.mockClear();
@@ -33,8 +34,8 @@ describe('turning a dish down', () => {
   it('keeps the reason as written and tells the kitchen in those words', async () => {
     await adminService.moderateProduct('p1', 'admin1', false, '  The photo does not show the dish  ');
     expect(db.product.update.mock.calls[0][0].data).toMatchObject({ approvalStatus: 'rejected', isActive: false, rejectionReason: 'The photo does not show the dish' });
-    const sent = (notifySeller.mock.calls[0] as unknown[])[1] as { message: string };
-    expect(sent.message).toBe('"Chicken Karahi" wasn\'t approved: The photo does not show the dish');
+    const sent = (notifySeller.mock.calls[0] as unknown[])[1] as { text: NotificationText };
+    expect(renderNotification(sent.text, 'en').message).toBe('"Chicken Karahi" wasn\'t approved: The photo does not show the dish');
   });
 
   it('is refused by the request check too, before it reaches the service', () => {
