@@ -3,6 +3,7 @@ import adminOrderService from './admin-order.service';
 import { notify } from './notify.service';
 import { logger } from '../utils/logger';
 import { thrown } from '../utils/thrown';
+import { notificationText } from '../utils/notificationText';
 
 /**
  * Orders that nobody is moving forward release their stock and the customer's money.
@@ -91,8 +92,7 @@ export async function sweepStaleOrders(now: Date = new Date()) {
           userId: a.id,
           category: 'orders',
           type: 'payment_unconfirmed',
-          title: `Order #${o.orderNumber}: payment not confirmed`,
-          message: `The customer reported a transfer more than ${rules.confirmPaymentHours} hours ago and the kitchen hasn't confirmed or disputed it.`,
+          text: notificationText('admin.paymentUnconfirmed', { orderNumber: o.orderNumber, hours: rules.confirmPaymentHours }),
           data: { orderId: o.id },
           actionUrl: `/admin/orders/${o.id}`,
           channels: ['push', 'email'],

@@ -6,6 +6,7 @@ import { AppError } from '../middleware/errorHandler';
 import { notify } from './notify.service';
 import { thrown } from '../utils/thrown';
 import { realPhoneOrNull } from '../utils/otp';
+import { notificationText } from '../utils/notificationText';
 
 const STATUS_LABEL: Record<string, string> = {
   open: 'Open',
@@ -337,8 +338,10 @@ export class SupportService {
         userId: ticket.userId,
         category: 'orders',
         type: 'support',
-        title: status === 'resolved' ? `Ticket ${ticket.ticketNumber} resolved` : `New reply on ticket ${ticket.ticketNumber}`,
-        message: message.length > 140 ? `${message.slice(0, 140)}…` : message,
+        text: notificationText(status === 'resolved' ? 'support.resolved' : 'support.reply', {
+          ticketNumber: ticket.ticketNumber,
+          excerpt: message.length > 140 ? `${message.slice(0, 140)}…` : message,
+        }),
         actionUrl: `/support`,
         data: { ticketId },
         channels: ['push'],

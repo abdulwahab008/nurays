@@ -20,6 +20,7 @@ import { notifyApprovers } from './approvals.service';
 import { ACTIVE_DELIVERY_STATUSES, BEFORE_PICKUP_STATUSES, ON_THE_WAY_STATUSES, canMoveDelivery, ORDER_STATUS_FOR_DELIVERY_STATUS, refuseDeliveryMove } from '../utils/deliveryStatus';
 import { doorField } from '../utils/addressSnapshot';
 import { logEvent, logger } from '../utils/logger';
+import { notificationText } from '../utils/notificationText';
 
 // The delivery status machine (which status follows which, and what the order must look like) is in utils/deliveryStatus.ts.
 
@@ -777,7 +778,7 @@ export class RiderService {
         },
       });
     });
-    notifyApprovers({ title: 'New rider application', message: `A rider (${data.city.trim()}) sent their application and documents.`, actionUrl: '/admin/riders?tab=applications', dedupeKey: `rider-application:${rider.id}:${Date.now()}` });
+    notifyApprovers({ text: notificationText('approval.riderApplication', { city: data.city.trim() }), actionUrl: '/admin/riders?tab=applications', dedupeKey: `rider-application:${rider.id}:${Date.now()}` });
     return this.getMyApplication(userId);
   }
 

@@ -210,6 +210,12 @@ export default function ProfilePage() {
     }
   };
 
+  // Switching the language (here or in the header) already saved it to the profile: the form follows, so saving the
+  // other details does not put the old language back.
+  useEffect(() => {
+    setFormData((prev) => (prev.languagePreference === locale ? prev : { ...prev, languagePreference: locale }));
+  }, [locale]);
+
   useEffect(() => {
     if (leaving.current) return;
     if (!hasSession()) {

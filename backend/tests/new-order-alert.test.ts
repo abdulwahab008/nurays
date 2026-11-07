@@ -10,6 +10,7 @@ import prisma from '../src/config/database';
 import socketManager from '../src/config/socket';
 import { notify } from '../src/services/notify.service';
 import realtimeOrderService from '../src/services/realtime-order.service';
+import { renderNotification } from '../src/utils/notificationText';
 
 const db = prisma as any;
 const item = (sellerUserId: string, name: string, totalPrice: string) => ({ quantity: 1, totalPrice, productName: name, product: { name }, seller: { userId: sellerUserId, businessName: sellerUserId } });
@@ -27,7 +28,7 @@ it("tells each kitchen its own dishes' total, in the alert and in the live event
   });
   await realtimeOrderService.emitNewOrderNotification('o1');
 
-  const messages = Object.fromEntries((notify as jest.Mock).mock.calls.map(([n]) => [n.userId, n.message]));
+  const messages = Object.fromEntries((notify as jest.Mock).mock.calls.map(([n]) => [n.userId, renderNotification(n.text, 'en').message]));
   expect(messages['kitchen-a']).toContain('Rs 950.5 of your dishes');
   expect(messages['kitchen-b']).toContain('Rs 900 of your dishes');
   expect(messages['kitchen-a']).not.toContain('2,150');

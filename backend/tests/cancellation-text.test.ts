@@ -3,7 +3,11 @@
  * rejection, the system's timeout and a support person's decision all read the same. A reason is repeated only when it was
  * written for the customer to read.
  */
-import { cancellationReasonForCustomer, cancelledNotice } from '../src/utils/cancellationText';
+import { cancellationReasonForCustomer } from '../src/utils/cancellationText';
+import { notificationText, renderNotification } from '../src/utils/notificationText';
+
+const cancelledNotice = (orderNumber: string, cancelledBy: string | null | undefined, reason: string | null | undefined) =>
+  renderNotification(notificationText('order.cancelled', { orderNumber, pickup: false, cancelledBy: cancelledBy ?? null, reason: reason ?? null }), 'en').message;
 
 describe('why an order was cancelled, as told to the customer', () => {
   it('repeats the kitchen\'s reason without the internal prefix', () => {

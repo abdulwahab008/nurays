@@ -15,6 +15,7 @@ import { kitchenApplicationGaps } from '../src/utils/kitchenApplication';
 import sellerService from '../src/services/seller.service';
 import adminService from '../src/services/admin.service';
 import { notify } from '../src/services/notify.service';
+import { renderNotification } from '../src/utils/notificationText';
 
 const COMPLETE = { communityId: 'c1', latitude: 24.9, longitude: 67.1 };
 const BOTH_SIDES = ['cnic_front', 'cnic_back', 'kitchen_photo'];
@@ -132,7 +133,7 @@ describe('the administrator\'s decision on a kitchen', () => {
     givenSeller({}, []);
     await adminService.approveRejectSeller('s1', 'admin1', false, '  The photos of the CNIC are too blurry to read  ');
     expect(db.seller.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ verificationStatus: 'rejected', rejectionReason: 'The photos of the CNIC are too blurry to read' }) }));
-    expect((notify as jest.Mock).mock.calls[0][0].message).toBe('Reason: The photos of the CNIC are too blurry to read');
+    expect(renderNotification((notify as jest.Mock).mock.calls[0][0].text, 'en').message).toBe('Reason: The photos of the CNIC are too blurry to read');
   });
 
   it('lists what each waiting application lacks, so the screen can say so', async () => {

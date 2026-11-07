@@ -16,6 +16,7 @@ import { changedPayoutDetails } from '../utils/payoutAccount';
 import { pktDate } from '../utils/payoutWeek';
 import { nextPeriodStart, payoutDestination } from './weekly-payout.service';
 import { confirmPasswordIfSet } from './reauth.service';
+import { notificationText } from '../utils/notificationText';
 
 /** Shared shape for the business-operations fields — read by getSellerProfile, written by updateSellerProfile. */
 function formatBusinessOperationsFields(seller: {
@@ -269,7 +270,7 @@ export class SellerService {
       });
     }
 
-    notifyApprovers({ title: 'New kitchen application', message: `${data.businessName} applied to sell on Nuray.`, actionUrl: '/admin/pending-sellers', dedupeKey: `seller-application:${seller.id}` });
+    notifyApprovers({ text: notificationText('approval.kitchenApplication', { businessName: data.businessName }), actionUrl: '/admin/pending-sellers', dedupeKey: `seller-application:${seller.id}` });
     return {
       sellerId: seller.id,
       verificationStatus: seller.verificationStatus,

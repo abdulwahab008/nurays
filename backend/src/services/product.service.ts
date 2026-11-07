@@ -19,6 +19,7 @@ import { SELLER_COMMUNITY_DELIVERY_SELECT } from '../utils/sellerDeliverySelect'
 import { isUploadedBy } from '../utils/uploadPaths';
 import { isStoredFile } from '../storage';
 import { thrown } from '../utils/thrown';
+import { notificationText } from '../utils/notificationText';
 
 const SELLER_AVAILABILITY_SELECT = {
   status: true,
@@ -1005,7 +1006,7 @@ export class ProductService {
       const slug = await this.uniqueSlug(data.name, seller.id);
       try {
         const created = await createRow(slug);
-        notifyApprovers({ title: 'New dish to approve', message: `"${created.name}" was added and is waiting for approval.`, actionUrl: '/admin/products', dedupeKey: `product-new:${created.id}` });
+        notifyApprovers({ text: notificationText('approval.newDish', { name: created.name }), actionUrl: '/admin/products', dedupeKey: `product-new:${created.id}` });
         return created;
       } catch (err) {
         const target = String(thrown(err).meta?.target ?? '');
@@ -1101,8 +1102,8 @@ export class ProductService {
     });
 
     if (needsReview) {
-      notifyApprovers({ title: 'A dish was changed and needs review', message: `"${updatedProduct.name}" was edited by its kitchen.`, actionUrl: '/admin/products', dedupeKey: `product-review:${productId}:${Date.now()}` });
-      void notifySeller(product.sellerId, { title: 'Your changes are under review', message: `"${updatedProduct.name}" is hidden from customers until staff approve the changes.`, actionUrl: '/sellers/products' });
+      notifyApprovers({ text: notificationText('approval.dishChanged', { name: updatedProduct.name }), actionUrl: '/admin/products', dedupeKey: `product-review:${productId}:${Date.now()}` });
+      void notifySeller(product.sellerId, { text: notificationText('dish.underReview', { name: updatedProduct.name }), actionUrl: '/sellers/products' });
     }
     return updatedProduct;
   }

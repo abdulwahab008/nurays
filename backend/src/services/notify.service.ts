@@ -6,6 +6,7 @@ import { smsProvider } from '../config/env';
 import { logger } from '../utils/logger';
 import { pushConfigured } from './push.service';
 import { queueDelivery, DeliveryChannel } from '../jobs/notify.jobs';
+import { NotificationText, notificationLanguageOf, renderNotification } from '../utils/notificationText';
 
 /**
  * Notifications. Every one lands in the person's in-app list (and their open tabs, live).
@@ -92,8 +93,8 @@ export interface NotifyInput {
   category: NotificationCategory;
   /** Kept for the in-app list's icons and filters (order, payment, delivery...). */
   type: string;
-  title: string;
-  message: string;
+  /** Written in the recipient's language when the notification is made. */
+  text: NotificationText;
   actionUrl?: string;
   data?: Record<string, unknown>;
   /** Channels this event is worth besides the in-app list. */
@@ -108,14 +109,19 @@ export interface NotifyInput {
  */
 export async function notify(input: NotifyInput): Promise<string | null> {
   try {
+    const user = await prisma.user.findUnique({
+      where: { id: input.userId },
+      select: { notificationPreferences: true, profile: { select: { languagePreference: true } } },
+    });
+    const { title, message } = renderNotification(input.text, notificationLanguageOf(user?.profile?.languagePreference));
     let created;
     try {
       created = await prisma.notification.create({
         data: {
           userId: input.userId,
           type: input.type,
-          title: input.title,
-          message: input.message,
+          title,
+          message,
           actionUrl: input.actionUrl ?? null,
           data: input.data != null ? ({ ...input.data, category: input.category } as Prisma.InputJsonValue) : ({ category: input.category } as Prisma.InputJsonValue),
           dedupeKey: input.dedupeKey ?? null,
@@ -137,7 +143,6 @@ export async function notify(input: NotifyInput): Promise<string | null> {
 
     const wanted = input.channels ?? [];
     if (wanted.length > 0) {
-      const user = await prisma.user.findUnique({ where: { id: input.userId }, select: { notificationPreferences: true } });
       const prefs = resolvePreferences(user?.notificationPreferences)[input.category];
       for (const channel of wanted) {
         if (!prefs[channel]) continue;
@@ -154,7 +159,7 @@ export async function notify(input: NotifyInput): Promise<string | null> {
 }
 
 /** Tell a kitchen's owner about their listing (dish or category moderation): in the app and by push. */
-export async function notifySeller(sellerId: string, n: { title: string; message: string; actionUrl?: string; dedupeKey?: string }) {
+export async function notifySeller(sellerId: string, n: { text: NotificationText; actionUrl?: string; dedupeKey?: string }) {
   const seller = await prisma.seller.findUnique({ where: { id: sellerId }, select: { userId: true } }).catch(() => null);
   if (!seller) return null;
   return notify({ userId: seller.userId, category: 'orders', type: 'listing', channels: ['push'], ...n });

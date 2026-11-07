@@ -2,6 +2,7 @@ import prisma from '../config/database';
 import { AppError } from '../middleware/errorHandler';
 import { notifySeller } from './notify.service';
 import { notifyApprovers } from './approvals.service';
+import { notificationText } from '../utils/notificationText';
 
 interface CreateCategoryRequestData {
   sellerId: string;
@@ -57,7 +58,7 @@ class CategoryRequestService {
       }
     }
 
-    notifyApprovers({ title: 'New category request', message: `A kitchen asked for the category "${data.name}".`, actionUrl: '/admin/category-requests', dedupeKey: `category-request:${data.sellerId}:${data.name.toLowerCase()}:${Date.now()}` });
+    notifyApprovers({ text: notificationText('approval.categoryRequest', { name: data.name }), actionUrl: '/admin/category-requests', dedupeKey: `category-request:${data.sellerId}:${data.name.toLowerCase()}:${Date.now()}` });
     return prisma.categoryRequest.create({
       data: {
         sellerId: data.sellerId,
@@ -219,8 +220,7 @@ class CategoryRequestService {
     });
 
     await notifySeller(request.sellerId, {
-      title: 'Category approved',
-      message: `"${request.name}" is now a category. You can list your dishes in it.`,
+      text: notificationText('category.approved', { name: request.name }),
       actionUrl: '/sellers/products/new',
       dedupeKey: `category-request:${requestId}:approved`,
     });
@@ -261,8 +261,7 @@ class CategoryRequestService {
     });
 
     await notifySeller(request.sellerId, {
-      title: 'Category request not approved',
-      message: `"${request.name}" wasn't added: ${reason}`,
+      text: notificationText('category.rejected', { name: request.name, reason }),
       actionUrl: '/sellers/products/new',
       dedupeKey: `category-request:${requestId}:rejected`,
     });

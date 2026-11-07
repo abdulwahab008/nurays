@@ -22,6 +22,7 @@ jest.mock('web-push', () => ({ __esModule: true, default: { setVapidDetails: jes
 
 import { notify, resolvePreferences, updatePreferences } from '../src/services/notify.service';
 import { sendPushToUser } from '../src/services/push.service';
+import { notificationText } from '../src/utils/notificationText';
 
 const created = (over: Record<string, unknown> = {}) => ({ id: 'n1', type: 'order', title: 'T', message: 'M', actionUrl: '/orders/o1', createdAt: new Date(), ...over });
 
@@ -61,7 +62,7 @@ describe('preferences', () => {
 
 describe('notify', () => {
   it('creates the in-app notification, updates open tabs, and queues the channels the event is worth', async () => {
-    const id = await notify({ userId: 'u1', category: 'orders', type: 'order', title: 'T', message: 'M', channels: ['push', 'email', 'sms'], dedupeKey: 'order:o1:new:u1' });
+    const id = await notify({ userId: 'u1', category: 'orders', type: 'order', text: notificationText('kitchen.approved', {}), channels: ['push', 'email', 'sms'], dedupeKey: 'order:o1:new:u1' });
     expect(id).toBe('n1');
     expect(mockPrisma.notification.create.mock.calls[0][0].data.dedupeKey).toBe('order:o1:new:u1');
     expect(mockEmitToUser).toHaveBeenCalledWith('u1', 'notification:new', expect.objectContaining({ id: 'n1' }));
@@ -70,27 +71,27 @@ describe('notify', () => {
 
   it('sends nothing twice for the same event', async () => {
     mockPrisma.notification.create.mockRejectedValue(new Prisma.PrismaClientKnownRequestError('dup', { code: 'P2002', clientVersion: 'x' }));
-    expect(await notify({ userId: 'u1', category: 'orders', type: 'order', title: 'T', message: 'M', channels: ['push'], dedupeKey: 'k' })).toBeNull();
+    expect(await notify({ userId: 'u1', category: 'orders', type: 'order', text: notificationText('kitchen.approved', {}), channels: ['push'], dedupeKey: 'k' })).toBeNull();
     expect(mockEmitToUser).not.toHaveBeenCalled();
     expect(mockQueueDelivery).not.toHaveBeenCalled();
   });
 
   it("respects what the person turned off", async () => {
     mockPrisma.user.findUnique.mockResolvedValue({ notificationPreferences: { orders: { email: false, sms: false } } });
-    await notify({ userId: 'u1', category: 'orders', type: 'order', title: 'T', message: 'M', channels: ['push', 'email', 'sms'] });
+    await notify({ userId: 'u1', category: 'orders', type: 'order', text: notificationText('kitchen.approved', {}), channels: ['push', 'email', 'sms'] });
     expect(mockQueueDelivery.mock.calls.map((c) => c[1])).toEqual(['push']);
   });
 
   it("skips channels the server can't send (no VAPID keys, no SMS provider)", async () => {
     delete process.env.VAPID_PUBLIC_KEY;
     process.env.SMS_PROVIDER = 'none';
-    await notify({ userId: 'u1', category: 'orders', type: 'order', title: 'T', message: 'M', channels: ['push', 'email', 'sms'] });
+    await notify({ userId: 'u1', category: 'orders', type: 'order', text: notificationText('kitchen.approved', {}), channels: ['push', 'email', 'sms'] });
     expect(mockQueueDelivery.mock.calls.map((c) => c[1])).toEqual(['email']);
   });
 
   it('never throws (a notification must not fail what triggered it)', async () => {
     mockPrisma.notification.create.mockRejectedValue(new Error('database down'));
-    await expect(notify({ userId: 'u1', category: 'orders', type: 'order', title: 'T', message: 'M' })).resolves.toBeNull();
+    await expect(notify({ userId: 'u1', category: 'orders', type: 'order', text: notificationText('kitchen.approved', {}) })).resolves.toBeNull();
   });
 });
 

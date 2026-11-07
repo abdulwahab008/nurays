@@ -2,6 +2,7 @@ import prisma from '../config/database';
 import { notify } from './notify.service';
 import { can, Permission } from '../utils/permissions';
 import { logger } from '../utils/logger';
+import { NotificationText } from '../utils/notificationText';
 
 /**
  * Everything waiting for a staff decision, in one place, and a nudge to the people who decide
@@ -9,14 +10,14 @@ import { logger } from '../utils/logger';
  */
 
 /** Tell every active admin and the super admin that something needs approval. In-app only (no email or push spam). */
-export function notifyApprovers(input: { title: string; message: string; actionUrl: string; dedupeKey: string }) {
+export function notifyApprovers(input: { text: NotificationText; actionUrl: string; dedupeKey: string }) {
   void (async () => {
     const approvers = await prisma.user.findMany({
       where: { userType: 'admin', status: 'active', staffRole: { in: ['admin', 'super_admin'] } },
       select: { id: true },
     });
     for (const a of approvers) {
-      await notify({ userId: a.id, category: 'orders', type: 'approval', title: input.title, message: input.message, actionUrl: input.actionUrl, channels: [], dedupeKey: `${input.dedupeKey}:${a.id}` });
+      await notify({ userId: a.id, category: 'orders', type: 'approval', text: input.text, actionUrl: input.actionUrl, channels: [], dedupeKey: `${input.dedupeKey}:${a.id}` });
     }
   })().catch((err) => logger.error({ err }, 'Could not notify approvers'));
 }

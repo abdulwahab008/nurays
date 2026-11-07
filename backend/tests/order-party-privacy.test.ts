@@ -34,6 +34,7 @@ import socketManager from '../src/config/socket';
 import { notify, notifyMany } from '../src/services/notify.service';
 import { safepayGateway } from '../src/gateways/safepay.gateway';
 import realtimeOrderService from '../src/services/realtime-order.service';
+import { renderNotification } from '../src/utils/notificationText';
 import orderService from '../src/services/order.service';
 import orderPlacement from '../src/services/order-placement.service';
 
@@ -87,7 +88,7 @@ describe('live order events', () => {
     expect((notify as jest.Mock).mock.calls[0][0]).toMatchObject({ userId: IDS.customer, channels: [] });
     const [kitchens, build] = (notifyMany as jest.Mock).mock.calls[0];
     expect(kitchens).toEqual([IDS.kitchenA, IDS.kitchenB]);
-    expect(build(IDS.kitchenA).message).toContain('cancelled by the customer');
+    expect(renderNotification(build(IDS.kitchenA).text, 'en').message).toContain('cancelled by the customer');
 
     jest.clearAllMocks();
     await realtimeOrderService.emitOrderStatusUpdate('o1', 'cancelled', IDS.kitchenA);
