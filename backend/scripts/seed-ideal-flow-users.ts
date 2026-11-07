@@ -6,10 +6,12 @@
  *
  *   cd backend && npm run seed:demo
  */
+import 'dotenv/config';
 import { Prisma, PrismaClient } from '@prisma/client';
 import bcrypt from 'bcrypt';
 import { seedCommunities } from '../prisma/seed-communities';
-import { roundMoney } from '../src/utils/pricing';
+import { isProduction } from '../src/config/env';
+import { MAX_RIDER_CASH_LIMIT } from '../src/validators/admin.validator';
 
 const prisma = new PrismaClient();
 const PASSWORD = 'Password123!';
@@ -29,25 +31,24 @@ async function account(passwordHash: string, a: { email: string; phone: string; 
   return user;
 }
 
+/** The demo accounts share a known password, so this seed refuses to touch a production database. */
+export function assertDemoSeedAllowed(env: NodeJS.ProcessEnv = process.env) {
+  if (isProduction(env)) {
+    throw new Error('The demo seed creates accounts with a known password and never runs in production. Set NODE_ENV=development or test.');
+  }
+}
+
 /**
- * Cash orders delivered while trying the app pile up as cash the demo rider holds, and nobody settles a demo rider at a
- * hub, so after a few test days they sit at the cash limit and are never offered a cash order again. A re-run records
- * the cash as handed in (the ledger keeps its history), so the demo rider starts with nothing in hand.
+ * Demo only: nobody settles the demo rider at a hub, so cash from test orders piles up in their hand and the default
+ * limit would soon stop them being offered cash orders. The demo rider gets the highest per-rider limit an admin can
+ * set instead, and a higher one already set is kept. The production cash-limit rule and the ledger are untouched.
  */
-export async function handInDemoRiderCash(client: Prisma.TransactionClient, riderId: string, adminId: string): Promise<number> {
-  const { _sum } = await client.riderLedgerEntry.aggregate({
-    where: { riderId, type: { in: ['cod_collected', 'cash_deposit'] } },
-    _sum: { amount: true },
-  });
-  const cashHeld = roundMoney(-Number(_sum.amount ?? 0));
-  if (cashHeld <= 0) return 0;
-  await client.riderLedgerEntry.create({
-    data: { riderId, type: 'cash_deposit', amount: cashHeld, note: 'Demo reset: cash handed in', createdBy: adminId },
-  });
-  return cashHeld;
+export function demoRiderCashLimit(current: Prisma.Decimal | number | null | undefined): number {
+  return Math.max(MAX_RIDER_CASH_LIMIT, Number(current ?? 0));
 }
 
 async function main() {
+  assertDemoSeedAllowed();
   const passwordHash = await bcrypt.hash(PASSWORD, 10);
   await seedCommunities();
   const community = await prisma.community.findUnique({ where: { slug: 'gulshan-e-iqbal' } });
@@ -126,6 +127,7 @@ async function main() {
   }
 
   const riderUser = await account(passwordHash, { email: 'rider@nuray.test', phone: '+923007770888', userType: 'rider', name: 'Imran Ali' });
+  const existingRider = await prisma.rider.findUnique({ where: { userId: riderUser.id }, select: { cashLimit: true } });
   const rider = {
     city: 'Karachi',
     vehicleType: 'motorcycle',
@@ -134,10 +136,9 @@ async function main() {
     status: 'active',
     verificationStatus: 'approved',
     isAvailable: true,
-    cashLimit: null,
+    cashLimit: demoRiderCashLimit(existingRider?.cashLimit),
   };
-  const demoRider = await prisma.rider.upsert({ where: { userId: riderUser.id }, update: rider, create: { userId: riderUser.id, ...rider } });
-  await handInDemoRiderCash(prisma, demoRider.id, admin.id);
+  await prisma.rider.upsert({ where: { userId: riderUser.id }, update: rider, create: { userId: riderUser.id, ...rider } });
 
   const customerUser = await account(passwordHash, { email: 'customer@nuray.test', phone: '+923001230888', userType: 'customer', name: 'Ayesha Khan' });
   const hasAddress = await prisma.userAddress.findFirst({ where: { userId: customerUser.id } });

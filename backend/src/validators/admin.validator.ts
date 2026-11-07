@@ -77,8 +77,10 @@ export const riderAdjustmentSchema = z.object({
   note: z.string().trim().min(1, 'Say what the adjustment is for').max(300),
 });
 
+export const MAX_RIDER_CASH_LIMIT = 1_000_000;
+
 export const riderCashLimitSchema = z.object({
-  cashLimit: z.number().finite().min(0).max(1_000_000).nullable(),
+  cashLimit: z.number().finite().min(0).max(MAX_RIDER_CASH_LIMIT).nullable(),
 });
 
 export const riderCommunitySchema = z.object({ communityId: z.string().uuid().nullable() });

@@ -1,58 +1,33 @@
 /**
- * The demo seed (scripts/seed-ideal-flow-users.ts) leaves the demo rider with no cash in hand, so cash orders
- * delivered while trying the app never strand them at the cash limit.
+ * The demo seed (scripts/seed-ideal-flow-users.ts) never runs against production, and gives the demo rider the highest
+ * per-rider cash limit an admin can set, so cash from test orders never stops them being offered cash orders. It writes
+ * nothing to the rider's ledger.
  */
 import { Prisma } from '@prisma/client';
-import { handInDemoRiderCash } from '../scripts/seed-ideal-flow-users';
-import { riderMoney } from '../src/services/rider-ledger.service';
+import { assertDemoSeedAllowed, demoRiderCashLimit } from '../scripts/seed-ideal-flow-users';
+import { MAX_RIDER_CASH_LIMIT } from '../src/validators/admin.validator';
 
 jest.mock('../src/config/database', () => ({ __esModule: true, default: {} }));
 
-type Entry = { type: string; amount: number };
-
-function fakeLedger(entries: Entry[]) {
-  return {
-    riderLedgerEntry: {
-      groupBy: jest.fn(async () => {
-        const sums = new Map<string, number>();
-        for (const e of entries) sums.set(e.type, (sums.get(e.type) ?? 0) + e.amount);
-        return [...sums].map(([type, amount]) => ({ type, _sum: { amount } }));
-      }),
-      aggregate: jest.fn(async ({ where }: { where: { type: { in: string[] } } }) => ({
-        _sum: { amount: entries.filter((e) => where.type.in.includes(e.type)).reduce((total, e) => total + e.amount, 0) },
-      })),
-      create: jest.fn(async ({ data }: { data: Entry }) => {
-        entries.push({ type: data.type, amount: Number(data.amount) });
-        return data;
-      }),
-    },
-  };
-}
-
-const asClient = (fake: ReturnType<typeof fakeLedger>) => fake as unknown as Prisma.TransactionClient;
-
-describe('handInDemoRiderCash', () => {
-  it('records the cash the demo rider holds as handed in, keeping their earnings', async () => {
-    const entries: Entry[] = [
-      { type: 'delivery_fee', amount: 1200 },
-      { type: 'cod_collected', amount: -9879 },
-      { type: 'cash_deposit', amount: 500 },
-    ];
-    const fake = fakeLedger(entries);
-
-    await expect(handInDemoRiderCash(asClient(fake), 'rider-1', 'admin-1')).resolves.toBe(9379);
-
-    expect(fake.riderLedgerEntry.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({ riderId: 'rider-1', type: 'cash_deposit', amount: 9379, createdBy: 'admin-1' }),
-    });
-    await expect(riderMoney(asClient(fake), 'rider-1')).resolves.toMatchObject({ cashHeld: 0, unpaid: 1200, earned: 1200 });
+describe('the demo seed', () => {
+  it('refuses to run in production, and any unrecognised NODE_ENV counts as production', () => {
+    expect(() => assertDemoSeedAllowed({ NODE_ENV: 'production' })).toThrow(/never runs in production/);
+    expect(() => assertDemoSeedAllowed({})).toThrow(/never runs in production/);
+    expect(() => assertDemoSeedAllowed({ NODE_ENV: 'staging' })).toThrow(/never runs in production/);
   });
 
-  it('writes nothing when the demo rider holds no cash, so a re-run is a no-op', async () => {
-    const fake = fakeLedger([{ type: 'delivery_fee', amount: 300 }]);
+  it('runs in development and test', () => {
+    expect(() => assertDemoSeedAllowed({ NODE_ENV: 'development' })).not.toThrow();
+    expect(() => assertDemoSeedAllowed({ NODE_ENV: 'test' })).not.toThrow();
+  });
 
-    await expect(handInDemoRiderCash(asClient(fake), 'rider-1', 'admin-1')).resolves.toBe(0);
+  it('gives the demo rider the highest limit an admin can set', () => {
+    expect(demoRiderCashLimit(null)).toBe(MAX_RIDER_CASH_LIMIT);
+    expect(demoRiderCashLimit(undefined)).toBe(MAX_RIDER_CASH_LIMIT);
+    expect(demoRiderCashLimit(new Prisma.Decimal(10_000))).toBe(MAX_RIDER_CASH_LIMIT);
+  });
 
-    expect(fake.riderLedgerEntry.create).not.toHaveBeenCalled();
+  it('keeps a higher limit already set', () => {
+    expect(demoRiderCashLimit(new Prisma.Decimal(MAX_RIDER_CASH_LIMIT + 5))).toBe(MAX_RIDER_CASH_LIMIT + 5);
   });
 });
