@@ -462,7 +462,7 @@ export default function CheckoutPage() {
         // Straight on to the payment page. If it can't be opened, the order page offers
         // "Pay now" (the order waits for payment until the payment window closes).
         try {
-          window.location.href = await paymentService.startOrderPayment(orderId);
+          window.location.assign(await paymentService.startOrderPayment(orderId));
           return;
         } catch (payErr) {
           showToast(apiErrorMessage(payErr, t('payPageFailed')), 'error', 8000);

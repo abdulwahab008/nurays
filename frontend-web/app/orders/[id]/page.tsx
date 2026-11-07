@@ -31,6 +31,7 @@ import { commonMessages, statusKey } from '@/lib/i18n/messages/common';
 import { ordersMessages } from '@/lib/i18n/messages/orders';
 import { checkoutMessages } from '@/lib/i18n/messages/checkout';
 import { useShallow } from 'zustand/react/shallow';
+import { useNow } from '@/components/sellers/order-timing';
 
 type OrdersT = ReturnType<typeof useT<typeof ordersMessages.en>>;
 
@@ -283,6 +284,7 @@ function OrderDetailContent() {
   const { isAuthenticated, user } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated, user: s.user })));
   const { showToast } = useToast();
   const { joinOrderRoom, onOrderStatusUpdate, onDeliveryTracking } = useSocket();
+  const now = useNow();
   const [order, setOrder] = useState<OrderDetail | null>(null);
   const [loading, setLoading] = useState(true);
   // Why the order could not be read when it was not a 404: an order that could not be read is not an order that does not exist.
@@ -558,7 +560,7 @@ function OrderDetailContent() {
   })();
   // An estimate that has already gone by says nothing useful; the slot and the tracker still show.
   const etaLine =
-    active && !unpaid && order.delivery?.estimatedAt && new Date(order.delivery.estimatedAt).getTime() > Date.now()
+    active && !unpaid && order.delivery?.estimatedAt && new Date(order.delivery.estimatedAt).getTime() > now
       ? t('detail.expectedBy', { time: formatDateTime(order.delivery.estimatedAt) })
       : null;
   // Items are only marked one by one when they are not all at the same stage.
