@@ -296,10 +296,14 @@ mandatory in production):
   `instances × connection_limit + 10` (migrations, psql, monitoring) at or below PostgreSQL's `max_connections`
   (100 by default): 9 instances at 10, or 4 at 20. Check with `SHOW max_connections;`. Each instance's
   scheduled jobs use at most `SCHEDULER_CONCURRENCY` (default 2) jobs' worth of those connections at a time.
-  Beyond about five instances put PgBouncer (transaction mode) in front
-  and add `&pgbouncer=true` (the app then does not send `DB_STATEMENT_TIMEOUT_MS`: set it on the role). The load
+  Put PgBouncer (transaction mode) in front only when the instances need more connections than PostgreSQL allows:
+  it adds a hop and does not make a busy database faster. Use PgBouncer 1.21 or later with
+  `max_prepared_statements` set (for example 500), `ignore_startup_parameters = extra_float_digits,options`, and
+  **no** `&pgbouncer=true` in `DATABASE_URL`, so Prisma keeps its prepared statements. Set the statement timeout on
+  the role (`ALTER ROLE … SET statement_timeout = '30s'`), because PgBouncer drops the one the app sends. The load
   test in `docs/PRODUCTION_READINESS_AUDIT.md` showed that a larger pool does not make the API faster on 4 cores:
-  the limit there is CPU, so scale instances, not the pool.
+  the limit there is CPU, so scale instances, not the pool. A local comparison (see LOAD_TESTING.md) found
+  `pgbouncer=true` (no prepared statements) the slowest setup of all.
 
 ## Background jobs
 
