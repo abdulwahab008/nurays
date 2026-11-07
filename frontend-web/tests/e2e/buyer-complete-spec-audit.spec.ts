@@ -1,7 +1,8 @@
-import { test, expect, request, APIRequestContext, type Page } from '@playwright/test';
+import { test, expect, request, APIRequestContext } from '@playwright/test';
 import { execSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { signIn } from './support/customer';
 
 const API_BASE = (process.env.API_BASE ?? 'http://localhost:3001/api/v1').replace(/\/$/, '');
 const DB_URL = process.env.E2E_DB_URL ?? 'postgresql://localhost:5432/frozennuray_dev';
@@ -92,53 +93,6 @@ async function createVerifiedCustomer(): Promise<TestUserSession> {
   return { email, jwt, user, addressId };
 }
 
-async function setSession(page: Page, session: TestUserSession) {
-  await page.addInitScript(
-    ({ token, user }: { token: string; user: TestUserSession['user'] }) => {
-      window.localStorage.setItem('auth_token', token);
-      window.localStorage.setItem('access_token', token);
-      window.localStorage.setItem('refresh_token', token);
-      window.localStorage.setItem('token', token);
-      window.sessionStorage.setItem('access_token', token);
-      window.sessionStorage.setItem('refresh_token', token);
-      window.localStorage.setItem(
-        'auth-storage',
-        JSON.stringify({
-          state: {
-            user,
-            token,
-            tokens: { access_token: token, refresh_token: token },
-            isAuthenticated: true,
-          },
-          version: 0,
-        }),
-      );
-    },
-    { token: session.jwt, user: session.user },
-  );
-
-  await page.context().addCookies([
-    {
-      name: 'access_token',
-      value: session.jwt,
-      domain: 'localhost',
-      path: '/',
-      httpOnly: false,
-      secure: false,
-      sameSite: 'Lax',
-    },
-    {
-      name: 'auth_token',
-      value: session.jwt,
-      domain: 'localhost',
-      path: '/',
-      httpOnly: false,
-      secure: false,
-      sameSite: 'Lax',
-    },
-  ]);
-}
-
 test.describe.serial('Buyer / Customer Specification Complete 27-Section Audit', () => {
   test.setTimeout(60000);
   let session: TestUserSession;
@@ -222,7 +176,7 @@ test.describe.serial('Buyer / Customer Specification Complete 27-Section Audit',
 
   // TEST 2: Section 4, 5 & Rule 4, 5, 7 — Home Dashboard, Community Selector & Cravings
   test('2. Section 4 & 5: Home Dashboard, Hyperlocal Community Badge & Cravings Shortcuts', async ({ page }) => {
-    await setSession(page, session);
+    await signIn(page, session);
     await page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
     await page.waitForLoadState('domcontentloaded');
 
@@ -243,7 +197,7 @@ test.describe.serial('Buyer / Customer Specification Complete 27-Section Audit',
 
   // TEST 3: Section 6, 7 & Rule 4, 5, 7 — Search, Hyperlocal Distance & Seller Discovery Card
   test('3. Section 6 & 7: Search, Hyperlocal Priority & Community Distance Badges', async ({ page }) => {
-    await setSession(page, session);
+    await signIn(page, session);
     await page.goto('/products', { waitUntil: 'domcontentloaded' });
     await page.waitForLoadState('domcontentloaded');
 
@@ -264,7 +218,7 @@ test.describe.serial('Buyer / Customer Specification Complete 27-Section Audit',
 
   // TEST 4: Section 8 — Seller Detail Page & Profile Header
   test('4. Section 8: Kitchen Profile, Chef Bio, Community Tag & Chat Trigger', async ({ page }) => {
-    await setSession(page, session);
+    await signIn(page, session);
     await page.goto('/kitchens/k-saima', { waitUntil: 'domcontentloaded' });
     await page.waitForLoadState('domcontentloaded');
 
@@ -279,7 +233,7 @@ test.describe.serial('Buyer / Customer Specification Complete 27-Section Audit',
 
   // TEST 5: Section 9 — Dish Detail Page, Special Instructions & Buy Now Button
   test('5. Section 9: Dish Detail, Quantity Selector, Special Instructions & Dual Action Buttons', async ({ page }) => {
-    await setSession(page, session);
+    await signIn(page, session);
     await page.goto(`/products/${product1Id}`, { waitUntil: 'domcontentloaded' });
     await page.waitForLoadState('domcontentloaded');
 
@@ -303,7 +257,7 @@ test.describe.serial('Buyer / Customer Specification Complete 27-Section Audit',
 
   // TEST 6: Section 10 & Rule 8 — Single-Seller Cart Conflict & Replacement Modal
   test('6. Section 10 & Rule 8: Single-Seller Cart Enforcement & Conflict Replacement Modal', async ({ page }) => {
-    await setSession(page, session);
+    await signIn(page, session);
 
     // 1. Add product from Kitchen 1
     await page.goto(`/products/${product1Id}`, { waitUntil: 'domcontentloaded' });
@@ -354,7 +308,7 @@ test.describe.serial('Buyer / Customer Specification Complete 27-Section Audit',
 
   // TEST 7: Section 11, 12, 13, 14 & Rule 10, 11 — Checkout, Manual Payment & TID Submission
   test('7. Section 11-14 & Rule 10: Checkout Flow, Manual Payment (JazzCash/EasyPaisa) & TID Submission', async ({ page }) => {
-    await setSession(page, session);
+    await signIn(page, session);
 
     // Seed cart via API so checkout has items guaranteed
     const ctx = await api();
@@ -422,7 +376,7 @@ test.describe.serial('Buyer / Customer Specification Complete 27-Section Audit',
 
   // TEST 8: Section 15, 16 & Rule 9, 13 — Order Tracking Stepper & Cancellation Rules
   test('8. Section 15 & 16 & Rule 9: Order Tracking Stepper & Cancellation Window Enforcement', async ({ page }) => {
-    await setSession(page, session);
+    await signIn(page, session);
 
     // Create a new fresh pending order
     const ctx = await api();
@@ -468,7 +422,7 @@ test.describe.serial('Buyer / Customer Specification Complete 27-Section Audit',
 
   // TEST 9: Section 17, 23 & Rule 14 — In-App Messaging (Order Chat) & Tri-Partite Review
   test('9. Section 17 & 23 & Rule 14: In-App Order Chat Drawer & Tri-Partite Review System', async ({ page }) => {
-    await setSession(page, session);
+    await signIn(page, session);
 
     // Create order and set to delivered
     const ctx = await api();
@@ -538,7 +492,7 @@ test.describe.serial('Buyer / Customer Specification Complete 27-Section Audit',
 
   // TEST 10: Section 18, 21 & Rule 15, 17 — Favorites Page & 1-Click Reorder
   test('10. Section 18 & 21 & Rule 15, 17: Favorites Page & 1-Click Reorder Action', async ({ page }) => {
-    await setSession(page, session);
+    await signIn(page, session);
 
     // 1. Add favorite via API
     const ctx = await api();
@@ -594,7 +548,7 @@ test.describe.serial('Buyer / Customer Specification Complete 27-Section Audit',
 
   // TEST 11: Section 19, 20, 22 — Support, Notifications & Profile Verification
   test('11. Section 19, 20, 22: Help & Support, Notifications & Addresses Management', async ({ page }) => {
-    await setSession(page, session);
+    await signIn(page, session);
 
     // 1. Support
     page.on('pageerror', (err) => console.log('SUPPORT PAGE EXCEPTION:', err));

@@ -7,8 +7,8 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Wallet, ArrowDownLeft, ArrowUpRight, Plus, Lock } from 'lucide-react';
 import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { useToast } from '@/components/ui/toast';
-import { apiClient, apiErrorMessage } from '@/lib/api-client';
-import { useAuthStore } from '@/lib/store/auth-store';
+import { apiErrorMessage } from '@/lib/api-client';
+import { useAuthStore, hasSession } from '@/lib/store/auth-store';
 import { paymentService, WalletSummary, WalletTransaction } from '@/lib/services/payment.service';
 import { formatPrice, formatDateTime } from '@/lib/utils';
 import { useT } from '@/lib/i18n';
@@ -65,7 +65,7 @@ function WalletContent() {
   }, []);
 
   useEffect(() => {
-    if (!isAuthenticated && !apiClient.getAccessToken()) {
+    if (!hasSession()) {
       router.replace(loginUrlHere());
       return;
     }

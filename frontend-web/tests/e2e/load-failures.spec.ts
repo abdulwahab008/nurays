@@ -86,7 +86,7 @@ test.describe('Kitchen pages when the API fails', () => {
   for (const [failure, answer] of FAILURES) {
     test(`no form of made-up values and no counters when ${failure}`, async ({ page }) => {
       // Nothing the pages ask the API is answered, so any signed-in kitchen will do: the session is a customer's with a kitchen's role.
-      await signIn(page, { jwt: customer.jwt, user: { ...(customer.user as object), userType: 'seller', user_type: 'seller' } });
+      await signIn(page, { ...customer, user: { ...(customer.user as object), userType: 'seller', user_type: 'seller' } });
       await page.route('**/api/v1/**', answer);
       for (const [path, name] of KITCHEN_PAGES) {
         await page.goto(path);

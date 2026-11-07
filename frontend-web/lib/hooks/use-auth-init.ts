@@ -9,7 +9,6 @@ import { apiClient, type ApiResponse, apiErrorStatus } from '@/lib/api-client';
  * Verifies token and restores user session
  */
 export function useAuthInit() {
-  const user = useAuthStore((state) => state.user);
   const setUser = useAuthStore((state) => state.setUser);
   const [initialized, setInitialized] = useState(false);
 
@@ -18,12 +17,11 @@ export function useAuthInit() {
 
     const initAuth = async () => {
       try {
-        // Check if we have a token but no user (page refresh scenario)
+        // A saved account after a reload: the first request renews the access token through the refresh cookie (or
+        // finds the session ended, which signs out), and brings the account up to date.
         if (typeof window !== 'undefined') {
-          const token = apiClient.getAccessToken();
-          
-          if (token && !user) {
-            // Try to verify token and get user info
+          // The store itself: on the first render after a load the hook's `user` is still the signed-out snapshot.
+          if (useAuthStore.getState().user) {
             try {
               const response = await apiClient.get<ApiResponse<User>>('/auth/me', { timeout: 3000 });
               if (mounted && response.data?.success && response.data?.data) {
@@ -33,16 +31,11 @@ export function useAuthInit() {
                 apiClient.clearTokens();
               }
             } catch (error) {
-              // Token is invalid or expired, clear it
-              if (mounted) {
-                if (apiErrorStatus(error) === 401) {
-                  apiClient.clearTokens();
-                }
+              if (mounted && apiErrorStatus(error) === 401) {
+                setUser(null);
+                apiClient.clearTokens();
               }
             }
-          } else if (!token && user && mounted) {
-            // We have user but no token - invalid state, clear user
-            setUser(null);
           }
         }
       } finally {

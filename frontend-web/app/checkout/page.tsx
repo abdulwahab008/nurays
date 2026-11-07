@@ -32,7 +32,7 @@ import { formatPrice, orderTotals } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { LoadError } from '@/components/ui/LoadError';
 import { useToast } from '@/components/ui/toast';
-import { useAuthStore } from '@/lib/store/auth-store';
+import { useAuthStore, hasSession } from '@/lib/store/auth-store';
 import { useCartStore } from '@/lib/store/cart-store';
 import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
@@ -204,8 +204,7 @@ export default function CheckoutPage() {
   };
 
   useEffect(() => {
-    const token = apiClient.getAccessToken();
-    if (!token && !isAuthenticated) {
+    if (!hasSession()) {
       router.replace(loginUrlHere());
       return;
     }
@@ -233,8 +232,7 @@ export default function CheckoutPage() {
   const handleClearCart = async () => {
     setClearingCart(true);
     try {
-      const token = apiClient.getAccessToken();
-      if (token || isAuthenticated) {
+      if (hasSession()) {
         await cartService.clearCart();
       }
       useCartStore.getState().clearCart();

@@ -111,61 +111,9 @@ export function secureKV(plugin: SecureStoragePlugin): SecureKV {
   };
 }
 
-/** The token store's shape (lib/token-store.ts), repeated here so this file needs no imports. */
-export interface TokenStoreLike {
-  access(): string | null;
-  refresh(): string | null;
-  saveAccess(token: string, isolated?: boolean): void;
-  savePair(access: string, refresh: string, isolated?: boolean): void;
-  clear(): void;
-  tabIsolated(): boolean;
-}
-
-/**
- * In the app the tokens are also kept in the phone's secure storage. Reads stay synchronous (the request interceptor
- * needs the token at once), so the page keeps working from its own copy; every change is written through, and
- * `syncTokens` brings the page's copy back when the WebView's storage was cleared (iOS may do that under storage
- * pressure, and an app update can).
- */
-export function mirroredTokenStore(base: TokenStoreLike, secure: SecureKV): TokenStoreLike {
-  const quietly = (p: Promise<void>) => void p.catch(() => undefined);
-  return {
-    access: () => base.access(),
-    refresh: () => base.refresh(),
-    tabIsolated: () => base.tabIsolated(),
-    saveAccess(token, isolated) {
-      base.saveAccess(token, isolated);
-      quietly(secure.set('access', token));
-    },
-    savePair(access, refresh, isolated) {
-      base.savePair(access, refresh, isolated);
-      quietly(secure.set('access', access));
-      quietly(secure.set('refresh', refresh));
-    },
-    clear() {
-      base.clear();
-      quietly(secure.remove('access'));
-      quietly(secure.remove('refresh'));
-    },
-  };
-}
-
-/**
- * At start: a page that is signed in copies its tokens to secure storage ('mirrored'); a page that lost them takes
- * them back from there ('restored': the caller then loads the account again); otherwise nothing ('none').
- */
-export async function syncTokens(base: TokenStoreLike, secure: SecureKV): Promise<'restored' | 'mirrored' | 'none'> {
-  const refresh = base.refresh();
-  if (refresh) {
-    await secure.set('refresh', refresh);
-    const access = base.access();
-    if (access) await secure.set('access', access);
-    return 'mirrored';
-  }
-  const [savedAccess, savedRefresh] = await Promise.all([secure.get('access'), secure.get('refresh')]);
-  if (!savedRefresh) return 'none';
-  base.savePair(savedAccess ?? '', savedRefresh);
-  return 'restored';
+/** Tokens an earlier version of the app kept in secure storage: the refresh token is now the API's httpOnly cookie. */
+export async function forgetSavedTokens(secure: SecureKV): Promise<void> {
+  await Promise.all([secure.remove('access'), secure.remove('refresh')]);
 }
 
 /**

@@ -1,9 +1,9 @@
 // Run with `npm test` (Node's own test runner, which reads TypeScript directly: no extra packages).
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { browserTokenStore, setTokenStore, tokenStore, type StorageLike, type TokenStore } from '../../lib/token-store.ts';
+import { browserTokenStore, type StorageLike } from '../../lib/token-store.ts';
 
-/** A stand-in for a browser storage that remembers what was written. */
+/** A stand-in for this tab's sessionStorage that remembers what was written. */
 function memory(): StorageLike & { data: Map<string, string> } {
   const data = new Map<string, string>();
   return {
@@ -16,113 +16,59 @@ function memory(): StorageLike & { data: Map<string, string> } {
 
 function setup() {
   const session = memory();
-  const local = memory();
-  return { session, local, store: browserTokenStore(() => ({ session, local })) };
+  return { session, store: browserTokenStore(() => session) };
 }
 
-test('a new pair is kept for every tab, in the shared storage', () => {
-  const { session, local, store } = setup();
-  store.savePair('a1', 'r1');
-  assert.equal(local.getItem('access_token'), 'a1');
-  assert.equal(local.getItem('refresh_token'), 'r1');
-  assert.equal(session.data.size, 0, 'nothing in this tab\'s own storage');
+test('a signed-in page keeps the access token in memory only, and never a refresh token', () => {
+  const { session, store } = setup();
+  store.save('a1', 'r1');
   assert.equal(store.access(), 'a1');
-  assert.equal(store.refresh(), 'r1');
+  assert.equal(store.refresh(), null, 'the refresh token is the httpOnly cookie');
+  assert.equal(session.data.size, 0, 'nothing is written to storage');
   assert.equal(store.tabIsolated(), false);
 });
 
-test('a tab asked to keep its own session uses its own storage, and remembers that it did', () => {
-  const { session, local, store } = setup();
-  store.savePair('a1', 'r1', true);
+test('a refresh answer replaces the access token', () => {
+  const { store } = setup();
+  store.save('a1');
+  store.save('a2');
+  assert.equal(store.access(), 'a2');
+});
+
+test('a tab kept apart keeps its own pair in its own storage, and remembers that it is', () => {
+  const { session, store } = setup();
+  store.save('a1', 'r1', true);
   assert.equal(session.getItem('access_token'), 'a1');
   assert.equal(session.getItem('refresh_token'), 'r1');
-  assert.equal(session.getItem('tab_isolated'), 'true');
-  assert.equal(local.data.size, 0, 'the other tabs\' storage is left alone');
   assert.equal(store.tabIsolated(), true);
-  // a later save, without being asked again, stays in this tab
-  store.savePair('a2', 'r2');
-  assert.equal(session.getItem('access_token'), 'a2');
-  assert.equal(local.data.size, 0);
-  store.saveAccess('a3');
-  assert.equal(session.getItem('access_token'), 'a3');
-  assert.equal(session.getItem('refresh_token'), 'r2', 'the refresh token stays');
-  assert.equal(local.data.size, 0);
+  store.save('a2');
+  assert.equal(store.access(), 'a2', 'a later save stays in this tab without being asked again');
+  assert.equal(store.refresh(), 'r1', 'an answer with no refresh token keeps the one it has');
+  store.save('a3', 'r3');
+  assert.equal(store.refresh(), 'r3');
 });
 
-test('a new access token keeps the refresh token', () => {
-  const { local, store } = setup();
-  store.savePair('a1', 'r1');
-  store.saveAccess('a2');
-  assert.equal(store.access(), 'a2');
-  assert.equal(store.refresh(), 'r1');
-  assert.equal(local.getItem('refresh_token'), 'r1');
-});
-
-test('this tab\'s own tokens are read before the shared ones', () => {
-  const { session, local, store } = setup();
-  local.setItem('access_token', 'shared');
-  local.setItem('refresh_token', 'shared-r');
-  assert.equal(store.access(), 'shared');
-  session.setItem('access_token', 'mine');
-  assert.equal(store.access(), 'mine');
-  assert.equal(store.refresh(), 'shared-r', 'a token this tab does not have comes from the shared storage');
-});
-
-test('signing out forgets both tokens everywhere, and that the tab was kept apart', () => {
-  const { session, local, store } = setup();
-  store.savePair('a1', 'r1', true);
-  local.setItem('access_token', 'shared');
-  local.setItem('refresh_token', 'shared-r');
+test('signing out forgets the tokens and that the tab was kept apart', () => {
+  const { session, store } = setup();
+  store.save('a1', 'r1', true);
+  session.setItem('auth-storage', '{"state":{}}');
   store.clear();
-  assert.equal(session.data.size, 0);
-  assert.equal(local.data.size, 0);
   assert.equal(store.access(), null);
   assert.equal(store.refresh(), null);
   assert.equal(store.tabIsolated(), false);
+  assert.deepEqual([...session.data.keys()], ['auth-storage'], 'what is not a token stays');
+
+  const plain = setup().store;
+  plain.save('a1');
+  plain.clear();
+  assert.equal(plain.access(), null);
 });
 
-test('clearing leaves what is not a token alone', () => {
-  const { local, store } = setup();
-  local.setItem('auth-storage', '{"state":{}}');
-  store.savePair('a1', 'r1');
-  store.clear();
-  assert.equal(local.getItem('auth-storage'), '{"state":{}}');
-});
-
-test('with no browser (the server) everything reads as signed out and nothing is written or thrown', () => {
+test('with no browser (the server) everything reads as signed out and nothing is thrown', () => {
   const store = browserTokenStore(() => null);
-  assert.equal(store.access(), null);
+  store.save('a', 'r');
   assert.equal(store.refresh(), null);
   assert.equal(store.tabIsolated(), false);
-  store.savePair('a', 'r');
-  store.saveAccess('a');
   store.clear();
-});
-
-test('the store in use can be replaced, as a native shell does with its secure storage', () => {
-  const original = tokenStore();
-  const secure = new Map<string, string>();
-  const native: TokenStore = {
-    access: () => secure.get('a') ?? null,
-    refresh: () => secure.get('r') ?? null,
-    saveAccess: (token) => void secure.set('a', token),
-    savePair: (access, refresh) => {
-      secure.set('a', access);
-      secure.set('r', refresh);
-    },
-    clear: () => secure.clear(),
-    tabIsolated: () => false,
-  };
-  try {
-    setTokenStore(native);
-    assert.equal(tokenStore(), native);
-    tokenStore().savePair('a1', 'r1');
-    assert.equal(secure.get('a'), 'a1');
-    assert.equal(tokenStore().access(), 'a1');
-    tokenStore().clear();
-    assert.equal(tokenStore().access(), null);
-  } finally {
-    setTokenStore(original);
-  }
-  assert.equal(tokenStore(), original);
+  assert.equal(store.access(), null);
 });

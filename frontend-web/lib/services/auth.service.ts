@@ -31,7 +31,8 @@ export interface LoginPasswordRequest {
 
 export interface AuthTokens {
   access_token: string;
-  refresh_token: string;
+  /** Only outside production; the website keeps it only in a tab kept apart. Otherwise it is the httpOnly cookie. */
+  refresh_token?: string;
   expires_in: number;
 }
 

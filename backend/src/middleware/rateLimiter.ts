@@ -7,6 +7,7 @@ import { getRedis } from '../config/redis';
 import { concurrencyLimit, QueueFullError } from '../utils/concurrencyLimit';
 import { verifyRefreshToken, verifyToken } from '../utils/jwt';
 import { logger } from '../utils/logger';
+import { readRefreshCookie } from '../utils/refresh-cookie';
 import { formatPhoneNumber } from '../utils/otp';
 import { AppError } from './errorHandler';
 
@@ -101,7 +102,7 @@ export const byLoginAccount = (req: Request) => {
 
 /** A refresh by the account its (validly signed) refresh token names; anything else by address. */
 export const byRefreshTokenOrIp = (req: Request) => {
-  const token = req.body?.refreshToken;
+  const token = req.body?.refreshToken ?? readRefreshCookie(req);
   if (typeof token === 'string') {
     try {
       return `u:${verifyRefreshToken(token).userId}`;

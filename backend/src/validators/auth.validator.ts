@@ -58,8 +58,9 @@ export const verifyEmailSchema = z.object({
   token: z.string().min(1, 'Verification token is required'),
 });
 
+// The website sends none: its refresh token is the httpOnly cookie.
 export const refreshTokenSchema = z.object({
-  refreshToken: z.string().min(1),
+  refreshToken: z.string().min(1).optional(),
 });
 
 export const updateProfileSchema = z.object({

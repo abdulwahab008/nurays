@@ -10,7 +10,7 @@ import { cancellationNotice } from '@/lib/order-cancellation';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { LoadError } from '@/components/ui/LoadError';
-import { useAuthStore } from '@/lib/store/auth-store';
+import { useAuthStore, hasSession } from '@/lib/store/auth-store';
 import { useSocket, type DeliveryTrackingEvent } from '@/lib/hooks/use-socket';
 import { useLiveRefresh } from '@/lib/hooks/use-live-refresh';
 import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
@@ -375,8 +375,7 @@ function OrderDetailContent() {
   }, [params.id, joinOrderRoom, onOrderStatusUpdate, onDeliveryTracking, t]);
 
   useEffect(() => {
-    const token = apiClient.getAccessToken();
-    if (!token && !isAuthenticated) {
+    if (!hasSession()) {
       router.replace(loginUrlHere());
       return;
     }

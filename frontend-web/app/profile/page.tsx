@@ -12,7 +12,7 @@ import { LoadError } from '@/components/ui/LoadError';
 import { useToast } from '@/components/ui/toast';
 import { useDialogs } from '@/components/ui/Dialogs';
 import { authService } from '@/lib/services/auth.service';
-import { useAuthStore } from '@/lib/store/auth-store';
+import { useAuthStore, hasSession } from '@/lib/store/auth-store';
 import { PasswordCard } from '@/components/profile/PasswordCard';
 import { SessionsCard } from '@/components/profile/SessionsCard';
 import { TwoFactorCard } from '@/components/profile/TwoFactorCard';
@@ -212,8 +212,7 @@ export default function ProfilePage() {
 
   useEffect(() => {
     if (leaving.current) return;
-    const token = apiClient.getAccessToken();
-    if (!token && !isAuthenticated) {
+    if (!hasSession()) {
       router.replace(loginUrlHere());
       return;
     }

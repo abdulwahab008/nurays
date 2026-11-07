@@ -1,7 +1,8 @@
-import { test, expect, request, APIRequestContext, type Page } from '@playwright/test';
+import { test, expect, request, APIRequestContext } from '@playwright/test';
 import { execSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { signIn } from './support/customer';
 
 const API_BASE = (process.env.API_BASE ?? 'http://localhost:3001/api/v1').replace(/\/$/, '');
 const DB_URL = process.env.E2E_DB_URL ?? 'postgresql://localhost:5432/frozennuray_dev';
@@ -87,49 +88,6 @@ async function createVerifiedCustomer(): Promise<TestUserSession> {
   return { email, jwt, user, addressId };
 }
 
-async function setSession(page: Page, session: TestUserSession) {
-  await page.addInitScript(
-    ({ token, user }: { token: string; user: TestUserSession['user'] }) => {
-      window.localStorage.setItem('auth_token', token);
-      window.localStorage.setItem('access_token', token);
-      window.localStorage.setItem('token', token);
-      window.localStorage.setItem(
-        'auth-storage',
-        JSON.stringify({
-          state: {
-            user,
-            token,
-            isAuthenticated: true,
-          },
-          version: 0,
-        }),
-      );
-    },
-    { token: session.jwt, user: session.user },
-  );
-
-  await page.context().addCookies([
-    {
-      name: 'access_token',
-      value: session.jwt,
-      domain: 'localhost',
-      path: '/',
-      httpOnly: false,
-      secure: false,
-      sameSite: 'Lax',
-    },
-    {
-      name: 'auth_token',
-      value: session.jwt,
-      domain: 'localhost',
-      path: '/',
-      httpOnly: false,
-      secure: false,
-      sameSite: 'Lax',
-    },
-  ]);
-}
-
 test.describe('Buyer Hyperlocal Workflow & Operations', () => {
   test.describe.configure({ mode: 'serial' });
 
@@ -144,7 +102,7 @@ test.describe('Buyer Hyperlocal Workflow & Operations', () => {
   });
 
   test('1. Hyperlocal Discovery, Community Detection & Tier Badges', async ({ page }) => {
-    await setSession(page, session);
+    await signIn(page, session);
     await page.goto('/products');
     await page.waitForLoadState('networkidle');
 
@@ -159,7 +117,7 @@ test.describe('Buyer Hyperlocal Workflow & Operations', () => {
   });
 
   test('2. Single-Seller Cart Conflict Detection & Auto-Replacement', async ({ page }) => {
-    await setSession(page, session);
+    await signIn(page, session);
 
     // Ensure cart is initially empty
     const ctx = await api();
@@ -217,7 +175,7 @@ test.describe('Buyer Hyperlocal Workflow & Operations', () => {
   });
 
   test('3. Favorite Kitchen Toggle & Dedicated Favorites Page', async ({ page }) => {
-    await setSession(page, session);
+    await signIn(page, session);
 
     // Go to product of Claude Test Kitchen
     const prod1Id = 'a0500ed2-9260-4543-a7c7-bf96397644f6';
@@ -244,7 +202,7 @@ test.describe('Buyer Hyperlocal Workflow & Operations', () => {
   });
 
   test('4. Checkout, Manual Payment (JazzCash/EasyPaisa) & TID Submission', async ({ page }) => {
-    await setSession(page, session);
+    await signIn(page, session);
 
     // Ensure item in cart
     const ctx = await api();
@@ -322,7 +280,7 @@ test.describe('Buyer Hyperlocal Workflow & Operations', () => {
   });
 
   test('5. In-App Order Messaging (Buyer <-> Kitchen)', async ({ page }) => {
-    await setSession(page, session);
+    await signIn(page, session);
 
     const orderId = placedOrderId || dbQuery(
       `SELECT id FROM orders WHERE customer_id = '${session.user.id}' ORDER BY created_at DESC LIMIT 1`,
@@ -358,7 +316,7 @@ test.describe('Buyer Hyperlocal Workflow & Operations', () => {
   });
 
   test('6. Tri-Partite Review System on Completed Order', async ({ page }) => {
-    await setSession(page, session);
+    await signIn(page, session);
 
     const orderId = placedOrderId || dbQuery(
       `SELECT id FROM orders WHERE customer_id = '${session.user.id}' ORDER BY created_at DESC LIMIT 1`,

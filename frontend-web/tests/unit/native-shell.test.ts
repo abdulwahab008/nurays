@@ -1,30 +1,12 @@
 // Run with `npm test` (Node's own test runner, which reads TypeScript directly: no extra packages).
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {
-  appPathFromUrl,
-  mirroredTokenStore,
-  nativePlugins,
-  secureKV,
-  syncTokens,
-  type SecureKV,
-  type SecureStoragePlugin,
-} from '../../lib/native-shell.ts';
-import { browserTokenStore, type StorageLike } from '../../lib/token-store.ts';
+import { appPathFromUrl, forgetSavedTokens, nativePlugins, secureKV, type SecureKV, type SecureStoragePlugin } from '../../lib/native-shell.ts';
 
-function memory(): StorageLike {
-  const data = new Map<string, string>();
-  return { getItem: (k) => data.get(k) ?? null, setItem: (k, v) => void data.set(k, v), removeItem: (k) => void data.delete(k) };
-}
-const pageStore = () => {
-  const s = { session: memory(), local: memory() };
-  return browserTokenStore(() => s);
-};
 function secureMemory(): SecureKV & { data: Map<string, string> } {
   const data = new Map<string, string>();
   return { data, get: async (k) => data.get(k) ?? null, set: async (k, v) => void data.set(k, v), remove: async (k) => void data.delete(k) };
 }
-const settle = () => new Promise((r) => setImmediate(r));
 
 test('the plugins are only read inside the app', () => {
   const Plugins = {};
@@ -63,44 +45,13 @@ test('the secure storage face prefixes keys and reads a missing one as null', as
   assert.deepEqual(calls[1], ['set', { prefixedKey: 'nuray_refresh', data: 'r1', sync: false, access: 0 }]);
 });
 
-test('every token change is written through to secure storage, and signing out removes them', async () => {
+test('tokens an earlier version saved on the phone are removed', async () => {
   const secure = secureMemory();
-  const store = mirroredTokenStore(pageStore(), secure);
-  store.savePair('a1', 'r1');
-  await settle();
-  assert.deepEqual([...secure.data], [['access', 'a1'], ['refresh', 'r1']]);
-  assert.equal(store.access(), 'a1');
-  store.saveAccess('a2');
-  await settle();
-  assert.equal(secure.data.get('access'), 'a2');
-  assert.equal(secure.data.get('refresh'), 'r1');
-  store.clear();
-  await settle();
-  assert.equal(secure.data.size, 0);
-  assert.equal(store.refresh(), null);
-});
-
-test('a failing secure storage never breaks signing in', async () => {
-  const broken: SecureKV = { get: async () => null, set: async () => Promise.reject(new Error('keystore')), remove: async () => Promise.reject(new Error('keystore')) };
-  const store = mirroredTokenStore(pageStore(), broken);
-  assert.doesNotThrow(() => store.savePair('a1', 'r1'));
-  await settle();
-  assert.equal(store.refresh(), 'r1');
-});
-
-test('at start a signed-in page is mirrored, a page that lost its tokens gets them back', async () => {
-  const secure = secureMemory();
-  const signedIn = pageStore();
-  signedIn.savePair('a1', 'r1');
-  assert.equal(await syncTokens(signedIn, secure), 'mirrored');
-  assert.equal(secure.data.get('refresh'), 'r1');
-
-  const wiped = pageStore();
-  assert.equal(await syncTokens(wiped, secure), 'restored');
-  assert.equal(wiped.access(), 'a1');
-  assert.equal(wiped.refresh(), 'r1');
-
-  assert.equal(await syncTokens(pageStore(), secureMemory()), 'none');
+  await secure.set('access', 'a1');
+  await secure.set('refresh', 'r1');
+  await secure.set('other', 'kept');
+  await forgetSavedTokens(secure);
+  assert.deepEqual([...secure.data], [['other', 'kept']]);
 });
 
 test('the platform is read only inside the app', async () => {

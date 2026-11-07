@@ -66,12 +66,12 @@ The same `Idempotency-Key` with the same request returns the order already place
 
 ### Refresh flow
 
-1. Log in or register: the response carries `tokens: { access_token, refresh_token, expires_in }` (snake_case; `expires_in` is the access token's lifetime in seconds).
-2. When a request returns 401, call `POST /auth/refresh` with `{ refreshToken }`.
+1. Log in or register: the response carries `tokens: { access_token, refresh_token, expires_in }` (snake_case; `expires_in` is the access token's lifetime in seconds) and sets the refresh token as the httpOnly cookie `nuray_rt` (path `/api/v1/auth`). **In production `refresh_token` is left out of the JSON**: the cookie is the only copy. The same holds for the refresh answer's `refreshToken`.
+2. When a request returns 401, call `POST /auth/refresh`: a browser sends no body and `withCredentials`, and the cookie is used only when `Origin` is exactly `CORS_ORIGIN` (else 403 `ORIGIN_NOT_ALLOWED`); a script outside a browser may still send `{ refreshToken }`. Neither gives 401 `NO_REFRESH_TOKEN`.
 3. The response is `{ success, data: { accessToken, refreshToken } }` (camelCase, no `expires_in`): both tokens are replaced. **Each refresh token works once** (rotation): keep the new one. The same token presented again within 30 seconds (two tabs refreshing at once) still gets a new pair; later, it ends the whole session and answers 401 `REFRESH_TOKEN_REUSED` (it was copied).
 4. Retry the original request once. If refresh fails (401 `INVALID_REFRESH_TOKEN`, `SESSION_REVOKED`, `REFRESH_TOKEN_REUSED`), sign out. A refresh token issued before rotation existed answers `SESSION_REVOKED` once: sign in again.
 
-The web client (`frontend-web/lib/api-client.ts`) does exactly this, shares one in-flight refresh between concurrent 401s, and never retries `/auth/refresh`, `/auth/login`, `/auth/logout` or `/auth/register`. `POST /auth/logout` ends this device's session only; `POST /auth/logout-all` ends them all.
+The web client (`frontend-web/lib/api-client.ts`) does exactly this, shares one in-flight refresh between concurrent 401s, and never retries `/auth/refresh`, `/auth/login`, `/auth/logout` or `/auth/register`. `POST /auth/logout` ends this device's session only and clears the cookie; with no access token in hand it ends the session the cookie names (from the website's origin only). `POST /auth/logout-all` ends them all.
 
 ### Response envelope
 

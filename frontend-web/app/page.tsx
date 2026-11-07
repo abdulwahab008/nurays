@@ -9,7 +9,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { isAxiosError } from 'axios';
 import { useShallow } from 'zustand/react/shallow';
-import { useAuthStore } from '@/lib/store/auth-store';
+import { useAuthStore, hasSession } from '@/lib/store/auth-store';
 import { useCartStore } from '@/lib/store/cart-store';
 import { useToast } from '@/components/ui/toast';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
@@ -17,7 +17,7 @@ import { SlideOverCartDrawer } from '@/components/marketplace/SlideOverCartDrawe
 import { UberLeftSidebar } from '@/components/marketplace/UberLeftSidebar';
 import { cartService } from '@/lib/services/cart.service';
 import { favoriteService } from '@/lib/services/favorite.service';
-import { apiClient, errorMessage } from '@/lib/api-client';
+import { errorMessage } from '@/lib/api-client';
 import { useLocale, useT } from '@/lib/i18n';
 import { homeMessages } from '@/lib/i18n/messages/home';
 import { browseMessages } from '@/lib/i18n/messages/browse';
@@ -183,7 +183,7 @@ export default function Home() {
     }
 
     const stockType = dish.isFrozen ? 'hub' : 'direct';
-    if (apiClient.getAccessToken() || isAuthenticated) {
+    if (hasSession()) {
       try {
         await cartService.addToCart({ productId: dish.id, quantity: 1, stockType });
       } catch (err: unknown) {

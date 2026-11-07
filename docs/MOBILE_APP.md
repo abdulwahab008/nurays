@@ -16,7 +16,7 @@ exposes (`window.Capacitor.Plugins`), wired up in `frontend-web/components/Nativ
 | Opens the website | `NURAY_APP_URL` (built in at sync time). Until it is set a placeholder address stands, and a release build refuses it. |
 | No connection | A page in the app (`mobile/www/offline.html`, English and Urdu) with "Try again". |
 | Payments | Safepay's pages open inside the app, so a payment comes back to the app's /payment/return page. Other sites open in the in-app browser (links) or the phone's own app (maps, phone numbers): `lib/open-external.ts`. |
-| Sign-in | Tokens are also kept in the phone's Keychain (iOS) or Keystore (Android) and come back from there if the WebView's storage was cleared. Android cloud backup is off, so tokens are not copied to Google Drive. |
+| Sign-in | As on the website: the refresh token is an httpOnly cookie in the WebView's cookie store, the access token is in the page's memory. If the WebView's storage was cleared but the cookie kept, the account comes back from the cookie at start. Tokens an older version kept in the Keychain or Keystore are removed. **Check on real phones:** each start renews the token through the cookie, and if Android has not written the new cookie to disk when the app is closed, the next start presents a used token and is signed out (reuse detection). |
 | Links into the app | `https://<site>/...` (Android App Links; iOS Universal Links once the Associated Domains entitlement is added, see below) and `pk.nuray.app://...` open the page in the app. |
 | Android back button | Goes back; on the first page it closes the app. |
 | Permissions | Camera (documents and receipts), location while in use (address pin, rider position). |

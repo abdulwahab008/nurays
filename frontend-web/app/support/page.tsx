@@ -7,7 +7,7 @@ import { Send } from 'lucide-react';
 import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
-import { useAuthStore } from '@/lib/store/auth-store';
+import { useAuthStore, hasSession } from '@/lib/store/auth-store';
 import { apiClient, apiErrorMessage } from '@/lib/api-client';
 import { orderService, type Order } from '@/lib/services/order.service';
 import { formatDate } from '@/lib/utils';
@@ -90,8 +90,7 @@ export default function SupportPage() {
   };
 
   useEffect(() => {
-    const token = apiClient.getAccessToken();
-    if (!token && !isAuthenticated) {
+    if (!hasSession()) {
       router.replace(loginUrlHere());
       return;
     }

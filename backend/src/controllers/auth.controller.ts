@@ -10,7 +10,8 @@ import { endSession, listSessions } from '../services/session.service';
 import { logger } from '../utils/logger';
 import { guardAccountProbe } from '../middleware/accountProbe';
 import * as twoFactor from '../services/staff-two-factor.service';
-import { verifyChallenge, type ChallengePurpose } from '../utils/jwt';
+import { verifyChallenge, verifyRefreshToken, type ChallengePurpose } from '../utils/jwt';
+import { clearRefreshCookie, fromWebsite, readRefreshCookie, usesCookie } from '../utils/refresh-cookie';
 import prisma from '../config/database';
 
 export const requestOTP = async (req: Request, res: Response) => {
@@ -191,8 +192,27 @@ export const resendVerificationEmail = async (req: Request, res: Response) => {
   });
 };
 
+/** The cookie's refresh token, when the request comes from the website itself. */
+function refreshTokenFromCookie(req: Request): string | null {
+  const token = readRefreshCookie(req);
+  if (token && !fromWebsite(req)) throw new AppError('Not allowed from this site', 403, 'ORIGIN_NOT_ALLOWED');
+  return token;
+}
+
+function sessionFromCookie(req: Request): { userId: string; sid: string } | null {
+  const token = readRefreshCookie(req);
+  if (!token || !usesCookie(req)) return null;
+  try {
+    const { userId, sid } = verifyRefreshToken(token);
+    return sid ? { userId, sid } : null;
+  } catch {
+    return null;
+  }
+}
+
 export const refreshToken = async (req: Request, res: Response) => {
-  const { refreshToken } = req.body;
+  const refreshToken = typeof req.body?.refreshToken === 'string' ? req.body.refreshToken : refreshTokenFromCookie(req);
+  if (!refreshToken) throw new AppError('Session expired, please log in again', 401, 'NO_REFRESH_TOKEN');
 
   const result = await authService.refreshToken(refreshToken);
 
@@ -256,6 +276,13 @@ export const changePassword = async (req: Request, res: Response) => {
  * before sessions were recorded carries no session id, so it signs out everywhere, as logout used to.
  */
 export const logout = async (req: Request, res: Response) => {
+  // Signed out with no access token in hand (the page was reloaded, or it expired): the cookie names the session.
+  const cookieSession = req.user ? null : sessionFromCookie(req);
+  if (usesCookie(req)) clearRefreshCookie(res);
+  if (cookieSession) {
+    await endSession(cookieSession.userId, cookieSession.sid);
+    socketManager.disconnectSession(cookieSession.sid);
+  }
   if (req.user) {
     const { userId, sid } = req.user;
     const pushEndpoint = typeof req.body?.pushEndpoint === 'string' ? req.body.pushEndpoint : null;
@@ -290,6 +317,7 @@ async function endEverywhere(userId: string) {
 export const logoutAll = async (req: Request, res: Response) => {
   if (!req.user) throw new AppError('Authentication required', 401, 'AUTH_REQUIRED');
   await endEverywhere(req.user.userId);
+  if (usesCookie(req)) clearRefreshCookie(res);
   void recordAudit({ userId: req.user.userId, action: 'auth:LOGOUT_ALL', entityType: 'user', entityId: req.user.userId, ipAddress: req.ip, responseStatus: 200 });
   res.status(200).json({ success: true, message: 'Signed out on every device' });
 };
