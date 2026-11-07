@@ -2,9 +2,9 @@ import { test, expect } from '@playwright/test';
 import { sanitizeReports, stripAddress } from '../../lib/csp-report';
 
 /**
- * The Content-Security-Policy is sent report-only first. These checks keep that useful: the policy
- * names the collector, the collector takes both report formats and logs no secret, and the public pages
- * load without a single violation, which is the evidence needed before the policy is enforced.
+ * The Content-Security-Policy is enforced (CSP_ENFORCE=false makes it report-only). These checks keep it honest: the
+ * policy names the collector, the collector takes both report formats and logs no secret, an injected inline handler
+ * is blocked and reported, and the public pages load without a single violation.
  */
 
 test.describe('CSP report collector', () => {
@@ -74,20 +74,24 @@ test.describe('CSP report collector', () => {
 
 test.describe('the public pages break no part of the policy', () => {
   // The control for the checks below: a clean page only means something if a violation would be seen.
-  test('a script from an origin the policy does not name is reported by the browser', async ({ page }) => {
+  // A script added by a running script is allowed ('strict-dynamic'); markup injected into the page is what the policy
+  // stops, so the control injects an inline event handler, as an XSS would.
+  test('an injected inline event handler is blocked and reported by the browser', async ({ page }) => {
     const reports: string[] = [];
     await page.route('**/api/csp-report', async (route) => {
       reports.push(route.request().postData() ?? '');
       await route.fulfill({ status: 204 });
     });
     await page.goto('/login', { waitUntil: 'networkidle' });
-    await page.evaluate(() => {
-      const script = document.createElement('script');
-      script.src = 'https://not-allowed.example/x.js?secret=1';
-      document.head.append(script);
+    const ran = await page.evaluate(async () => {
+      const holder = document.createElement('div');
+      holder.innerHTML = '<img src="/no-such-image.png" onerror="window.__injected = true">';
+      document.body.append(holder);
+      await new Promise((r) => setTimeout(r, 500));
+      return (window as unknown as { __injected?: boolean }).__injected === true;
     });
+    expect(ran).toBe(false);
     await expect.poll(() => reports.length, { timeout: 10_000 }).toBeGreaterThan(0);
-    expect(reports.join('\n')).toContain('not-allowed.example');
     expect(reports.join('\n')).toContain('script-src');
   });
 

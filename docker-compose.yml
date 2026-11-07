@@ -73,7 +73,7 @@ services:
         NEXT_PUBLIC_SENTRY_DSN: ${NEXT_PUBLIC_SENTRY_DSN:-}
         NEXT_PUBLIC_SENTRY_ENVIRONMENT: ${NEXT_PUBLIC_SENTRY_ENVIRONMENT:-}
         NEXT_PUBLIC_SENTRY_RELEASE: ${NEXT_PUBLIC_SENTRY_RELEASE:-}
-        CSP_ENFORCE: ${CSP_ENFORCE:-false}
+        CSP_ENFORCE: ${CSP_ENFORCE:-true}
         NEXT_PUBLIC_MAP_TILE_URL: ${NEXT_PUBLIC_MAP_TILE_URL:-}
         NEXT_PUBLIC_MAP_ATTRIBUTION: ${NEXT_PUBLIC_MAP_ATTRIBUTION:-}
     environment:
@@ -81,7 +81,7 @@ services:
       # for its page title and link preview.
       API_INTERNAL_URL: ${API_INTERNAL_URL:-http://backend:3001/api/v1}
       # Read when the server starts: set true and restart to enforce the Content-Security-Policy (no rebuild).
-      CSP_ENFORCE: ${CSP_ENFORCE:-false}
+      CSP_ENFORCE: ${CSP_ENFORCE:-true}
     container_name: nuray-frontend
     restart: unless-stopped
     logging: *logging

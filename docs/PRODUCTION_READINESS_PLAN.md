@@ -16,7 +16,7 @@ Still ahead, in order:
 
 1. **Merge PR #38** (yours), which runs CI on `main` again (Phase 0.2).
 2. **Phase 1:** everything outside the code, and the load test on staging (the tooling is ready).
-3. **Phase 2, what is left:** the seven days of CSP reports and then enforcing, and the device checks for DELIV-7 (the automated resume test is in) and for the native branch of MOBILE-4.
+3. **Phase 2, what is left:** the device checks for DELIV-7 (the automated resume test is in) and for the native branch of MOBILE-4.
 4. **Phase 3:** waits for your answers to decisions 1–28; anything with a migration waits for your approval.
 
 ## Where things stand (when the plan was written)
@@ -115,7 +115,7 @@ Most of this is outside the code. Items marked **(you)** need the owner or ops; 
 - [x] **SEC-4** Per-phone and per-email limits on OTP, forgot-password, resend-verification and email change. A forgot-password link is not re-issued within 60 s. A generous per-IP backstop on login. Redis keys hold hashes, never raw numbers or addresses. **Done.**
 - [x] **Staff passwords** At least 12 characters for staff everywhere: reset, `create-admin.js` and `reset-admin-password.js`. The reset script takes the email as an argument, has no default password and writes an audit entry. **Done.**
 - [x] **SEC-5** Refuse common passwords using a bundled list, and fix the leftover "6 characters" hint on the register page. The fixtures must not contain "nuray", which the personal-word check would refuse. **Done** (about ten thousand common passwords, the person's own details; the register page says 8).
-- [ ] **SEC-7** Give the report-only CSP somewhere to send reports: a same-origin `/csp-report` collector that strips query strings, because reset links carry tokens. Add a Playwright CSP check and a build flag to enforce. Then 7 days of reports on staging or the soft launch, then enforce. The `'unsafe-inline'` question is decision 9. **Done so far:** the `/api/csp-report` collector, a Playwright check that the public pages produce no report, and `CSP_ENFORCE=true`. **Left:** seven days of reports on staging or the soft launch, then the switch.
+- [ ] **SEC-7** Give the report-only CSP somewhere to send reports: a same-origin `/csp-report` collector that strips query strings, because reset links carry tokens. Add a Playwright CSP check and a build flag to enforce. Then 7 days of reports on staging or the soft launch, then enforce. The `'unsafe-inline'` question is decision 9. **Done so far:** the `/api/csp-report` collector, a Playwright check that the public pages produce no report, and `CSP_ENFORCE=true`. **Done (2026-11-07):** enforced by default with a per-request nonce and no `'unsafe-inline'` for scripts (branch `feat/csp-enforce`); `CSP_ENFORCE=false` makes it report-only.
 
 **Capacity**
 - [x] **PERF-5** Try auto-assignment first and post a job to the open pool only if nobody takes it. That removes most pool events with no client change. Then send pool events only to riders who are on duty and active (a socket room joined and left on duty toggle, approval and suspension), and refresh only the list that changed. **Done:** a job is offered to the best rider first and the pool hears of it only when nobody can take it; then only riders who are approved, active and on duty are told (the `riders:on-duty` room, kept in step by `socketManager.syncRiderDuty`), and the dashboard reloads just the list of available jobs, and again when the rider goes on duty. In a browser: two requests instead of five for a new job, one instead of three when someone else takes it, none for a rider who is off duty. Checked by unit tests and the `pool` API suite.
@@ -189,7 +189,7 @@ Each line gives the options, the recommendation, and what it unlocks. Effort is 
 | 6 | **Require a pin for home delivery at the API** (DELIV-4) | First run the read-only count of pinless addresses and recent pinless orders on a production copy. If no recent pinless orders exist, enforce now with no grace period; otherwise use a 30-day grace period. | S. Fixtures in `verify-money-flows` need pins. |
 | 7 | **IP geolocation fallback** (FE-11, OPS-13, INTEG-7) | Delete it. When GPS fails, only pan the map and ask the buyer to drag the pin; never set a guessed pin. | No visitor IPs sent over plain HTTP. S. |
 | 8 | **Revealing which accounts exist** (SEC-11) | Same answer on login paths: "if this number is registered, a code is on its way". The registration-purpose OTP request must also stop answering "user exists". Sign-up errors can stay explicit. | S. |
-| 9 | **CSP strength** (SEC-7) | Enforce the current policy after the 7-day soak. Per-request nonces would make every page server-rendered and are only worth it once decision 2 is done. | P1 closed. |
+| 9 | **CSP strength** (SEC-7) | **Done (2026-11-07):** per-request nonces, enforced (every page was already server-rendered). | P1 closed. |
 | 10 | **Audit log free text** (SEC-R7) | Redact phone numbers, emails, CNIC and IBAN, and cap reasons at 200 characters. Order numbers and payment references stay readable. Retention set with the lawyer (suggested: 24 months for staff actions, 180 days for failed-login rows); needs a trigger change. | M. |
 | 11 | **Schema clean-ups** (MONEY-7, MONEY-8, BE-9): one approval session | Approve: an idempotency fingerprint column (a reused key with a different order body is refused), drop `inventory_reservations`, drop four unused models after confirming production has no rows in them. | S each, separate migrations. |
 | 12 | **Default community** (FE-20) | No silent default: keep the chooser open and say "No Nuray community near you yet". | S. |
@@ -285,7 +285,7 @@ Status now: what the code shows today. Needs: code = can be done now; decision =
 | SEC-3 | Open | Partly done | code | P1 | M | 3 (#3) | Staff lockout that cannot be used to lock out the super admin. Done: counted per account and address, ceiling of 50 across addresses. Left: two-factor sign-in for staff (migration) |
 | SEC-4 | Partly fixed | Done | code | P1 | M | 2 | OTP, forgot-password and verification-email limits per target; login backstops |
 | SEC-5 | Partly fixed | Done | code | P2 | S | 2 | Common/breached password check (plus the leftover 6-character UI hint) |
-| SEC-7 | Partly fixed | Partly done | code | P1 | S | 2 | Collector, Playwright check and `CSP_ENFORCE` are in; left: a week of reports, then enforce |
+| SEC-7 | Fixed | Done | code | P1 | S | 2 | Enforced with a per-request nonce (branch `feat/csp-enforce`); `CSP_ENFORCE=false` makes it report-only |
 | SEC-11 | Open | Open | decision | P2 | S | 3 (#8) | Stop revealing which emails and phone numbers have accounts on the login and OTP paths |
 | NEW-auth-1 | — | Done | code | P1 | S | 2 | Throttle re-authentication password checks; stop answering a wrong password with 401 |
 | NEW-auth-2 | — | Done | code | P2 | XS | 2 | Remove the unused 'reset_password' OTP purpose. Done: the API refuses it (400) and nothing is sent |

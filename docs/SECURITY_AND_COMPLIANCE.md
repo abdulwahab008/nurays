@@ -139,25 +139,24 @@ itself) and a Content-Security-Policy. HSTS is set at the TLS terminator (see th
 assets ship with the build, so the only third-party origins the policy names are Google sign-in, Safepay's
 checkout and the configured API, realtime and error-reporting hosts.
 
-The policy is **report-only** until it has been seen to be clean: a browser that meets something the policy would
-block still loads it, and posts a report to `/api/csp-report` (`app/api/csp-report/route.ts`). Each violation
-becomes one JSON log line, `"type":"csp-violation"`, with the directive, what was blocked and the page, where every
-address is cut to origin and path (a password-reset link carries its token in the query string), the script
-sample is dropped, and the body and the number of reports per minute are capped. `tests/e2e/csp.spec.ts` checks
+The policy is **enforced**. Every page gets a new nonce (`frontend-web/proxy.ts`): Next.js puts it on its own
+scripts, and the root layout on the one inline script it writes (the theme script). `script-src` is
+`'self' 'nonce-…' 'strict-dynamic'`, with no `'unsafe-inline'`, so an injected `<script>`, inline event handler
+(`onerror=`) or `javascript:` link does not run; scripts a trusted script loads (Google's sign-in script) do.
+`'unsafe-eval'` is added in development only (React needs it there). `style-src` keeps `'unsafe-inline'`: the
+components set style attributes, which a nonce cannot cover, and a style cannot run code. Every page is rendered per
+request (the root layout reads a cookie), which a nonce requires.
+
+A browser that meets something the policy blocks posts a report to `/api/csp-report` (`app/api/csp-report/route.ts`).
+Each violation becomes one JSON log line, `"type":"csp-violation"`, with the directive, what was blocked and the page,
+where every address is cut to origin and path (a password-reset link carries its token in the query string), the
+script sample is dropped, and the body and the number of reports per minute are capped. `tests/e2e/csp.spec.ts` checks
 the header, both report formats and the redaction, and loads the public pages to prove they report nothing.
 
-To enforce it:
-
-1. Run the report-only build on staging or the soft launch, using every role's screens, for about a week.
-2. Search the frontend logs for `"type":"csp-violation"`. A legitimate origin goes into the policy in
-   `next.config.ts`; reports whose blocked address is a browser extension (`chrome-extension`, `moz-extension`) are noise.
-3. When a week is clean, restart the web server with `CSP_ENFORCE=true` in its environment (Docker:
-   `-e CSP_ENFORCE=true`, or the compose `.env`); no rebuild. `frontend-web/proxy.ts` reads it at start-up and the
-   header becomes `Content-Security-Policy`. (The `CSP_ENFORCE` build argument, in the publish workflow the
-   repository variable, still sets the image's default.) Reports keep coming, so keep the same search saved.
-
-`'unsafe-inline'` stays in `script-src` and `style-src` for now (Next.js's inline bootstrap script and inline
-styles); replacing it with per-request nonces is a separate decision.
+After a change that adds a script, frame or connection to another site, add its origin in `frontend-web/lib/csp.ts`
+and search the frontend logs for `"type":"csp-violation"` (reports whose blocked address is a browser extension are
+noise). If something is blocked in production, `CSP_ENFORCE=false` in the web server's environment and a restart make
+the policy report-only until the origin is added; no rebuild.
 
 ## Private files and signed URLs
 
