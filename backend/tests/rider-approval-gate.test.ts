@@ -12,6 +12,9 @@ jest.mock('../src/config/database', () => ({
     riderLedgerEntry: { groupBy: jest.fn().mockResolvedValue([]) },
   },
 }));
+jest.mock('../src/services/delivery-pricing.service', () => ({
+  getPlatformDeliveryPricing: jest.fn(async () => ({ perKm: 20, includedKm: 3, maxKm: 20, fallbackBaseFee: 150, communities: new Map() })),
+}));
 
 import riderService from '../src/services/rider.service';
 import prisma from '../src/config/database';

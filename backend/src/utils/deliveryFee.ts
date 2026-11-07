@@ -438,18 +438,21 @@ export interface DeliveryFeeCorridor {
  * The rider's pay for a job: a standard fee (city base rate + Rs 20 per km) and the range a
  * rider may ask for instead (floor protects the rider, ceiling the platform).
  * Without both locations no distance is guessed: the standard fee is the base rate.
+ * Km beyond maxKm (how far Nuray riders deliver, PlatformDeliveryPricing.maxKm) are not paid: a job
+ * only gets that long through a wrong pin, which must not price it at thousands of rupees.
  */
 export function calculateDeliveryFeeCorridor(
   pickupLat: number | null,
   pickupLng: number | null,
   deliveryLat: number | null,
   deliveryLng: number | null,
+  maxKm: number,
   city?: string | null
 ): DeliveryFeeCorridor {
   const known = [pickupLat, pickupLng, deliveryLat, deliveryLng].every((v) => v != null && Number.isFinite(v));
   const distKm = known ? Math.round(haversineKm(pickupLat!, pickupLng!, deliveryLat!, deliveryLng!) * 10) / 10 : null;
   const baseRate = platformDefaultFee(city);
-  const distanceSurcharge = distKm != null ? Math.round(distKm * 20) : 0; // Rs 20 per km
+  const distanceSurcharge = distKm != null ? Math.round(Math.min(distKm, maxKm) * 20) : 0; // Rs 20 per km
   const standardFee = Math.max(120, baseRate + distanceSurcharge);
 
   // Floor (85% or Rs 100 min) - protects rider

@@ -13,6 +13,9 @@ const mockPrisma: any = {
 };
 
 jest.mock('../src/config/database', () => ({ __esModule: true, default: mockPrisma }));
+jest.mock('../src/services/delivery-pricing.service', () => ({
+  getPlatformDeliveryPricing: jest.fn(async () => ({ perKm: 20, includedKm: 3, maxKm: 20, fallbackBaseFee: 150, communities: new Map() })),
+}));
 
 const mockEmitTracking = jest.fn().mockResolvedValue(undefined);
 jest.mock('../src/services/realtime-order.service', () => ({
@@ -214,6 +217,15 @@ describe('claimDelivery and the cash limit', () => {
     // Unknown locations: the base fee, never a distance worked out from made-up points.
     expect(data).toEqual(expect.objectContaining({ riderId: 'rider-1', status: 'assigned', riderBonus: 0 }));
     expect(data.riderFee).toBeGreaterThan(0);
+  });
+
+  it('fixes no more than the fee at the max delivery distance when a pin is a thousand km off', async () => {
+    // Karachi kitchen, drop-off pinned in Lahore.
+    mockPrisma.delivery.findUnique.mockResolvedValue({ ...job, pickupLatitude: 24.85, pickupLongitude: 67.02, deliveryLatitude: 31.52, deliveryLongitude: 74.35 });
+    mockPrisma.order.findFirst.mockResolvedValue({ id: 'o1', paymentMethod: 'safepay', paymentStatus: 'paid', totalAmount: 3000 });
+    await riderService.claimDelivery('user-1', 'd1');
+    const { data } = mockPrisma.delivery.updateMany.mock.calls[0][0];
+    expect(data.riderFee).toBe(100 + 20 * 20);
   });
 });
 
