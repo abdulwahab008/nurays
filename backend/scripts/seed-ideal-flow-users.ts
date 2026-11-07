@@ -6,9 +6,10 @@
  *
  *   cd backend && npm run seed:demo
  */
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 import bcrypt from 'bcrypt';
 import { seedCommunities } from '../prisma/seed-communities';
+import { roundMoney } from '../src/utils/pricing';
 
 const prisma = new PrismaClient();
 const PASSWORD = 'Password123!';
@@ -26,6 +27,24 @@ async function account(passwordHash: string, a: { email: string; phone: string; 
     create: { userId: user.id, fullName: a.name, city: a.city ?? 'Karachi' },
   });
   return user;
+}
+
+/**
+ * Cash orders delivered while trying the app pile up as cash the demo rider holds, and nobody settles a demo rider at a
+ * hub, so after a few test days they sit at the cash limit and are never offered a cash order again. A re-run records
+ * the cash as handed in (the ledger keeps its history), so the demo rider starts with nothing in hand.
+ */
+export async function handInDemoRiderCash(client: Prisma.TransactionClient, riderId: string, adminId: string): Promise<number> {
+  const { _sum } = await client.riderLedgerEntry.aggregate({
+    where: { riderId, type: { in: ['cod_collected', 'cash_deposit'] } },
+    _sum: { amount: true },
+  });
+  const cashHeld = roundMoney(-Number(_sum.amount ?? 0));
+  if (cashHeld <= 0) return 0;
+  await client.riderLedgerEntry.create({
+    data: { riderId, type: 'cash_deposit', amount: cashHeld, note: 'Demo reset: cash handed in', createdBy: adminId },
+  });
+  return cashHeld;
 }
 
 async function main() {
@@ -115,8 +134,10 @@ async function main() {
     status: 'active',
     verificationStatus: 'approved',
     isAvailable: true,
+    cashLimit: null,
   };
-  await prisma.rider.upsert({ where: { userId: riderUser.id }, update: rider, create: { userId: riderUser.id, ...rider } });
+  const demoRider = await prisma.rider.upsert({ where: { userId: riderUser.id }, update: rider, create: { userId: riderUser.id, ...rider } });
+  await handInDemoRiderCash(prisma, demoRider.id, admin.id);
 
   const customerUser = await account(passwordHash, { email: 'customer@nuray.test', phone: '+923001230888', userType: 'customer', name: 'Ayesha Khan' });
   const hasAddress = await prisma.userAddress.findFirst({ where: { userId: customerUser.id } });
@@ -139,9 +160,11 @@ async function main() {
   console.log('seller.rejected@nuray.test, rider@nuray.test, admin@frozennuray.com (the super admin when no other account is; it gets two-step sign-in where STAFF_2FA_REQUIRED is on, always in production).');
 }
 
-main()
-  .catch((e) => {
-    console.error('Seeding the demo accounts failed:', e);
-    process.exit(1);
-  })
-  .finally(() => prisma.$disconnect());
+if (require.main === module) {
+  main()
+    .catch((e) => {
+      console.error('Seeding the demo accounts failed:', e);
+      process.exit(1);
+    })
+    .finally(() => prisma.$disconnect());
+}
