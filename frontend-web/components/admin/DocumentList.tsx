@@ -1,7 +1,8 @@
 'use client';
 
-
+import { FileText } from 'lucide-react';
 import { ExternalLink } from '@/components/ExternalLink';
+
 const DOCUMENT_LABELS: Record<string, string> = {
   cnic_front: 'CNIC (front)',
   cnic_back: 'CNIC (back)',
@@ -11,7 +12,7 @@ const DOCUMENT_LABELS: Record<string, string> = {
 
 /** Verification documents: private files, opened through short-lived links. */
 export default function DocumentList({ documents }: { documents: Array<{ id: string; type: string; url: string | null }> }) {
-  if (documents.length === 0) return <p className="mt-3 text-xs text-gray-500">No documents uploaded.</p>;
+  if (documents.length === 0) return <p className="mt-3 text-xs text-muted">No documents uploaded.</p>;
   return (
     <div className="mt-3 flex flex-wrap gap-2" data-testid="documents">
       {documents.map((d) =>
@@ -19,9 +20,10 @@ export default function DocumentList({ documents }: { documents: Array<{ id: str
           <ExternalLink
             key={d.id}
             href={d.url}
-            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-gray-200 text-xs font-medium text-gray-700 hover:bg-gray-50"
+            className="inline-flex min-h-11 items-center gap-1.5 px-3 rounded-lg border border-line text-xs font-medium text-ink hover:bg-raised"
           >
-            📄 {DOCUMENT_LABELS[d.type] ?? d.type}
+            <FileText className="h-3.5 w-3.5" aria-hidden="true" />
+            {DOCUMENT_LABELS[d.type] ?? d.type}
           </ExternalLink>
         ) : null
       )}

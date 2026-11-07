@@ -8,6 +8,7 @@ import {
   newVariant,
   productPayload,
   productProblem,
+  productProblems,
   profitOf,
   saveErrorMessage,
   variantPayload,
@@ -18,12 +19,32 @@ import {
 const filled = { ...EMPTY_PRODUCT_FORM, name: ' Biryani ', price: '450', categoryId: 'cat-1', productType: 'ready_to_eat' as const };
 
 test('a new dish needs a name, a category, a price above zero and the text of a custom unit', () => {
-  assert.equal(productProblem({ ...filled, name: '  ' }, '', { requireCategory: true }), 'Please enter product name');
-  assert.equal(productProblem({ ...filled, categoryId: '' }, '', { requireCategory: true }), 'Please select a category');
-  assert.equal(productProblem({ ...filled, price: '0' }, '', { requireCategory: true }), 'Please enter a valid price');
-  assert.equal(productProblem({ ...filled, price: 'abc' }, '', { requireCategory: true }), 'Please enter a valid price');
-  assert.equal(productProblem({ ...filled, unit: 'other' }, ' ', { requireCategory: true }), 'Please enter a custom unit type');
+  assert.equal(productProblem({ ...filled, name: '  ' }, '', { requireCategory: true }), 'problem.name');
+  assert.equal(productProblem({ ...filled, categoryId: '' }, '', { requireCategory: true }), 'problem.category');
+  assert.equal(productProblem({ ...filled, price: '0' }, '', { requireCategory: true }), 'problem.price');
+  assert.equal(productProblem({ ...filled, price: 'abc' }, '', { requireCategory: true }), 'problem.price');
+  assert.equal(productProblem({ ...filled, unit: 'other' }, ' ', { requireCategory: true }), 'problem.customUnit');
   assert.equal(productProblem({ ...filled, unit: 'other' }, 'per tray', { requireCategory: true }), null);
+});
+
+test('a price before discount must be above the price, and every size needs a name', () => {
+  assert.equal(
+    productProblem({ ...filled, originalPrice: '400' }, '', { requireCategory: true }),
+    'problem.originalPrice'
+  );
+  assert.equal(productProblem({ ...filled, originalPrice: '450' }, '', { requireCategory: true }) !== null, true);
+  assert.equal(productProblem({ ...filled, originalPrice: '500' }, '', { requireCategory: true }), null);
+  const problems = productProblems({ ...filled, name: '' }, '', { requireCategory: true, variants: [{ name: 'Small' }, { name: ' ' }] });
+  assert.deepEqual(Object.keys(problems), ['product-name-input', 'variant-1-name']);
+});
+
+test('a stock of 0 (sold out) is kept, and only an empty box falls back to 50', () => {
+  assert.equal(productPayload({ ...filled, stockQuantity: '0' }, '', [], 'edit').stockQuantity, 0);
+  assert.equal(productPayload({ ...filled, stockQuantity: '' }, '', [], 'create').stockQuantity, 50);
+  assert.equal(productPayload({ ...filled, stockQuantity: '12' }, '', [], 'create').stockQuantity, 12);
+  assert.equal(formFromProduct({ name: 'Naan', price: 40, stockQuantity: 0 }).form.stockQuantity, '0');
+  assert.equal(formFromProduct({ name: 'Naan', price: 40 }).form.stockQuantity, '50');
+  assert.equal(productProblem({ ...filled, stockQuantity: '-2' }, '', { requireCategory: true }), 'problem.stock');
 });
 
 test('an old dish saved without a category can still be edited', () => {

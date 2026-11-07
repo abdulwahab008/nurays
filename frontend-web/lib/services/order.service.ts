@@ -15,11 +15,13 @@ export interface CreateOrderRequest {
   paymentMethod: 'jazzcash' | 'easypaisa' | 'card' | 'safepay' | 'bank' | 'cod' | 'wallet';
   promotionCode?: string;
   deliveryInstructions?: string;
+  /** The total the checkout showed; the server refuses the order (PRICE_CHANGED) when it would charge another amount. */
+  expectedTotal?: number;
 }
 
 /**
  * A dish of an order, as the API sends it to the customer who placed it. The list sends only the first three dishes and
- * the fields up to `status`; the order's own page sends all of them, with the kitchen and the dish.
+ * the fields up to `status`, plus the kitchen's name; the order's own page sends all of them, with the kitchen and the dish.
  */
 export interface OrderItem {
   id: string;
@@ -32,7 +34,18 @@ export interface OrderItem {
   unitPrice?: number | string;
   totalPrice?: number | string;
   status: string;
-  seller?: { id?: string; businessName?: string; businessNameUrdu?: string | null } | null;
+  /** How the dish was stocked when ordered: 'hub' for frozen stock from a hub, 'direct' from the kitchen. On the order's own page. */
+  fulfillmentType?: string | null;
+  hubId?: string | null;
+  seller?: {
+    id?: string;
+    businessName?: string;
+    businessNameUrdu?: string | null;
+    /** On the order's own page, for a self-pickup order only: where to collect it, and the kitchen's number while it is open. */
+    pickupAddress?: string | null;
+    pickupLandmark?: string | null;
+    pickupPhone?: string | null;
+  } | null;
   product?: { id?: string; name?: string; slug?: string; images?: Array<{ imageUrl: string }> } | null;
 }
 
@@ -45,6 +58,8 @@ export interface Order {
   /** The status under its older name: a live update sets both, and old data may carry only this one. */
   status?: string;
   paymentStatus: string;
+  paymentMethod?: string | null;
+  deliveryType?: string | null;
   createdAt: string;
   estimatedDeliveryAt?: string | null;
   /** How many dishes the order has; `items` holds only the first three in the list. */
@@ -159,11 +174,11 @@ export const orderService = {
    * key again (a retry after a timeout) returns the order already placed instead of
    * creating a second one.
    */
-  createOrder: async (data: CreateOrderRequest, idempotencyKey?: string) => {
+  createOrder: async (data: CreateOrderRequest, idempotencyKey: string) => {
     const response = await apiClient.post<ApiResponse<{ order: PlacedOrder; payment?: { gateway: string; status: string } }>>(
       '/orders',
       data,
-      idempotencyKey ? { headers: { 'Idempotency-Key': idempotencyKey } } : undefined
+      { headers: { 'Idempotency-Key': idempotencyKey } }
     );
     return response.data;
   },

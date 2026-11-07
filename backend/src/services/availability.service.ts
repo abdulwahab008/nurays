@@ -175,7 +175,7 @@ export function computeSellerAvailability(seller: SellerAvailabilityInput, now: 
       opensAt: null,
       closesAt: null,
       nextOpenAt: null,
-      reason: 'Seller account is not active',
+      reason: 'This kitchen is not taking orders',
       isManualOverride: false,
     };
   }
@@ -199,6 +199,22 @@ export function computeSellerAvailability(seller: SellerAvailabilityInput, now: 
 
   return computeFromSchedule(seller, now);
 }
+
+/** Why a kitchen refuses a new order, as a code a client can put in the customer's language. */
+export type NotAcceptingCode = 'KITCHEN_CLOSED' | 'KITCHEN_PREORDER_ONLY' | 'KITCHEN_ORDER_CUTOFF' | 'KITCHEN_DAILY_LIMIT';
+
+export type AcceptingResult =
+  | { accepting: true; reason: null; code: null; nextOpenAt: null }
+  | { accepting: false; reason: string; code: NotAcceptingCode; nextOpenAt: Date | null };
+
+const CLOSED_REASON: Record<AvailabilityStatus, string> = {
+  open: 'This kitchen is open',
+  closed: 'This kitchen is closed right now',
+  busy: 'This kitchen is too busy for new orders right now',
+  vacation: 'This kitchen is on a break',
+  holiday: 'This kitchen is closed for a holiday',
+  preorder_only: 'This kitchen only takes pre-orders for a later delivery day',
+};
 
 /** Is this deliverySlotDate a real calendar day after today (PKT)? */
 function isGenuineFutureDate(deliverySlotDate: string | undefined, now: Date): boolean {
@@ -226,7 +242,7 @@ export async function isAcceptingOrders(
   },
   now: Date = new Date(),
   deliverySlotDate?: string
-): Promise<{ accepting: boolean; reason: string | null }> {
+): Promise<AcceptingResult> {
   const availability = computeSellerAvailability(seller, now);
   // A seller that's pre-order-only — via the standing preOrderOnly flag, or a
   // temporary 'preorder_only' override — never accepts an IMMEDIATE order,
@@ -240,20 +256,30 @@ export async function isAcceptingOrders(
   if (isPreorderCapable && !isGenuineFutureDate(deliverySlotDate, now)) {
     return {
       accepting: false,
-      reason: availability.isOpen
-        ? 'This kitchen only accepts pre-orders for a future delivery date'
-        : availability.reason || `Seller is currently ${availability.status.replace('_', ' ')}`,
+      reason: 'This kitchen only takes pre-orders for a later delivery day',
+      code: 'KITCHEN_PREORDER_ONLY',
+      nextOpenAt: availability.nextOpenAt,
     };
   }
 
   if (!availability.isOpen && !isPreorderCapable) {
-    return { accepting: false, reason: availability.reason || `Seller is currently ${availability.status.replace('_', ' ')}` };
+    return {
+      accepting: false,
+      reason: availability.reason || CLOSED_REASON[availability.status],
+      code: 'KITCHEN_CLOSED',
+      nextOpenAt: availability.nextOpenAt,
+    };
   }
 
   if (seller.orderCutoffTime) {
     const { minutesSinceMidnight } = pktParts(now);
     if (minutesSinceMidnight >= parseHHMM(seller.orderCutoffTime)) {
-      return { accepting: false, reason: `Today's orders are closed after ${seller.orderCutoffTime}` };
+      return {
+        accepting: false,
+        reason: `This kitchen stops taking today's orders at ${seller.orderCutoffTime}`,
+        code: 'KITCHEN_ORDER_CUTOFF',
+        nextOpenAt: availability.nextOpenAt,
+      };
     }
   }
 
@@ -271,11 +297,16 @@ export async function isAcceptingOrders(
       },
     });
     if (todaysOrderCount >= seller.maxDailyOrders) {
-      return { accepting: false, reason: `This kitchen has reached its ${seller.maxDailyOrders}-order daily limit` };
+      return {
+        accepting: false,
+        reason: `This kitchen has reached its ${seller.maxDailyOrders}-order daily limit`,
+        code: 'KITCHEN_DAILY_LIMIT',
+        nextOpenAt: availability.nextOpenAt,
+      };
     }
   }
 
-  return { accepting: true, reason: null };
+  return { accepting: true, reason: null, code: null, nextOpenAt: null };
 }
 
 /** Validate a requested delivery slot date against pre-order/advance-booking rules. */

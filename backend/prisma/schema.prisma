@@ -188,6 +188,11 @@ model Seller {
   freeDeliveryRadiusKm Float?   @map("free_delivery_radius_km") // Free delivery within this many km from business location (e.g. 4 = 4 km radius)
   latitude            Decimal?  @db.Decimal(10, 8) // Seller business location for distance-based delivery
   longitude         Decimal?  @db.Decimal(11, 8)
+  // Where a rider collects the food: the street address, a landmark to find the door, and a number
+  // to call on arrival. The map pin is latitude/longitude above. Null on kitchens that never set them.
+  pickupAddress     String?   @map("pickup_address")
+  pickupLandmark    String?   @map("pickup_landmark")
+  pickupPhone       String?   @map("pickup_phone")
   deliveryFeeType   String?   @map("delivery_fee_type") // 'fixed' | 'distance' - how to charge when address is outside free areas
   deliveryFeeFixed  Int?      @map("delivery_fee_fixed") // PKR when outside free areas (e.g. 200-300)
   deliveryFeeBase   Int?      @map("delivery_fee_base") // PKR base fee when distance-based

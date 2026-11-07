@@ -5,6 +5,8 @@ import { searchTerm } from '../utils/search';
 import { pageArgs } from '../utils/pagination';
 import { onMenuWhere } from '../utils/menu';
 import { computeSellerAvailability } from './availability.service';
+import { computeCustomerFacingSellerInfo } from './product.service';
+import { SELLER_COMMUNITY_DELIVERY_SELECT } from '../utils/sellerDeliverySelect';
 
 /** The query a visitor's browsing of kitchens may carry: whatever the address bar had, so each value is checked before use. */
 export interface PublicSellerFilters {
@@ -14,6 +16,16 @@ export interface PublicSellerFilters {
   search?: unknown;
   limit?: unknown;
   sort?: unknown;
+  /** Where the visitor is (their chosen area and/or saved address): with either, each kitchen carries its delivery fee and time. */
+  customerCommunityId?: unknown;
+  customerLat?: unknown;
+  customerLng?: unknown;
+}
+
+function coordinate(value: unknown, limit: number): number | null {
+  if (value == null || value === '') return null;
+  const n = Number(value);
+  return Number.isFinite(n) && Math.abs(n) <= limit ? n : null;
 }
 
 /**
@@ -22,6 +34,10 @@ export interface PublicSellerFilters {
  */
 export async function listPublicSellers(filters: PublicSellerFilters) {
   const { communityId, city, businessType, search, limit, sort } = filters;
+  const customerCommunityId = typeof filters.customerCommunityId === 'string' && filters.customerCommunityId ? filters.customerCommunityId : null;
+  const customerLat = coordinate(filters.customerLat, 90);
+  const customerLng = coordinate(filters.customerLng, 180);
+  const quoteDelivery = customerCommunityId != null || (customerLat != null && customerLng != null);
 
   const whereClause: Prisma.SellerWhereInput = {
     isVerified: true,
@@ -86,8 +102,10 @@ export async function listPublicSellers(filters: PublicSellerFilters) {
           slug: true,
           city: true,
           deliveryBaseFee: true,
+          crossCommunityEnabled: true,
         },
       },
+      communityDeliveries: SELLER_COMMUNITY_DELIVERY_SELECT.communityDeliveries,
       products: {
         where: { isActive: true, approvalStatus: 'approved', ...onMenuWhere() },
         take: 4,
@@ -106,14 +124,42 @@ export async function listPublicSellers(filters: PublicSellerFilters) {
           },
         },
       },
-      _count: {
-        select: {
-          products: { where: { isActive: true, approvalStatus: 'approved', ...onMenuWhere() } },
-          reviews: { where: { isApproved: true } },
-        },
-      },
     },
   });
+
+  // Scoped to the kitchens on the page: a relation _count aggregates the whole products and reviews tables first.
+  const sellerIds = sellers.map((s) => s.id);
+  const unreviewedIds = sellers.filter((s) => !s.totalReviews).map((s) => s.id);
+  const [productRows, reviewRows] = await Promise.all([
+    sellerIds.length === 0 ? [] : prisma.product.groupBy({
+      by: ['sellerId'],
+      where: { sellerId: { in: sellerIds }, isActive: true, approvalStatus: 'approved', ...onMenuWhere() },
+      _count: { _all: true },
+    }),
+    unreviewedIds.length === 0 ? [] : prisma.review.groupBy({
+      by: ['sellerId'],
+      where: { sellerId: { in: unreviewedIds }, isApproved: true },
+      _count: { _all: true },
+    }),
+  ]);
+  const productCounts = new Map(productRows.map((r) => [r.sellerId, r._count._all]));
+  const reviewCounts = new Map(reviewRows.map((r) => [r.sellerId, r._count._all]));
+
+  // The same fee and time the dish cards show, worked out once per kitchen; only when the visitor's area or address is known.
+  const deliveryById = new Map<string, Awaited<ReturnType<typeof computeCustomerFacingSellerInfo>>['delivery']>();
+  if (quoteDelivery) {
+    await Promise.all(
+      sellers.map(async (s) => {
+        const info = await computeCustomerFacingSellerInfo(
+          { ...s, minPrepTimeMinutes: s.minPrepTimeMinutes ?? null },
+          customerLat,
+          customerLng,
+          customerCommunityId
+        );
+        deliveryById.set(s.id, info.delivery);
+      })
+    );
+  }
 
   const formatted = sellers.map((s) => ({
     id: s.id,
@@ -123,7 +169,7 @@ export async function listPublicSellers(filters: PublicSellerFilters) {
     coverImageUrl: s.coverImageUrl,
     // Real rating only: 0 with no reviews (the UI shows "New"), never a made-up 4.8.
     ratingAverage: Number(s.ratingAverage) || 0,
-    totalReviews: s.totalReviews || s._count.reviews || 0,
+    totalReviews: s.totalReviews || reviewCounts.get(s.id) || 0,
     trendScore: Math.round(s.trendScore * 100) / 100,
     // null when the kitchen hasn't set one: the UI shows nothing rather than a guess.
     minPrepTimeMinutes: s.minPrepTimeMinutes ?? null,
@@ -136,6 +182,7 @@ export async function listPublicSellers(filters: PublicSellerFilters) {
     mealCategories: s.mealCategories,
     allowCrossCommunity: s.allowCrossCommunity,
     community: s.community,
+    delivery: deliveryById.get(s.id) ?? null,
     availability: computeSellerAvailability({
       status: s.status,
       scheduleMode: s.scheduleMode,
@@ -159,7 +206,7 @@ export async function listPublicSellers(filters: PublicSellerFilters) {
       images: p.images.map((img) => img.imageUrl),
       preparationTime: p.preparationTime,
     })),
-    productCount: s._count.products,
+    productCount: productCounts.get(s.id) ?? 0,
   }));
 
   return formatted;

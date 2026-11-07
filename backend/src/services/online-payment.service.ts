@@ -7,7 +7,7 @@ import { creditWallet } from './wallet.service';
 import realtimeOrderService from './realtime-order.service';
 import { notify, notifyMany } from './notify.service';
 import { ONLINE_GATEWAY_METHODS, PAYABLE_STATUSES } from '../utils/paymentCustody';
-import { logger } from '../utils/logger';
+import { logEvent, logger } from '../utils/logger';
 import { reportError } from '../config/sentry';
 import { roundMoney } from '../utils/pricing';
 
@@ -115,10 +115,13 @@ export interface SettleResult {
  *  - wallet top-up: the wallet is credited.
  */
 export async function settleAttempt(tracker: string, via: 'return' | 'webhook', reference?: string | null): Promise<SettleResult> {
+  // For the event log line only: the attempt id stands in for the gateway's tracker.
+  let settledAttempt = undefined as { id: string; amount: number } | undefined;
   const result = await prisma.$transaction(async (tx) => {
     const locked = await tx.$queryRaw<Array<{ id: string }>>`SELECT id FROM payment_attempts WHERE tracker = ${tracker} FOR UPDATE`;
     if (locked.length === 0) return { outcome: 'unknown' as const };
     const attempt = await tx.paymentAttempt.findUniqueOrThrow({ where: { id: locked[0].id } });
+    settledAttempt = { id: attempt.id, amount: Number(attempt.amount) };
     const purpose = attempt.purpose as 'order' | 'wallet_topup';
     if (['paid', 'duplicate'].includes(attempt.status)) return { outcome: 'already_settled' as const, purpose, orderId: attempt.orderId };
 
@@ -207,6 +210,19 @@ export async function settleAttempt(tracker: string, via: 'return' | 'webhook', 
     }
     return { outcome: 'paid' as const, purpose, orderId: order.id };
   });
+
+  if (result.outcome !== 'unknown') {
+    logEvent(
+      result.outcome === 'paid' ? 'payment.succeeded' : result.outcome === 'duplicate' ? 'payment.duplicate_credited' : 'payment.duplicate_ignored',
+      {
+        attemptId: settledAttempt?.id,
+        orderId: result.orderId,
+        purpose: result.purpose,
+        via,
+        amountMinor: settledAttempt ? Math.round(settledAttempt.amount * 100) : undefined,
+      }
+    );
+  }
 
   // After commit: tell the order's parties (never fails the settlement).
   if (result.purpose === 'order' && result.orderId && result.outcome !== 'already_settled') {

@@ -10,7 +10,8 @@ jest.mock('../src/config/database', () => ({
 }));
 jest.mock('../src/config/socket', () => ({
   __esModule: true,
-  default: { emitToRole: jest.fn(), emitToOnDutyRiders: jest.fn(), emitToRooms: jest.fn(), emitToUser: jest.fn() },
+  ON_DUTY_RIDERS_ROOM: 'riders:on-duty',
+  default: { emitToRole: jest.fn(), emitToOnDutyRiders: jest.fn(), emitToRooms: jest.fn(), emitToUser: jest.fn(), getIO: jest.fn() },
 }));
 jest.mock('../src/services/notify.service', () => ({ notify: jest.fn(), notifyMany: jest.fn() }));
 
@@ -28,7 +29,7 @@ const toRiders = () => socket.emitToOnDutyRiders.mock.calls.map((c: unknown[]) =
 describe('postDelivery', () => {
   it('says nothing to the riders when a rider takes the job at once', async () => {
     const dispatch = jest.fn().mockResolvedValue({ assigned: true, riderId: 'r1' });
-    await postDelivery('d1', 'o1', dispatch);
+    await postDelivery('d1', 'o1', { dispatch });
     expect(dispatch).toHaveBeenCalledWith('d1', { announced: false });
     expect(toRiders()).toEqual([]);
   });
@@ -36,7 +37,7 @@ describe('postDelivery', () => {
   it('announces the job to the riders on duty when nobody can take it, and to no one else', async () => {
     for (const reason of ['no_riders', 'no_eligible_rider', 'disabled', 'lost_race']) {
       socket.emitToOnDutyRiders.mockClear();
-      await postDelivery('d1', 'o1', jest.fn().mockResolvedValue({ assigned: false, reason }));
+      await postDelivery('d1', 'o1', { dispatch: jest.fn().mockResolvedValue({ assigned: false, reason }) });
       expect(toRiders()).toEqual([['delivery:new', { deliveryId: 'd1', orderId: 'o1' }]]);
     }
     // Not to every rider: one who is off duty cannot claim a job, so it would only make their dashboard reload.
@@ -44,7 +45,7 @@ describe('postDelivery', () => {
   });
 
   it('never leaves a job unannounced when the dispatcher fails', async () => {
-    await expect(postDelivery('d1', 'o1', jest.fn().mockRejectedValue(new Error('database is down')))).resolves.toBeUndefined();
+    await expect(postDelivery('d1', 'o1', { dispatch: jest.fn().mockRejectedValue(new Error('database is down')) })).resolves.toBeUndefined();
     expect(toRiders()).toEqual([['delivery:new', { deliveryId: 'd1', orderId: 'o1' }]]);
   });
 
@@ -58,6 +59,46 @@ describe('postDelivery', () => {
       else process.env.AUTO_ASSIGN_ENABLED = before;
     }
     expect(toRiders()).toEqual([['delivery:new', { deliveryId: 'd1', orderId: 'o1' }]]);
+  });
+});
+
+describe('a job a rider hands back', () => {
+  /** Records the room the event goes to, the rooms left out, and what is sent. */
+  const fakeIo = () => {
+    const sent: { to: string[]; except: string[]; event?: string; payload?: unknown } = { to: [], except: [] };
+    const chain = {
+      to: (room: string) => (sent.to.push(room), chain),
+      except: (room: string) => (sent.except.push(room), chain),
+      emit: (event: string, payload: unknown) => {
+        sent.event = event;
+        sent.payload = payload;
+      },
+    };
+    socket.getIO.mockReturnValue(chain);
+    return sent;
+  };
+
+  it('is announced to the riders on duty except every device of the rider who handed it back', async () => {
+    const sent = fakeIo();
+    await postDelivery('d1', 'o1', { releasedByUserId: 'u-rider', dispatch: jest.fn().mockResolvedValue({ assigned: false, reason: 'no_eligible_rider' }) });
+    expect(sent).toEqual({ to: ['riders:on-duty'], except: ['user:u-rider'], event: 'delivery:new', payload: { deliveryId: 'd1', orderId: 'o1' } });
+    expect(toRiders()).toEqual([]);
+  });
+
+  it('is not announced to anyone when another rider takes it at once', async () => {
+    const sent = fakeIo();
+    await postDelivery('d1', 'o1', { releasedByUserId: 'u-rider', dispatch: jest.fn().mockResolvedValue({ assigned: true, riderId: 'r2' }) });
+    expect(sent.event).toBeUndefined();
+    expect(toRiders()).toEqual([]);
+  });
+
+  it('does not fail the hand-back when realtime is not running', async () => {
+    socket.getIO.mockImplementation(() => {
+      throw new Error('Socket.io not initialized');
+    });
+    await expect(
+      postDelivery('d1', 'o1', { releasedByUserId: 'u-rider', dispatch: jest.fn().mockResolvedValue({ assigned: false }) })
+    ).resolves.toBeUndefined();
   });
 });
 

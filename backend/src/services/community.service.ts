@@ -12,16 +12,14 @@ export class CommunityService {
     const communities = await prisma.community.findMany({
       where: { isActive: true },
       orderBy: { name: 'asc' },
-      include: {
-        _count: {
-          select: {
-            sellers: {
-              where: { isVerified: true, status: 'active' },
-            },
-          },
-        },
-      },
     });
+    // Scoped to these communities: a relation _count aggregates the whole sellers table first.
+    const sellerRows = communities.length === 0 ? [] : await prisma.seller.groupBy({
+      by: ['communityId'],
+      where: { communityId: { in: communities.map((c) => c.id) }, isVerified: true, status: 'active' },
+      _count: { _all: true },
+    });
+    const sellerCounts = new Map(sellerRows.map((r) => [r.communityId, r._count._all]));
 
     return communities.map((c) => ({
       id: c.id,
@@ -36,7 +34,7 @@ export class CommunityService {
       crossCommunityEnabled: c.crossCommunityEnabled,
       deliveryBaseFee: Number(c.deliveryBaseFee),
       crossCommunityBaseFee: Number(c.crossCommunityBaseFee),
-      sellerCount: c._count.sellers,
+      sellerCount: sellerCounts.get(c.id) ?? 0,
     }));
   }
 

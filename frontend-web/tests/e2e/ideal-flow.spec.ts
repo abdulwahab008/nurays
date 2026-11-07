@@ -24,9 +24,9 @@ test.describe('Nuray Multi-Role Login Verification', () => {
   test('Customer UI login redirects to /dashboard', async ({ page }) => {
     await page.goto('/login');
     await page.getByRole('button', { name: 'Email', exact: true }).click();
-    await page.getByLabel(/Email Address/).fill(USERS.customer.email);
+    await page.getByLabel('Email', { exact: true }).fill(USERS.customer.email);
     await page.getByLabel('Password').fill(USERS.customer.pass);
-    await page.getByRole('button', { name: 'Login', exact: true }).click();
+    await page.getByRole('button', { name: 'Sign in', exact: true }).click();
 
     // Verify redirected away from /login to customer dashboard
     await expect(page).toHaveURL(/\/dashboard/, { timeout: 15_000 });
@@ -36,9 +36,9 @@ test.describe('Nuray Multi-Role Login Verification', () => {
   test('Seller (Home Chef) UI login redirects to /sellers/dashboard', async ({ page }) => {
     await page.goto('/login');
     await page.getByRole('button', { name: 'Email', exact: true }).click();
-    await page.getByLabel(/Email Address/).fill(USERS.seller.email);
+    await page.getByLabel('Email', { exact: true }).fill(USERS.seller.email);
     await page.getByLabel('Password').fill(USERS.seller.pass);
-    await page.getByRole('button', { name: 'Login', exact: true }).click();
+    await page.getByRole('button', { name: 'Sign in', exact: true }).click();
 
     // Verify redirected to seller kitchen portal
     await expect(page).toHaveURL(/\/sellers\/dashboard/, { timeout: 15_000 });
@@ -48,9 +48,9 @@ test.describe('Nuray Multi-Role Login Verification', () => {
   test('Rider UI login redirects to /riders/dashboard', async ({ page }) => {
     await page.goto('/login');
     await page.getByRole('button', { name: 'Email', exact: true }).click();
-    await page.getByLabel(/Email Address/).fill(USERS.rider.email);
+    await page.getByLabel('Email', { exact: true }).fill(USERS.rider.email);
     await page.getByLabel('Password').fill(USERS.rider.pass);
-    await page.getByRole('button', { name: 'Login', exact: true }).click();
+    await page.getByRole('button', { name: 'Sign in', exact: true }).click();
 
     // Verify redirected to rider dashboard
     await expect(page).toHaveURL(/\/riders\/dashboard/, { timeout: 15_000 });
@@ -60,9 +60,9 @@ test.describe('Nuray Multi-Role Login Verification', () => {
   test('Admin UI login redirects to /admin/dashboard', async ({ page }) => {
     await page.goto('/login');
     await page.getByRole('button', { name: 'Email', exact: true }).click();
-    await page.getByLabel(/Email Address/).fill(USERS.admin.email);
+    await page.getByLabel('Email', { exact: true }).fill(USERS.admin.email);
     await page.getByLabel('Password').fill(USERS.admin.pass);
-    await page.getByRole('button', { name: 'Login', exact: true }).click();
+    await page.getByRole('button', { name: 'Sign in', exact: true }).click();
 
     // Verify redirected to super admin dashboard
     await expect(page).toHaveURL(/\/admin\/dashboard/, { timeout: 15_000 });
@@ -91,9 +91,9 @@ test.describe('Nuray Ideal E2E Operational Flow & Doorstep Handshake', () => {
     // 3. Customer UI check: Login and view completed order
     await page.goto('/login');
     await page.getByRole('button', { name: 'Email', exact: true }).click();
-    await page.getByLabel(/Email Address/).fill(USERS.customer.email);
+    await page.getByLabel('Email', { exact: true }).fill(USERS.customer.email);
     await page.getByLabel('Password').fill(USERS.customer.pass);
-    await page.getByRole('button', { name: 'Login', exact: true }).click();
+    await page.getByRole('button', { name: 'Sign in', exact: true }).click();
     await expect(page).not.toHaveURL(/\/login/, { timeout: 15_000 });
 
     await page.goto('/orders');

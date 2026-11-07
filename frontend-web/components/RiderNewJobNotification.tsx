@@ -9,6 +9,8 @@ import { useT } from '@/lib/i18n';
 import { riderMessages } from '@/lib/i18n/messages/rider';
 import { riderService } from '@/lib/services/rider.service';
 import { useShallow } from 'zustand/react/shallow';
+import { X } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 
 interface JobPopup {
   key: string;
@@ -85,15 +87,17 @@ export function RiderNewJobNotification() {
         if (pending) clearTimeout(pending);
         show({ key: `a-${d.deliveryId}`, kind: 'assigned', ...d });
       }),
-      // Posted to the riders on duty: only worth a pop-up if nobody has taken it a moment later.
+      // Posted to the riders on duty (never to one who just handed it back): only worth a pop-up if nobody has taken it a moment later.
       subscribe('delivery:new', (d) => {
         const timer = setTimeout(async () => {
           timers.delete(d.deliveryId);
-          // Only worth a pop-up for a rider who has a free slot (the server tells only riders who are on duty).
+          // Only worth a pop-up for a rider who has a free slot and could take this job (not past their cash limit).
           try {
-            const mine = await riderService.getMyDeliveries({ history: 0 }); // only the running jobs are counted
+            const [mine, pool] = await Promise.all([riderService.getMyDeliveries({ history: 0 }), riderService.getAvailableDeliveries()]);
             const active = (mine.data ?? []).filter((x) => !['delivered', 'delivery_failed', 'cancelled'].includes(x.status)).length;
             if (active >= 2) return;
+            const job = (pool.data ?? []).find((x) => x.id === d.deliveryId);
+            if (!job || job.exceedsCashLimit) return;
           } catch {
             return;
           }
@@ -118,36 +122,58 @@ export function RiderNewJobNotification() {
   if (!isRider || popups.length === 0) return null;
 
   return (
-    <div className="fixed top-[calc(1rem+var(--safe-top))] end-[calc(1rem+var(--safe-end))] z-[100] w-[min(92vw,380px)] space-y-3" data-testid="rider-job-popups">
+    <div className="fixed z-[100] space-y-3 max-sm:inset-x-3 max-sm:top-[calc(var(--header-offset)+0.5rem)] sm:top-[calc(1rem+var(--safe-top))] sm:end-[calc(1rem+var(--safe-end))] sm:w-[380px]" data-testid="rider-job-popups">
       {popups.map((p) => (
-        <div key={p.key} role="alert" className="rounded-2xl bg-slate-900 text-white shadow-2xl border border-emerald-400/40 p-4" data-testid={p.kind === 'assigned' ? 'rider-assigned-popup' : 'rider-pool-popup'}>
+        <div key={p.key} role="alert" className="rounded-[20px] bg-surface border border-line-strong shadow-[var(--shadow-card)] max-sm:shadow-2xl p-4" data-testid={p.kind === 'assigned' ? 'rider-assigned-popup' : 'rider-pool-popup'}>
           <div className="flex items-start justify-between gap-3">
-            <p className="font-black text-sm">{p.kind === 'assigned' ? t('popupAssignedTitle') : t('popupPoolTitle')}</p>
-            <button onClick={() => dismiss(p.key)} aria-label={t('popupDismiss')} className="text-slate-300 hover:text-white text-lg leading-none">×</button>
+            <div className="min-w-0 pt-2.5">
+              <p className="text-[15px] font-semibold text-ink leading-snug">{p.kind === 'assigned' ? t('popupAssignedTitle') : t('popupPoolTitle')}</p>
+              {p.kind === 'assigned' && <p className="text-sm text-muted">{t('orderNo', { number: p.orderNumber ?? '' })}</p>}
+            </div>
+            <button
+              type="button"
+              onClick={() => dismiss(p.key)}
+              aria-label={t('popupDismiss')}
+              className="-me-2 -mt-1 w-11 h-11 shrink-0 flex items-center justify-center rounded-full text-muted hover:text-ink hover:bg-raised focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-brand/40"
+            >
+              <X className="w-5 h-5" aria-hidden="true" />
+            </button>
           </div>
           {p.kind === 'assigned' ? (
-            <div className="mt-2 text-xs space-y-1 text-slate-200">
-              <p className="font-bold text-white">{t('orderNo', { number: p.orderNumber ?? '' })}</p>
-              <p>🏪 {p.pickupAddress}</p>
-              <p>📍 {p.deliveryAddress}</p>
-              <p className="flex flex-wrap gap-3 pt-1">
-                {!!p.cashToCollect && <span className="text-amber-300 font-bold">{t('popupCollect', { amount: formatPrice(p.cashToCollect) })}</span>}
-                {p.riderFee != null && <span className="text-emerald-300 font-bold">{t('popupEarn', { amount: formatPrice(p.riderFee) })}</span>}
-              </p>
-              {(p.activeJobs ?? 0) > 1 && <p className="text-blue-200">{t('popupJobsNow', { count: p.activeJobs ?? 0 })}</p>}
+            <div className="mt-3 space-y-2">
+              <dl className="space-y-2 text-sm">
+                <div>
+                  <dt className="text-muted">{t('pickupKitchen')}</dt>
+                  <dd className="text-ink leading-snug">{p.pickupAddress}</dd>
+                </div>
+                <div>
+                  <dt className="text-muted">{t('dropoffCustomer')}</dt>
+                  <dd className="text-ink leading-snug">{p.deliveryAddress}</dd>
+                </div>
+              </dl>
+              {(!!p.cashToCollect || p.riderFee != null) && (
+                <div className="flex flex-wrap items-center gap-2 pt-1 text-sm">
+                  {!!p.cashToCollect && (
+                    <span className="rounded-full bg-accent-soft text-accent-soft-ink px-2.5 py-0.5 font-medium tabular-nums">{t('popupCollect', { amount: formatPrice(p.cashToCollect) })}</span>
+                  )}
+                  {p.riderFee != null && <span className="text-ink font-medium tabular-nums">{t('popupEarn', { amount: formatPrice(p.riderFee) })}</span>}
+                </div>
+              )}
+              {(p.activeJobs ?? 0) > 1 && <p className="text-sm text-muted">{t('popupJobsNow', { count: p.activeJobs ?? 0 })}</p>}
             </div>
           ) : (
-            <p className="mt-2 text-xs text-slate-200">{t('popupPoolBody')}</p>
+            <p className="mt-2 text-sm text-muted">{t('popupPoolBody')}</p>
           )}
-          <button
+          <Button
+            type="button"
             onClick={() => {
               dismiss(p.key);
               router.push(p.kind === 'assigned' ? '/riders/dashboard#active' : '/riders/dashboard#available');
             }}
-            className="mt-3 w-full rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black py-2"
+            className="mt-4 w-full"
           >
             {p.kind === 'assigned' ? t('popupViewRuns') : t('popupViewPool')}
-          </button>
+          </Button>
         </div>
       ))}
     </div>

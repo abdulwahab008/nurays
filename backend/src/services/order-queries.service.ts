@@ -6,6 +6,7 @@ import { AppError } from '../middleware/errorHandler';
 import { presentFile } from '../storage';
 import { haversineKm } from '../utils/deliveryFee';
 import { addressAsOrdered } from '../utils/addressSnapshot';
+import { realPhoneOrNull } from '../utils/otp';
 import sellerOrderService from './seller-order.service';
 
 // Once the food has left the kitchen, the customer can see where the rider is.
@@ -57,14 +58,19 @@ function presentDelivery<
     rider: Record<string, unknown> | null;
     releasedRiderIds?: unknown;
   },
->(delivery: D, viewer: { canSeePay: boolean; canSeeLocation: boolean; canSeeInternal: boolean; riderFirstName: string | null }) {
+>(
+  delivery: D,
+  viewer: { canSeePay: boolean; canSeeLocation: boolean; canSeeInternal: boolean; riderFirstName: string | null; riderPhone: string | null },
+) {
   // The riders who handed the job back are dispatch's business (it skips them); only staff see who they were.
   const { riderFee, riderBonus, riderLatitude, riderLongitude, riderLocationAt, releasedRiderIds, ...rest } = delivery;
   const live = viewer.canSeeLocation && ON_THE_WAY_STATUSES.includes(delivery.status) && riderLatitude != null && riderLongitude != null;
   const doorKnown = delivery.deliveryLatitude != null && delivery.deliveryLongitude != null;
+  // The rider's number, like the customer's on the rider's side, is shared only while the rider holds the job.
+  const riderPhone = ACTIVE_DELIVERY_STATUSES.includes(delivery.status) ? viewer.riderPhone : null;
   return {
     ...rest,
-    rider: delivery.rider ? { ...delivery.rider, name: viewer.riderFirstName } : null,
+    rider: delivery.rider ? { ...delivery.rider, name: viewer.riderFirstName, phone: riderPhone } : null,
     ...(viewer.canSeeInternal ? { releasedRiderIds } : {}),
     ...(viewer.canSeePay ? { riderFee: riderFee != null ? Number(riderFee) : null, riderBonus: riderBonus != null ? Number(riderBonus) : null } : {}),
     riderLocation: live
@@ -119,11 +125,7 @@ export class OrderQueries {
               productImage: true,
               quantity: true,
               status: true,
-            },
-          },
-          _count: {
-            select: {
-              items: true,
+              seller: { select: { id: true, businessName: true, businessNameUrdu: true } },
             },
           },
         },
@@ -151,9 +153,11 @@ export class OrderQueries {
           totalAmount: Number(order.totalAmount),
           orderStatus: effectiveOrderStatus,
           paymentStatus: order.paymentStatus,
+          paymentMethod: order.paymentMethod,
+          deliveryType: order.deliveryType,
           createdAt: order.createdAt,
           estimatedDeliveryAt: order.estimatedDeliveryAt,
-          itemsCount: order._count.items,
+          itemsCount: order.items.length,
           items: order.items.slice(0, 3),
         };
       }),
@@ -217,10 +221,16 @@ export class OrderQueries {
                 id: true,
                 businessName: true,
                 businessNameUrdu: true,
+                pickupAddress: true,
+                pickupLandmark: true,
+                pickupPhone: true,
+                user: { select: { phone: true } },
               },
             },
           },
         },
+        // Only the viewer's own reviews: whether the customer has rated this order already.
+        reviews: { where: { customerId: userId }, select: { id: true, orderItemId: true } },
         deliveryAddress: true,
         hub: {
           select: {
@@ -272,9 +282,10 @@ export class OrderQueries {
     const riderUserId = order.delivery?.riderId
       ? (await prisma.rider.findUnique({ where: { id: order.delivery.riderId }, select: { userId: true } }))?.userId
       : null;
-    const riderFullName = riderUserId
-      ? (await prisma.userProfile.findUnique({ where: { userId: riderUserId }, select: { fullName: true } }))?.fullName
+    const riderUser = riderUserId
+      ? await prisma.user.findUnique({ where: { id: riderUserId }, select: { phone: true, profile: { select: { fullName: true } } } })
       : null;
+    const riderFullName = riderUser?.profile?.fullName;
 
     // A rider delivering the order needs the food, the door, the amount to collect and how it is
     // paid; not the customer's bank details, receipt, the kitchen's fee breakdown or internal keys.
@@ -287,6 +298,7 @@ export class OrderQueries {
           canSeeLocation: isAdmin || isOrderRider || order.customerId === userId,
           canSeeInternal: isAdmin,
           riderFirstName: riderFullName?.trim().split(/\s+/)[0] || null,
+          riderPhone: isAdmin || order.customerId === userId ? realPhoneOrNull(riderUser?.phone) : null,
         })
       : null;
     // The delivery row carries the door too: a rider whose job is over keeps the area only.
@@ -300,8 +312,25 @@ export class OrderQueries {
           }
         : presentedDelivery;
 
+    // Where a self-pickup order is collected. The kitchen's number goes to the customer only while the order is open.
+    const isPickup = order.deliveryType === 'self_pickup';
+    const orderOpen = !['delivered', 'completed', 'cancelled', 'refunded'].includes(order.orderStatus);
+    const items = forViewer.items.map((item) => {
+      const { pickupAddress, pickupLandmark, pickupPhone, user: sellerUser, ...seller } = item.seller;
+      return {
+        ...item,
+        seller: {
+          ...seller,
+          pickupAddress: isPickup ? pickupAddress : null,
+          pickupLandmark: isPickup ? pickupLandmark : null,
+          pickupPhone: isPickup && orderOpen && !riderOnly ? realPhoneOrNull(pickupPhone ?? sellerUser?.phone) : null,
+        },
+      };
+    });
+
     return {
       ...forViewer,
+      items,
       // The door as the order was placed (utils/addressSnapshot.ts), whatever has happened to the saved address since: edited, it
       // must not say the order is going somewhere else, and deleted, the order must still say where it went. A rider's copy was
       // settled above.

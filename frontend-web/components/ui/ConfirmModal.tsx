@@ -13,6 +13,8 @@ interface ConfirmModalProps {
   confirmText?: string;
   cancelText?: string;
   variant?: 'danger' | 'warning' | 'info';
+  /** The picture beside the title; by default a bin for `danger` and a warning sign otherwise. A danger that deletes nothing (handing a job back) takes `warning`. */
+  icon?: 'delete' | 'warning';
   loading?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
@@ -25,6 +27,7 @@ export function ConfirmModal({
   confirmText,
   cancelText,
   variant = 'danger',
+  icon,
   loading = false,
   onConfirm,
   onCancel,
@@ -46,78 +49,62 @@ export function ConfirmModal({
   if (!isOpen) return null;
 
   const isDanger = variant === 'danger';
+  const Icon = (icon ?? (isDanger ? 'delete' : 'warning')) === 'delete' ? Trash2 : AlertTriangle;
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs transition-opacity duration-200"
+      className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-ink/40"
       onClick={() => {
         if (!loading) onCancel();
       }}
     >
       <div
-        className="w-full max-w-md bg-white rounded-3xl p-6 sm:p-7 shadow-2xl border border-slate-100 transform transition-all duration-200 scale-100"
+        className="w-full sm:max-w-md bg-surface rounded-t-2xl sm:rounded-2xl p-5 sm:p-6 pb-[calc(1.25rem+var(--safe-bottom))] sm:pb-6 shadow-[var(--shadow-hover)]"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
         aria-labelledby="confirm-dialog-title"
+        aria-describedby="confirm-dialog-message"
       >
-        <div className="flex items-start justify-between gap-4 mb-4">
-          <div className="flex items-center gap-3">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-center gap-3 min-w-0">
             <div
-              className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 ${
-                isDanger
-                  ? 'bg-rose-50 text-rose-600 border border-rose-100'
-                  : 'bg-amber-50 text-amber-600 border border-amber-100'
+              aria-hidden="true"
+              className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${
+                isDanger ? 'bg-red-50 text-red-700' : 'bg-accent-soft text-accent-soft-ink'
               }`}
             >
-              {isDanger ? <Trash2 className="w-5 h-5 stroke-[2.2]" /> : <AlertTriangle className="w-5 h-5 stroke-[2.2]" />}
+              <Icon className="w-5 h-5" />
             </div>
-            <div>
-              <h3 id="confirm-dialog-title" className="text-base font-bold text-slate-900 tracking-tight">
-                {title}
-              </h3>
-            </div>
+            <h3 id="confirm-dialog-title" className="text-lg font-semibold text-ink leading-snug">
+              {title}
+            </h3>
           </div>
           <button
             type="button"
             disabled={loading}
             onClick={onCancel}
-            className="w-8 h-8 rounded-full text-slate-500 hover:text-slate-600 hover:bg-slate-100 flex items-center justify-center transition-colors disabled:opacity-50 cursor-pointer"
+            className="w-11 h-11 -me-2 -mt-1 rounded-full text-muted hover:text-ink hover:bg-raised flex items-center justify-center transition-colors disabled:opacity-50 shrink-0"
             aria-label={t('close')}
           >
-            <X className="w-4 h-4" />
+            <X className="w-5 h-5" aria-hidden="true" />
           </button>
         </div>
 
-        <p className="text-xs text-slate-600 leading-relaxed mb-6 ps-14">{message}</p>
+        <p id="confirm-dialog-message" className="text-sm text-muted leading-relaxed mt-3">{message}</p>
 
-        <div className="flex items-center justify-end gap-3 pt-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={loading}
-            onClick={onCancel}
-            className="rounded-xl px-4 text-xs font-semibold text-slate-700 hover:bg-slate-100 cursor-pointer"
-          >
+        <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 mt-6">
+          {/* Focus starts on the safe answer, so Enter on a phone keyboard never confirms by accident. */}
+          <Button type="button" variant="outline" disabled={loading} onClick={onCancel} autoFocus>
             {cancelText ?? t('cancel')}
           </Button>
-          <Button
-            type="button"
-            size="sm"
-            disabled={loading}
-            onClick={onConfirm}
-            className={`rounded-xl px-5 text-xs font-bold text-white transition-all cursor-pointer ${
-              isDanger
-                ? 'bg-rose-600 hover:bg-rose-700 shadow-xs'
-                : 'bg-brand hover:bg-brand-500 shadow-xs'
-            }`}
-          >
+          {/* Words on turquoise are dark (text-on-brand, from the default variant); white only on the red. */}
+          <Button type="button" variant={isDanger ? 'destructive' : 'default'} disabled={loading} onClick={onConfirm} className="sm:min-w-28">
             {loading ? (
-              <div className="flex items-center gap-1.5">
-                <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                <span>{t('clearing')}</span>
-              </div>
+              <span className="flex items-center gap-2">
+                <span aria-hidden="true" className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                <span>{t('working')}</span>
+              </span>
             ) : (
               confirmText ?? t('confirm')
             )}

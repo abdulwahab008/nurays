@@ -10,6 +10,7 @@ Code: `backend/src/config/socket.ts` (server), `backend/src/services/realtime-or
 
 - Socket.IO runs on the same HTTP server as the API (`socketManager.initialize(httpServer)` in `backend/src/index.ts`), at the default `/socket.io` path, not under `/api/v1`.
 - Transports: `websocket` and `polling`. CORS origin is `CORS_ORIGIN` (default `http://localhost:3000`), with credentials.
+- A client frame larger than 16 KiB closes that connection (`maxHttpBufferSize`): clients only send short events (an order id).
 - **Redis adapter.** When `REDIS_URL` is set, `@socket.io/redis-adapter` is attached (two dedicated connections, `socket-pub` and `socket-sub`). An event emitted on any app instance then reaches clients connected to every instance, and `socketsLeave` applies everywhere. Without Redis only the local instance is reached, which is fine for one process. Production requires `REDIS_URL` (`backend/src/config/env.ts`).
 - On shutdown the server closes all sockets; clients reconnect to another instance.
 
@@ -19,7 +20,9 @@ The client sends the **access token** either as `auth: { token }` in the handsha
 
 - there is no token, or it is invalid, expired, or a refresh token;
 - the user no longer exists or is not `active`;
-- the token was revoked (issued before the user's `tokensValidAfter`).
+- the token was revoked (issued before the user's `tokensValidAfter`), or its session was signed out.
+
+If the database or the session store fails while a valid token is being checked, the handshake is refused with `Server unavailable: retry later` and `data: { retryable: true }`, so the client knows to try again (see "Frontend") rather than treat it as a bad token.
 
 The user's role is read fresh from the database, not from the token, so a role change takes effect on the next connection. A socket is not re-checked after connecting: the token is only verified once. The frontend reconnects with the new token whenever it changes.
 
@@ -48,7 +51,7 @@ When someone stops being a party to an order (a rider unassigned by an admin ret
 | `join:order` | `orderId` (string, up to 64 chars) | joins `order:<orderId>` if the user is a party to it; otherwise nothing happens (no ack, no error, a warning in the server log) |
 | `leave:order` | `orderId` (string, up to 64 chars) | leaves the room |
 
-A user can send 120 events a minute (`SOCKET_EVENTS_PER_MINUTE`), counted over all their connections on an instance; the rest are dropped without an answer and logged once. An event whose argument is not such a string is ignored. An exception inside a handler is logged and never thrown, because one that escaped would shut the whole server down. There are no other client-to-server events. The rider's position is sent over HTTP (`POST /riders/deliveries/:id/location`), not over the socket.
+A user can send 120 events a minute (`SOCKET_EVENTS_PER_MINUTE`), counted over all their connections on an instance; the rest are dropped without an answer and logged once. An event whose argument is not such a string is ignored. An exception inside a handler is logged and never thrown, because one that escaped would shut the whole server down. Each event runs under its own log id (`requestId: "socket:<uuid>"`), so its log lines can be found together. There are no other client-to-server events. The rider's position is sent over HTTP (`POST /riders/deliveries/:id/location`), not over the socket.
 
 Room membership is lost when a connection drops, so clients must re-send `join:order` after every reconnect (the frontend does).
 
@@ -66,7 +69,7 @@ Order events go through `emitToRooms`, which sends one event to the union of sev
 | `order:item:status:update` | order audience | `{ orderItemId, orderId, orderNumber, status, updatedAt }` | a single item's status changes (seller item routes) |
 | `order:message` | order audience | `{ orderId, messageId, senderRole }` | a chat message is posted on the order |
 | `order:messages:read` | order audience | `{ orderId }` | someone read the order's messages |
-| `order:delivery:tracking` | the customer's `user:` room and `role:admin` (not the order's room: it holds the kitchens) | `{ orderId, location: { latitude, longitude }, distanceKm?, estimatedArrival?, updatedAt }` | the rider reports a position (see below) |
+| `order:delivery:tracking` | the customer's `user:` room only (not the order's room: it holds the kitchens; and not `role:admin`: no admin screen shows a rider's position) | `{ orderId, location: { latitude, longitude }, distanceKm?, estimatedArrival?, updatedAt }` | the rider reports a position (see below) |
 | `delivery:new` | `riders:on-duty` | `{ deliveryId, orderId }` | a Nuray delivery job is created (`ensureDeliveryForOrder`, when the kitchen accepts or starts preparing, or an admin moves the order on), handed back by its rider, reopened by an admin retry, or released when a rider is suspended, **and no rider could take it automatically**. The job is offered to the best rider first (`postDelivery`); one that is assigned at once is never announced to the pool |
 | `delivery:removed` | `riders:on-duty` | `{ deliveryId, orderId, reason: 'claimed' }` when a rider claims it; `{ deliveryId, orderId }` when it is cancelled | the job is no longer available. A job taken automatically the moment it was posted sends no `delivery:removed` (no rider ever heard of it); the order's parties still get `delivery:assigned` |
 | `delivery:assigned` | order audience | `{ deliveryId, orderId }` | a rider claimed the job |
@@ -76,6 +79,7 @@ Order events go through `emitToRooms`, which sends one event to the union of sev
 Notes:
 
 - `status` in `order:status:update` is the order status (`pending`, `confirmed`, `preparing`, `ready`, `dispatched`, `in_transit`, `delivered`, `delivery_failed`, `completed`, `cancelled`, `refunded`). Who made the change (a user, the system or a payment) decides who is notified but is not in the payload: this event reaches the customer, every kitchen and the rider, and none of them learns another's account id. The chat events likewise name the sender by role only.
+- `emitOrderStatusUpdate` and `emitOrderItemStatusUpdate` run after the change is committed and never throw: a failure there (the database blipping) is logged and does not turn the committed change into an error for the caller.
 - `emitOrderStatusUpdate` also creates the in-app notification (and push/email/SMS where applicable) for the customer for statuses with a message, and tells kitchens about cancellations they did not make. That is where most `notification:new` events for orders come from (`backend/src/services/notify.service.ts`).
 - Alongside `order:new`, each kitchen gets a notification (`notification:new`, plus push, email and SMS). For online-payment orders (`safepay` or `card`) still unpaid, it is a "waiting for payment" notification without push/email/SMS, and the "New paid order" notification follows once Safepay confirms (`online-payment.service.ts`). The `order:new` socket event itself is not held back, so the seller pop-up can appear before payment.
 - `order:new` goes to each seller only, never to the customer; the customer gets an "Order placed" notification instead.
@@ -90,7 +94,7 @@ Notes:
 5. When a position was stored and the job is `picked_up`, `in_transit` or `arrived_at_customer`, the server emits `order:delivery:tracking` with the position and `distanceKm` (rider to customer, one decimal, only when the customer's location is known).
 6. The customer's order page shows the rider on a map only while the order status is `dispatched` or `in_transit`. It uses the latest `order:delivery:tracking` payload, otherwise `delivery.riderLocation` from `GET /orders/:id` (which is returned only to viewers allowed to see it, and only while on the way).
 
-Only the customer and admins receive `order:delivery:tracking`: the order's room also holds the kitchens, who see the status but never where the rider is.
+Only the customer receives `order:delivery:tracking`: the order's room also holds the kitchens, who see the status but never where the rider is, and admins are not sent a sample every few seconds for every delivery on the platform.
 
 ## Order tracking endpoint
 
@@ -100,15 +104,22 @@ Only the customer and admins receive `order:delivery:tracking`: the order's room
 
 ### The shared connection (`lib/realtime/socket.ts`)
 
-- One socket per browser tab, shared by every component. Opened with `io(socketUrl(), { auth: { token }, transports: ['websocket', 'polling'] })`.
+- One socket per browser tab, shared by every component. Opened with `io(socketUrl(), { auth, transports: ['websocket', 'polling'], reconnectionDelay: 3000, reconnectionDelayMax: 30000, randomizationFactor: 0.5 })`; `auth` reads the current access token at every (re)connect.
 - `socketUrl()` (`lib/config.ts`) is `NEXT_PUBLIC_WS_URL` if set, otherwise the origin of `NEXT_PUBLIC_API_URL`, otherwise the page's own origin.
 - It watches the `auth:tokens-changed` event (fired by the API client when tokens are set, refreshed or cleared) and the `storage` event (another tab logging in or out). When the access token changes it closes the socket and opens a new one with the new token; with no token it closes.
-- Socket.IO's own reconnection handles dropped connections. `connect_error` only logs in development.
+- Socket.IO's own reconnection handles dropped connections: the first retry 1.5 to 4.5 s after the drop, then doubling up to 30 s, each spread ±50%, so the clients of a restarted server come back over seconds instead of all at once.
+- A refused handshake stops the library's retries. When the server marked it `retryable`, the client retries it itself on its own back-off (3 s doubling up to 60 s, ±50%, reset on a successful connect). Otherwise the token was refused, most often because it expired while the connection was down: the client makes one `GET /auth/me` per token (after a jittered ~3 s), which lets the API client renew it, and the new token re-opens the socket. `connect_error` logs only in development.
 
 ### Hooks
 
 - `useSocket()` (`lib/hooks/use-socket.ts`) opens or releases the shared socket as the auth store's `isAuthenticated` changes, and returns `socket`, `connected`, `subscribe(event, cb)`, `joinOrderRoom(orderId)`, `leaveOrderRoom(orderId)` and shortcuts `onOrderStatusUpdate`, `onDeliveryTracking`, `onNewOrder`, `onOrderItemStatusUpdate`. `joinOrderRoom` re-emits `join:order` on every `connect`, and its returned cleanup emits `leave:order`. The returned functions change when the connection is replaced, so effects re-subscribe.
-- `useLiveRefresh(refresh, { events, match, intervalMs = 60000, offlineMs = 15000, enabled })` (`lib/hooks/use-live-refresh.ts`) reloads a screen when a listed event arrives (optionally filtered by `match`; bursts are coalesced with a 250 ms debounce), after a reconnect, when the tab becomes visible, and on a safety timer: every 60 s while connected, every 15 s while not. Timers do not run while the tab is hidden.
+- `useLiveRefresh(refresh, { events, match, intervalMs = 60000, offlineMs = 30000, offlineMaxMs = max(intervalMs, 120000), coalesceMs = 250, enabled, eventsOnly })` (`lib/hooks/use-live-refresh.ts`, timing in `lib/realtime/backoff.ts`) reloads a screen:
+  - when a listed event arrives (optionally filtered by `match`): the reload waits `coalesceMs` and every event in that time joins it (the admin dashboard and approvals pages use 30 s, so at most one event reload per 30 s);
+  - after a reconnect, at a random moment within 5 s, so the clients of a restarted server do not all reload at once;
+  - when the tab becomes visible, unless the last reload is under 15 s old;
+  - on a safety timer: `intervalMs` ±20% while connected; while disconnected the first reload comes after `offlineMs` (or `intervalMs` if sooner) and the wait then doubles up to `offlineMaxMs`, ±20%. With the defaults (60 s live; 30 s, 60 s, then 120 s offline) losing the socket makes a page poll at most twice as often as live for one poll, and less often than live from the third. The order chat polls at 15 s then 30 s while offline.
+
+  Timer reloads are skipped while the tab is hidden. With `eventsOnly` only the event reloads run.
 - `useRiderLocation(deliveryIds, onAutoAdvance)` (`lib/hooks/use-rider-location.ts`) is the sender side of live location (above).
 
 ### Who listens to what

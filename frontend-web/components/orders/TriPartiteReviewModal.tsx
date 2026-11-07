@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { Star, X, CheckCircle2, Award, Bike, Utensils } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { isAxiosError } from 'axios';
 import { apiClient, ApiError } from '@/lib/api-client';
 import { useToast } from '@/components/ui/toast';
@@ -26,6 +27,7 @@ interface TriPartiteReviewModalProps {
   riderName?: string;
   isOpen: boolean;
   onClose: () => void;
+  /** Called once the order has a review: one just sent, or one the customer had already left. */
   onReviewed?: () => void;
 }
 
@@ -43,9 +45,10 @@ export default function TriPartiteReviewModal({
   onClose,
   onReviewed,
 }: TriPartiteReviewModalProps) {
-  const [foodRating, setFoodRating] = useState(5);
-  const [sellerRating, setSellerRating] = useState(5);
-  const [riderRating, setRiderRating] = useState(5);
+  // Nothing is pre-filled: a rating is what the customer chose, not a default they did not change.
+  const [foodRating, setFoodRating] = useState(0);
+  const [sellerRating, setSellerRating] = useState(0);
+  const [riderRating, setRiderRating] = useState(0);
   const [comment, setComment] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -60,6 +63,7 @@ export default function TriPartiteReviewModal({
 
   const reviewableItems = items.filter((item) => !UNREVIEWABLE_ITEM_STATUSES.includes(item.status ?? ''));
   const ratesDelivery = !deliveryType || deliveryType === 'home_delivery';
+  const canSubmit = foodRating > 0 && sellerRating > 0;
 
   const handleClose = () => {
     setError(null);
@@ -75,7 +79,7 @@ export default function TriPartiteReviewModal({
    */
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (submitting) return;
+    if (submitting || !canSubmit) return;
     if (reviewableItems.length === 0) {
       setError(t('review.noItems'));
       return;
@@ -95,7 +99,7 @@ export default function TriPartiteReviewModal({
             orderItemId: item.id,
             productRating: foodRating,
             sellerRating,
-            ...(ratesDelivery ? { deliveryRating: riderRating } : {}),
+            ...(ratesDelivery && riderRating > 0 ? { deliveryRating: riderRating } : {}),
             comment: comment.trim() || undefined,
           });
           created++;
@@ -113,7 +117,7 @@ export default function TriPartiteReviewModal({
       setSubmitting(false);
     }
 
-    if (created > 0) onReviewed?.();
+    if (created > 0 || alreadyReviewed === reviewableItems.length) onReviewed?.();
 
     if (failureMessage) {
       const saved = created + alreadyReviewed;
@@ -144,7 +148,8 @@ export default function TriPartiteReviewModal({
           type="button"
           onClick={() => onChange(star)}
           aria-label={t('review.starAria', { count: star })}
-          className="p-1 text-2xl transition-transform hover:scale-115 focus:outline-none"
+          aria-pressed={star <= value}
+          className="w-11 h-11 flex items-center justify-center rounded-full transition-transform hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
         >
           <Star
             className={`w-6 h-6 ${
@@ -155,28 +160,35 @@ export default function TriPartiteReviewModal({
           />
         </button>
       ))}
-      <span className="ms-2 text-xs font-extrabold text-ink">{value} / 5</span>
+      <span className="ms-1 text-xs font-medium text-muted">{value > 0 ? `${value} / 5` : t('review.notRated')}</span>
     </div>
   );
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-200">
-      <div className="relative w-full max-w-md bg-surface rounded-3xl shadow-2xl border border-line overflow-hidden">
-        {/* Header */}
-        <div className="px-6 py-4 bg-[#0C1016] text-white flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <span className="text-xl">⭐</span>
-            <div>
-              <h3 className="font-extrabold text-sm text-white">{t('review.title')}</h3>
-              <p className="text-[11px] text-muted font-medium">{t('review.orderNumber', { number: orderNumber })}</p>
-            </div>
+    <div
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-xs p-3 sm:p-4 animate-in fade-in duration-200"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) handleClose();
+      }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="review-title"
+        className="relative w-full max-w-md bg-surface rounded-3xl shadow-2xl border border-line overflow-hidden max-h-[92vh] overflow-y-auto"
+      >
+        <div className="px-4 py-3 flex items-center justify-between gap-3 border-b border-line">
+          <div className="min-w-0">
+            <h3 id="review-title" className="font-semibold text-ink">{t('review.title')}</h3>
+            <p className="text-xs text-muted" data-ltr>{t('review.orderNumber', { number: orderNumber })}</p>
           </div>
           <button
+            type="button"
             onClick={handleClose}
             aria-label={t('review.close')}
-            className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors"
+            className="shrink-0 w-11 h-11 rounded-full bg-raised hover:bg-line text-ink flex items-center justify-center transition-colors"
           >
-            <X className="w-4 h-4" />
+            <X className="w-5 h-5" />
           </button>
         </div>
 
@@ -197,11 +209,11 @@ export default function TriPartiteReviewModal({
             </p>
 
             {/* 1. Food Rating */}
-            <div className="p-3.5 bg-brand-50/60 border border-brand-100 rounded-2xl space-y-1.5">
+            <div className="p-3.5 bg-raised border border-line rounded-2xl space-y-1.5">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Utensils className="w-4 h-4 text-brand-ink" />
-                  <span className="font-extrabold text-xs text-ink">{t('review.food')}</span>
+                  <span className="font-semibold text-sm text-ink">{t('review.food')}</span>
                 </div>
               </div>
               {renderStars(foodRating, setFoodRating)}
@@ -216,8 +228,8 @@ export default function TriPartiteReviewModal({
             <div className="p-3.5 bg-raised border border-line rounded-2xl space-y-1.5">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <Award className="w-4 h-4 text-purple-600" />
-                  <span className="font-extrabold text-xs text-ink">{t('review.kitchen')}</span>
+                  <Award className="w-4 h-4 text-brand-ink" />
+                  <span className="font-semibold text-sm text-ink">{t('review.kitchen')}</span>
                 </div>
                 <span className="text-[11px] text-muted font-bold">{sellerName}</span>
               </div>
@@ -229,8 +241,8 @@ export default function TriPartiteReviewModal({
               <div className="p-3.5 bg-raised border border-line rounded-2xl space-y-1.5">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <Bike className="w-4 h-4 text-frozen-ink" />
-                    <span className="font-extrabold text-xs text-ink">{t('review.rider')}</span>
+                    <Bike className="w-4 h-4 text-brand-ink" />
+                    <span className="font-semibold text-sm text-ink">{t('review.rider')}</span>
                   </div>
                   <span className="text-[11px] text-muted font-bold">{riderName}</span>
                 </div>
@@ -259,21 +271,14 @@ export default function TriPartiteReviewModal({
             )}
 
             {/* Action Buttons */}
-            <div className="flex gap-3 pt-2">
-              <button
-                type="submit"
-                disabled={submitting}
-                className="flex-1 py-3 px-4 rounded-2xl font-extrabold text-xs text-on-brand bg-brand hover:bg-brand-500 disabled:opacity-50 transition-all shadow-md"
-              >
+            {!canSubmit && <p className="text-xs text-muted">{t('review.rateToSubmit')}</p>}
+            <div className="flex gap-3 pt-1">
+              <Button type="submit" disabled={submitting || !canSubmit} className="flex-1" data-testid="submit-review">
                 {submitting ? t('review.submitting') : t('review.submit')}
-              </button>
-              <button
-                type="button"
-                onClick={handleClose}
-                className="py-3 px-4 rounded-2xl font-extrabold text-xs text-muted bg-raised hover:bg-line transition-colors"
-              >
+              </Button>
+              <Button type="button" variant="outline" onClick={handleClose}>
                 {tc('cancel')}
-              </button>
+              </Button>
             </div>
           </form>
         )}

@@ -19,9 +19,44 @@ import { presentFile } from '../storage';
 import { notifyApprovers } from './approvals.service';
 import { ACTIVE_DELIVERY_STATUSES, BEFORE_PICKUP_STATUSES, ON_THE_WAY_STATUSES, canMoveDelivery, ORDER_STATUS_FOR_DELIVERY_STATUS, refuseDeliveryMove } from '../utils/deliveryStatus';
 import { doorField } from '../utils/addressSnapshot';
-import { logger } from '../utils/logger';
+import { logEvent, logger } from '../utils/logger';
 
 // The delivery status machine (which status follows which, and what the order must look like) is in utils/deliveryStatus.ts.
+
+// The kitchen a rider collects from: where it is, how to find the door and who to call there.
+const PICKUP_SELLER_SELECT = {
+  businessName: true,
+  pickupAddress: true,
+  pickupLandmark: true,
+  pickupPhone: true,
+  primaryCommunityName: true,
+  latitude: true,
+  longitude: true,
+  deliveryProvider: true,
+  user: { select: { phone: true } },
+} as const;
+
+// No rider job for an order that is finished or called off.
+const ORDER_CLOSED_FOR_DELIVERY = ['cancelled', 'refunded', 'delivered', 'completed'];
+
+type PickupSeller = Prisma.SellerGetPayload<{ select: typeof PICKUP_SELLER_SELECT }>;
+type PickupItem = { status: string; fulfillmentType: string | null; seller: PickupSeller | null };
+
+const text = (value: string | null | undefined) => (typeof value === 'string' && value.trim() !== '' ? value.trim() : null);
+
+/** The kitchen the rider collects from: the first live item that a platform rider delivers (as when the job was made). */
+function pickupSellerOf(items: PickupItem[] | undefined): PickupSeller | null {
+  if (!items?.length) return null;
+  return (items.find((i) => i.status !== 'cancelled' && (i.fulfillmentType === 'hub' || i.seller?.deliveryProvider !== 'self')) ?? items[0])?.seller ?? null;
+}
+
+/** The pickup line a job and its notifications carry: the kitchen's name, street address and area. */
+function pickupLineOf(seller: Pick<PickupSeller, 'businessName' | 'pickupAddress' | 'primaryCommunityName'> | null | undefined): string {
+  const address = text(seller?.pickupAddress);
+  const area = text(seller?.primaryCommunityName);
+  const areaIfNew = area && !address?.toLowerCase().includes(area.toLowerCase()) ? area : null;
+  return [text(seller?.businessName), address, areaIfNew].filter(Boolean).join(', ') || 'Seller pickup';
+}
 
 // What a job reads from its order. The customer's contact and address details are only handed to
 // the rider who has the job (see formatDelivery); the handover code is never part of it.
@@ -37,6 +72,7 @@ const DELIVERY_INCLUDE = {
       deliveryAddressSnapshot: true,
       customer: { select: { phone: true, profile: { select: { fullName: true } } } },
       deliveryAddress: { select: { area: true, city: true, houseNumber: true, landmark: true, addressLine2: true } },
+      items: { select: { status: true, fulfillmentType: true, seller: { select: PICKUP_SELLER_SELECT } } },
     },
   },
 } as const;
@@ -60,8 +96,8 @@ const GEOFENCE_KM = 0.15; // 150 m
 // A phone reporting every second is stored (and passed on to the customer) at most this often.
 const LOCATION_MIN_INTERVAL_MS = 3_000;
 
-function mapsUrl(lat: number | null, lng: number | null, text: string | null | undefined): string {
-  const destination = lat != null && lng != null ? `${lat},${lng}` : encodeURIComponent(text ?? '');
+function mapsUrl(lat: number | null, lng: number | null, place: string | null | undefined): string {
+  const destination = lat != null && lng != null ? `${lat},${lng}` : encodeURIComponent(place ?? '');
   // Google Maps URLs API (https://developers.google.com/maps/documentation/urls/get-started): only its documented
   // parameters. No travelmode: the Maps app keeps the mode the rider last used (two-wheeler on a motorbike).
   return `https://www.google.com/maps/dir/?api=1&destination=${destination}`;
@@ -85,11 +121,23 @@ function formatDelivery(delivery: DeliveryWithOrder & {
   riderAskFee?: number | null;
   exceedsCashLimit?: boolean;
 }) {
-  const { pickupLat, pickupLng, deliveryLat, deliveryLng } = endsOf(delivery);
-  const corridor = calculateDeliveryFeeCorridor(pickupLat, pickupLng, deliveryLat, deliveryLng);
+  const ends = endsOf(delivery);
+  const { deliveryLat, deliveryLng } = ends;
+  // The fee is priced from the points saved on the job, the same ones the claim fixes the pay from.
+  const corridor = calculateDeliveryFeeCorridor(ends.pickupLat, ends.pickupLng, deliveryLat, deliveryLng);
 
   // Who to call and where exactly: only for the rider who holds a job that is still running.
   const o = delivery.order;
+  // The kitchen as it is now: a job made before the kitchen saved its pin or street address still
+  // gets them, so the rider is never sent to a search for a home kitchen's name.
+  const kitchen = pickupSellerOf(o?.items);
+  const kitchenLat = finiteOrNull(kitchen?.latitude);
+  const kitchenLng = finiteOrNull(kitchen?.longitude);
+  const hasKitchenPin = kitchenLat != null && kitchenLng != null;
+  const pickupLat = hasKitchenPin ? kitchenLat : ends.pickupLat;
+  const pickupLng = hasKitchenPin ? kitchenLng : ends.pickupLng;
+  const pickupStreet = text(kitchen?.pickupAddress);
+  const pickupLine = kitchen ? pickupLineOf(kitchen) : delivery.pickupAddress;
   // The address as it was when the order was placed (older orders have no snapshot: the live one then).
   const door = (key: 'houseNumber' | 'addressLine2' | 'landmark' | 'area' | 'city') => {
     const value = doorField(o?.deliveryAddressSnapshot, o?.deliveryAddress, key);
@@ -111,7 +159,15 @@ function formatDelivery(delivery: DeliveryWithOrder & {
     totalAmount: delivery.order?.totalAmount ? Number(delivery.order.totalAmount) : 0,
     paymentMethod: delivery.order?.paymentMethod || 'cod',
     orderStatus: delivery.order?.orderStatus,
-    pickupAddress: delivery.pickupAddress,
+    pickupAddress: pickupLine,
+    // The kitchen's own details. Its phone, like the customer's, only goes to the rider holding the job.
+    pickup: {
+      name: text(kitchen?.businessName),
+      address: pickupStreet,
+      area: text(kitchen?.primaryCommunityName),
+      landmark: text(kitchen?.pickupLandmark),
+      phone: reveal ? realPhoneOrNull(text(kitchen?.pickupPhone) ?? kitchen?.user?.phone) : null,
+    },
     deliveryAddress: shownAddress,
     pickupLatitude: pickupLat,
     pickupLongitude: pickupLng,
@@ -152,7 +208,8 @@ function formatDelivery(delivery: DeliveryWithOrder & {
         }
       : null,
     // Pass the job on to Maps by its saved coordinates when there are some (more exact than text).
-    pickupMapsUrl: mapsUrl(pickupLat, pickupLng, delivery.pickupAddress),
+    // Without a pin, only a real street address is worth a maps search; a kitchen's name alone finds nothing.
+    pickupMapsUrl: pickupLat != null && pickupLng != null ? mapsUrl(pickupLat, pickupLng, null) : pickupStreet ? mapsUrl(null, null, pickupLine) : null,
     dropoffMapsUrl: reveal ? mapsUrl(deliveryLat, deliveryLng, delivery.deliveryAddress) : null,
   };
 }
@@ -167,13 +224,12 @@ export class RiderService {
     const order = await prisma.order.findUnique({
       where: { id: orderId },
       include: {
-        items: { include: { seller: { select: { businessName: true, latitude: true, longitude: true, deliveryProvider: true } } } },
+        items: { include: { seller: { select: PICKUP_SELLER_SELECT } } },
         deliveryAddress: true,
       },
     });
     if (!order || order.deliveryType !== 'home_delivery') return;
-    // No job for an order that is finished or called off.
-    if (['cancelled', 'refunded', 'delivered', 'completed'].includes(order.orderStatus)) return;
+    if (ORDER_CLOSED_FOR_DELIVERY.includes(order.orderStatus)) return;
 
     // Sellers who deliver themselves don't post to the rider pool; they drive the
     // order to delivered / delivery_failed from their own dashboard. The provider is
@@ -185,9 +241,6 @@ export class RiderService {
       : liveItems.some((i) => i.fulfillmentType === 'hub' || i.seller?.deliveryProvider !== 'self');
     if (!needsPlatformRider) return;
 
-    const existing = await prisma.delivery.findUnique({ where: { orderId } });
-    if (existing) return;
-
     // The address the order was placed to, not the saved address as edited since (see utils/addressSnapshot).
     const deliveryAddress =
       (['addressLine1', 'area', 'city'] as const)
@@ -195,12 +248,9 @@ export class RiderService {
         .filter((part): part is string => typeof part === 'string' && part.trim() !== '')
         .join(', ') || 'Address unavailable';
 
-    // The customer's handover code lives on the order. Older orders created without
-    // one get it now, before a rider can be assigned.
-    await prisma.order.updateMany({ where: { id: orderId, handoverCode: null }, data: { handoverCode: newHandoverCode() } });
     const estimatedReadyAt = new Date(Date.now() + estimatedPrepMinutes * 60 * 1000);
 
-    const pickupSeller = (order.items.find((i) => i.status !== 'cancelled' && (i.fulfillmentType === 'hub' || i.seller?.deliveryProvider !== 'self')) ?? order.items[0])?.seller;
+    const pickupSeller = pickupSellerOf(order.items);
     // Unknown locations stay unknown (null): a guessed point would misprice the job.
     const pickupLat = finiteOrNull(pickupSeller?.latitude);
     const pickupLng = finiteOrNull(pickupSeller?.longitude);
@@ -208,21 +258,34 @@ export class RiderService {
     const deliveryLng = finiteOrNull(doorField(order.deliveryAddressSnapshot, order.deliveryAddress, 'longitude') as number | null | undefined);
 
     try {
-      const created = await prisma.delivery.create({
-        data: {
-          orderId,
-          pickupAddress: pickupSeller?.businessName ?? 'Seller pickup',
-          deliveryAddress,
-          pickupLatitude: pickupLat,
-          pickupLongitude: pickupLng,
-          deliveryLatitude: deliveryLat,
-          deliveryLongitude: deliveryLng,
-          status: 'pending',
-          estimatedReadyAt,
-        },
+      const created = await prisma.$transaction(async (tx) => {
+        // The status read above was unlocked, so a reject or cancel could have committed since. Re-read it under the
+        // order's row lock (which every reject and cancel takes): one that won is seen here, and one that comes after
+        // finds this job and cancels it, so a cancelled order is never left with a live job.
+        const [locked] = await tx.$queryRaw<Array<{ order_status: string }>>`SELECT order_status FROM orders WHERE id = ${orderId} FOR UPDATE`;
+        if (!locked || ORDER_CLOSED_FOR_DELIVERY.includes(locked.order_status)) return null;
+        if (await tx.delivery.findUnique({ where: { orderId }, select: { id: true } })) return null;
+
+        // The customer's handover code lives on the order. Older orders created without
+        // one get it now, before a rider can be assigned.
+        await tx.order.updateMany({ where: { id: orderId, handoverCode: null }, data: { handoverCode: newHandoverCode() } });
+        return tx.delivery.create({
+          data: {
+            orderId,
+            pickupAddress: pickupLineOf(pickupSeller),
+            deliveryAddress,
+            pickupLatitude: pickupLat,
+            pickupLongitude: pickupLng,
+            deliveryLatitude: deliveryLat,
+            deliveryLongitude: deliveryLng,
+            status: 'pending',
+            estimatedReadyAt,
+          },
+          select: { id: true },
+        });
       });
       // Offered to the best rider first; the pool hears of it only if nobody can take it.
-      postDeliverySoon(created.id, orderId);
+      if (created) postDeliverySoon(created.id, orderId);
     } catch (err) {
       const isDuplicate = err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002';
       if (!isDuplicate) throw err;
@@ -310,13 +373,16 @@ export class RiderService {
         tripKm: job.distanceKm ?? null,
         exceedsCashLimit: job.exceedsCashLimit,
       });
-      return { job: { ...job, pickupDistanceKm }, score };
+      return { job: { ...job, pickupDistanceKm, handedBackByYou: d.releasedRiderIds.includes(rider.id) }, score };
     });
-    return ranked.sort((a, b) => b.score - a.score).map((r) => r.job);
+    // A job this rider handed back stays open to them in case they change their mind, below every other job.
+    return ranked
+      .sort((a, b) => Number(a.job.handedBackByYou) - Number(b.job.handedBackByYou) || b.score - a.score)
+      .map((r) => r.job);
   }
 
   /**
-   * The rider's jobs, newest first: every job still going, and the `history` most recent finished ones (30 unless
+   * The rider's jobs: every job still going (furthest along first), and the `history` most recent finished ones (30 unless
    * asked, 0 for none, at most 200). The dashboard reloads this every 30 seconds for every rider on duty, so it
    * carries what the screen shows and not a rider's whole career; earnings has the full ledger.
    */
@@ -343,10 +409,14 @@ export class RiderService {
             take: finishedCount,
           }),
     ]);
-    return [...running, ...finished].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()).map(formatDelivery);
+    // The job the rider is furthest along with first (the one they are standing at the kitchen or door for), then the
+    // older one; a job handed to them a moment ago never pushes it down. Finished jobs follow, newest first.
+    const step = (status: string) => ACTIVE_DELIVERY_STATUSES.indexOf(status);
+    running.sort((a, b) => step(b.status) - step(a.status) || a.createdAt.getTime() - b.createdAt.getTime());
+    return [...running, ...finished].map(formatDelivery);
   }
 
-  async claimDelivery(userId: string, deliveryId: string, askFee?: number) {
+  async claimDelivery(userId: string, deliveryId: string) {
     const rider = await this.requireRider(userId);
     if (!rider.isAvailable) {
       throw new AppError('You are off duty. Switch to on duty to take new jobs.', 409, 'RIDER_OFF_DUTY');
@@ -357,26 +427,15 @@ export class RiderService {
       throw new AppError('Delivery not found', 404, 'DELIVERY_NOT_FOUND');
     }
 
-    // The rider's pay for this job: the standard fee, or their own ask within the allowed
-    // range (within the allowed range), fixed now so the job's price can't change under them.
+    // The rider's pay for this job: the standard fee, fixed now so the job's price can't change under them.
+    // An ask above it is not honoured: nobody approves asks yet, so taking a job at the rider's own price
+    // would just pay the highest fee on every job. Older apps still send one; it is ignored, not refused.
     const ends = endsOf(delivery);
     const corridor = calculateDeliveryFeeCorridor(ends.pickupLat, ends.pickupLng, ends.deliveryLat, ends.deliveryLng);
-    let validatedAskFee: number | undefined;
-    if (askFee != null && Number(askFee) > 0) {
-      const numericAsk = Number(askFee);
-      if (numericAsk < corridor.minFloor || numericAsk > corridor.maxCeiling) {
-        throw new AppError(
-          `Bid of Rs ${numericAsk} is out of bounds. The allowed corridor for this location is Rs ${corridor.minFloor} to Rs ${corridor.maxCeiling}.`,
-          400,
-          'BID_OUT_OF_BOUNDS'
-        );
-      }
-      validatedAskFee = numericAsk;
-    }
 
     // One claim at a time per rider (their row locked), so two quick claims can't both pass
     // the two-job and cash limits.
-    await prisma.$transaction(async (tx) => {
+    const claimedOrderNumber = await prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM riders WHERE id = ${rider.id} FOR UPDATE`;
 
       // At most two jobs at once.
@@ -391,7 +450,7 @@ export class RiderService {
 
       const liveOrder = await tx.order.findFirst({
         where: { id: delivery.orderId, orderStatus: { notIn: ['cancelled', 'refunded', 'delivered', 'completed'] } },
-        select: { id: true, paymentMethod: true, paymentStatus: true, totalAmount: true },
+        select: { id: true, paymentMethod: true, paymentStatus: true, totalAmount: true, orderNumber: true },
       });
       if (!liveOrder || delivery.status !== 'pending') {
         throw new AppError('This job is no longer available', 409, 'DELIVERY_UNAVAILABLE');
@@ -421,7 +480,7 @@ export class RiderService {
         data: {
           riderId: rider.id,
           status: 'assigned',
-          riderFee: validatedAskFee ?? corridor.standardFee,
+          riderFee: corridor.standardFee,
           riderBonus: bonus,
           assignmentMode: 'claimed',
         },
@@ -429,6 +488,15 @@ export class RiderService {
       if (claim.count === 0) {
         throw new AppError('Delivery already claimed by another rider', 409, 'ALREADY_CLAIMED');
       }
+      return liveOrder.orderNumber;
+    });
+    logEvent('delivery.claimed', {
+      orderId: delivery.orderId,
+      orderNumber: claimedOrderNumber,
+      deliveryId,
+      riderId: rider.id,
+      actor: 'rider',
+      riderFeeMinor: Math.round(corridor.standardFee * 100),
     });
     void realtimeOrderService.emitDeliveryClaimed(deliveryId, delivery.orderId);
 
@@ -436,7 +504,7 @@ export class RiderService {
       where: { id: deliveryId },
       include: DELIVERY_INCLUDE,
     });
-    return formatDelivery({ ...updated, riderAskFee: validatedAskFee });
+    return formatDelivery(updated);
   }
 
   async updateDeliveryStatus(
@@ -559,7 +627,17 @@ export class RiderService {
         where: { id: deliveryId },
         include: DELIVERY_INCLUDE,
       });
-      return { updated, newOrderStatus, orderId: delivery.orderId };
+      return { updated, newOrderStatus, orderId: delivery.orderId, orderNumber: order.orderNumber };
+    });
+
+    const orderEvent: Record<string, string> = { picked_up: 'order.picked_up', delivered: 'order.delivered', delivery_failed: 'order.delivery_failed' };
+    logEvent(orderEvent[status] ?? `delivery.${status}`, {
+      orderId: result.orderId,
+      orderNumber: result.orderNumber,
+      deliveryId,
+      riderId: rider.id,
+      actor: 'rider',
+      orderStatus: result.newOrderStatus,
     });
 
     // Side effects only after the commit.
@@ -597,8 +675,9 @@ export class RiderService {
     }
     // No longer a party to this order: out of its live room (status and the next rider's position).
     socketManager.removeUserFromOrder(userId, delivery.orderId);
-    // Offer it to another rider (never the one who handed it back); the pool hears of it only if nobody takes it.
-    postDeliverySoon(deliveryId, delivery.orderId);
+    // Offer it to another rider (never the one who handed it back); the pool hears of it only if nobody takes
+    // it, and the rider who handed it back is not told about it as a new job.
+    postDeliverySoon(deliveryId, delivery.orderId, { releasedByUserId: userId });
     return { released: true };
   }
 

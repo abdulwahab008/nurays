@@ -9,6 +9,8 @@ jest.mock('../src/config/database', () => ({
   default: {
     order: { findUnique: jest.fn(), updateMany: jest.fn() },
     delivery: { findUnique: jest.fn(), create: jest.fn() },
+    $queryRaw: jest.fn(),
+    $transaction: jest.fn(),
   },
 }));
 
@@ -35,7 +37,9 @@ beforeEach(() => {
   db.order.findUnique.mockReset();
   db.order.updateMany.mockReset().mockResolvedValue({ count: 0 });
   db.delivery.findUnique.mockReset().mockResolvedValue(null);
-  db.delivery.create.mockReset().mockResolvedValue({});
+  db.delivery.create.mockReset().mockResolvedValue({ id: 'delivery-1' });
+  db.$queryRaw.mockReset().mockResolvedValue([{ order_status: 'preparing' }]);
+  db.$transaction.mockReset().mockImplementation(async (fn: (tx: unknown) => unknown) => fn(db));
 });
 
 describe('ensureDeliveryForOrder — delivery provider', () => {
@@ -67,6 +71,21 @@ describe('ensureDeliveryForOrder — delivery provider', () => {
 
   it('creates no rider job for a cancelled order', async () => {
     db.order.findUnique.mockResolvedValue({ ...order([item('platform')]), orderStatus: 'cancelled' });
+    await riderService.ensureDeliveryForOrder('order-1');
+    expect(db.delivery.create).not.toHaveBeenCalled();
+  });
+
+  it('creates no rider job when the order was cancelled after it was first read (accept racing a reject)', async () => {
+    db.order.findUnique.mockResolvedValue({ ...order([item('platform')]), orderStatus: 'preparing' });
+    db.$queryRaw.mockResolvedValue([{ order_status: 'cancelled' }]);
+    await riderService.ensureDeliveryForOrder('order-1');
+    expect(db.delivery.create).not.toHaveBeenCalled();
+    expect(db.order.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('creates no second rider job once one exists', async () => {
+    db.order.findUnique.mockResolvedValue(order([item('platform')]));
+    db.delivery.findUnique.mockResolvedValue({ id: 'delivery-1' });
     await riderService.ensureDeliveryForOrder('order-1');
     expect(db.delivery.create).not.toHaveBeenCalled();
   });

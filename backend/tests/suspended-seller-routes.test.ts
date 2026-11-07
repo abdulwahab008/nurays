@@ -86,3 +86,25 @@ describe('an active kitchen', () => {
     expect(res.status).not.toBe(403);
   });
 });
+
+describe('a kitchen whose status the database cannot give in time', () => {
+  beforeEach(() =>
+    seller.findUnique.mockRejectedValue(Object.assign(new Error('Timed out fetching a new connection from the connection pool'), { code: 'P2024', clientVersion: '6.0.0' }))
+  );
+
+  it('is told to try again (503 SERVICE_BUSY), not that it is suspended', async () => {
+    const res = await call('POST', '/promotions');
+    expect([res.status, res.body.error?.code]).toEqual([503, 'SERVICE_BUSY']);
+  });
+});
+
+describe('requireSeller when the database cannot give the kitchen in time', () => {
+  it('hands the database error on for a 503, not a 403 verification failure', async () => {
+    const { requireSeller } = jest.requireActual('../src/middleware/auth.middleware');
+    const timeout = Object.assign(new Error('Timed out fetching a new connection from the connection pool'), { code: 'P2024', clientVersion: '6.0.0' });
+    seller.findUnique.mockRejectedValue(timeout);
+    const next = jest.fn();
+    await requireSeller({ user: { id: 'user-1', userType: 'seller' } }, {}, next);
+    expect(next).toHaveBeenCalledWith(timeout);
+  });
+});

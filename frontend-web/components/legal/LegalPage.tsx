@@ -31,17 +31,48 @@ export function ContactUs() {
   return <><a href={`mailto:${LEGAL.email}`} className="underline">{LEGAL.email}</a> or the {page}</>;
 }
 
+const ENGLISH_LABELS = {
+  lastUpdated: 'Last updated:',
+  terms: 'Terms of service',
+  privacy: 'Privacy policy',
+  refund: 'Refund and cancellation policy',
+  help: 'Help and contact',
+};
+
+export type LegalLabels = typeof ENGLISH_LABELS;
+
 /**
  * The page frame for the public text pages. `legalText` is true for the terms, the privacy and refund policies and
- * the like, which carry a notice until a lawyer has reviewed them (NEXT_PUBLIC_LEGAL_REVIEWED); the help page is not a legal text.
+ * the like, which carry a notice until a lawyer has reviewed them (NEXT_PUBLIC_LEGAL_REVIEWED); the help page is not a legal text. A page shown in the chosen language passes its own `labels`.
  */
-export function LegalPage({ title, updated, children, legalText = true }: { title: string; updated: string; children: ReactNode; legalText?: boolean }) {
+export function LegalPage({
+  title,
+  updated,
+  children,
+  legalText = true,
+  labels = ENGLISH_LABELS,
+}: {
+  title: string;
+  updated: string;
+  children: ReactNode;
+  legalText?: boolean;
+  labels?: LegalLabels;
+}) {
+  // The legal texts exist only in English; they keep English direction even when the app is in Urdu.
+  const englishOnly = labels === ENGLISH_LABELS;
   return (
     <div className="min-h-screen bg-page py-8 sm:py-12 px-4">
-      <article className="max-w-3xl mx-auto bg-surface rounded-[24px] border border-line p-6 sm:p-10">
-        <Link href="/" className="text-sm font-bold text-brand-ink hover:underline">← Nuray</Link>
-        <h1 className="mt-4 text-[28px] sm:text-[36px] leading-tight font-extrabold tracking-tight text-ink">{title}</h1>
-        <p className="mt-1 text-sm text-muted">Last updated: {updated}</p>
+      <article
+        dir={englishOnly ? 'ltr' : undefined}
+        lang={englishOnly ? 'en' : undefined}
+        className="max-w-3xl mx-auto bg-surface rounded-[24px] border border-line p-6 sm:p-10"
+      >
+        <Link href="/" className="inline-flex items-center gap-1 min-h-11 text-sm font-bold text-brand-ink hover:underline">
+          <span aria-hidden className="inline-block rtl:-scale-x-100">←</span>
+          <span>Nuray</span>
+        </Link>
+        <h1 className="mt-2 text-[28px] sm:text-[36px] leading-tight font-extrabold tracking-tight text-ink">{title}</h1>
+        <p className="mt-1 text-sm text-muted">{labels.lastUpdated} <bdi>{updated}</bdi></p>
         {legalText && !LEGAL.reviewed && (
           <p className="mt-4 rounded-2xl bg-accent-soft p-3 text-sm text-accent-soft-ink">
             This text describes how Nuray works today. It has not yet been reviewed by a lawyer; if anything is
@@ -51,11 +82,11 @@ export function LegalPage({ title, updated, children, legalText = true }: { titl
         <div className="mt-6 space-y-6 text-[15px] leading-7 text-ink [&_h2]:text-xl [&_h2]:font-extrabold [&_h2]:text-ink [&_h2]:mt-8 [&_ul]:list-disc [&_ul]:ps-6 [&_ul]:space-y-1">
           {children}
         </div>
-        <nav className="mt-10 pt-6 border-t border-line flex flex-wrap gap-4 text-sm font-semibold text-brand-ink">
-          <Link href="/terms" className="hover:underline">Terms of Service</Link>
-          <Link href="/privacy" className="hover:underline">Privacy Policy</Link>
-          <Link href="/refund-policy" className="hover:underline">Refund &amp; Cancellation Policy</Link>
-          <Link href="/help" className="hover:underline">Help &amp; contact</Link>
+        <nav className="mt-10 pt-4 border-t border-line flex flex-wrap gap-x-4 text-sm font-semibold text-brand-ink">
+          <Link href="/terms" className="inline-flex items-center min-h-11 hover:underline">{labels.terms}</Link>
+          <Link href="/privacy" className="inline-flex items-center min-h-11 hover:underline">{labels.privacy}</Link>
+          <Link href="/refund-policy" className="inline-flex items-center min-h-11 hover:underline">{labels.refund}</Link>
+          <Link href="/help" className="inline-flex items-center min-h-11 hover:underline">{labels.help}</Link>
         </nav>
       </article>
     </div>

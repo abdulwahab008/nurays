@@ -13,11 +13,24 @@ interface ListenerHandle {
   remove(): Promise<void>;
 }
 
+/**
+ * What addListener gives back. The plugins in window.Capacitor.Plugins come from the bridge the app injects, whose
+ * addListener returns the handle itself rather than a promise of it (unlike @capacitor/core's own plugins).
+ */
+export type Listening = ListenerHandle | Promise<ListenerHandle>;
+
+/** Stops a listener, whichever way addListener returned it. */
+export function removeListener(listening: Listening): void {
+  void Promise.resolve(listening)
+    .then((h) => h.remove())
+    .catch(() => undefined);
+}
+
 /** The native plugins this site uses, as the shell exposes them (each may be missing in an older app build). */
 export interface NativePlugins {
   App?: {
-    addListener(event: 'appUrlOpen', cb: (e: { url: string }) => void): Promise<ListenerHandle>;
-    addListener(event: 'backButton', cb: (e: { canGoBack: boolean }) => void): Promise<ListenerHandle>;
+    addListener(event: 'appUrlOpen', cb: (e: { url: string }) => void): Listening;
+    addListener(event: 'backButton', cb: (e: { canGoBack: boolean }) => void): Listening;
     exitApp(): Promise<void>;
   };
   SecureStorage?: SecureStoragePlugin;
@@ -162,7 +175,7 @@ export async function syncTokens(base: TokenStoreLike, secure: SecureKV): Promis
  */
 export interface SocialLoginPlugin {
   initialize(options: SocialLoginInit): Promise<void>;
-  login(options: { provider: 'google' | 'apple'; options: { scopes: string[] } }): Promise<{ provider: string; result: SocialLoginResult }>;
+  login(options: { provider: 'google' | 'apple'; options: { scopes?: string[] } }): Promise<{ provider: string; result: SocialLoginResult }>;
 }
 
 export interface SocialLoginResult {
@@ -221,9 +234,9 @@ export interface PushNotificationsPlugin {
   checkPermissions(): Promise<{ receive: string }>;
   requestPermissions(): Promise<{ receive: string }>;
   register(): Promise<void>;
-  addListener(event: 'registration', cb: (token: { value: string }) => void): Promise<ListenerHandle>;
-  addListener(event: 'registrationError', cb: (error: { error: string }) => void): Promise<ListenerHandle>;
-  addListener(event: 'pushNotificationActionPerformed', cb: (action: { notification: { data?: Record<string, unknown> } }) => void): Promise<ListenerHandle>;
+  addListener(event: 'registration', cb: (token: { value: string }) => void): Listening;
+  addListener(event: 'registrationError', cb: (error: { error: string }) => void): Listening;
+  addListener(event: 'pushNotificationActionPerformed', cb: (action: { notification: { data?: Record<string, unknown> } }) => void): Listening;
 }
 
 /**
@@ -231,7 +244,7 @@ export interface PushNotificationsPlugin {
  * Rejects after `timeoutMs` when neither comes, which is what a phone without Google Play services does.
  */
 export async function nativePushToken(plugin: PushNotificationsPlugin, timeoutMs = 15_000): Promise<string> {
-  const handles: Array<Promise<ListenerHandle>> = [];
+  const handles: Listening[] = [];
   try {
     return await new Promise<string>((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error('The phone gave no push token')), timeoutMs);
@@ -254,7 +267,7 @@ export async function nativePushToken(plugin: PushNotificationsPlugin, timeoutMs
       });
     });
   } finally {
-    for (const handle of handles) void handle.then((h) => h.remove()).catch(() => undefined);
+    handles.forEach(removeListener);
   }
 }
 
@@ -281,8 +294,10 @@ export interface BackgroundGeolocationPlugin {
   addWatcher(
     options: { backgroundMessage?: string; backgroundTitle?: string; requestPermissions?: boolean; stale?: boolean; distanceFilter?: number },
     callback: (location?: BackgroundLocation, error?: { code?: string; message?: string }) => void
-  ): Promise<string>;
+  ): string | Promise<string>; // The app's bridge returns the id itself (a callback method), not a promise.
   removeWatcher(options: { id: string }): Promise<void>;
+  /** Capacitor's own permission request; on Android it asks for location before a watch starts. */
+  requestPermissions(): Promise<{ location?: string }>;
   openSettings(): Promise<void>;
 }
 

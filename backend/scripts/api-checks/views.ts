@@ -10,9 +10,9 @@ export default async function views() {
   const dish = await makeProduct(kitchen.sellerId);
   const customer = await makeUser('customer');
   const row = () => prisma.product.findUniqueOrThrow({ where: { id: dish }, select: { viewsCount: true, updatedAt: true } });
-  /** The dish once its counter has reached `atLeast` and stopped moving (a view is counted after the answer is sent). */
+  /** The dish once its counter has reached `atLeast` and stopped moving (views are written in batches every 30 s). */
   const settled = async (atLeast: number) => {
-    for (let i = 0; i < 50 && (await row()).viewsCount < atLeast; i++) await sleep(100);
+    for (let i = 0; i < 400 && (await row()).viewsCount < atLeast; i++) await sleep(100);
     await sleep(400);
     return row();
   };

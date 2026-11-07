@@ -4,7 +4,7 @@
  */
 
 const mockPrisma: any = {
-  riderLedgerEntry: { groupBy: jest.fn(), createMany: jest.fn(), create: jest.fn() },
+  riderLedgerEntry: { groupBy: jest.fn(), createMany: jest.fn(), create: jest.fn(), findMany: jest.fn(), count: jest.fn() },
   rider: { findUnique: jest.fn(), updateMany: jest.fn() },
   delivery: { findUnique: jest.fn(), findUniqueOrThrow: jest.fn(), findMany: jest.fn(), count: jest.fn(), update: jest.fn(), updateMany: jest.fn() },
   order: { findFirst: jest.fn() },
@@ -24,7 +24,7 @@ jest.mock('../src/services/realtime-order.service', () => ({
   },
 }));
 
-import { riderMoney, recordSettlement, recordPayout, postDeliveryEntries, setCashLimit, DEFAULT_CASH_LIMIT } from '../src/services/rider-ledger.service';
+import { riderMoney, recordSettlement, recordPayout, postDeliveryEntries, setCashLimit, listRiderEntries, DEFAULT_CASH_LIMIT } from '../src/services/rider-ledger.service';
 import riderService from '../src/services/rider.service';
 
 /** groupBy rows for a ledger with these per-type sums. */
@@ -137,6 +137,24 @@ describe('postDeliveryEntries', () => {
   it('writes nothing for zero amounts (a prepaid order has no cash entry)', async () => {
     await postDeliveryEntries(mockPrisma, { riderId: 'rider-1', deliveryId: 'd1', orderId: 'o1', orderNumber: 'N1', fee: 150, bonus: 0, cashCollected: 0 });
     expect(mockPrisma.riderLedgerEntry.createMany.mock.calls[0][0].data).toHaveLength(1);
+  });
+});
+
+describe('listRiderEntries', () => {
+  it('names the order a delivery entry belongs to, and leaves it empty for a hub settlement', async () => {
+    const at = new Date('2026-11-06T10:00:00Z');
+    mockPrisma.riderLedgerEntry.findMany.mockResolvedValue([
+      { id: 'e1', type: 'delivery_fee', amount: 120, orderId: 'o1', reference: null, note: 'Delivery fee, order #FN1', createdAt: at, delivery: { order: { orderNumber: 'FN1' } } },
+      { id: 'e2', type: 'cash_deposit', amount: 500, orderId: null, reference: 'R-9', note: 'Cash handed in', createdAt: at, delivery: null },
+    ]);
+    mockPrisma.riderLedgerEntry.count.mockResolvedValue(2);
+    const { entries, pagination } = await listRiderEntries('r1');
+    expect(entries.map((e) => e.orderNumber)).toEqual(['FN1', null]);
+    expect(entries[1]).toMatchObject({ reference: 'R-9', note: 'Cash handed in' });
+    expect(pagination.total).toBe(2);
+    expect(mockPrisma.riderLedgerEntry.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ include: { delivery: { select: { order: { select: { orderNumber: true } } } } } })
+    );
   });
 });
 

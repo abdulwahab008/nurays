@@ -9,6 +9,7 @@ import LocationMap from '@/components/ui/LocationMap';
 import { apiClient, apiErrorMessage } from '@/lib/api-client';
 import { formatPrice } from '@/lib/utils';
 import { CommunityPairFees } from '@/components/admin/CommunityPairFees';
+import { PageHeader } from '@/components/admin/AdminListParts';
 
 interface Community {
   id: string;
@@ -140,69 +141,77 @@ export default function AdminCommunitiesPage() {
     }
   };
 
-  const field = 'w-full px-3 py-2 rounded-lg border border-gray-200 text-sm';
-  const label = 'block text-xs font-semibold text-gray-700 mb-1';
+  const field = 'nuray-input w-full text-sm';
+  const label = 'block text-sm font-medium text-ink mb-1';
+  // The form opens above the list: bring it into view.
+  const editCommunity = (c: Community) => {
+    setForm(fromCommunity(c));
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+  const neighbourCount = (c: Community) => (c.neighborCommunityIds.length === 1 ? '1 neighbour' : `${c.neighborCommunityIds.length} neighbours`);
+  const deliveryLine = (c: Community) =>
+    `${formatPrice(c.deliveryBaseFee)} inside${c.crossCommunityEnabled ? ` · ${formatPrice(c.crossCommunityBaseFee)} + per km outside` : ' · own kitchens only'}`;
   const neighbours = form ? communities.filter((c) => c.id !== form.id && (!form.city.trim() || c.city.toLowerCase() === form.city.trim().toLowerCase())) : [];
 
   return (
     <AdminShell>
-      <div className="max-w-6xl mx-auto space-y-5">
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">Communities</h1>
-            <p className="text-gray-600 mt-1">Neighbourhoods buyers and kitchens belong to, with their delivery fees.</p>
-          </div>
-          <Button onClick={() => setForm(form ? null : blank())} className="bg-green-600 hover:bg-green-700 text-white">
-            {form ? 'Close' : 'New community'}
-          </Button>
-        </div>
+      <div className="max-w-6xl space-y-5">
+        <PageHeader
+          title="Communities"
+          subtitle="Neighbourhoods buyers and kitchens belong to, with their delivery fees."
+          actions={
+            <Button variant={form ? 'outline' : 'default'} onClick={() => setForm(form ? null : blank())}>
+              {form ? 'Close' : 'New community'}
+            </Button>
+          }
+        />
 
         {form && (
-          <form onSubmit={save} className="bg-white border border-gray-200 rounded-lg p-5 grid grid-cols-1 lg:grid-cols-2 gap-5" data-testid="community-form">
+          <form onSubmit={save} className="bg-surface border border-line rounded-2xl p-4 sm:p-5 grid grid-cols-1 lg:grid-cols-2 gap-5" data-testid="community-form">
             <div className="space-y-3">
-              <h2 className="font-bold text-gray-900">{form.id ? `Edit ${form.name}` : 'New community'}</h2>
+              <h2 className="text-base font-semibold text-ink">{form.id ? `Edit ${form.name}` : 'New community'}</h2>
               <div>
-                <label className={label}>Name</label>
-                <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Askari 11" className={field} />
+                <label htmlFor="community-name" className={label}>Name</label>
+                <input id="community-name" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Askari 11" className={field} />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className={label}>City</label>
-                  <input required value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} placeholder="Lahore" className={field} />
+                  <label htmlFor="community-city" className={label}>City</label>
+                  <input id="community-city" required value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} placeholder="Lahore" className={field} />
                 </div>
                 {form.id && (
                   <div>
-                    <label className={label}>Web address</label>
-                    <input value={form.slug} onChange={(e) => setForm({ ...form, slug: e.target.value })} className={field} />
+                    <label htmlFor="community-slug" className={label}>Web address</label>
+                    <input id="community-slug" value={form.slug} onChange={(e) => setForm({ ...form, slug: e.target.value })} className={field} />
                   </div>
                 )}
               </div>
               <div>
-                <label className={label}>Area description (optional)</label>
-                <input value={form.areaDescription} onChange={(e) => setForm({ ...form, areaDescription: e.target.value })} placeholder="Sectors A–F and the main boulevard" className={field} />
+                <label htmlFor="community-area" className={label}>Area description (optional)</label>
+                <input id="community-area" value={form.areaDescription} onChange={(e) => setForm({ ...form, areaDescription: e.target.value })} placeholder="Sectors A–F and the main boulevard" className={field} />
               </div>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
-                  <label className={label}>Radius (km)</label>
-                  <input required type="number" min={0.2} max={50} step={0.1} value={form.radiusKm} onChange={(e) => setForm({ ...form, radiusKm: e.target.value })} className={field} />
+                  <label htmlFor="community-radius" className={label}>Radius (km)</label>
+                  <input id="community-radius" required type="number" min={0.2} max={50} step={0.1} value={form.radiusKm} onChange={(e) => setForm({ ...form, radiusKm: e.target.value })} className={field} />
                 </div>
                 <div>
-                  <label className={label}>Nuray delivery within this community (Rs, fixed)</label>
-                  <input required type="number" min={0} value={form.deliveryBaseFee} onChange={(e) => setForm({ ...form, deliveryBaseFee: e.target.value })} className={field} />
+                  <label htmlFor="community-fee" className={label}>Delivery inside (Rs, fixed)</label>
+                  <input id="community-fee" required type="number" min={0} value={form.deliveryBaseFee} onChange={(e) => setForm({ ...form, deliveryBaseFee: e.target.value })} className={field} />
                 </div>
                 <div>
-                  <label className={label}>From here to other communities: base fee (Rs, plus per km)</label>
-                  <input required type="number" min={0} value={form.crossCommunityBaseFee} onChange={(e) => setForm({ ...form, crossCommunityBaseFee: e.target.value })} className={field} />
+                  <label htmlFor="community-cross-fee" className={label}>To other communities (Rs, plus per km)</label>
+                  <input id="community-cross-fee" required type="number" min={0} value={form.crossCommunityBaseFee} onChange={(e) => setForm({ ...form, crossCommunityBaseFee: e.target.value })} className={field} />
                 </div>
               </div>
-              <label className="flex items-center gap-2 text-sm text-gray-700">
-                <input type="checkbox" checked={form.crossCommunityEnabled} onChange={(e) => setForm({ ...form, crossCommunityEnabled: e.target.checked })} />
+              <label className="flex min-h-11 items-center gap-2 text-sm text-ink">
+                <input type="checkbox" className="h-5 w-5" checked={form.crossCommunityEnabled} onChange={(e) => setForm({ ...form, crossCommunityEnabled: e.target.checked })} />
                 Kitchens in neighbouring communities can deliver here
               </label>
               {neighbours.length > 0 && (
                 <div>
-                  <label className={label}>Neighbouring communities</label>
-                  <div className="flex flex-wrap gap-2">
+                  <p className={label} id="community-neighbours">Neighbouring communities</p>
+                  <div className="flex flex-wrap gap-2" role="group" aria-labelledby="community-neighbours">
                     {neighbours.map((c) => {
                       const on = form.neighborCommunityIds.includes(c.id);
                       return (
@@ -212,7 +221,8 @@ export default function AdminCommunitiesPage() {
                           onClick={() =>
                             setForm({ ...form, neighborCommunityIds: on ? form.neighborCommunityIds.filter((x) => x !== c.id) : [...form.neighborCommunityIds, c.id] })
                           }
-                          className={`px-2.5 py-1 rounded-full text-xs border ${on ? 'border-green-600 bg-green-50 text-green-800' : 'border-gray-200 text-gray-600'}`}
+                          aria-pressed={on}
+                          className={`min-h-11 px-3 rounded-full text-sm border ${on ? 'border-brand bg-brand-soft text-brand-soft-ink' : 'border-line text-ink hover:bg-raised'}`}
                         >
                           {c.name}
                         </button>
@@ -221,72 +231,89 @@ export default function AdminCommunitiesPage() {
                   </div>
                 </div>
               )}
-              <label className="flex items-center gap-2 text-sm text-gray-700">
-                <input type="checkbox" checked={form.isActive} onChange={(e) => setForm({ ...form, isActive: e.target.checked })} />
+              <label className="flex min-h-11 items-center gap-2 text-sm text-ink">
+                <input type="checkbox" className="h-5 w-5" checked={form.isActive} onChange={(e) => setForm({ ...form, isActive: e.target.checked })} />
                 Active (offered to buyers and kitchens)
               </label>
-              <Button type="submit" disabled={saving} className="bg-green-600 hover:bg-green-700 text-white">
+              <Button type="submit" disabled={saving}>
                 {saving ? 'Saving…' : form.id ? 'Save changes' : 'Create community'}
               </Button>
             </div>
             <div>
-              <label className={label}>Centre: click the map or drag the pin</label>
+              <p className={label}>Centre</p>
               <LocationMap
                 center={form.center ?? { lat: 31.5204, lng: 74.3587 }}
                 markerPosition={form.center}
+                hidePinUntilPicked
                 radiusKm={Number(form.radiusKm) || null}
                 height="380px"
                 onLocationSelect={(c) => setForm((prev) => (prev ? { ...prev, center: { lat: c.lat, lng: c.lng } } : prev))}
               />
-              <p className="text-xs text-gray-500 mt-1">
-                {form.center ? `${form.center.lat.toFixed(5)}, ${form.center.lng.toFixed(5)}` : 'No centre picked yet.'}
+              <p className={`text-sm mt-2 ${form.center ? 'text-muted' : 'text-accent-soft-ink bg-accent-soft rounded-lg px-3 py-2'}`} role="status">
+                {form.center ? 'Drag the pin to move the centre.' : 'Tap the map to place the centre of the community.'}
               </p>
             </div>
           </form>
         )}
 
-        <div className="bg-white border border-gray-200 rounded-lg overflow-x-auto">
+        <div className="bg-surface border border-line rounded-2xl overflow-x-auto">
           {loading && communities.length === 0 ? (
-            <p className="p-10 text-center text-gray-500">Loading…</p>
+            <p className="p-10 text-center text-sm text-muted" role="status">Loading…</p>
           ) : loadError && communities.length === 0 ? (
             <LoadError error={loadError} onRetry={load} title="We couldn't load the communities" className="m-4" />
           ) : communities.length === 0 ? (
-            <p className="p-10 text-center text-gray-500">No communities yet.</p>
+            <p className="p-10 text-center text-sm text-muted">No communities yet. Add the first with New community.</p>
           ) : (
-            <table className="w-full text-sm" data-testid="communities-table">
-              <thead className="bg-gray-50 text-start text-xs uppercase tracking-wide text-gray-500">
+            <>
+            <ul className="md:hidden divide-y divide-line" data-testid="communities-cards">
+              {communities.map((c) => (
+                <li key={c.id} className={`flex items-center gap-3 px-4 py-3 ${c.isActive ? '' : 'opacity-60'}`}>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold text-ink">
+                      {c.name} <span className="font-normal text-muted">· {c.city}</span>
+                      {!c.isActive && <span className="ms-2 rounded-full bg-raised px-2 py-0.5 text-xs font-medium text-muted">Off</span>}
+                    </p>
+                    <p className="text-sm text-muted">{deliveryLine(c)}</p>
+                    <p className="text-xs text-muted">Radius {c.radiusKm} km · {neighbourCount(c)} · {c.sellerCount === 1 ? '1 kitchen' : `${c.sellerCount} kitchens`}</p>
+                  </div>
+                  <Button variant="outline" onClick={() => editCommunity(c)}>Edit</Button>
+                </li>
+              ))}
+            </ul>
+            <div className="hidden md:block">
+            <table className="w-full text-sm [&_th]:text-start" data-testid="communities-table">
+              <thead className="bg-raised text-start text-xs font-medium text-muted">
                 <tr>
                   <th className="px-4 py-3">Community</th>
                   <th className="px-4 py-3">Area</th>
                   <th className="px-4 py-3">Nuray delivery</th>
                   <th className="px-4 py-3">Kitchens / members</th>
-                  <th className="px-4 py-3" />
+                  <th className="px-4 py-3"><span className="sr-only">Actions</span></th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-line">
                 {communities.map((c) => (
                   <tr key={c.id} className={c.isActive ? '' : 'opacity-60'}>
                     <td className="px-4 py-3">
-                      <p className="font-semibold text-gray-900">
-                        {c.name} {!c.isActive && <span className="text-xs font-normal text-gray-500">(off)</span>}
+                      <p className="font-semibold text-ink">
+                        {c.name} {!c.isActive && <span className="text-xs font-normal text-muted">(off)</span>}
                       </p>
-                      <p className="text-xs text-gray-500">
+                      <p className="text-xs text-muted">
                         {c.city} · /{c.slug}
                       </p>
                     </td>
-                    <td className="px-4 py-3 text-xs text-gray-600">
-                      {c.radiusKm} km around {c.centerLatitude.toFixed(4)}, {c.centerLongitude.toFixed(4)}
-                      {c.neighborCommunityIds.length > 0 && <p>{c.neighborCommunityIds.length} {c.neighborCommunityIds.length === 1 ? 'neighbour' : 'neighbours'}</p>}
+                    <td className="px-4 py-3 text-muted">
+                      Radius {c.radiusKm} km · {neighbourCount(c)}
                     </td>
-                    <td className="px-4 py-3 text-gray-700">
+                    <td className="px-4 py-3 text-ink">
                       {formatPrice(c.deliveryBaseFee)}
-                      <p className="text-xs text-gray-500">{c.crossCommunityEnabled ? `to others: ${formatPrice(c.crossCommunityBaseFee)} + per km` : 'Own kitchens only'}</p>
+                      <p className="text-xs text-muted">{c.crossCommunityEnabled ? `to others: ${formatPrice(c.crossCommunityBaseFee)} + per km` : 'Own kitchens only'}</p>
                     </td>
-                    <td className="px-4 py-3 text-gray-700">
+                    <td className="px-4 py-3 text-ink">
                       {c.sellerCount} / {c.memberCount}
                     </td>
                     <td className="px-4 py-3 text-end">
-                      <Button variant="outline" size="sm" onClick={() => setForm(fromCommunity(c))}>
+                      <Button variant="outline" onClick={() => editCommunity(c)}>
                         Edit
                       </Button>
                     </td>
@@ -294,6 +321,8 @@ export default function AdminCommunitiesPage() {
                 ))}
               </tbody>
             </table>
+            </div>
+            </>
           )}
         </div>
 

@@ -1,16 +1,17 @@
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+import { ChevronRight, ReceiptText } from 'lucide-react';
 import { AdminShell } from '@/components/layout/AdminShell';
 import { Button } from '@/components/ui/button';
 import { LoadError } from '@/components/ui/LoadError';
-import { useToast } from '@/components/ui/toast';
-import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
-import { formatPrice, formatDate } from '@/lib/utils';
-import { useShallow } from 'zustand/react/shallow';
+import { formatPrice } from '@/lib/utils';
+import { formatDateTime } from '@/components/admin/admin-dates';
+import { FilterChips, OrderStatusPill, PageHeader, Pager, StatusPill } from '@/components/admin/AdminListParts';
+import { methodLabel, nothingToCollect, paymentState, statusLabel } from './order-labels';
 
 interface AdminOrder {
   id: string;
@@ -18,13 +19,18 @@ interface AdminOrder {
   totalAmount: number;
   orderStatus: string;
   paymentStatus: string;
+  paymentMethod?: string | null;
   customer: {
     email: string;
+    phone?: string;
     profile?: { fullName?: string };
   };
+  items?: Array<{ seller?: { businessName?: string } | null }>;
   createdAt: string;
-  itemsCount: number;
 }
+
+// Delivery failed comes first: those orders wait for an admin to retry or cancel them.
+const STATUS_FILTERS = ['all', 'delivery_failed', 'pending', 'confirmed', 'preparing', 'ready', 'dispatched', 'in_transit', 'delivered', 'completed', 'cancelled'] as const;
 
 const PAYMENT_FILTERS = [
   ['', 'Any payment'],
@@ -32,6 +38,12 @@ const PAYMENT_FILTERS = [
   ['payment_submitted', 'Receipts waiting for the kitchen'],
   ['refund_pending', 'Refund being sent'],
 ] as const;
+
+// A cancelled order that was never paid has no payment story: the pill would only repeat "cancelled".
+const kitchenOf = (order: AdminOrder) => {
+  const names = Array.from(new Set((order.items ?? []).map((i) => i.seller?.businessName).filter(Boolean)));
+  return names.length ? names.join(', ') : null;
+};
 
 export default function AdminOrdersPage() {
   return (
@@ -44,223 +56,252 @@ export default function AdminOrdersPage() {
 function AdminOrdersContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [paymentFilter, setPaymentFilter] = useState<string>(searchParams.get('paymentStatus') ?? '');
-  const { isAuthenticated, user } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated, user: s.user })));
-  const { showToast } = useToast();
+  // The filters live in the address, so Back, reload and a shared link all keep the view.
+  // `orderStatus` is the API's name for the same filter; links from the approvals queue use it.
+  const filter = searchParams.get('status') ?? searchParams.get('orderStatus') ?? 'all';
+  const sellerId = searchParams.get('sellerId') ?? '';
+  const paymentFilter = searchParams.get('paymentStatus') ?? '';
+  const query = searchParams.get('q') ?? '';
+  const page = Math.max(1, Number(searchParams.get('page')) || 1);
+
   const [loading, setLoading] = useState(true);
   // Why the orders could not be read; shown instead of "No orders found", which would be untrue.
   const [loadError, setLoadError] = useState<unknown>(null);
   const [orders, setOrders] = useState<AdminOrder[]>([]);
-  const [filter, setFilter] = useState<string>('all');
-  const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [search, setSearch] = useState(query);
+  const [kitchenName, setKitchenName] = useState<string | null>(null);
+  // Only the newest request may fill the list: an older, slower one would show the previous filter's orders.
+  const latest = useRef(0);
 
-  // The menu's "Transfers to check" link changes the query string on the same page.
-  useEffect(() => {
-    setPaymentFilter(searchParams.get('paymentStatus') ?? '');
-    setPage(1);
-  }, [searchParams]);
+  const setView = (changes: Record<string, string | number | null>) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if ('status' in changes) params.delete('orderStatus');
+    for (const [key, value] of Object.entries(changes)) {
+      if (value === null || value === '' || value === 'all' || (key === 'page' && value === 1)) params.delete(key);
+      else params.set(key, String(value));
+    }
+    const qs = params.toString();
+    router.replace(qs ? `/admin/orders?${qs}` : '/admin/orders', { scroll: false });
+  };
 
-  const loadOrders = async () => {
+  const loadOrders = useCallback(async () => {
+    const request = ++latest.current;
     try {
       setLoading(true);
       setLoadError(null);
-      const response = await apiClient.get(
-        `/admin/orders?page=${page}&limit=20${filter !== 'all' ? `&orderStatus=${filter}` : ''}${paymentFilter ? `&paymentStatus=${paymentFilter}` : ''}`
-      );
+      const response = await apiClient.get('/admin/orders', {
+        params: {
+          page,
+          limit: 20,
+          orderStatus: filter !== 'all' ? filter : undefined,
+          paymentStatus: paymentFilter || undefined,
+          sellerId: sellerId || undefined,
+          orderNumber: query || undefined,
+        },
+      });
+      if (request !== latest.current) return;
       if (response.data.success) {
         setOrders(response.data.data.orders || []);
         setTotalPages(response.data.data.pagination?.totalPages || 1);
+        setTotal(response.data.data.pagination?.total ?? 0);
       }
     } catch (error) {
-      console.error('Failed to load orders:', error);
-      setLoadError(error);
+      if (request === latest.current) setLoadError(error);
     } finally {
-      setLoading(false);
+      if (request === latest.current) setLoading(false);
     }
-  };
+  }, [filter, paymentFilter, sellerId, query, page]);
 
   useEffect(() => {
-    if (!isAuthenticated) {
-      router.push('/admin/login');
-      return;
-    }
-
-    if (user?.user_type !== 'admin' && user?.userType !== 'admin') {
-      router.push('/products');
-      showToast('Access denied. Admin privileges required.', 'error');
-      return;
-    }
-
     loadOrders();
-  }, [isAuthenticated, user, filter, paymentFilter, page, router]);
+  }, [loadOrders]);
 
-  const getStatusColor = (status: string) => {
-    const statusMap: Record<string, string> = {
-      pending: 'bg-yellow-100 text-yellow-800',
-      confirmed: 'bg-blue-100 text-blue-800',
-      preparing: 'bg-purple-100 text-purple-800',
-      ready: 'bg-indigo-100 text-indigo-800',
-      dispatched: 'bg-pink-100 text-pink-800',
-      in_transit: 'bg-brand-100 text-brand-800',
-      delivered: 'bg-green-100 text-green-800',
-      completed: 'bg-green-100 text-green-800',
-      cancelled: 'bg-red-100 text-red-800',
+  useEffect(() => {
+    setKitchenName(null);
+    if (!sellerId) return;
+    let cancelled = false;
+    apiClient
+      .get(`/admin/sellers/${sellerId}`)
+      .then((res) => {
+        if (!cancelled) setKitchenName(res.data?.data?.businessName ?? null);
+      })
+      .catch(() => {
+        // The orders still filter by the kitchen; only its name is missing from the chip.
+      });
+    return () => {
+      cancelled = true;
     };
-    return statusMap[status] || 'bg-gray-100 text-gray-800';
-  };
-
-  if (!isAuthenticated || (user?.user_type !== 'admin' && user?.userType !== 'admin')) {
-    return null;
-  }
+  }, [sellerId]);
 
   return (
     <AdminShell>
-      <div className="max-w-7xl mx-auto">
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold text-gray-900">All Orders</h1>
-          <p className="text-gray-600 mt-1">Manage all platform orders</p>
+      <div className="max-w-7xl space-y-4">
+        <PageHeader title="Orders" subtitle="Every order on Nuray. Delivery failed orders need you to retry or cancel them." />
+
+        <form
+          role="search"
+          className="flex gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            setView({ q: search.trim(), page: 1 });
+          }}
+        >
+          <label htmlFor="order-search" className="sr-only">Order number</label>
+          <div className="min-w-0 flex-1 sm:flex-none sm:w-80">
+          <input
+            id="order-search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Order number, e.g. FN2026…"
+            className="nuray-input text-sm"
+            inputMode="search"
+          />
+          </div>
+          <Button type="submit" variant="outline">Find</Button>
+          {query && (
+            <Button type="button" variant="ghost" onClick={() => { setSearch(''); setView({ q: null, page: 1 }); }}>
+              Clear
+            </Button>
+          )}
+        </form>
+
+        <FilterChips
+          label="Order status"
+          value={filter}
+          onChange={(status) => setView({ status, page: 1 })}
+          options={STATUS_FILTERS.map((status) => ({ id: status, label: status === 'all' ? 'All' : statusLabel(status), problem: status === 'delivery_failed' }))}
+        />
+
+        {sellerId && (
+          <div className="flex flex-wrap items-center gap-2" data-testid="kitchen-filter">
+            <span className="rounded-full bg-brand-soft px-3 py-1 text-sm font-medium text-brand-soft-ink">
+              {kitchenName ? `Kitchen: ${kitchenName}` : 'One kitchen'}
+            </span>
+            <Button type="button" variant="ghost" onClick={() => setView({ sellerId: null, page: 1 })}>
+              Show every kitchen
+            </Button>
+          </div>
+        )}
+
+        <div className="flex items-center gap-2">
+          <label htmlFor="payment-filter" className="text-sm text-muted shrink-0">Payment</label>
+          {/* .nuray-input is full width, so the box around it sets the size. */}
+          <div className="min-w-0 flex-1 sm:flex-none sm:w-72">
+            <select
+              id="payment-filter"
+              value={paymentFilter}
+              onChange={(e) => setView({ paymentStatus: e.target.value, page: 1 })}
+              className="nuray-input text-sm"
+            >
+              {PAYMENT_FILTERS.map(([value, label]) => (
+                <option key={value || 'any'} value={value}>{label}</option>
+              ))}
+            </select>
+          </div>
         </div>
 
-        {/* Filters */}
-        <div className="bg-white rounded-lg shadow-sm p-4 mb-6">
-          <div className="flex gap-2 flex-wrap">
-            {['all', 'pending', 'confirmed', 'preparing', 'ready', 'dispatched', 'in_transit', 'delivered', 'completed', 'cancelled'].map((status) => (
-              <button
-                key={status}
-                onClick={() => {
-                  setFilter(status);
-                  setPage(1);
-                }}
-                className={`px-4 py-2 rounded-md font-medium transition-colors ${
-                  filter === status
-                    ? 'bg-green-600 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                {status.charAt(0).toUpperCase() + status.slice(1).replace('_', ' ')}
-              </button>
-            ))}
-          </div>
-          <div className="flex gap-2 flex-wrap mt-3 pt-3 border-t border-gray-100">
-            {PAYMENT_FILTERS.map(([value, label]) => (
-              <button
-                key={value || 'any'}
-                onClick={() => {
-                  setPaymentFilter(value);
-                  setPage(1);
-                }}
-                className={`px-3 py-1.5 rounded-md text-sm transition-colors ${
-                  paymentFilter === value ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {loading ? (
-          <div className="text-center py-12">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto mb-4"></div>
-            <p className="text-gray-600">Loading orders...</p>
+        {loading && orders.length === 0 ? (
+          <div className="flex items-center justify-center gap-3 py-12 text-sm text-muted" role="status">
+            <span className="h-5 w-5 animate-spin rounded-full border-2 border-line-strong border-t-brand-ink" aria-hidden="true" />
+            Loading orders…
           </div>
         ) : loadError && orders.length === 0 ? (
           <LoadError error={loadError} onRetry={loadOrders} title="We couldn't load the orders" />
         ) : orders.length === 0 ? (
-          <div className="bg-white rounded-lg shadow-sm p-12 text-center">
-            <div className="text-6xl mb-4">📦</div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">No orders found</h2>
-            <p className="text-gray-600">No orders match your current filter</p>
+          <div className="flex flex-col items-center gap-3 py-12 text-center">
+            <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-soft text-brand-soft-ink">
+              <ReceiptText className="h-6 w-6" aria-hidden="true" />
+            </span>
+            <p className="text-sm text-muted">No orders match these filters.</p>
           </div>
         ) : (
           <>
-            <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-3 text-start text-xs font-medium text-gray-500 uppercase">Order #</th>
-                      <th className="px-6 py-3 text-start text-xs font-medium text-gray-500 uppercase">Customer</th>
-                      <th className="px-6 py-3 text-start text-xs font-medium text-gray-500 uppercase">Amount</th>
-                      <th className="px-6 py-3 text-start text-xs font-medium text-gray-500 uppercase">Status</th>
-                      <th className="px-6 py-3 text-start text-xs font-medium text-gray-500 uppercase">Payment</th>
-                      <th className="px-6 py-3 text-start text-xs font-medium text-gray-500 uppercase">Date</th>
-                      <th className="px-6 py-3 text-start text-xs font-medium text-gray-500 uppercase">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200">
-                    {orders.map((order) => (
-                      <tr key={order.id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <Link href={`/admin/orders/${order.id}`} className="text-brand-ink hover:underline font-medium">
+            {/* Phones: one tappable card per order, three lines. */}
+            <ul aria-busy={loading} className={`md:hidden divide-y divide-line rounded-2xl border border-line bg-surface transition-opacity ${loading ? 'opacity-60' : ''}`} data-testid="admin-orders-cards">
+              {orders.map((order) => {
+                const payment = paymentState(order);
+                const kitchen = kitchenOf(order) ?? kitchenName;
+                return (
+                  <li key={order.id}>
+                    <Link href={`/admin/orders/${order.id}`} className="flex items-center gap-3 px-4 py-3 hover:bg-page">
+                      <div className="min-w-0 flex-1 space-y-1">
+                        <div className="flex items-baseline justify-between gap-2">
+                          <span className="font-semibold text-ink break-all">#{order.orderNumber}</span>
+                          <span className="text-sm font-semibold text-ink tabular-nums shrink-0">{formatPrice(order.totalAmount)}</span>
+                        </div>
+                        <p className="text-sm text-muted truncate">
+                          {order.customer.profile?.fullName || order.customer.email}
+                          {kitchen ? ` · ${kitchen}` : ''}
+                        </p>
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                          <OrderStatusPill status={order.orderStatus} label={statusLabel(order.orderStatus)} />
+                          {!nothingToCollect(order) && <StatusPill tone={payment.tone}>{payment.label}</StatusPill>}
+                          <span className="text-xs text-muted">{formatDateTime(order.createdAt)}</span>
+                        </div>
+                      </div>
+                      <ChevronRight className="h-4 w-4 text-muted shrink-0 rtl:rotate-180" aria-hidden="true" />
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+
+            <div aria-busy={loading} className={`hidden md:block bg-surface border border-line rounded-2xl overflow-x-auto transition-opacity ${loading ? 'opacity-60' : ''}`}>
+              <table className="w-full text-sm">
+                <thead className="bg-raised">
+                  <tr className="text-start text-xs font-medium text-muted">
+                    <th className="px-4 py-3 text-start">Order</th>
+                    <th className="px-4 py-3 text-start">Customer</th>
+                    <th className="px-3 py-3 text-start lg:px-4">Kitchen</th>
+                    <th className="px-4 py-3 text-start">Amount</th>
+                    <th className="px-4 py-3 text-start">Status</th>
+                    <th className="px-4 py-3 text-start">Payment</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-line">
+                  {orders.map((order) => {
+                    const payment = paymentState(order);
+                    const kitchen = kitchenOf(order) ?? kitchenName;
+                    return (
+                      <tr key={order.id} className="hover:bg-page">
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <Link href={`/admin/orders/${order.id}`} className="inline-flex min-h-11 items-center font-semibold text-brand-ink hover:underline">
                             #{order.orderNumber}
                           </Link>
+                          <p className="text-xs text-muted">{formatDateTime(order.createdAt)}</p>
                         </td>
-                        <td className="px-6 py-4">
-                          <div className="text-sm font-medium text-gray-900">
-                            {order.customer.profile?.fullName || order.customer.email}
-                          </div>
-                          <div className="text-sm text-gray-500">{order.customer.email}</div>
+                        <td className="px-4 py-3">
+                          <p className="text-ink">{order.customer.profile?.fullName || order.customer.email}</p>
+                          <p className="max-w-56 truncate text-xs text-muted" title={order.customer.email}>{order.customer.email}</p>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                          {formatPrice(order.totalAmount)}
+                        <td className="px-3 py-3 text-ink lg:px-4">
+                          {kitchen ? (
+                            <p className="line-clamp-2 min-w-22 max-w-48 break-words" title={kitchen}>{kitchen}</p>
+                          ) : (
+                            <span className="text-muted">Not known</span>
+                          )}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`px-2 py-1 rounded text-xs font-medium ${getStatusColor(order.orderStatus)}`}>
-                            {order.orderStatus.replace('_', ' ').toUpperCase()}
-                          </span>
+                        <td className="px-4 py-3 whitespace-nowrap font-semibold text-ink tabular-nums">{formatPrice(order.totalAmount)}</td>
+                        <td className="px-4 py-3">
+                          <OrderStatusPill status={order.orderStatus} label={statusLabel(order.orderStatus)} />
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`px-2 py-1 rounded text-xs font-medium ${
-                            order.paymentStatus === 'paid' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
-                          }`}>
-                            {order.paymentStatus.toUpperCase()}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {formatDate(order.createdAt)}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm">
-                          <Link href={`/admin/orders/${order.id}`}>
-                            <Button variant="outline" size="sm">
-                              View
-                            </Button>
-                          </Link>
+                        <td className="px-4 py-3">
+                          {!nothingToCollect(order) && <StatusPill tone={payment.tone} className="mb-1">{payment.label}</StatusPill>}
+                          <p className="text-xs text-muted">{methodLabel(order.paymentMethod)}</p>
                         </td>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
 
-            {/* Pagination */}
-            {totalPages > 1 && (
-              <div className="mt-6 flex items-center justify-between">
-                <Button
-                  variant="outline"
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  disabled={page === 1}
-                >
-                  Previous
-                </Button>
-                <span className="text-sm text-gray-600">
-                  Page {page} of {totalPages}
-                </span>
-                <Button
-                  variant="outline"
-                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                  disabled={page === totalPages}
-                >
-                  Next
-                </Button>
-              </div>
-            )}
+            <Pager page={page} totalPages={totalPages} total={total} noun="orders" one="order" onChange={(next) => setView({ page: next })} />
           </>
         )}
       </div>
     </AdminShell>
   );
 }
-

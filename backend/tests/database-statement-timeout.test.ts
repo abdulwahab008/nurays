@@ -31,9 +31,14 @@ describe('the database connection string the app runs on', () => {
     expect(options.datasourceUrl).toBe(`${URL_WITH_PARAMS}&${TIMEOUT_30S}`);
   });
 
-  it('starts the query string when there is none', () => {
+  it('caps the pool at 10 connections when DATABASE_URL names no connection_limit, starting the query string', () => {
     const options = clientOptions({ DATABASE_URL: 'postgresql://app@db.internal/nuray', DB_STATEMENT_TIMEOUT_MS: undefined });
-    expect(options.datasourceUrl).toBe(`postgresql://app@db.internal/nuray?${TIMEOUT_30S}`);
+    expect(options.datasourceUrl).toBe(`postgresql://app@db.internal/nuray?connection_limit=10&${TIMEOUT_30S}`);
+  });
+
+  it('keeps the connection_limit the operator wrote', () => {
+    const options = clientOptions({ DATABASE_URL: 'postgresql://app@db.internal/nuray?connection_limit=25', DB_STATEMENT_TIMEOUT_MS: '0' });
+    expect(options.datasourceUrl).toBe('postgresql://app@db.internal/nuray?connection_limit=25');
   });
 
   it('takes the limit from DB_STATEMENT_TIMEOUT_MS', () => {

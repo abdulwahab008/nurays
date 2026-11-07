@@ -1,207 +1,210 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { AdminShell } from '@/components/layout/AdminShell';
-import { useToast } from '@/components/ui/toast';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { DashboardLayout, adminSidebarFor } from '@/components/layout/DashboardShell';
 import { LoadError } from '@/components/ui/LoadError';
+import { AdminFilterTabs } from '@/components/admin/AdminFilterTabs';
+import { Figure, LoadingLine } from '@/components/admin/AdminListParts';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
 import { formatPrice } from '@/lib/utils';
 import { useShallow } from 'zustand/react/shallow';
+import { statusLabel } from '../orders/order-labels';
 
 interface AnalyticsData {
   overview: {
     totalUsers: number;
     totalSellers: number;
+    newUsersThisWeek?: number;
+    newSellersThisWeek?: number;
     totalOrders: number;
     totalRevenue: number;
+    periodOrders: number;
+    periodRevenue: number;
+    periodPaidOrders: number;
+    activeUsers: number;
+    activeSellers: number;
+    totalCommission: number;
   };
-  revenue: {
-    today: number;
-    thisWeek: number;
-    thisMonth: number;
-    total: number;
-  };
-  orders: {
-    today: number;
-    thisWeek: number;
-    thisMonth: number;
-    total: number;
-  };
-  revenueByDay?: Array<{ date: string; revenue: number }>;
+  ordersByStatus: Record<string, number>;
+  revenueByDay?: Array<{ date: string; orders: number; revenue: number }>;
+}
+
+type Period = '7' | '30' | '90';
+const PERIODS: ReadonlyArray<{ id: Period; label: string }> = [
+  { id: '7', label: '7 days' },
+  { id: '30', label: '30 days' },
+  { id: '90', label: '90 days' },
+];
+
+const STATUS_ORDER = ['pending', 'confirmed', 'preparing', 'ready', 'dispatched', 'in_transit', 'delivered', 'delivery_failed', 'cancelled', 'refunded'];
+
+const karachiToday = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Karachi' }).format(new Date());
+
+/** The Pakistan calendar date `back` days before today, as YYYY-MM-DD: the days the backend groups paid sales by. */
+function karachiDaysAgo(back: number) {
+  const d = new Date(`${karachiToday()}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - back);
+  return d.toISOString().slice(0, 10);
+}
+
+/** Paid sales for every day of the period, with the days that had none as zero. */
+function dailySeries(rows: AnalyticsData['revenueByDay'], days: number) {
+  const byDate = new Map((rows ?? []).map((r) => [r.date, r]));
+  const out: Array<{ date: string; revenue: number; orders: number }> = [];
+  for (let i = days - 1; i >= 0; i--) {
+    const key = karachiDaysAgo(i);
+    const row = byDate.get(key);
+    out.push({ date: key, revenue: row?.revenue ?? 0, orders: row?.orders ?? 0 });
+  }
+  return out;
+}
+
+const shortDate = (iso: string) => new Date(`${iso}T00:00:00`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+
+function SalesChart({ series }: { series: Array<{ date: string; revenue: number; orders: number }> }) {
+  const max = Math.max(1, ...series.map((d) => d.revenue));
+  const best = series.reduce((a, b) => (b.revenue > a.revenue ? b : a), series[0]);
+  return (
+    <figure>
+      <div className="flex h-40 items-end gap-[2px]" role="img" aria-label={`Paid sales by day. Best day ${shortDate(best.date)}, ${formatPrice(best.revenue)}.`}>
+        {series.map((d) => (
+          <div key={d.date} className="group relative flex h-full flex-1 items-end">
+            <div
+              className={`w-full rounded-t-sm ${d.revenue > 0 ? 'bg-brand' : 'bg-line'}`}
+              style={{ height: d.revenue > 0 ? `${Math.max(3, (d.revenue / max) * 100)}%` : '2px' }}
+              title={`${shortDate(d.date)}: ${formatPrice(d.revenue)}, ${d.orders} paid orders`}
+            />
+          </div>
+        ))}
+      </div>
+      <figcaption className="mt-2 flex justify-between text-xs text-muted">
+        <span>{shortDate(series[0].date)}</span>
+        <span>Best day {formatPrice(best.revenue)}</span>
+        <span>{shortDate(series[series.length - 1].date)}</span>
+      </figcaption>
+    </figure>
+  );
 }
 
 export default function AdminAnalyticsPage() {
-  const router = useRouter();
   const { isAuthenticated, user } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated, user: s.user })));
-  const { showToast } = useToast();
+  const isAdmin = user?.user_type === 'admin' || user?.userType === 'admin';
+  const [period, setPeriod] = useState<Period>('30');
   const [loading, setLoading] = useState(true);
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
   // Why the figures could not be read: never shown as zeros, which would read as "no business at all".
   const [loadError, setLoadError] = useState<unknown>(null);
 
-  const loadAnalytics = async () => {
+  const loadAnalytics = useCallback(async () => {
     try {
       setLoading(true);
+      const now = new Date();
+      // Pakistan has no daylight saving, so its midnight is always +05:00.
+      const from = new Date(`${karachiDaysAgo(Number(period) - 1)}T00:00:00+05:00`);
+      const response = await apiClient.get('/admin/analytics', { params: { dateFrom: from.toISOString(), dateTo: now.toISOString() } });
+      if (!response.data.success) throw new Error('The analytics answer carried no figures');
+      setAnalytics(response.data.data);
       setLoadError(null);
-      const response = await apiClient.get('/admin/analytics');
-      if (response.data.success) {
-        setAnalytics(response.data.data);
-      } else {
-        throw new Error('The analytics answer carried no figures');
-      }
     } catch (error: unknown) {
-      console.error('Failed to load analytics:', error);
       setLoadError(error);
     } finally {
       setLoading(false);
     }
-  };
+  }, [period]);
 
   useEffect(() => {
-    if (!isAuthenticated) {
-      router.push('/admin/login');
-      return;
-    }
+    if (isAuthenticated && isAdmin) void loadAnalytics();
+  }, [isAuthenticated, isAdmin, loadAnalytics]);
 
-    if (user?.user_type !== 'admin' && user?.userType !== 'admin') {
-      router.push('/products');
-      showToast('Access denied. Admin privileges required.', 'error');
-      return;
-    }
+  const series = useMemo(() => dailySeries(analytics?.revenueByDay, Number(period)), [analytics, period]);
 
-    loadAnalytics();
-  }, [isAuthenticated, user, router]);
+  if (!isAuthenticated || !isAdmin) return null;
 
-  if (!isAuthenticated || (user?.user_type !== 'admin' && user?.userType !== 'admin')) {
-    return null;
-  }
+  const o = analytics?.overview;
+  const statuses = analytics
+    ? Object.entries(analytics.ordersByStatus).sort(([a], [b]) => STATUS_ORDER.indexOf(a) - STATUS_ORDER.indexOf(b))
+    : [];
 
   return (
-    <AdminShell>
-      <div className="max-w-7xl mx-auto">
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold text-gray-900">Platform Analytics</h1>
-          <p className="text-gray-600 mt-1">View platform-wide statistics and insights</p>
-        </div>
+    <DashboardLayout title="Analytics" sidebarItems={adminSidebarFor(user?.permissions)} userType="admin">
+      <div className="max-w-5xl space-y-6">
+        <AdminFilterTabs label="Period" value={period} onChange={setPeriod} tabs={PERIODS} />
 
-        {loading ? (
-          <div className="text-center py-12">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto mb-4"></div>
-            <p className="text-gray-600">Loading analytics...</p>
-          </div>
-        ) : loadError ? (
-          <LoadError error={loadError} onRetry={loadAnalytics} title="We couldn't load the analytics" />
-        ) : analytics ? (
+        {loading && !analytics ? (
+          <LoadingLine text="Loading the figures" />
+        ) : loadError && !analytics ? (
+          <LoadError error={loadError} onRetry={() => void loadAnalytics()} title="We couldn't load the analytics" />
+        ) : analytics && o ? (
           <>
-            {/* Overview Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-              <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-gray-600 mb-1">Total Users</p>
-                    <p className="text-3xl font-bold text-gray-900">{analytics.overview.totalUsers}</p>
-                  </div>
-                  <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                    <span className="text-2xl">👥</span>
-                  </div>
-                </div>
+            {Boolean(loadError) && (
+              <LoadError compact error={loadError} onRetry={() => void loadAnalytics()} title="We couldn't refresh the figures: these are for the period before" />
+            )}
+            <section aria-labelledby="period-heading">
+              <h2 id="period-heading" className="mb-4 text-sm font-semibold text-ink">
+                Last {period} days
+              </h2>
+              <div className="grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-3" data-testid="period-figures">
+                <Figure label="Paid sales" value={formatPrice(o.periodRevenue)} />
+                <Figure label="Orders" value={o.periodOrders} />
+                <Figure label="Commission earned" value={formatPrice(o.totalCommission)} />
+                <Figure label="Customers who ordered" value={o.activeUsers} />
+                <Figure label="Kitchens with orders" value={o.activeSellers} />
+                <Figure label="Average paid order" value={formatPrice(o.periodPaidOrders ? Math.round(o.periodRevenue / o.periodPaidOrders) : 0)} />
               </div>
+            </section>
 
-              <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-gray-600 mb-1">Total Sellers</p>
-                    <p className="text-3xl font-bold text-gray-900">{analytics.overview.totalSellers}</p>
-                  </div>
-                  <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-                    <span className="text-2xl">🏪</span>
-                  </div>
-                </div>
-              </div>
+            <section aria-labelledby="sales-heading" className="border-t border-line pt-5">
+              <h2 id="sales-heading" className="mb-4 text-sm font-semibold text-ink">
+                Paid sales by day
+              </h2>
+              <SalesChart series={series} />
+            </section>
 
-              <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-gray-600 mb-1">Total Orders</p>
-                    <p className="text-3xl font-bold text-gray-900">{analytics.overview.totalOrders}</p>
-                  </div>
-                  <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-                    <span className="text-2xl">📦</span>
-                  </div>
-                </div>
-              </div>
+            <div className="grid grid-cols-1 gap-x-10 gap-y-6 md:grid-cols-2">
+              <section aria-labelledby="status-heading" className="border-t border-line pt-5">
+                <h2 id="status-heading" className="mb-2 text-sm font-semibold text-ink">
+                  Orders by status
+                </h2>
+                {statuses.length === 0 ? (
+                  <p className="text-sm text-muted">No orders in this period.</p>
+                ) : (
+                  <ul className="divide-y divide-line text-sm">
+                    {statuses.map(([status, count]) => (
+                      <li key={status} className="flex justify-between gap-3 py-2">
+                        <span className={status === 'delivery_failed' || status === 'cancelled' ? 'text-red-700' : 'text-ink'}>{statusLabel(status)}</span>
+                        <span className="font-medium tabular-nums text-ink">{count}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </section>
 
-              <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-gray-600 mb-1">Total Revenue</p>
-                    <p className="text-2xl font-bold text-green-600">{formatPrice(analytics.overview.totalRevenue)}</p>
-                  </div>
-                  <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
-                    <span className="text-2xl">💰</span>
-                  </div>
+              <section aria-labelledby="alltime-heading" className="border-t border-line pt-5">
+                <h2 id="alltime-heading" className="mb-4 text-sm font-semibold text-ink">
+                  All time
+                </h2>
+                <div className="grid grid-cols-2 gap-x-6 gap-y-5">
+                  <Figure label="Paid sales" value={formatPrice(o.totalRevenue)} />
+                  <Figure label="Orders" value={o.totalOrders} />
+                  <Figure
+                    label="Customers"
+                    value={o.totalUsers}
+                    sub={o.newUsersThisWeek != null ? `${o.newUsersThisWeek} joined this week` : 'Active accounts'}
+                    href="/admin/users"
+                  />
+                  <Figure
+                    label="Live kitchens"
+                    value={o.totalSellers}
+                    sub={o.newSellersThisWeek != null ? `${o.newSellersThisWeek} joined this week` : 'Approved and active'}
+                    href="/admin/sellers?status=approved"
+                  />
                 </div>
-              </div>
-            </div>
-
-            {/* Revenue & Orders */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-              <div className="bg-white rounded-lg shadow-sm p-6">
-                <h2 className="text-xl font-bold text-gray-900 mb-4">Revenue</h2>
-                <div className="space-y-3">
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Today</span>
-                    <span className="font-semibold text-gray-900">{formatPrice(analytics.revenue?.today ?? 0)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">This Week</span>
-                    <span className="font-semibold text-gray-900">{formatPrice(analytics.revenue?.thisWeek ?? 0)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">This Month</span>
-                    <span className="font-semibold text-gray-900">{formatPrice(analytics.revenue?.thisMonth ?? 0)}</span>
-                  </div>
-                  <div className="flex justify-between border-t pt-3">
-                    <span className="font-medium text-gray-900">Total</span>
-                    <span className="font-bold text-green-600">{formatPrice(analytics.revenue?.total ?? analytics.overview?.totalRevenue ?? 0)}</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-white rounded-lg shadow-sm p-6">
-                <h2 className="text-xl font-bold text-gray-900 mb-4">Orders</h2>
-                <div className="space-y-3">
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Today</span>
-                    <span className="font-semibold text-gray-900">{analytics.orders?.today ?? 0}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">This Week</span>
-                    <span className="font-semibold text-gray-900">{analytics.orders?.thisWeek ?? 0}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">This Month</span>
-                    <span className="font-semibold text-gray-900">{analytics.orders?.thisMonth ?? 0}</span>
-                  </div>
-                  <div className="flex justify-between border-t pt-3">
-                    <span className="font-medium text-gray-900">Total (all time)</span>
-                    <span className="font-bold text-green-600">{analytics.overview?.totalOrders ?? 0}</span>
-                  </div>
-                </div>
-              </div>
+              </section>
             </div>
           </>
-        ) : (
-          <div className="bg-white rounded-lg shadow-sm p-12 text-center">
-            <div className="text-6xl mb-4">📊</div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">No analytics data</h2>
-            <p className="text-gray-600">Analytics data will appear here once the platform has activity</p>
-          </div>
-        )}
+        ) : null}
       </div>
-    </AdminShell>
+    </DashboardLayout>
   );
 }
-

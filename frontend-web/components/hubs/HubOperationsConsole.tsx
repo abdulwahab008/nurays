@@ -6,14 +6,12 @@
  * Each tab is in ./console/; the rules (the -18°C line, the queue filter) are in lib/hub-console.ts.
  */
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { useShallow } from 'zustand/react/shallow';
+import Link from 'next/link';
+import { Snowflake } from 'lucide-react';
 import { DashboardLayout, ADMIN_SIDEBAR_ITEMS, HUB_MANAGER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { LoadError } from '@/components/ui/LoadError';
-import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
-import { loginUrlHere } from '@/lib/auth-redirect';
 import type { BatchSummary, ConsoleTab, FrozenProduct, Hub, HubBatch, HubStats, TemperatureLog, TempStats } from '@/lib/hub-console';
 import CommandBar from './console/CommandBar';
 import OverviewTab from './console/OverviewTab';
@@ -22,11 +20,13 @@ import FefoTab from './console/FefoTab';
 import TemperatureTab from './console/TemperatureTab';
 import BatchStatusModal from './console/BatchStatusModal';
 
+const TITLE = 'Hub operations';
+const SUBTITLE = 'Batches in, temperature checks, oldest stock out first';
+
 export default function HubOperationsConsole({ mode }: { mode: 'admin' | 'manager' }) {
   const isManagerMode = mode === 'manager';
-  const router = useRouter();
-  const { isAuthenticated, user } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated, user: s.user })));
-  const { showToast } = useToast();
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const userId = useAuthStore((s) => s.user?.id);
 
   const [activeTab, setActiveTab] = useState<ConsoleTab>('overview');
 
@@ -111,21 +111,11 @@ export default function HubOperationsConsole({ mode }: { mode: 'admin' | 'manage
     }
   };
 
-  // Auth Guard
+  // Who may open the console is decided by the segment's layout (app/admin/layout.tsx, app/hub/layout.tsx).
   useEffect(() => {
-    if (!isAuthenticated) {
-      router.push(loginUrlHere(isManagerMode ? '/login' : '/admin/login'));
-      return;
-    }
-    const role = user?.userType ?? user?.user_type;
-    if (role !== (isManagerMode ? 'hub_manager' : 'admin')) {
-      router.push('/products');
-      showToast(isManagerMode ? 'This page is for hub managers.' : 'Access denied. Administrator privileges required.', 'error');
-      return;
-    }
-    initializeData();
+    if (isAuthenticated) initializeData();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- load once per signed-in user
-  }, [isAuthenticated, user, router]);
+  }, [isAuthenticated, userId]);
 
   const handleHubChange = (hubId: string) => {
     setSelectedHubId(hubId);
@@ -137,8 +127,8 @@ export default function HubOperationsConsole({ mode }: { mode: 'admin' | 'manage
   if (!loading && initError && hubs.length === 0) {
     return (
       <DashboardLayout
-        title="Cold Hub Operations & FEFO Engine"
-        subtitle="Batch intake, temperature checks and the FEFO dispatch queue"
+        title={TITLE}
+        subtitle={SUBTITLE}
         sidebarItems={isManagerMode ? HUB_MANAGER_SIDEBAR_ITEMS : ADMIN_SIDEBAR_ITEMS}
         userType={isManagerMode ? 'hub_manager' : 'admin'}
       >
@@ -152,23 +142,28 @@ export default function HubOperationsConsole({ mode }: { mode: 'admin' | 'manage
   if (!loading && hubs.length === 0) {
     return (
       <DashboardLayout
-        title="Cold Hub Operations & FEFO Engine"
-        subtitle="Batch intake, temperature checks and the FEFO dispatch queue"
+        title={TITLE}
+        subtitle={SUBTITLE}
         sidebarItems={isManagerMode ? HUB_MANAGER_SIDEBAR_ITEMS : ADMIN_SIDEBAR_ITEMS}
         userType={isManagerMode ? 'hub_manager' : 'admin'}
       >
-        <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center max-w-xl mx-auto" data-testid="no-hubs">
-          <div className="text-4xl mb-3">❄️</div>
-          <h2 className="text-lg font-bold text-slate-900">{isManagerMode ? 'No hub is assigned to you yet' : 'No active hubs'}</h2>
-          <p className="text-sm text-slate-600 mt-2">
+        <div className="py-12 text-center max-w-xl mx-auto" data-testid="no-hubs">
+          <span className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-soft text-brand-soft-ink">
+            <Snowflake className="h-6 w-6" aria-hidden="true" />
+          </span>
+          <h2 className="text-base font-semibold text-ink">{isManagerMode ? 'No hub is assigned to you yet' : 'No active hubs'}</h2>
+          <p className="text-sm text-muted mt-2">
             {isManagerMode
               ? 'An admin assigns each hub to its manager. Ask them to add you to your hub, then reload this page.'
               : 'Create a hub and assign its manager first.'}
           </p>
           {!isManagerMode && (
-            <a href="/admin/hubs/manage" className="inline-block mt-4 px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-semibold">
-              Hubs &amp; managers
-            </a>
+            <Link
+              href="/admin/hubs/manage"
+              className="mt-4 inline-flex h-11 items-center justify-center rounded-xl bg-brand px-6 text-sm font-semibold text-on-brand hover:bg-brand-500"
+            >
+              Set up a hub
+            </Link>
           )}
         </div>
       </DashboardLayout>
@@ -177,8 +172,8 @@ export default function HubOperationsConsole({ mode }: { mode: 'admin' | 'manage
 
   return (
     <DashboardLayout
-      title="Cold Hub Operations & FEFO Engine"
-      subtitle="Physical batch intake, mandatory ≤ -18°C temperature probe verification & automated FEFO dispatch queue"
+      title={TITLE}
+      subtitle={SUBTITLE}
       sidebarItems={isManagerMode ? HUB_MANAGER_SIDEBAR_ITEMS : ADMIN_SIDEBAR_ITEMS}
       userType={isManagerMode ? 'hub_manager' : 'admin'}
     >

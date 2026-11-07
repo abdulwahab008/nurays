@@ -15,8 +15,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   return (
     <RoleGuard
       allowedRoles={['admin']}
-      redirectUnauthenticated="/admin/login"
-      redirectWrongRole="/products"
+      redirectUnauthenticated="/login"
     >
       {children}
     </RoleGuard>

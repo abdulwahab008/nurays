@@ -14,10 +14,12 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { useDialogs } from '@/components/ui/Dialogs';
 import { CategoryRequestModal } from '@/components/CategoryRequestModal';
-import MenuTypeField, { DEFAULT_MENU, MenuType, MenuValue, menuError, menuPayload } from '@/components/sellers/MenuTypeField';
+import MenuTypeField, { DEFAULT_MENU, MenuType, MenuValue, menuIncomplete, menuPayload } from '@/components/sellers/MenuTypeField';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
 import { loginUrlHere } from '@/lib/auth-redirect';
+import { useT } from '@/lib/i18n';
+import { kitchenProductFormMessages } from '@/lib/i18n/messages/kitchen-product-form';
 import {
   EMPTY_PRODUCT_FORM,
   MAX_VARIANTS,
@@ -28,7 +30,7 @@ import {
   locateCategory,
   newVariant,
   productPayload,
-  productProblem,
+  productProblems,
   saveErrorMessage,
   variantPayload,
   withoutVariant,
@@ -38,6 +40,8 @@ import DetailsSection from './DetailsSection';
 import PhotosSection, { ProductImage } from './PhotosSection';
 import PricingSection from './PricingSection';
 import VariantsEditor from './VariantsEditor';
+import DeliveryMenuSection from './DeliveryMenuSection';
+import { FieldErrorsContext, SwitchRow } from './fields';
 import { ShortcutsButton, ShortcutsHelp, useFormShortcuts } from './KeyboardShortcuts';
 
 interface LoadedProduct extends SavedProduct {
@@ -62,6 +66,7 @@ export default function ProductForm(props: Props) {
   const { isAuthenticated, user } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated, user: s.user })));
   const { showToast } = useToast();
   const { confirm: confirmDialog } = useDialogs();
+  const t = useT(kitchenProductFormMessages);
   const formRef = useRef<HTMLFormElement>(null);
 
   const [loading, setLoading] = useState(mode === 'edit');
@@ -78,9 +83,14 @@ export default function ProductForm(props: Props) {
   const [categoriesError, setCategoriesError] = useState<unknown>(null);
   const [parentId, setParentId] = useState<string | null>(null);
   const [showCategoryRequest, setShowCategoryRequest] = useState(false);
+  // What stopped the last save, by field; the messages go once the kitchen changes something.
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const { helpOpen, setHelpOpen } = useFormShortcuts(formRef, saving);
 
-  const update = useCallback((patch: Partial<ProductFormData>) => setForm((prev) => ({ ...prev, ...patch })), []);
+  const update = useCallback((patch: Partial<ProductFormData>) => {
+    setForm((prev) => ({ ...prev, ...patch }));
+    setFieldErrors((prev) => (Object.keys(prev).length ? {} : prev));
+  }, []);
 
   const loadCategories = useCallback(async () => {
     try {
@@ -101,12 +111,12 @@ export default function ProductForm(props: Props) {
           apiClient.get(`/products/${id}`),
           apiClient.get(`/product-variants/product/${id}`).catch((error) => {
             console.error('Failed to load variants:', error);
-            showToast("We couldn't load this dish's variants; saving now leaves them as they are.", 'warning');
+            showToast(t('sizesLoadFailed'), 'warning');
             return null;
           }),
         ]);
         const product: LoadedProduct | undefined = productRes.data.success ? productRes.data.data : undefined;
-        if (!product) throw new Error('Product not found');
+        if (!product) throw new Error(t('notFound'));
 
         const filled = formFromProduct(product);
         setForm(filled.form);
@@ -124,23 +134,23 @@ export default function ProductForm(props: Props) {
         setShowVariants(saved.length > 0);
       } catch (error) {
         console.error('Failed to load product:', error);
-        showToast('Failed to load product', 'error');
+        showToast(t('openFailed'), 'error');
         router.push('/sellers/products');
       } finally {
         setLoading(false);
       }
     },
-    [router, showToast],
+    [router, showToast, t],
   );
 
   useEffect(() => {
     if (!isAuthenticated) {
-      router.push(loginUrlHere());
+      router.replace(loginUrlHere());
       return;
     }
     if (user?.userType !== 'seller' && user?.user_type !== 'seller') {
       router.push('/dashboard');
-      showToast('Access denied. Seller privileges required.', 'error');
+      showToast(t('accessDenied'), 'error');
       return;
     }
     loadCategories();
@@ -194,9 +204,22 @@ export default function ProductForm(props: Props) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const problem = productProblem(form, customUnit, { requireCategory: mode === 'create' }) || menuError(menu);
-    if (problem) {
-      showToast(problem, 'error');
+    const problems = Object.fromEntries(
+      Object.entries(productProblems(form, customUnit, { requireCategory: mode === 'create', variants })).map(([field, problem]) => [field, t(problem)])
+    );
+    setFieldErrors(problems);
+    const first = Object.keys(problems)[0];
+    if (first) {
+      if (!showVariants && first.startsWith('variant-')) setShowVariants(true);
+      const field = document.getElementById(first);
+      field?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      field?.focus({ preventScroll: true });
+      const count = Object.keys(problems).length;
+      showToast(count === 1 ? problems[first] : t('fixCount', { count }), 'error');
+      return;
+    }
+    if (menuIncomplete(menu)) {
+      showToast(t('pickDay'), 'error');
       return;
     }
 
@@ -204,7 +227,7 @@ export default function ProductForm(props: Props) {
       setSaving(true);
       const uploaded = await uploadNewPhotos();
       if (uploaded === null) {
-        showToast(mode === 'create' ? 'Failed to upload images. Product will be created without images.' : 'Failed to upload new images', 'warning');
+        showToast(mode === 'create' ? t('photosNotUploadedCreate') : t('photosNotUploadedEdit'), 'warning');
       }
       const savedPhotos = images.filter((img) => img.url).map((img) => img.url as string);
       const body = { ...productPayload(form, customUnit, [...savedPhotos, ...(uploaded || [])], mode), ...menuPayload(menu) };
@@ -219,25 +242,26 @@ export default function ProductForm(props: Props) {
 
       if (!variantsSaved) {
         showToast(
-          mode === 'create'
-            ? 'Product created but variants failed. You can add them later by editing the product.'
-            : 'Product updated but some variants failed. Please try again.',
+          mode === 'create' ? t('sizesNotSavedCreate') : t('sizesNotSavedEdit'),
           'warning',
         );
+        // The dish exists now: going on as "Add a dish" would make a second one.
+        if (mode === 'create') {
+          router.push(`/sellers/products/${id}/edit`);
+          return;
+        }
       } else if (mode === 'create') {
         showToast(
-          n > 0
-            ? `Product created with ${n} variant${n > 1 ? 's' : ''}! It'll go live once approved by an admin.`
-            : "Product submitted for review! It'll go live once approved by an admin.",
+          n > 1 ? t('savedWithSizes', { count: n }) : n === 1 ? t('savedWithSizesOne') : t('savedNew'),
           'success',
         );
       } else {
-        showToast(touchedVariants ? `Product and ${n} variant(s) updated successfully!` : '✅ Product updated successfully!', 'success');
+        showToast(t('changesSaved'), 'success');
       }
       router.push('/sellers/products');
     } catch (error) {
       console.error('Failed to save product:', error);
-      showToast(saveErrorMessage(error, mode === 'create' ? 'Failed to add product. Please try again.' : 'Failed to update product. Please try again.'), 'error');
+      showToast(saveErrorMessage(error, mode === 'create' ? t('notSavedCreate') : t('notSavedEdit')), 'error');
     } finally {
       setSaving(false);
     }
@@ -247,9 +271,9 @@ export default function ProductForm(props: Props) {
     if (!productId) return;
     if (
       !(await confirmDialog({
-        title: 'Delete this dish?',
-        message: 'Are you sure you want to delete this product? This action cannot be undone.',
-        confirmText: 'Delete',
+        title: t('deleteTitle'),
+        message: t('deleteBody'),
+        confirmText: t('delete'),
       }))
     ) {
       return;
@@ -258,12 +282,12 @@ export default function ProductForm(props: Props) {
       setSaving(true);
       const response = await apiClient.delete(`/products/${productId}`);
       if (response.data.success) {
-        showToast('Product deleted successfully', 'success');
+        showToast(t('deleted'), 'success');
         router.push('/sellers/products');
       }
     } catch (error) {
       console.error('Failed to delete product:', error);
-      showToast(saveErrorMessage(error, 'Failed to delete product'), 'error');
+      showToast(saveErrorMessage(error, t('notDeleted')), 'error');
     } finally {
       setSaving(false);
     }
@@ -271,7 +295,7 @@ export default function ProductForm(props: Props) {
 
   const addVariant = () => {
     if (variants.length >= MAX_VARIANTS) {
-      showToast(`Maximum ${MAX_VARIANTS} variants allowed per product`, 'warning');
+      showToast(t('maxSizes', { max: MAX_VARIANTS }), 'warning');
       return;
     }
     setVariants((prev) => [...prev, newVariant(form, prev.length)]);
@@ -285,98 +309,45 @@ export default function ProductForm(props: Props) {
 
   if (!isAuthenticated) return null;
 
-  const title = mode === 'create' ? 'Add New Product' : 'Edit Product';
+  const title = mode === 'create' ? t('addTitle') : t('editTitle');
   if (loading) {
     return (
-      <DashboardLayout title={title} subtitle="Loading..." sidebarItems={SELLER_SIDEBAR_ITEMS} userType="seller">
-        <div className="flex items-center justify-center min-h-96">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
-            <p className="text-gray-500">Loading product...</p>
+      <DashboardLayout title={title} sidebarItems={SELLER_SIDEBAR_ITEMS} userType="seller">
+        <div className="max-w-3xl">
+          <div className="flex items-center gap-3 py-10 text-sm text-muted" role="status">
+            <span className="h-5 w-5 rounded-full border-2 border-line-strong border-t-brand-600 motion-safe:animate-spin" aria-hidden="true" />
+            {t('loading')}
           </div>
         </div>
       </DashboardLayout>
     );
   }
 
-  const detailsDone = !!form.name && !!form.categoryId;
-  const steps = [
-    { label: 'Photos', done: images.length > 0 },
-    { label: 'Details', done: detailsDone },
-    { label: 'Pricing', done: !!form.price },
-  ];
-
   return (
     <DashboardLayout
       title={title}
-      subtitle={mode === 'create' ? 'List a new product in your store' : 'Update your product details'}
+      subtitle={mode === 'create' ? t('addSubtitle') : undefined}
       sidebarItems={SELLER_SIDEBAR_ITEMS}
       userType="seller"
     >
-      <div className="max-w-4xl mx-auto">
-        <ShortcutsButton onClick={() => setHelpOpen(!helpOpen)} />
+      <div className="max-w-3xl">
         {helpOpen && <ShortcutsHelp onClose={() => setHelpOpen(false)} />}
 
-        {mode === 'create' && (
-          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl p-5 mb-6 border border-blue-100">
-            <div className="flex items-center justify-between max-w-3xl mx-auto">
-              {steps.map((step, i) => (
-                <div key={step.label} className={`flex items-center ${i < steps.length - 1 ? 'flex-1' : ''}`}>
-                  <div className="flex items-center gap-2">
-                    <div
-                      className={`w-10 h-10 rounded-full flex items-center justify-center font-bold ${
-                        step.done ? 'bg-emerald-600 text-white' : 'bg-white text-gray-400 border-2 border-gray-300'
-                      }`}
-                    >
-                      {step.done ? '✓' : i + 1}
-                    </div>
-                    <span className={`text-sm font-medium ${step.done ? 'text-emerald-700' : 'text-gray-500'}`}>{step.label}</span>
-                  </div>
-                  {i < steps.length - 1 && (
-                    <div className="flex-1 mx-4 h-1 bg-white rounded-full overflow-hidden">
-                      <div className={`h-full bg-emerald-500 transition-all duration-500 ${step.done ? 'w-full' : 'w-0'}`}></div>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        <form ref={formRef} onSubmit={handleSubmit}>
+        <FieldErrorsContext.Provider value={fieldErrors}>
+        <form ref={formRef} onSubmit={handleSubmit} noValidate>
           {mode === 'edit' && (
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-lg font-bold text-gray-900">Product Status</h2>
-                  <p className="text-sm text-gray-500">Control whether this product is visible to customers</p>
-                </div>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={form.isActive}
-                  aria-label="Visible to customers"
-                  onClick={() => update({ isActive: !form.isActive })}
-                  className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors ${form.isActive ? 'bg-emerald-500' : 'bg-gray-300'}`}
-                >
-                  <span
-                    className={`inline-block h-6 w-6 transform rounded-full bg-white shadow transition-transform ${
-                      form.isActive ? 'translate-x-7' : 'translate-x-1'
-                    }`}
-                  />
-                </button>
-              </div>
-              <div
-                className={`mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium ${
-                  form.isActive ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-600'
-                }`}
-              >
-                {form.isActive ? '● Live - Visible to customers' : '○ Hidden - Not visible to customers'}
-              </div>
-            </div>
+            <section aria-label={t('showingSection')} className="border-b border-line pb-6 mb-8">
+              <SwitchRow
+                checked={form.isActive}
+                onChange={() => update({ isActive: !form.isActive })}
+                label={form.isActive ? t('showing') : t('hidden')}
+                hint={form.isActive ? t('showingHint') : t('hiddenHint')}
+                ariaLabel={t('visibleLabel')}
+              />
+            </section>
           )}
 
-          <PhotosSection images={images} onChange={setImages} onTooMany={() => showToast('Maximum 4 images allowed', 'warning')} />
+          <PhotosSection images={images} onChange={setImages} onTooMany={() => showToast(t('tooManyPhotos'), 'warning')} />
 
           <DetailsSection
             form={form}
@@ -411,70 +382,49 @@ export default function ProductForm(props: Props) {
                 onToggle={() => setShowVariants(!showVariants)}
                 onAdd={addVariant}
                 onRemove={removeVariant}
-                onUpdate={(index, patch) => setVariants((prev) => prev.map((v, i) => (i === index ? { ...v, ...patch } : v)))}
+                onUpdate={(index, patch) => {
+                  setVariants((prev) => prev.map((v, i) => (i === index ? { ...v, ...patch } : v)));
+                  setFieldErrors((prev) => (Object.keys(prev).length ? {} : prev));
+                }}
                 onMakeDefault={(index) => setVariants((prev) => prev.map((v, i) => ({ ...v, isDefault: i === index })))}
               />
             }
-            menu={<MenuTypeField value={menu} onChange={setMenu} />}
           />
 
-          <div className="sticky bottom-0 bg-white border-t-2 border-gray-100 -mx-4 px-4 sm:-mx-6 sm:px-6 pt-5 pb-[calc(1.25rem+var(--safe-bottom))] mt-8 rounded-t-3xl shadow-2xl">
-            <div className="max-w-4xl mx-auto flex flex-col sm:flex-row gap-3">
-              <Button
-                type="submit"
-                disabled={saving}
-                className="flex-1 bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white py-4 rounded-xl font-bold text-lg shadow-xl hover:shadow-2xl transform hover:-translate-y-0.5 transition-all"
-              >
-                {saving ? (
-                  <span className="flex items-center justify-center gap-2">
-                    <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                      <path
-                        className="opacity-75"
-                        fill="currentColor"
-                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                      />
-                    </svg>
-                    <span>{mode === 'create' ? 'Creating Product...' : 'Saving...'}</span>
-                  </span>
-                ) : (
-                  <span className="flex items-center justify-center gap-2">
-                    <span className="text-xl">{mode === 'create' ? '✨' : '💾'}</span>
-                    <span>{mode === 'create' ? 'Create Product' : 'Save Changes'}</span>
-                    <span className="text-xs opacity-75 ms-2 px-2 py-1 bg-white/20 rounded">Ctrl+S</span>
-                  </span>
-                )}
-              </Button>
-              <Link href="/sellers/products" className="sm:w-auto">
-                <Button type="button" variant="outline" className="w-full sm:w-40 py-4 rounded-xl border-2 font-semibold hover:bg-gray-50">
-                  Cancel
-                </Button>
-              </Link>
-            </div>
-          </div>
+          <DeliveryMenuSection form={form} update={update} menu={<MenuTypeField value={menu} onChange={setMenu} />} />
 
-          {mode === 'create' ? (
-            <div className="mt-6 bg-gradient-to-br from-amber-50 to-brand-50 rounded-2xl p-5 border-2 border-amber-200 shadow-sm">
-              <h3 className="font-bold text-amber-900 mb-3 flex items-center gap-2 text-lg">
-                <span className="text-2xl">💡</span> Pro Tips for Better Sales
-              </h3>
-              <ul className="text-sm text-amber-700 space-y-1">
-                <li>• Use clear, well-lit photos from multiple angles</li>
-                <li>• Include quantity in product name (e.g., &quot;Pack of 12&quot;)</li>
-                <li>• Add a discount - products with discounts sell 3x more!</li>
-                <li>• List all ingredients for customer trust</li>
-              </ul>
-            </div>
-          ) : (
-            <div className="mt-8 border border-red-200 rounded-2xl p-6 bg-red-50">
-              <h3 className="font-bold text-red-700 mb-2">Danger Zone</h3>
-              <p className="text-sm text-red-600 mb-4">Once you delete a product, there is no going back. Please be certain.</p>
-              <Button type="button" variant="outline" onClick={handleDelete} disabled={saving} className="border-red-300 text-red-600 hover:bg-red-100">
-                🗑️ Delete Product
+          {mode === 'edit' && (
+            <section aria-labelledby="dish-delete" className="border-t border-line py-8">
+              <h2 id="dish-delete" className="text-sm font-semibold text-ink">
+                {t('deleteHeading')}
+              </h2>
+              <p className="mt-1 text-sm text-muted">{t('deleteHint')}</p>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleDelete}
+                disabled={saving}
+                className="mt-4 border-red-200 text-red-700 hover:bg-red-50"
+              >
+                {t('deleteDish')}
               </Button>
-            </div>
+            </section>
           )}
+
+          <div data-bottom-bar className="sticky bottom-0 z-10 flex flex-wrap items-center justify-end gap-3 border-t border-line bg-page/95 py-4 pb-[calc(1rem+var(--safe-bottom,0px))] backdrop-blur">
+            <ShortcutsButton onClick={() => setHelpOpen(!helpOpen)} />
+            <span className="hidden flex-1 sm:block" />
+            <Link href="/sellers/products" className="flex-1 sm:flex-none">
+              <Button type="button" variant="outline" className="w-full">
+                {t('cancel')}
+              </Button>
+            </Link>
+            <Button type="submit" disabled={saving} className="flex-1 sm:flex-none sm:px-8 disabled:bg-raised disabled:text-muted disabled:opacity-100">
+              {saving ? (mode === 'create' ? t('adding') : t('saving')) : mode === 'create' ? t('addDish') : t('saveChanges')}
+            </Button>
+          </div>
         </form>
+        </FieldErrorsContext.Provider>
       </div>
 
       <CategoryRequestModal

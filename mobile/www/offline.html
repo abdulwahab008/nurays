@@ -4,25 +4,36 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Nuray</title>
-  <script src="app-config.js"></script>
+  <script>
+    // On Android this page is all the app serves from itself, so it needs no other file: scripts/prepare-www.ts writes
+    // NURAY_APP_URL here before every sync.
+    const appUrl = "https://app.nuray.invalid";
+  </script>
   <style>
-    body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; background: #FAFAFA;
-      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: #1f2937; text-align: center; }
+    /* The website's colours (page, ink, muted, brand, on-brand in frontend-web/app/globals.css), copied because this page
+       is shown when the website cannot be loaded. */
+    body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; background: #F5F8F7;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: #0D2624; text-align: center; }
     main { padding: 24px; max-width: 360px; }
     h1 { font-size: 20px; margin: 16px 0 8px; }
-    p { font-size: 15px; line-height: 1.5; color: #4b5563; margin: 0 0 4px; }
+    p { font-size: 15px; line-height: 1.5; color: #4A6460; margin: 0 0 4px; }
     p[lang="ur"] { direction: rtl; margin-top: 12px; }
-    button { margin-top: 24px; background: #FF5500; color: #fff; border: 0; border-radius: 12px; padding: 12px 28px; font-size: 16px; }
+    button { margin-top: 24px; min-height: 44px; background: #41DAC7; color: #06302B; border: 0; border-radius: 12px;
+      padding: 12px 28px; font-size: 16px; font-weight: 600; }
   </style>
 </head>
 <body>
   <main>
-    <img src="icon.png" width="72" height="72" alt="">
+    <svg viewBox="0 0 96 96" width="72" height="72" aria-hidden="true">
+      <rect width="96" height="96" rx="28" fill="#41DAC7"/>
+      <path d="M33 70V45a15 15 0 0 1 30 0v25" fill="none" stroke="#06302B" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/>
+      <circle cx="74" cy="22" r="8" fill="#FFC83D"/>
+    </svg>
     <h1>Can't reach Nuray</h1>
     <p>Check your internet connection and try again.</p>
     <p lang="ur">نورے سے رابطہ نہیں ہو سکا۔ اپنا انٹرنیٹ کنکشن چیک کریں اور دوبارہ کوشش کریں۔</p>
     <!-- Loads the website again (the app opens it at start; this page is only shown when that failed). -->
-    <button type="button" onclick="location.replace(window.NURAY_APP_URL || '/')">Try again</button>
+    <button type="button" onclick="location.replace(appUrl)">Try again</button>
   </main>
 </body>
 </html>

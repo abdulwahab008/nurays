@@ -1,224 +1,147 @@
+/**
+ * The demo accounts offered on /login in development (frontend-web/components/auth/DemoLoginPanel.tsx): a customer, an
+ * approved kitchen with dishes, a kitchen under review, a rejected kitchen with its reason, a rider and an admin, all
+ * with the password Password123! and a name. Safe to run again (upserts). It creates its own records only and leaves
+ * the end-to-end seed (prisma/seed-e2e.ts) alone.
+ *
+ *   cd backend && npm run seed:demo
+ */
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcrypt';
+import { seedCommunities } from '../prisma/seed-communities';
 
 const prisma = new PrismaClient();
+const PASSWORD = 'Password123!';
+
+async function account(passwordHash: string, a: { email: string; phone: string; userType: string; name: string; city?: string; staffRole?: string }) {
+  const fields = { passwordHash, userType: a.userType, status: 'active', emailVerified: true };
+  const user = await prisma.user.upsert({
+    where: { email: a.email },
+    update: fields,
+    create: { email: a.email, phone: a.phone, ...fields, ...(a.staffRole ? { staffRole: a.staffRole } : {}) },
+  });
+  await prisma.userProfile.upsert({
+    where: { userId: user.id },
+    update: { fullName: a.name, city: a.city ?? 'Karachi' },
+    create: { userId: user.id, fullName: a.name, city: a.city ?? 'Karachi' },
+  });
+  return user;
+}
 
 async function main() {
-  console.log('Seeding standard test users for all roles...');
-  const passwordHash = await bcrypt.hash('Password123!', 10);
+  const passwordHash = await bcrypt.hash(PASSWORD, 10);
+  await seedCommunities();
+  const community = await prisma.community.findUnique({ where: { slug: 'gulshan-e-iqbal' } });
 
-  // 1. Category
   const category = await prisma.category.upsert({
     where: { slug: 'ready-to-cook' },
     update: { isActive: true },
-    create: {
-      name: 'Ready to Cook',
-      slug: 'ready-to-cook',
-      productType: 'frozen',
-      isActive: true,
-      sortOrder: 1,
-    },
+    create: { name: 'Ready to Cook', slug: 'ready-to-cook', productType: 'frozen', isActive: true, sortOrder: 1 },
   });
 
-  // 2. Admin User
-  const adminUser = await prisma.user.upsert({
-    where: { email: 'admin@frozennuray.com' },
-    update: {
-      passwordHash,
-      userType: 'admin',
-      staffRole: 'admin',
-      status: 'active',
-      emailVerified: true,
-    },
-    create: {
-      email: 'admin@frozennuray.com',
-      phone: '+923000000001',
-      userType: 'admin',
-      staffRole: 'admin',
-      status: 'active',
-      emailVerified: true,
-      passwordHash,
-    },
+  // The demo admin is the super admin (the one account that manages staff and settings) when no one else holds that
+  // role. A re-run never changes an existing staff role: there can only be one super admin, and a demotion here would
+  // lock everyone out of staff management.
+  const superAdmin = await prisma.user.findFirst({ where: { staffRole: 'super_admin' }, select: { email: true } });
+  const admin = await account(passwordHash, {
+    email: 'admin@frozennuray.com',
+    phone: '+923000000001',
+    userType: 'admin',
+    staffRole: superAdmin ? 'admin' : 'super_admin',
+    name: 'Nuray admin',
   });
-  console.log('✅ Admin user ready:', adminUser.email);
+  if (!superAdmin) {
+    await prisma.user.update({ where: { id: admin.id }, data: { staffRole: 'super_admin' } });
+  }
 
-  // 3. Seller User & Record
-  // Also ensure e2e-seller@nuray.test has standard password
-  await prisma.user.updateMany({
-    where: { email: 'e2e-seller@nuray.test' },
-    data: { passwordHash, status: 'active', emailVerified: true },
-  });
-
-  const sellerUser = await prisma.user.upsert({
-    where: { email: 'seller@nuray.test' },
-    update: {
-      passwordHash,
-      userType: 'seller',
-      status: 'active',
-      emailVerified: true,
-    },
-    create: {
-      email: 'seller@nuray.test',
-      phone: '+923009990888',
-      userType: 'seller',
-      status: 'active',
-      emailVerified: true,
-      passwordHash,
-    },
-  });
-
+  // An approved kitchen in Gulshan-e-Iqbal with three dishes customers can order. Its name is its owner's, so it is not
+  // mistaken for the e2e seed's "Saima's Craft Kitchen" in the same area. The pin is in Block 13, Gulshan-e-Iqbal, Karachi:
+  // riders collect from it and delivery distances are measured from it.
+  const sellerUser = await account(passwordHash, { email: 'seller@nuray.test', phone: '+923009990888', userType: 'seller', name: 'Saima Baig' });
+  const kitchen = {
+    businessName: "Saima Baig's Kitchen",
+    isVerified: true,
+    status: 'active',
+    verificationStatus: 'approved',
+    rejectionReason: null,
+    minPrepTimeMinutes: 20,
+    communityId: community?.id,
+    primaryCommunityName: community?.name,
+    latitude: 24.9215,
+    longitude: 67.0935,
+    pickupAddress: 'House 18, Block 13-D, Gulshan-e-Iqbal, Karachi',
+  };
   const seller = await prisma.seller.upsert({
     where: { userId: sellerUser.id },
-    update: {
-      isVerified: true,
-      status: 'active',
-      verificationStatus: 'approved',
-      businessName: "Saima's Craft Kitchen",
-      minPrepTimeMinutes: 20,
-    },
-    create: {
-      userId: sellerUser.id,
-      businessName: "Saima's Craft Kitchen",
-      isVerified: true,
-      status: 'active',
-      verificationStatus: 'approved',
-      minPrepTimeMinutes: 20,
-      ratingAverage: 4.9,
-    },
+    update: kitchen,
+    create: { userId: sellerUser.id, ...kitchen },
   });
-  console.log('✅ Seller user & kitchen ready:', sellerUser.email, '->', seller.businessName);
+  // A rating is the average of real reviews: with none there is nothing to show.
+  await prisma.seller.updateMany({ where: { id: seller.id, totalReviews: 0 }, data: { ratingAverage: 0 } });
+  const dishes = [
+    { slug: 'saima-zafrani-chicken-biryani', name: 'Zafrani chicken biryani (2 portions)', price: 650, description: 'Basmati rice layered with saffron and slow-cooked chicken.' },
+    { slug: 'saima-chicken-shami-kebab-12', name: 'Chicken shami kebab (pack of 12)', price: 900, description: 'Frozen, ready to shallow-fry in five minutes.' },
+    { slug: 'saima-aloo-samosa-24', name: 'Aloo samosa (pack of 24)', price: 720, description: 'Frozen, crisp after eight minutes in hot oil.' },
+  ];
+  for (const d of dishes) {
+    const fields = { sellerId: seller.id, categoryId: category.id, name: d.name, description: d.description, price: d.price, unit: 'pack', stockQuantity: 100, isActive: true, approvalStatus: 'approved' };
+    await prisma.product.upsert({ where: { slug: d.slug }, update: fields, create: { slug: d.slug, ...fields } });
+  }
 
-  // Ensure standard product for this seller
-  const FIXED_PRODUCT_ID = '1e24a3f6-9043-4710-959a-afda9ccfe65a';
-  const sampleProduct = await prisma.product.upsert({
-    where: { id: FIXED_PRODUCT_ID },
-    update: {
-      sellerId: seller.id,
-      categoryId: category.id,
-      name: 'E2E Zafrani Chicken Biryani',
-      slug: 'e2e-zafrani-chicken-biryani',
-      price: 650,
-      stockQuantity: 100,
-      isActive: true,
-      approvalStatus: 'approved',
+  // Two applicants: one waiting for review, one rejected with a reason to fix.
+  const applicants = [
+    { email: 'seller.pending@nuray.test', phone: '+923009990889', name: 'Ahmed Khan', businessName: 'Ahmed Tikka & Karahi', verificationStatus: 'pending', rejectionReason: null },
+    {
+      email: 'seller.rejected@nuray.test',
+      phone: '+923009990890',
+      name: 'Bilal Tariq',
+      businessName: 'Bilal Shawarma',
+      verificationStatus: 'rejected',
+      rejectionReason: 'The CNIC photo is blurry. Upload a clear photo of the front.',
     },
-    create: {
-      id: FIXED_PRODUCT_ID,
-      sellerId: seller.id,
-      categoryId: category.id,
-      name: 'E2E Zafrani Chicken Biryani',
-      slug: 'e2e-zafrani-chicken-biryani',
-      description: 'Fragrant Basmati rice with marinated chicken and pure saffron.',
-      price: 650,
-      unit: 'pack',
-      stockQuantity: 100,
-      isActive: true,
-      approvalStatus: 'approved',
-    },
-  });
-  console.log('✅ Seller product ready:', sampleProduct.name, `(${sampleProduct.id})`);
+  ];
+  for (const a of applicants) {
+    const user = await account(passwordHash, { email: a.email, phone: a.phone, userType: 'seller', name: a.name });
+    const fields = { businessName: a.businessName, isVerified: false, status: 'active', verificationStatus: a.verificationStatus, rejectionReason: a.rejectionReason, communityId: community?.id, primaryCommunityName: community?.name };
+    await prisma.seller.upsert({ where: { userId: user.id }, update: fields, create: { userId: user.id, ...fields } });
+  }
 
-  // 4. Rider User & Record
-  const riderUser = await prisma.user.upsert({
-    where: { email: 'rider@nuray.test' },
-    update: {
-      passwordHash,
-      userType: 'rider',
-      status: 'active',
-      emailVerified: true,
-    },
-    create: {
-      email: 'rider@nuray.test',
-      phone: '+923007770888',
-      userType: 'rider',
-      status: 'active',
-      emailVerified: true,
-      passwordHash,
-    },
-  });
+  const riderUser = await account(passwordHash, { email: 'rider@nuray.test', phone: '+923007770888', userType: 'rider', name: 'Imran Ali' });
+  const rider = {
+    city: 'Karachi',
+    vehicleType: 'motorcycle',
+    vehicleNumber: 'KHI-8921',
+    licenseNumber: 'LIC-PK-2026',
+    status: 'active',
+    verificationStatus: 'approved',
+    isAvailable: true,
+  };
+  await prisma.rider.upsert({ where: { userId: riderUser.id }, update: rider, create: { userId: riderUser.id, ...rider } });
 
-  const rider = await prisma.rider.upsert({
-    where: { userId: riderUser.id },
-    update: {
-      city: 'Karachi',
-      vehicleType: 'motorcycle',
-      vehicleNumber: 'KHI-8921',
-      licenseNumber: 'LIC-PK-2026',
-      status: 'active',
-      verificationStatus: 'approved',
-      isAvailable: true,
-      ratingAverage: 4.85,
-    },
-    create: {
-      userId: riderUser.id,
-      city: 'Karachi',
-      vehicleType: 'motorcycle',
-      vehicleNumber: 'KHI-8921',
-      licenseNumber: 'LIC-PK-2026',
-      status: 'active',
-      verificationStatus: 'approved',
-      isAvailable: true,
-      ratingAverage: 4.85,
-    },
-  });
-  console.log('✅ Rider user & fleet ready:', riderUser.email, '->', rider.vehicleNumber);
-
-  // 5. Customer User & Address
-  const customerUser = await prisma.user.upsert({
-    where: { email: 'customer@nuray.test' },
-    update: {
-      passwordHash,
-      userType: 'customer',
-      status: 'active',
-      emailVerified: true,
-    },
-    create: {
-      email: 'customer@nuray.test',
-      phone: '+923001230888',
-      userType: 'customer',
-      status: 'active',
-      emailVerified: true,
-      passwordHash,
-    },
-  });
-
-  // Ensure Customer Address exists
-  const existingAddress = await prisma.userAddress.findFirst({
-    where: { userId: customerUser.id },
-  });
-
-  let addressId = existingAddress?.id;
-  if (!existingAddress) {
-    const newAddress = await prisma.userAddress.create({
+  const customerUser = await account(passwordHash, { email: 'customer@nuray.test', phone: '+923001230888', userType: 'customer', name: 'Ayesha Khan' });
+  const hasAddress = await prisma.userAddress.findFirst({ where: { userId: customerUser.id } });
+  if (!hasAddress) {
+    await prisma.userAddress.create({
       data: {
         userId: customerUser.id,
         label: 'Home',
         addressLine1: 'House 42, Street 8, Block 4',
-        area: 'DHA Phase 5',
+        area: 'Gulshan-e-Iqbal',
         city: 'Karachi',
-        latitude: 24.8607,
-        longitude: 67.0011,
+        latitude: 24.9207,
+        longitude: 67.0882,
         isDefault: true,
       },
     });
-    addressId = newAddress.id;
   }
-  console.log('✅ Customer user & delivery address ready:', customerUser.email, '->', addressId);
 
-  console.log('\n=============================================');
-  console.log('STANDARD TEST CREDENTIALS:');
-  console.log('1. Customer:     customer@nuray.test     / Password123!');
-  console.log('2. Seller:       seller@nuray.test       / Password123!');
-  console.log('3. Rider:        rider@nuray.test        / Password123!');
-  console.log('4. Admin:        admin@frozennuray.com   / Password123!');
-  console.log('=============================================\n');
+  console.log(`Demo accounts ready (password ${PASSWORD}): customer@nuray.test, seller@nuray.test, seller.pending@nuray.test,`);
+  console.log('seller.rejected@nuray.test, rider@nuray.test, admin@frozennuray.com (the super admin when no other account is; it gets two-step sign-in where STAFF_2FA_REQUIRED is on, always in production).');
 }
 
 main()
   .catch((e) => {
-    console.error('Seed demo users failed:', e);
+    console.error('Seeding the demo accounts failed:', e);
     process.exit(1);
   })
-  .finally(async () => {
-    await prisma.$disconnect();
-  });
+  .finally(() => prisma.$disconnect());

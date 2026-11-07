@@ -33,7 +33,8 @@ export function showsCustomerTabBar(pathname: string, userType: string | null | 
 export function activeCustomerTab(pathname: string): CustomerTab | null {
   if (under(pathname, '/orders')) return 'orders';
   if (under(pathname, '/cart')) return 'tray';
-  if (['/profile', '/wallet', '/favorites', '/notifications', '/support', '/help', '/dashboard'].some((p) => under(pathname, p))) return 'profile';
-  if (pathname === '/' || ['/kitchens', '/products'].some((p) => under(pathname, p))) return 'home';
+  if (['/profile', '/wallet', '/favorites', '/notifications', '/support', '/help'].some((p) => under(pathname, p))) return 'profile';
+  // A customer lands on /dashboard after signing in: it is their home, not their profile.
+  if (pathname === '/' || ['/kitchens', '/products', '/dashboard'].some((p) => under(pathname, p))) return 'home';
   return null;
 }

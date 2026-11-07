@@ -40,16 +40,6 @@ export function RetryButton({ onClick }: { onClick: () => void }) {
   );
 }
 
-export function KitchenAvatarSkeleton() {
-  return (
-    <div aria-hidden="true" className="flex-shrink-0 flex flex-col items-center gap-1.5">
-      <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-line animate-pulse" />
-      <div className="h-2.5 w-16 rounded bg-line animate-pulse" />
-      <div className="h-2 w-10 rounded bg-raised animate-pulse" />
-    </div>
-  );
-}
-
 export function KitchenCardSkeleton() {
   return (
     <div aria-hidden="true" className="bg-surface rounded-[20px] border border-line overflow-hidden">

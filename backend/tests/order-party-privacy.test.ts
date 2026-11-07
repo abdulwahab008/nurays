@@ -281,7 +281,9 @@ describe('the rider carrying an order', () => {
     deliveryInstructions: 'ring twice',
     deliveryAddressSnapshot: placedTo,
     deliveryAddress: editedSince,
-    items: [{ id: 'i1', sellerId: 's1' }],
+    deliveryType: 'home_delivery',
+    items: [{ id: 'i1', sellerId: 's1', seller: { id: 's1', businessName: 'Kitchen', businessNameUrdu: null, pickupAddress: 'House 4, Street 9', pickupLandmark: 'Green gate', pickupPhone: null, user: { phone: '+923001112233' } } }],
+    reviews: [],
     hub: null,
     statusHistory: [],
     delivery: { id: 'd1', status, riderId: 'rider-1', rider: { id: 'rider-1' }, riderFee: '100', riderBonus: null, riderLatitude: null, riderLongitude: null, riderLocationAt: null, deliveryLatitude: '31.4', deliveryLongitude: '74.4', releasedRiderIds: ['rider-9'] },
@@ -319,6 +321,43 @@ describe('the rider carrying an order', () => {
     db.user.findUnique.mockResolvedValue({ userType: 'admin', email: 'a@example.com' });
     const asAdmin: any = await orderService.getOrderDetails('o1', 'admin-1');
     expect(asAdmin.delivery.releasedRiderIds).toEqual(['rider-9']);
+  });
+
+  it("gives the customer the rider's phone while the job runs, and not after", async () => {
+    db.user.findUnique.mockReset().mockImplementation(({ where }: { where: { id: string } }) =>
+      Promise.resolve(where.id === IDS.customer ? { userType: 'customer', email: 'c@example.com' } : { phone: '+923004445566', profile: { fullName: 'Ali Raza' } }),
+    );
+    db.rider.findUnique.mockReset().mockImplementation(({ where }: { where: { id?: string } }) => Promise.resolve(where.id ? { userId: 'user-rider-1' } : null));
+    db.order.findUnique.mockResolvedValue({ handoverCode: '4821' });
+    db.order.findFirst.mockReset().mockResolvedValue(orderRow('in_transit'));
+    const running: any = await orderService.getOrderDetails('o1', IDS.customer);
+    expect(running.delivery.rider).toMatchObject({ name: 'Ali', phone: '+923004445566' });
+    // a home delivery does not hand out the kitchen's number
+    expect(running.items[0].seller).toMatchObject({ pickupAddress: null, pickupLandmark: null, pickupPhone: null });
+    expect(walk(running.items[0].seller).keys.has('user')).toBe(false);
+
+    db.order.findFirst.mockReset().mockResolvedValue(orderRow('delivered'));
+    const done: any = await orderService.getOrderDetails('o1', IDS.customer);
+    expect(done.delivery.rider.phone).toBeNull();
+  });
+
+  it("tells the customer of a self-pickup order where to collect it and the kitchen's number while it is open", async () => {
+    db.user.findUnique.mockReset().mockResolvedValue({ userType: 'customer', email: 'c@example.com' });
+    db.rider.findUnique.mockReset().mockResolvedValue(null);
+    db.order.findUnique.mockResolvedValue({ handoverCode: '4821' });
+    const pickupRow = (orderStatus: string) => ({ ...orderRow('in_transit'), orderStatus, deliveryType: 'self_pickup', delivery: null, reviews: [{ id: 'r1', orderItemId: 'i1' }] });
+    db.order.findFirst.mockReset().mockResolvedValue(pickupRow('ready'));
+    const open: any = await orderService.getOrderDetails('o1', IDS.customer);
+    expect(open.items[0].seller).toMatchObject({ pickupAddress: 'House 4, Street 9', pickupLandmark: 'Green gate', pickupPhone: '+923001112233' });
+    expect(open.reviews).toEqual([{ id: 'r1', orderItemId: 'i1' }]);
+    expect(db.order.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      include: expect.objectContaining({ reviews: { where: { customerId: IDS.customer }, select: { id: true, orderItemId: true } } }),
+    }));
+
+    db.order.findFirst.mockReset().mockResolvedValue(pickupRow('delivered'));
+    const done: any = await orderService.getOrderDetails('o1', IDS.customer);
+    expect(done.items[0].seller.pickupAddress).toBe('House 4, Street 9');
+    expect(done.items[0].seller.pickupPhone).toBeNull();
   });
 
   it('keeps the area and city only once the job is over, of the order as placed', async () => {

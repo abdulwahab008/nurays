@@ -14,6 +14,8 @@ import { CommunitySelector } from '@/components/community/CommunitySelector';
 import { LanguageSwitcher } from '@/components/i18n/LanguageSwitcher';
 import { useT } from '@/lib/i18n';
 import { shellMessages } from '@/lib/i18n/messages/shell';
+import { siteMessages } from '@/lib/i18n/messages/site';
+import { ThemeToggle } from '@/components/layout/ThemeToggle';
 import {
   Bell,
   CheckCheck,
@@ -23,10 +25,15 @@ import {
   AlertCircle,
   Info,
   ChevronRight,
-  Bike,
-  Radio,
-  Coins,
-  MessageCircle,
+  Heart,
+  LayoutGrid,
+  LifeBuoy,
+  LogOut,
+  MapPin,
+  Search,
+  Settings,
+  ShoppingBag,
+  User,
 } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
@@ -42,16 +49,22 @@ interface NavbarNotification {
 }
 
 interface DashboardNavbarProps {
-  title: string;
-  subtitle?: string;
   userType?: 'customer' | 'seller' | 'admin' | 'rider' | 'hub_manager';
   onMenuToggle?: () => void;
   drawerOpen?: boolean;
 }
 
-export function DashboardNavbar({ title, subtitle, userType = 'customer', onMenuToggle, drawerOpen }: DashboardNavbarProps) {
+const menuRow = 'flex h-11 items-center gap-3 px-4 text-sm text-ink hover:bg-raised transition-colors';
+const menuIcon = 'w-4 h-4 text-muted';
+const iconButton = 'relative grid h-11 w-11 shrink-0 place-items-center rounded-lg transition-colors';
+// On a phone a panel spans the screen under the bar (anchored to a button it would run off the edge); from sm it hangs
+// under its button.
+const panel = 'fixed inset-x-3 top-[calc(var(--header-offset)+0.5rem)] sm:absolute sm:inset-x-auto sm:top-full sm:end-0 sm:mt-2 bg-surface rounded-2xl shadow-xl border border-line z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-150';
+
+export function DashboardNavbar({ userType = 'customer', onMenuToggle, drawerOpen }: DashboardNavbarProps) {
   const router = useRouter();
   const t = useT(shellMessages);
+  const tSite = useT(siteMessages);
   const { showToast } = useToast();
   const pathname = usePathname() || '';
   const { logout, user, isAuthenticated } = useAuthStore(useShallow((s) => ({ logout: s.logout, user: s.user, isAuthenticated: s.isAuthenticated })));
@@ -66,6 +79,7 @@ export function DashboardNavbar({ title, subtitle, userType = 'customer', onMenu
   const [loadingNotifications, setLoadingNotifications] = useState<boolean>(false);
   const notificationRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const menuToggleRef = useRef<HTMLButtonElement>(null);
 
   // Click outside listener for user dropdown menu
   useEffect(() => {
@@ -82,6 +96,18 @@ export function DashboardNavbar({ title, subtitle, userType = 'customer', onMenu
     };
   }, [showDropdown]);
 
+
+  // Escape closes the phone menu and puts the focus back on the button that opened it.
+  useEffect(() => {
+    if (!drawerOpen || !onMenuToggle) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      onMenuToggle();
+      menuToggleRef.current?.focus();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [drawerOpen, onMenuToggle]);
 
   // Determine UI context strictly based on active route and layout userType:
   const isRider = pathname.startsWith('/riders') || (userType === 'rider' && !pathname.startsWith('/sellers') && !pathname.startsWith('/admin'));
@@ -105,12 +131,8 @@ export function DashboardNavbar({ title, subtitle, userType = 'customer', onMenu
     if (isUserSeller) return '/sellers/dashboard';
     if (isUserRider) return '/riders/dashboard';
     if (isUserAdmin) return '/admin/dashboard';
-    return '/dashboard';
+    return '/';
   };
-
-  // Theme accents — ink for seller, emerald for rider, turquoise for customer/admin (dark words on turquoise)
-  const accentBg = isRider ? '#059669' : isSeller ? 'var(--ink-900)' : 'var(--forest-500)';
-  const accentFg = isRider ? '#FFFFFF' : isSeller ? 'var(--fg-inverse)' : '#06302B';
 
   // Fetch notification unread count so we only show the red dot when there are unread
   useEffect(() => {
@@ -176,7 +198,6 @@ export function DashboardNavbar({ title, subtitle, userType = 'customer', onMenu
       }
       setNotificationsError(null);
     } catch (error) {
-      console.error('Failed to fetch recent notifications:', error);
       setNotificationsError(error);
     } finally {
       setLoadingNotifications(false);
@@ -198,7 +219,7 @@ export function DashboardNavbar({ title, subtitle, userType = 'customer', onMenu
       );
       setNotificationUnreadCount(prev => Math.max(0, prev - 1));
     } catch (err) {
-      console.error('Failed to mark notification read:', err);
+      showToast(apiErrorMessage(err, t('markReadFailed')), 'error');
     }
     if (actionUrl) {
       setShowNotificationsPanel(false);
@@ -212,7 +233,6 @@ export function DashboardNavbar({ title, subtitle, userType = 'customer', onMenu
       setRecentNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
       setNotificationUnreadCount(0);
     } catch (err) {
-      console.error('Failed to mark all notifications read:', err);
       showToast(apiErrorMessage(err, t('markAllReadFailed')), 'error');
     }
   };
@@ -220,30 +240,15 @@ export function DashboardNavbar({ title, subtitle, userType = 'customer', onMenu
   const getNotificationIcon = (type?: string) => {
     switch (type) {
       case 'order':
-        return <Package className="w-4 h-4 text-blue-600" />;
+        return <Package className="w-4 h-4" />;
       case 'promo':
-        return <Tag className="w-4 h-4 text-amber-600" />;
+        return <Tag className="w-4 h-4" />;
       case 'delivery':
-        return <Truck className="w-4 h-4 text-emerald-600" />;
+        return <Truck className="w-4 h-4" />;
       case 'warning':
-        return <AlertCircle className="w-4 h-4 text-rose-600" />;
+        return <AlertCircle className="w-4 h-4" />;
       default:
-        return <Info className="w-4 h-4 text-slate-600" />;
-    }
-  };
-
-  const getNotificationIconBg = (type?: string) => {
-    switch (type) {
-      case 'order':
-        return 'bg-blue-50 border-blue-100';
-      case 'promo':
-        return 'bg-amber-50 border-amber-100';
-      case 'delivery':
-        return 'bg-emerald-50 border-emerald-100';
-      case 'warning':
-        return 'bg-rose-50 border-rose-100';
-      default:
-        return 'bg-slate-50 border-slate-100';
+        return <Info className="w-4 h-4" />;
     }
   };
 
@@ -267,9 +272,12 @@ export function DashboardNavbar({ title, subtitle, userType = 'customer', onMenu
     }
   };
 
+  // Leave the page first, then end the session: the page's own guards must not see a signed-out visitor and send
+  // them to sign in with this page as ?next= (the next person to sign in here would land on it).
   const handleLogout = () => {
+    setShowDropdown(false);
+    router.replace('/login');
     logout();
-    router.push('/login');
   };
 
   const handleSearch = (e: React.FormEvent) => {
@@ -283,18 +291,19 @@ export function DashboardNavbar({ title, subtitle, userType = 'customer', onMenu
 
   return (
     <nav
-      className="fixed top-0 start-0 end-0 z-50 h-(--header-offset) pt-(--safe-top) pl-(--safe-left) pr-(--safe-right) bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-xs"
+      className="fixed top-0 start-0 end-0 z-50 h-(--header-offset) pt-(--safe-top) pl-(--safe-left) pr-(--safe-right) bg-surface/95 backdrop-blur-md border-b border-line"
     >
       <div className="flex items-center justify-between h-full px-3 sm:px-6 gap-2">
         {/* Logo Section */}
-        <div className="flex items-center gap-2 sm:gap-4">
+        <div className="flex items-center gap-1 sm:gap-4">
           {onMenuToggle && (
             <button
+              ref={menuToggleRef}
               type="button"
               onClick={onMenuToggle}
               aria-label={t('toggleNav')}
-              className="lg:hidden w-10 h-10 rounded-full grid place-items-center transition-colors"
-              style={{ color: 'var(--ink-800)' }}
+              aria-expanded={Boolean(drawerOpen)}
+              className="lg:hidden grid h-11 w-11 shrink-0 place-items-center rounded-full text-ink hover:bg-raised transition-colors"
             >
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                 {drawerOpen ? (
@@ -312,11 +321,11 @@ export function DashboardNavbar({ title, subtitle, userType = 'customer', onMenu
               </svg>
             </button>
           )}
-          <Link href={getDashboardLink()} className="flex items-center gap-3">
+          <Link href={getDashboardLink()} aria-label={t('goHome')} className="flex items-center gap-3 min-h-11 min-w-11">
             <Mark size={32} />
             <div className="hidden sm:block leading-tight">
               <Wordmark size={22} />
-              <p className="eyebrow mt-0.5">
+              <p className="eyebrow text-xs font-medium text-muted">
                 {isSeller ? t('ctxSeller') : isAdmin ? t('ctxAdmin') : isRider ? t('ctxRider') : isHubManager ? t('ctxHub') : t('ctxCustomer')}
               </p>
             </div>
@@ -325,29 +334,20 @@ export function DashboardNavbar({ title, subtitle, userType = 'customer', onMenu
 
         {/* Center - Search Bar (Only for customers) */}
         {isCustomer && (
-          <div className="hidden md:flex flex-1 max-w-lg mx-8">
-            <form onSubmit={handleSearch} className="w-full relative">
-              <div className="absolute start-3 top-1/2 -translate-y-1/2 text-gray-500">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
-              </div>
+          <div className="hidden lg:flex flex-1 max-w-lg mx-8">
+            <form onSubmit={handleSearch} role="search" className="w-full relative">
+              <Search className="absolute start-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted" aria-hidden="true" />
               <input
-                type="text"
+                type="search"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder={t('searchPlaceholder')}
-                className="w-full ps-10 pe-24 py-2.5 rounded-full text-sm outline-none transition-all"
-                style={{
-                  background: 'var(--cream-50)',
-                  border: '1px solid var(--ink-200)',
-                  color: 'var(--ink-900)',
-                }}
+                aria-label={t('search')}
+                className="w-full min-h-11 ps-10 pe-24 py-2.5 rounded-xl text-sm outline-none transition-all bg-page border border-line text-ink placeholder:text-muted focus:border-brand focus:ring-2 focus:ring-brand/20"
               />
               <button
                 type="submit"
-                className="absolute end-1.5 top-1/2 -translate-y-1/2 px-4 py-1.5 text-sm font-medium rounded-full transition-colors"
-                style={{ background: 'var(--ink-900)', color: 'var(--fg-inverse)' }}
+                className="absolute end-1.5 top-1/2 -translate-y-1/2 h-8 px-3.5 text-sm font-semibold rounded-lg transition-colors bg-brand text-on-brand hover:bg-brand-500"
               >
                 {t('search')}
               </button>
@@ -355,38 +355,29 @@ export function DashboardNavbar({ title, subtitle, userType = 'customer', onMenu
           </div>
         )}
 
-        {/* Center - Seller/Admin/Rider Title */}
-        {(isSeller || isAdmin || isRider) && (
-          <div className="hidden md:flex flex-1 min-w-0 justify-center">
-            <div className="text-center min-w-0 max-w-full">
-              <h2 className="font-display italic text-[22px] truncate" style={{ color: 'var(--ink-900)' }} title={title}>
-                {title}
-              </h2>
-              {subtitle && <p className="eyebrow mt-1 truncate" title={subtitle}>{subtitle}</p>}
-            </div>
-          </div>
-        )}
-        
         {/* Right Side - Actions */}
-        <div className="flex items-center gap-1 sm:gap-2 min-w-0">
+        <div className="flex items-center justify-end gap-1 sm:gap-2 min-w-0 max-sm:flex-1">
 
-          {/* Community Selector - Only for customers */}
+          {/* Below lg the inline search does not fit: a button opens the dish search instead */}
           {isCustomer && (
-            <div className="flex items-center min-w-0 overflow-hidden">
+            <Link href="/products" aria-label={t('search')} title={t('search')} className={`${iconButton} hidden md:grid lg:hidden text-muted hover:bg-raised hover:text-ink`}>
+              <Search className="w-5 h-5" aria-hidden="true" />
+            </Link>
+          )}
+
+          {/* Community Selector - Only for customers; on a phone it takes the room the bar has left, so the area's name fits */}
+          {isCustomer && (
+            <div className="flex items-center justify-end min-w-0 max-sm:flex-1 sm:max-w-[200px] md:shrink-0">
               <CommunitySelector variant="navbar" />
             </div>
           )}
 
-          {/* Cart - Only for customers; on a phone it is in the tab bar */}
+          {/* Tray - Only for customers; on a phone it is in the tab bar */}
           {isCustomer && (
-            <Link href="/cart" className="relative hidden md:block">
-              <button className="w-10 h-10 rounded-lg hover:bg-gray-50 flex items-center justify-center transition-colors" aria-label={t('cart')} title={t('cart')}>
-                <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M2.25 3h1.386c.51 0 .955.343 1.087.835l.383 1.437M7.5 14.25a3 3 0 00-3 3h15.75m-12.75-3h11.218c1.121-2.3 2.1-4.684 2.924-7.138a60.114 60.114 0 00-16.536-1.84M7.5 14.25L5.106 5.272M6 20.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm12.75 0a.75.75 0 11-1.5 0 .75.75 0 011.5 0z" />
-                </svg>
-              </button>
+            <Link href="/cart" aria-label={t('cart')} title={t('cart')} className={`${iconButton} hidden md:grid text-muted hover:bg-raised hover:text-ink`}>
+              <ShoppingBag className="w-5 h-5" aria-hidden="true" />
               {cartItemCount > 0 && (
-                <span className="absolute -top-0.5 -end-0.5 w-5 h-5 bg-gray-600 text-white text-xs font-bold rounded-full flex items-center justify-center">
+                <span className="absolute top-0.5 end-0.5 min-w-5 h-5 px-1 bg-accent text-on-accent text-xs font-bold rounded-full grid place-items-center" aria-hidden="true">
                   {cartItemCount > 9 ? '9+' : cartItemCount}
                 </span>
               )}
@@ -394,34 +385,9 @@ export function DashboardNavbar({ title, subtitle, userType = 'customer', onMenu
           )}
 
           {/* Seller Quick Actions */}
-          {isSeller && (
-            <>
-              <Link href="/sellers/orders" className="relative">
-                <button className="w-10 h-10 rounded-lg hover:bg-gray-50 flex items-center justify-center transition-colors" title={t('orders')} aria-label={t('orders')}>
-                  <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" />
-                  </svg>
-                </button>
-              </Link>
-              <Link href="/sellers/products" className="relative">
-                <button className="w-10 h-10 rounded-lg hover:bg-gray-50 flex items-center justify-center transition-colors" title={t('products')} aria-label={t('products')}>
-                  <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8.25v-1.5m0 1.5c-1.355 0-2.697.056-4.024.166C6.845 8.51 6 9.473 6 10.608v2.513m6-4.87c1.355 0 2.697.055 4.024.165C17.155 8.51 18 9.473 18 10.608v2.513m-3-4.87v-1.5m-6 1.5v-1.5m12 9.75l-1.5.75a3.354 3.354 0 01-3 0 3.354 3.354 0 00-3 0 3.354 3.354 0 01-3 0 3.354 3.354 0 00-3 0 3.354 3.354 0 01-3 0L3 16.5m15-3.38a48.474 48.474 0 00-6-.37c-2.032 0-4.034.125-6 .37m12 0c.39.049.777.102 1.163.16 1.07.16 1.837 1.094 1.837 2.175v5.17c0 .62-.504 1.124-1.125 1.124H4.125A1.125 1.125 0 013 20.625v-5.17c0-1.08.768-2.014 1.837-2.174A47.78 47.78 0 016 13.12M12.265 3.11a.375.375 0 11-.53 0L12 2.845l.265.265zm-3 0a.375.375 0 11-.53 0L9 2.845l.265.265zm6 0a.375.375 0 11-.53 0L15 2.845l.265.265z" />
-                  </svg>
-                </button>
-              </Link>
-              <Link href="/sellers/earnings" className="relative">
-                <button className="w-10 h-10 rounded-lg hover:bg-gray-50 flex items-center justify-center transition-colors" title={t('earnings')} aria-label={t('earnings')}>
-                  <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                </button>
-              </Link>
-            </>
-          )}
 
           {/* A customer's phone has the language under Profile; the bar keeps room for the area */}
-          <LanguageSwitcher className={isCustomer ? 'hidden sm:inline-flex px-2' : 'px-2 max-[420px]:[&>span]:hidden'} />
+          <LanguageSwitcher className={isCustomer ? 'hidden sm:inline-flex h-11 px-2' : 'h-11 min-w-11 justify-center px-2 max-[420px]:[&>span]:hidden'} />
 
           {/* Notifications Panel */}
           <div className="relative" ref={notificationRef}>
@@ -430,107 +396,102 @@ export function DashboardNavbar({ title, subtitle, userType = 'customer', onMenu
               onClick={handleToggleNotifications}
               aria-label={t('notifications')}
               aria-expanded={showNotificationsPanel}
-              className={`relative w-10 h-10 rounded-lg flex items-center justify-center transition-colors ${
-                showNotificationsPanel 
-                  ? 'bg-amber-50 text-amber-600' 
-                  : 'text-gray-600 hover:bg-gray-50'
-              }`}
+              className={`${iconButton} ${showNotificationsPanel ? 'bg-raised text-ink' : 'text-muted hover:bg-raised hover:text-ink'}`}
               title={t('notifications')}
             >
               <Bell className="w-5 h-5" />
               {notificationUnreadCount > 0 && (
-                <span className="absolute top-2 end-2 w-2 h-2 bg-red-500 rounded-full" aria-hidden="true" data-testid="bell-unread" />
+                <span className="absolute top-2.5 end-2.5 w-2 h-2 bg-red-500 rounded-full" aria-hidden="true" data-testid="bell-unread" />
               )}
             </button>
 
             {/* Notification Dropdown Panel */}
             {showNotificationsPanel && (
-              <div className="absolute end-0 top-full mt-2 w-80 sm:w-96 bg-white rounded-2xl shadow-xl border border-gray-100 z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+              <div data-top-panel className={`${panel} sm:w-96`}>
                 {/* Panel Header */}
-                <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-gray-50/70">
+                <div className="flex min-h-12 items-center justify-between ps-4 pe-2 border-b border-line">
                   <div className="flex items-center gap-2">
-                    <span className="font-semibold text-sm text-gray-900">{t('notifications')}</span>
-                    {notificationUnreadCount > 0 && (
-                      <span className="px-2 py-0.5 text-[11px] font-bold rounded-full bg-amber-100 text-amber-800">
+                    <span className="font-semibold text-sm text-ink">{t('notifications')}</span>
+                    {notificationUnreadCount > 0 && !notificationsError && (
+                      <span className="px-2 py-0.5 text-[11px] font-bold rounded-full bg-accent-soft text-accent-soft-ink">
                         {t('newCount', { count: notificationUnreadCount })}
                       </span>
                     )}
                   </div>
-                  {notificationUnreadCount > 0 && (
+                  {/* Offline the count is stale and marking would fail: neither is offered until the list loads. */}
+                  {notificationUnreadCount > 0 && !notificationsError && (
                     <button
                       type="button"
                       onClick={handleMarkAllNotificationsRead}
-                      className="text-xs font-medium text-amber-600 hover:text-amber-700 flex items-center gap-1 transition-colors"
+                      className="min-h-11 px-2 rounded-lg text-sm font-medium text-brand-ink hover:bg-raised flex items-center gap-1.5 transition-colors"
                     >
-                      <CheckCheck className="w-3.5 h-3.5" />
+                      <CheckCheck className="w-4 h-4" aria-hidden="true" />
                       <span>{t('markAllRead')}</span>
                     </button>
                   )}
                 </div>
 
                 {/* Panel Body */}
-                <div className="max-h-80 overflow-y-auto divide-y divide-gray-50">
+                <div className="max-h-80 overflow-y-auto divide-y divide-line">
                   {loadingNotifications ? (
-                    <div className="py-8 flex flex-col items-center justify-center gap-2 text-gray-500">
-                      <div className="w-5 h-5 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
+                    <div className="py-8 flex flex-col items-center justify-center gap-2 text-muted">
+                      <div className="w-5 h-5 border-2 border-brand-600 border-t-transparent rounded-full animate-spin" />
                       <span className="text-xs">{t('loadingUpdates')}</span>
                     </div>
                   ) : notificationsError && recentNotifications.length === 0 ? (
-                    <div className="p-3">
-                      <LoadError compact error={notificationsError} onRetry={fetchRecentNotifications} />
-                    </div>
+                    <LoadError compact plain error={notificationsError} onRetry={fetchRecentNotifications} />
                   ) : recentNotifications.length === 0 ? (
-                    <div className="py-10 px-4 text-center">
-                      <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-2 text-gray-500">
-                        <Bell className="w-5 h-5" />
-                      </div>
-                      <p className="text-sm font-semibold text-gray-900">{t('allCaughtUp')}</p>
-                      <p className="text-xs text-gray-500 mt-0.5">{t('noNotifications')}</p>
-                    </div>
+                    <p className="py-10 px-4 text-center text-sm text-muted">{t('noNotifications')}</p>
                   ) : (
                     recentNotifications.map((notif) => (
-                      <div
+                      <button
+                        type="button"
                         key={notif.id}
                         onClick={() => handleMarkNotificationRead(notif.id, notif.actionUrl)}
-                        className={`p-3.5 flex items-start gap-3 hover:bg-gray-50 cursor-pointer transition-colors ${
-                          !notif.isRead ? 'bg-amber-50/30' : ''
-                        }`}
+                        className="w-full p-3.5 flex items-start gap-3 text-start hover:bg-raised transition-colors"
                       >
-                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 border ${getNotificationIconBg(notif.type)}`}>
+                        <span
+                          aria-hidden="true"
+                          className={`w-8 h-8 rounded-full grid place-items-center shrink-0 ${notif.type === 'warning' ? 'bg-red-50 text-red-700' : 'bg-raised text-muted'}`}
+                        >
                           {getNotificationIcon(notif.type)}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between gap-1 mb-0.5">
-                            <p className={`text-xs font-semibold truncate ${!notif.isRead ? 'text-gray-900' : 'text-gray-700'}`}>
+                        </span>
+                        <span className="flex-1 min-w-0">
+                          <span className="flex items-center justify-between gap-2 mb-0.5">
+                            <span className={`text-sm truncate ${!notif.isRead ? 'font-semibold text-ink' : 'text-muted'}`}>
                               {notif.title}
-                            </p>
-                            <span className="text-[11px] text-gray-500 shrink-0">
+                            </span>
+                            <span className="text-xs text-muted shrink-0">
                               {formatRelativeTime(notif.createdAt, t)}
                             </span>
-                          </div>
-                          <p className="text-xs text-gray-600 line-clamp-2 leading-relaxed">
+                          </span>
+                          <span className="block text-xs text-muted line-clamp-2 leading-relaxed">
                             {notif.message}
-                          </p>
-                        </div>
+                          </span>
+                        </span>
                         {!notif.isRead && (
-                          <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0 mt-1.5" />
+                          <span className="w-2 h-2 rounded-full bg-brand-600 shrink-0 mt-1.5">
+                            <span className="sr-only">{t('unread')}</span>
+                          </span>
                         )}
-                      </div>
+                      </button>
                     ))
                   )}
                 </div>
 
-                {/* Panel Footer */}
-                <div className="p-2 border-t border-gray-100 bg-gray-50/50">
-                  <Link
-                    href={isSeller ? "/sellers/notifications" : isAdmin ? "/admin/notifications" : isRider ? "/riders/dashboard" : "/notifications"}
-                    onClick={() => setShowNotificationsPanel(false)}
-                    className="w-full py-2 px-3 text-center text-xs font-medium text-gray-700 hover:text-amber-600 hover:bg-white rounded-lg transition-colors flex items-center justify-center gap-1 border border-transparent hover:border-gray-200"
-                  >
-                    <span>{t('viewAllNotifications')}</span>
-                    <ChevronRight className="rtl:-scale-x-100 w-3.5 h-3.5" />
-                  </Link>
-                </div>
+                {/* Panel Footer: a rider has no full list (the customer page would open the customer menu), so none */}
+                {!isRider && (
+                  <div className="border-t border-line">
+                    <Link
+                      href={isSeller ? "/sellers/notifications" : isAdmin ? "/admin/notifications" : "/notifications"}
+                      onClick={() => setShowNotificationsPanel(false)}
+                      className="w-full min-h-12 px-3 text-sm font-medium text-brand-ink hover:bg-raised transition-colors flex items-center justify-center gap-1"
+                    >
+                      <span>{t('viewAllNotifications')}</span>
+                      <ChevronRight className="rtl:-scale-x-100 w-3.5 h-3.5" />
+                    </Link>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -540,173 +501,105 @@ export function DashboardNavbar({ title, subtitle, userType = 'customer', onMenu
             <div className="flex items-center gap-2 ms-2">
               <Link
                 href="/login"
-                className="px-4 py-2 rounded-xl text-xs font-bold text-on-brand shadow-xs transition-transform active:scale-95 bg-brand hover:bg-brand-500"
+                className="inline-flex h-11 items-center px-4 rounded-xl text-sm font-semibold text-on-brand transition-colors bg-brand hover:bg-brand-500"
               >
                 {t('signIn')}
               </Link>
             </div>
           ) : (
             <div className="relative ms-0 sm:ms-2" ref={dropdownRef}>
-              <button 
+              <button
                 type="button"
                 onClick={() => setShowDropdown(!showDropdown)}
-                className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer"
+                aria-label={tSite('account')}
+                aria-haspopup="menu"
+                aria-expanded={showDropdown}
+                className="flex min-h-11 min-w-11 items-center justify-center gap-2 sm:px-2 rounded-lg hover:bg-raised transition-colors cursor-pointer"
               >
-                <div
-                  className="w-9 h-9 rounded-full flex items-center justify-center shadow-2xs"
-                  style={{ background: accentBg, color: accentFg }}
-                >
+                <div className="w-9 h-9 rounded-full flex items-center justify-center bg-brand-soft text-brand-soft-ink">
                   <span className="font-semibold text-sm">
                     {user?.profile?.fullName?.charAt(0).toUpperCase() || user?.email?.charAt(0).toUpperCase() || 'U'}
                   </span>
                 </div>
-                <span className="hidden sm:block text-gray-700 text-sm font-bold">
-                  {user?.profile?.fullName?.split(' ')[0] || t('user')}
+                <span className="hidden sm:block text-ink text-sm font-medium">
+                  {user?.profile?.fullName?.split(' ')[0] || user?.email?.split('@')[0] || t('user')}
                 </span>
-                <svg className="w-4 h-4 text-gray-500 max-[380px]:hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="hidden sm:block w-4 h-4 text-muted" aria-hidden="true" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                 </svg>
               </button>
             
             {/* Dropdown Menu */}
             {showDropdown && (
-              <div className="absolute end-0 top-full mt-2 w-72 bg-white rounded-2xl shadow-xl border border-gray-100 py-1 z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-                <div className="px-4 py-3 border-b border-gray-100 bg-gray-50/70">
+              <div data-top-panel className={`${panel} sm:w-72 py-1`}>
+                <div className="px-4 py-3 border-b border-line">
                   <div className="flex items-center justify-between gap-2">
-                    <p className="text-gray-900 font-bold truncate text-sm">{user?.profile?.fullName || t('user')}</p>
-                    <span
-                      className="px-2 py-0.5 text-[11px] font-black rounded-full uppercase tracking-wider shrink-0"
-                      style={{
-                        background: isSeller ? 'var(--ink-100)' : isAdmin ? 'var(--gold-50)' : isRider ? '#ECFDF5' : 'var(--forest-50)',
-                        color: isSeller ? 'var(--ink-700)' : isAdmin ? 'var(--gold-700)' : isRider ? '#065F46' : 'var(--forest-700)',
-                      }}
-                    >
+                    <p className="text-ink font-semibold truncate text-sm">{user?.profile?.fullName || user?.email || t('user')}</p>
+                    <span className="px-2 py-0.5 text-xs font-medium rounded-full shrink-0 bg-raised text-muted">
                       {isSeller ? t('roleSeller') : isAdmin ? t('roleAdmin') : isRider ? t('roleRider') : isHubManager ? t('roleHub') : t('roleCustomer')}
                     </span>
                   </div>
-                  <p className="text-xs text-gray-500 truncate mt-0.5" data-ltr>{user?.email}</p>
+                  <p className="text-xs text-muted truncate mt-0.5" data-ltr>{user?.email}</p>
                 </div>
 
 
                 <div className="py-1">
-                  {/* Rider-specific menu items */}
-                  {isRider && (
-                    <>
-                      <Link href="/riders/dashboard" className="flex items-center gap-3 px-4 py-2 text-gray-700 hover:bg-gray-50 transition-colors">
-                        <Bike className="w-4 h-4 text-emerald-600" />
-                        <span className="text-sm font-medium">{t('fleetCommand')}</span>
-                      </Link>
-                      <Link href="/riders/dashboard#active" className="flex items-center gap-3 px-4 py-2 text-gray-700 hover:bg-gray-50 transition-colors">
-                        <Package className="w-4 h-4 text-emerald-600" />
-                        <span className="text-sm font-medium">{t('activeDeliveries')}</span>
-                      </Link>
-                      <Link href="/riders/dashboard#available" className="flex items-center gap-3 px-4 py-2 text-gray-700 hover:bg-gray-50 transition-colors">
-                        <Radio className="w-4 h-4 text-emerald-600" />
-                        <span className="text-sm font-medium">{t('availablePool')}</span>
-                      </Link>
-                      <Link href="/riders/dashboard#cash" className="flex items-center gap-3 px-4 py-2 text-gray-700 hover:bg-gray-50 transition-colors">
-                        <Coins className="w-4 h-4 text-emerald-600" />
-                        <span className="text-sm font-medium">{t('codSettlement')}</span>
-                      </Link>
-                      <Link href="/support" className="flex items-center gap-3 px-4 py-2 text-gray-700 hover:bg-gray-50 transition-colors">
-                        <MessageCircle className="w-4 h-4 text-emerald-600" />
-                        <span className="text-sm font-medium">{t('fleetSupport')}</span>
-                      </Link>
-                    </>
-                  )}
-                  {/* Seller-specific menu items */}
                   {isSeller && (
-                    <>
-                      <Link href="/sellers/dashboard" className="flex items-center gap-3 px-4 py-2 text-gray-700 hover:bg-gray-50 transition-colors">
-                        <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6z" />
-                        </svg>
-                        <span className="text-sm">{t('dashboard')}</span>
-                      </Link>
-                      <Link href="/sellers/orders" className="flex items-center gap-3 px-4 py-2 text-gray-700 hover:bg-gray-50 transition-colors">
-                        <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" />
-                        </svg>
-                        <span className="text-sm">{t('myOrders')}</span>
-                      </Link>
-                      <Link href="/sellers/products" className="flex items-center gap-3 px-4 py-2 text-gray-700 hover:bg-gray-50 transition-colors">
-                        <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8.25v-1.5m0 1.5c-1.355 0-2.697.056-4.024.166C6.845 8.51 6 9.473 6 10.608v2.513m6-4.87c1.355 0 2.697.055 4.024.165" />
-                        </svg>
-                        <span className="text-sm">{t('myProducts')}</span>
-                      </Link>
-                      <Link href="/sellers/settings" className="flex items-center gap-3 px-4 py-2 text-gray-700 hover:bg-gray-50 transition-colors">
-                        <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z" />
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                        </svg>
-                        <span className="text-sm">{t('settings')}</span>
-                      </Link>
-                    </>
+                    <Link href="/sellers/settings" className={menuRow}>
+                      <Settings className={menuIcon} aria-hidden="true" />
+                      {t('settings')}
+                    </Link>
                   )}
-                  {/* Customer menu items */}
                   {isCustomer && (
                     <>
-                      <Link href="/profile" className="flex items-center gap-3 px-4 py-2 text-gray-700 hover:bg-gray-50 transition-colors">
-                        <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
-                        </svg>
-                        <span className="text-sm">{t('myProfile')}</span>
+                      <Link href="/profile" className={menuRow}>
+                        <User className={menuIcon} aria-hidden="true" />
+                        {t('myProfile')}
                       </Link>
-                      <Link href="/orders" className="flex items-center gap-3 px-4 py-2 text-gray-700 hover:bg-gray-50 transition-colors">
-                        <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" />
-                        </svg>
-                        <span className="text-sm">{t('myOrders')}</span>
+                      <Link href="/orders" className={menuRow}>
+                        <ShoppingBag className={menuIcon} aria-hidden="true" />
+                        {t('myOrders')}
                       </Link>
-                      <Link href="/profile/addresses" className="flex items-center gap-3 px-4 py-2 text-gray-700 hover:bg-gray-50 transition-colors">
-                        <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
-                        </svg>
-                        <span className="text-sm">{t('savedAddresses')}</span>
+                      <Link href="/profile/addresses" className={menuRow}>
+                        <MapPin className={menuIcon} aria-hidden="true" />
+                        {t('savedAddresses')}
                       </Link>
-                      <Link href="/favorites" className="flex items-center gap-3 px-4 py-2 text-gray-700 hover:bg-gray-50 transition-colors">
-                        <svg className="w-4 h-4 text-rose-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z" />
-                        </svg>
-                        <span className="text-sm">{t('favoriteKitchens')}</span>
+                      <Link href="/favorites" className={menuRow}>
+                        <Heart className={menuIcon} aria-hidden="true" />
+                        {t('favoriteKitchens')}
                       </Link>
-                      <Link href="/support" className="flex items-center gap-3 px-4 py-2 text-gray-700 hover:bg-gray-50 transition-colors">
-                        <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a.75.75 0 01-.774-.75 3.75 3.75 0 01.408-1.706A8.281 8.281 0 013 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" />
-                        </svg>
-                        <span className="text-sm">{t('helpSupport')}</span>
+                      <Link href="/support" className={menuRow}>
+                        <LifeBuoy className={menuIcon} aria-hidden="true" />
+                        {t('helpSupport')}
                       </Link>
                     </>
                   )}
-                  {/* Admin menu items */}
                   {isAdmin && (
                     <>
-                      <Link href="/admin/dashboard" className="flex items-center gap-3 px-4 py-2 text-gray-700 hover:bg-gray-50 transition-colors">
-                        <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6z" />
-                        </svg>
-                        <span className="text-sm">{t('dashboard')}</span>
+                      <Link href="/admin/dashboard" className={menuRow}>
+                        <LayoutGrid className={menuIcon} aria-hidden="true" />
+                        {t('dashboard')}
                       </Link>
-                      <Link href="/admin/settings" className="flex items-center gap-3 px-4 py-2 text-gray-700 hover:bg-gray-50 transition-colors">
-                        <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281" />
-                        </svg>
-                        <span className="text-sm">{t('settings')}</span>
-                      </Link>
+                      {user?.permissions?.includes('read.finance') && (
+                        <Link href="/admin/settings" className={menuRow}>
+                          <Settings className={menuIcon} aria-hidden="true" />
+                          {t('settings')}
+                        </Link>
+                      )}
                     </>
                   )}
                 </div>
-                <div className="py-1 border-t border-gray-100">
-                  <button 
-                    onClick={handleLogout}
-                    className="w-full flex items-center gap-3 px-4 py-2 text-red-600 hover:bg-red-50 transition-colors"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75" />
-                    </svg>
-                    <span className="text-sm font-medium">{t('logout')}</span>
+                {/* The kitchen, rider, hub and admin screens stay light whatever is chosen (lib/theme.ts) */}
+                {isCustomer && (
+                  <div className="px-4 py-3 border-t border-line">
+                    <p className="mb-2 text-xs font-medium text-muted">{tSite('appearance')}</p>
+                    <ThemeToggle className="[&>button]:min-h-11" />
+                  </div>
+                )}
+                <div className="py-1 border-t border-line">
+                  <button type="button" onClick={handleLogout} className={`${menuRow} w-full font-medium text-red-700 hover:bg-red-50`}>
+                    <LogOut className="w-4 h-4" aria-hidden="true" />
+                    {tSite('signOut')}
                   </button>
                 </div>
               </div>

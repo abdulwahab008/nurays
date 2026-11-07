@@ -5,7 +5,7 @@ import { loginUrlHere } from '@/lib/auth-redirect';
 import { apiClient, apiErrorMessage, apiErrorCode, errorMessage } from '@/lib/api-client';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { userProfileService, UserProfile } from '@/lib/services/user-profile.service';
+import { userProfileService, UserProfile, type Address } from '@/lib/services/user-profile.service';
 import { formatPhoneNumber } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { LoadError } from '@/components/ui/LoadError';
@@ -16,7 +16,8 @@ import { useAuthStore } from '@/lib/store/auth-store';
 import { PasswordCard } from '@/components/profile/PasswordCard';
 import { SessionsCard } from '@/components/profile/SessionsCard';
 import { TwoFactorCard } from '@/components/profile/TwoFactorCard';
-import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
+import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS, RIDER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
+import { ThemeToggle } from '@/components/layout/ThemeToggle';
 import { useT, useLocale, LOCALES, LOCALE_NAMES } from '@/lib/i18n';
 import { commonMessages } from '@/lib/i18n/messages/common';
 import { accountMessages } from '@/lib/i18n/messages/account';
@@ -25,9 +26,7 @@ import {
   Bike,
   ShoppingCart,
   Camera,
-  Zap,
   MapPin,
-  Package,
   BarChart3,
   User,
   Pencil,
@@ -36,9 +35,14 @@ import {
   Lock,
   AlertTriangle,
   Check,
-  ArrowRight,
   Globe,
-  ShieldCheck,
+  LogOut,
+  Palette,
+  Heart,
+  Wallet,
+  Bell,
+  LifeBuoy,
+  ChevronRight,
 } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
@@ -52,7 +56,7 @@ export default function ProfilePage() {
 
   // Closing the account: typed confirmation, then the password if the server asks for one.
   const handleDeleteAccount = async () => {
-    if ((await askDialog({ title: t('deleteAccount'), message: t('deleteConfirmPrompt'), label: 'DELETE', mustEqual: 'DELETE' })) !== 'DELETE') return;
+    if ((await askDialog({ title: t('deleteAccount'), message: t('deleteConfirmPrompt'), label: 'DELETE', mustEqual: 'DELETE', destructive: true })) !== 'DELETE') return;
     const attempt = async (password?: string) => {
       await userProfileService.deleteAccount(password);
       showToast(t('accountDeleted'), 'success');
@@ -66,7 +70,7 @@ export default function ProfilePage() {
         await attempt();
       } catch (error) {
         if (apiErrorCode(error) !== 'PASSWORD_REQUIRED') throw error;
-        const password = (await askDialog({ title: t('password'), message: t('deletePasswordPrompt'), type: 'password' }));
+        const password = (await askDialog({ title: t('password'), message: t('deletePasswordPrompt'), type: 'password', destructive: true }));
         if (!password) return;
         await attempt(password);
       }
@@ -97,6 +101,9 @@ export default function ProfilePage() {
   const [phoneBusy, setPhoneBusy] = useState(false);
   const [editing, setEditing] = useState(false);
   const [sendingVerification, setSendingVerification] = useState(false);
+  const [defaultAddress, setDefaultAddress] = useState<Address | null>(null);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const photoInputRef = useRef<HTMLInputElement>(null);
   const [formData, setFormData] = useState({
     fullName: '',
     email: '',
@@ -105,7 +112,9 @@ export default function ProfilePage() {
     languagePreference: 'en',
   });
 
-  const sidebarItems = CUSTOMER_SIDEBAR_ITEMS;
+  const isRider = (user?.userType ?? user?.user_type) === 'rider';
+  const sidebarItems = isRider ? RIDER_SIDEBAR_ITEMS : CUSTOMER_SIDEBAR_ITEMS;
+  const layoutRole = isRider ? 'rider' : 'customer';
 
   const hasRealPhone = !!profile?.phone && !profile.phone.startsWith('+999');
 
@@ -157,9 +166,32 @@ export default function ProfilePage() {
     }
   };
 
+  // A new photo is uploaded (resized by the server), then set as the profile picture.
+  const changePhoto = async (file: File) => {
+    setUploadingPhoto(true);
+    try {
+      const body = new FormData();
+      body.append('avatar', file);
+      const uploaded = await apiClient.post<{ data: { url: string } }>('/upload/avatar', body, { headers: { 'Content-Type': 'multipart/form-data' } });
+      await userProfileService.updateAvatar(uploaded.data.data.url);
+      showToast(t('photoUpdated'), 'success');
+      loadProfile();
+    } catch (err) {
+      showToast(apiErrorMessage(err, t('photoUpdateFailed')), 'error');
+    } finally {
+      setUploadingPhoto(false);
+      if (photoInputRef.current) photoInputRef.current.value = '';
+    }
+  };
+
   const loadProfile = async () => {
     setLoading(true);
     setLoadError(null);
+    // Where the person gets food delivered is their default address, not the city typed on the profile.
+    userProfileService
+      .getAddresses()
+      .then((res) => setDefaultAddress(res.data.find((a) => a.isDefault) ?? res.data[0] ?? null))
+      .catch(() => setDefaultAddress(null));
     try {
       const response = await userProfileService.getProfile();
       setProfile(response.data);
@@ -182,7 +214,7 @@ export default function ProfilePage() {
     if (leaving.current) return;
     const token = apiClient.getAccessToken();
     if (!token && !isAuthenticated) {
-      router.push(loginUrlHere());
+      router.replace(loginUrlHere());
       return;
     }
     loadProfile();
@@ -219,7 +251,7 @@ export default function ProfilePage() {
         title={t('myProfile')}
         subtitle={t('manageAccount')}
         sidebarItems={sidebarItems}
-        userType="customer"
+        userType={layoutRole}
       >
         <div className="flex items-center justify-center h-64">
           <div className="text-center">
@@ -233,7 +265,7 @@ export default function ProfilePage() {
 
   if (loadError && !profile) {
     return (
-      <DashboardLayout title={t('myProfile')} subtitle={t('manageAccount')} sidebarItems={sidebarItems} userType="customer">
+      <DashboardLayout title={t('myProfile')} subtitle={t('manageAccount')} sidebarItems={sidebarItems} userType={layoutRole}>
         <div className="max-w-xl mx-auto my-12">
           <LoadError error={loadError} onRetry={loadProfile} title={t('profileLoadFailed')} />
         </div>
@@ -246,7 +278,7 @@ export default function ProfilePage() {
       title={t('myProfile')}
       subtitle={t('manageAccountSettings')}
       sidebarItems={sidebarItems}
-      userType="customer"
+      userType={layoutRole}
     >
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Profile Card - Left Side */}
@@ -276,6 +308,7 @@ export default function ProfilePage() {
                 {profile?.email || profile?.phone || t('role.customer')}
               </p>
               <div className="flex items-center justify-center gap-2 mb-4">
+                {profile?.userType && profile.userType !== 'customer' && (
                 <span className={`px-3 py-1 rounded-full text-xs font-medium flex items-center gap-1.5 ${
                   profile?.userType === 'seller'
                     ? 'bg-accent-soft text-accent-soft-ink'
@@ -286,70 +319,62 @@ export default function ProfilePage() {
                   {profile?.userType === 'seller' ? <Store className="w-3.5 h-3.5" /> : profile?.userType === 'rider' ? <Bike className="w-3.5 h-3.5" /> : <ShoppingCart className="w-3.5 h-3.5" />}
                   <span className="capitalize">{roleLabel(profile?.userType)}</span>
                 </span>
+                )}
                 {profile?.emailVerified && (
                   <span className="px-3 py-1 rounded-full text-xs font-bold bg-brand text-on-brand flex items-center gap-1">
                     <Check className="w-3 h-3" /> {t('verified')}
                   </span>
                 )}
               </div>
-              <Button variant="outline" className="w-full mb-3 flex items-center justify-center gap-2" size="sm">
-                <Camera className="w-4 h-4" /> {t('changePhoto')}
+              <input
+                ref={photoInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) void changePhoto(file);
+                }}
+              />
+              <Button
+                variant="outline"
+                className="w-full min-h-11"
+                disabled={uploadingPhoto}
+                onClick={() => photoInputRef.current?.click()}
+              >
+                <Camera className="w-4 h-4" /> {uploadingPhoto ? t('uploadingPhoto') : t('changePhoto')}
               </Button>
             </div>
           </div>
 
-          {/* Quick Links */}
-          <div className="bg-surface rounded-[20px] border border-line p-6 mt-6">
-            <h3 className="font-extrabold text-ink mb-4 flex items-center gap-2">
-              <Zap className="w-4 h-4 text-accent" /> {t('quickLinks')}
-            </h3>
-            <div className="space-y-2">
-              <Link href="/profile/addresses" className="flex items-center gap-3 p-3 rounded-xl hover:bg-raised transition-colors group">
-                <div className="w-10 h-10 bg-brand-soft rounded-xl flex items-center justify-center text-brand-soft-ink">
-                  <MapPin className="w-5 h-5" />
-                </div>
-                <div className="flex-1">
-                  <p className="font-medium text-ink">{t('addresses')}</p>
-                  <p className="text-xs text-muted">{t('addressesDesc')}</p>
-                </div>
-                <ArrowRight className="rtl:-scale-x-100 w-4 h-4 text-muted group-hover:translate-x-1 transition-transform" />
-              </Link>
-              <Link href="/orders" className="flex items-center gap-3 p-3 rounded-xl hover:bg-raised transition-colors group">
-                <div className="w-10 h-10 bg-brand-soft rounded-xl flex items-center justify-center text-brand-soft-ink">
-                  <Package className="w-5 h-5" />
-                </div>
-                <div className="flex-1">
-                  <p className="font-medium text-ink">{t('orderHistory')}</p>
-                  <p className="text-xs text-muted">{t('orderHistoryDesc')}</p>
-                </div>
-                <ArrowRight className="rtl:-scale-x-100 w-4 h-4 text-muted group-hover:translate-x-1 transition-transform" />
-              </Link>
-              {profile?.userType !== 'seller' && (
-                <Link href="/sellers/register" className="flex items-center gap-3 p-3 rounded-xl hover:bg-raised transition-colors group">
-                  <div className="w-10 h-10 bg-accent-soft rounded-xl flex items-center justify-center text-accent-soft-ink">
-                    <Store className="w-5 h-5" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="font-medium text-ink">{t('becomeSeller')}</p>
-                    <p className="text-xs text-muted">{t('becomeSellerDesc')}</p>
-                  </div>
-                  <ArrowRight className="rtl:-scale-x-100 w-4 h-4 text-muted group-hover:translate-x-1 transition-transform" />
-                </Link>
-              )}
-              {profile?.userType === 'seller' && (
-                <Link href="/sellers/dashboard" className="flex items-center gap-3 p-3 rounded-xl hover:bg-raised transition-colors group">
-                  <div className="w-10 h-10 bg-accent-soft rounded-xl flex items-center justify-center text-accent-soft-ink">
-                    <BarChart3 className="w-5 h-5" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="font-medium text-ink">{t('sellerDashboard')}</p>
-                    <p className="text-xs text-muted">{t('sellerDashboardDesc')}</p>
-                  </div>
-                  <ArrowRight className="rtl:-scale-x-100 w-4 h-4 text-muted group-hover:translate-x-1 transition-transform" />
-                </Link>
-              )}
-            </div>
-          </div>
+          {/* Everything else a customer keeps here: on a phone the tab bar has only Home, Orders, Tray and Profile. */}
+          <nav aria-labelledby="quick-links" className="bg-surface rounded-[20px] border border-line p-2 mt-6">
+            <h3 id="quick-links" className="sr-only">{t('quickLinks')}</h3>
+            <ul className="divide-y divide-line">
+              {(isRider ? [
+                { href: '/riders/dashboard', icon: Bike, label: t('riderDeliveries') },
+                { href: '/notifications/settings', icon: Bell, label: t('notifications') },
+                { href: '/support', icon: LifeBuoy, label: t('helpSupport') },
+              ] : [
+                { href: '/profile/addresses', icon: MapPin, label: t('addresses') },
+                { href: '/favorites', icon: Heart, label: t('savedKitchens') },
+                { href: '/wallet', icon: Wallet, label: t('walletLink') },
+                { href: '/notifications', icon: Bell, label: t('notifications') },
+                { href: '/support', icon: LifeBuoy, label: t('helpSupport') },
+                profile?.userType === 'seller'
+                  ? { href: '/sellers/dashboard', icon: BarChart3, label: t('sellerDashboard') }
+                  : { href: '/sellers/register', icon: Store, label: t('becomeSeller') },
+              ]).map(({ href, icon: Icon, label }) => (
+                <li key={href}>
+                  <Link href={href} className="flex items-center gap-3 min-h-12 px-3 rounded-xl hover:bg-raised transition-colors">
+                    <Icon className="w-5 h-5 text-muted shrink-0" aria-hidden />
+                    <span className="flex-1 font-medium text-ink">{label}</span>
+                    <ChevronRight className="rtl:-scale-x-100 w-4 h-4 text-muted" aria-hidden />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </nav>
         </div>
 
         {/* Main Content - Right Side */}
@@ -450,9 +475,9 @@ export default function ProfilePage() {
                 </div>
               </form>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="p-4 bg-raised rounded-xl">
-                  <p className="text-xs text-muted uppercase tracking-wide mb-1">{t('phoneNumber')}</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 md:gap-x-6 divide-y divide-line md:divide-y-0 border-t border-line md:border-t-0">
+                <div className="py-3 md:py-0">
+                  <p className="text-xs text-muted mb-1">{t('phoneNumber')}</p>
                   <p className="font-semibold text-ink flex items-center gap-2">
                     <Phone className="w-4 h-4 text-muted" />
                     {hasRealPhone ? <span data-ltr>{formatPhoneNumber(profile!.phone)}</span> : t('notProvided')}
@@ -473,7 +498,7 @@ export default function ProfilePage() {
                         setVerifyingPhone(true);
                         setPhoneInput(hasRealPhone ? profile!.phone : '');
                       }}
-                      className="mt-2 text-xs font-bold text-brand-ink hover:underline"
+                      className="mt-1 inline-flex items-center min-h-11 text-sm font-semibold text-brand-ink hover:underline"
                     >
                       {hasRealPhone ? t('verifyThisNumber') : t('addVerifyPhone')}
                     </button>
@@ -487,7 +512,7 @@ export default function ProfilePage() {
                         placeholder="+923001234567"
                         dir="ltr"
                         disabled={phoneCodeSent}
-                        className="w-full px-3 py-1.5 text-sm border border-line-strong rounded-lg"
+                        className="w-full h-11 px-3 text-sm border border-line-strong rounded-xl bg-surface text-ink"
                       />
                       {phoneCodeSent && (
                         <input
@@ -498,23 +523,23 @@ export default function ProfilePage() {
                           onChange={(e) => setPhoneCode(e.target.value.replace(/\D/g, ''))}
                           placeholder={t('sixDigitCode')}
                           dir="ltr"
-                          className="w-full px-3 py-1.5 text-sm border border-line-strong rounded-lg"
+                          className="w-full h-11 px-3 text-sm border border-line-strong rounded-xl bg-surface text-ink"
                         />
                       )}
                       <div className="flex gap-2">
                         {!phoneCodeSent ? (
-                          <button type="button" disabled={phoneBusy} onClick={sendPhoneCode} className="px-3 py-1.5 text-xs font-bold rounded-lg bg-ink text-page disabled:opacity-50">
+                          <button type="button" disabled={phoneBusy} onClick={sendPhoneCode} className="min-h-11 px-4 text-sm font-semibold rounded-xl bg-brand text-on-brand disabled:opacity-50">
                             {phoneBusy ? t('sending') : t('sendCode')}
                           </button>
                         ) : (
-                          <button type="button" disabled={phoneBusy || phoneCode.length !== 6} onClick={confirmPhoneCode} className="px-3 py-1.5 text-xs font-bold rounded-lg bg-brand-700 text-white disabled:opacity-50">
+                          <button type="button" disabled={phoneBusy || phoneCode.length !== 6} onClick={confirmPhoneCode} className="min-h-11 px-4 text-sm font-semibold rounded-xl bg-brand text-on-brand disabled:opacity-50">
                             {phoneBusy ? t('verifying') : t('verify')}
                           </button>
                         )}
                         <button
                           type="button"
                           onClick={() => { setVerifyingPhone(false); setPhoneCode(''); setPhoneCodeSent(false); }}
-                          className="px-3 py-1.5 text-xs font-bold rounded-lg border border-line-strong"
+                          className="min-h-11 px-4 text-sm font-semibold rounded-xl border border-line-strong text-ink"
                         >
                           {tc('cancel')}
                         </button>
@@ -522,42 +547,35 @@ export default function ProfilePage() {
                     </div>
                   )}
                 </div>
-                <div className="p-4 bg-raised rounded-xl">
-                  <p className="text-xs text-muted uppercase tracking-wide mb-1">{t('emailAddress')}</p>
+                <div className="py-3 md:py-0">
+                  <p className="text-xs text-muted mb-1">{t('emailAddress')}</p>
                   <p className="font-semibold text-ink flex items-center gap-2">
                     <Mail className="w-4 h-4 text-muted" />
                     {profile?.email ? <span data-ltr>{profile.email}</span> : t('notProvided')}
                   </p>
                 </div>
-                <div className="p-4 bg-raised rounded-xl">
-                  <p className="text-xs text-muted uppercase tracking-wide mb-1">{t('fullName')}</p>
+                <div className="py-3 md:py-0">
+                  <p className="text-xs text-muted mb-1">{t('fullName')}</p>
                   <p className="font-semibold text-ink flex items-center gap-2">
                     <User className="w-4 h-4 text-muted" />
                     {profile?.profile?.fullName || t('notSet')}
                   </p>
                 </div>
-                <div className="p-4 bg-raised rounded-xl">
-                  <p className="text-xs text-muted uppercase tracking-wide mb-1">{t('location')}</p>
+                <div className="py-3 md:py-0">
+                  <p className="text-xs text-muted mb-1">{t('location')}</p>
                   <p className="font-semibold text-ink flex items-center gap-2">
-                    <MapPin className="w-4 h-4 text-muted" />
-                    {profile?.profile?.area && profile?.profile?.city
-                      ? `${profile.profile.area}, ${profile.profile.city}`
-                      : t('notSet')}
+                    <MapPin className="w-4 h-4 text-muted shrink-0" />
+                    <span className="min-w-0">
+                      {defaultAddress
+                        ? [defaultAddress.area, defaultAddress.city].filter(Boolean).join(', ')
+                        : profile?.profile?.area && profile?.profile?.city
+                          ? `${profile.profile.area}, ${profile.profile.city}`
+                          : t('notSet')}
+                    </span>
                   </p>
-                </div>
-                <div className="p-4 bg-raised rounded-xl">
-                  <p className="text-xs text-muted uppercase tracking-wide mb-1">{t('accountType')}</p>
-                  <p className="font-semibold text-ink flex items-center gap-2">
-                    {profile?.userType === 'seller' ? <Store className="w-4 h-4 text-accent-soft-ink" /> : profile?.userType === 'rider' ? <Bike className="w-4 h-4 text-brand-ink" /> : <ShoppingCart className="w-4 h-4 text-brand-ink" />}
-                    <span className="capitalize">{roleLabel(profile?.userType)}</span>
-                  </p>
-                </div>
-                <div className="p-4 bg-raised rounded-xl">
-                  <p className="text-xs text-muted uppercase tracking-wide mb-1">{t('language')}</p>
-                  <p className="font-semibold text-ink flex items-center gap-2">
-                    <Globe className="w-4 h-4 text-brand-ink" />
-                    {profile?.profile?.languagePreference === 'ur' ? t('langUrdu') : t('langEnglish')}
-                  </p>
+                  <Link href="/profile/addresses" className="inline-flex items-center min-h-11 text-xs font-semibold text-brand-ink hover:underline">
+                    {defaultAddress ? t('editAddresses') : t('addAnAddress')}
+                  </Link>
                 </div>
               </div>
             )}
@@ -595,6 +613,15 @@ export default function ProfilePage() {
             </div>
           </div>
 
+          {/* Appearance */}
+          <div className="bg-surface rounded-[20px] border border-line p-6" data-testid="appearance-setting">
+            <h2 className="text-lg font-bold text-ink mb-1 flex items-center gap-2">
+              <Palette className="w-5 h-5 text-brand-ink" /> {t('appearance')}
+            </h2>
+            <p className="text-sm text-muted mb-4">{t('appearanceDesc')}</p>
+            <ThemeToggle className="max-w-sm" />
+          </div>
+
           {/* Security & Account */}
           <div className="bg-surface rounded-[20px] border border-line p-6">
             <h2 className="text-lg font-bold text-ink mb-4 flex items-center gap-2">
@@ -605,7 +632,7 @@ export default function ProfilePage() {
               <SessionsCard />
               {(user?.userType ?? user?.user_type) === 'admin' && <TwoFactorCard />}
               {profile?.email && (
-                <div className="flex items-center justify-between gap-3 p-4 bg-raised rounded-xl">
+                <div className="flex items-center justify-between gap-3 p-4 bg-raised rounded-xl" data-testid="email-verification">
                   <div className="flex items-center gap-3 min-w-0">
                     <div className="w-10 h-10 shrink-0 bg-brand-soft rounded-xl flex items-center justify-center text-brand-soft-ink">
                       <Mail className="w-5 h-5" />
@@ -632,30 +659,31 @@ export default function ProfilePage() {
             </div>
           </div>
 
-          {/* Danger Zone */}
-          <div className="bg-surface rounded-2xl shadow-sm border border-red-100 p-6">
-            <h2 className="text-lg font-bold text-red-600 mb-4 flex items-center gap-2">
-              <AlertTriangle className="w-5 h-5 text-red-600" /> {t('dangerZone')}
-            </h2>
-            <div className="flex items-center justify-between p-4 bg-red-50 rounded-xl">
-              <div>
-                <p className="font-medium text-ink">{t('signOut')}</p>
-                <p className="text-xs text-muted">{t('signOutDesc')}</p>
-              </div>
-              <Button 
-                variant="outline" 
-                size="sm" 
-                className="border-red-200 text-red-600 hover:bg-red-50"
-                onClick={() => {
-                  leaving.current = true;
-                  logout();
-                  router.push('/');
-                }}
-              >
-                {t('signOut')}
-              </Button>
+          <div className="bg-surface rounded-[20px] border border-line p-4 flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="font-medium text-ink">{t('signOut')}</p>
+              <p className="text-xs text-muted">{t('signOutDesc')}</p>
             </div>
-            <div className="flex items-center justify-between gap-3 p-4 bg-red-50 rounded-xl mt-3">
+            <Button
+              variant="outline"
+              className="shrink-0 min-h-11"
+              data-testid="profile-sign-out"
+              onClick={() => {
+                leaving.current = true;
+                logout();
+                router.push('/');
+              }}
+            >
+              <LogOut className="w-4 h-4" /> {t('signOut')}
+            </Button>
+          </div>
+
+          {/* Danger Zone */}
+          <div className="bg-surface rounded-[20px] border border-red-200 p-6">
+            <h2 className="text-lg font-bold text-red-700 mb-4 flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-red-700" /> {t('dangerZone')}
+            </h2>
+            <div className="flex items-center justify-between gap-3 p-4 bg-red-50 rounded-xl">
               <div className="min-w-0">
                 <p className="font-medium text-ink">{t('deleteAccount')}</p>
                 <p className="text-xs text-muted">{t('deleteAccountDesc')}</p>

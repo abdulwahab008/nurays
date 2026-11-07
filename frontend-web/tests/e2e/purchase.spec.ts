@@ -20,10 +20,11 @@ async function postJson(
   path: string,
   body: unknown,
   jwt?: string,
+  extraHeaders: Record<string, string> = {},
 ) {
   const url = `${API_BASE}/${path.replace(/^\//, '')}`;
   return ctx.post(url, {
-    headers: jwt ? { Authorization: `Bearer ${jwt}` } : {},
+    headers: { ...(jwt ? { Authorization: `Bearer ${jwt}` } : {}), ...extraHeaders },
     data: body,
   });
 }
@@ -109,6 +110,7 @@ test.describe('Nuray customer purchase', () => {
         paymentMethod: 'cod',
       },
       jwt,
+      { 'Idempotency-Key': crypto.randomUUID() },
     );
     expect(orderResp.status()).toBe(201);
     const orderBody = await orderResp.json();
@@ -141,6 +143,7 @@ test.describe('Nuray customer purchase', () => {
         paymentMethod: 'cod',
       },
       jwt,
+      { 'Idempotency-Key': crypto.randomUUID() },
     );
     const order = (await orderResp.json()).data.order as {
       orderNumber: string;
@@ -150,9 +153,9 @@ test.describe('Nuray customer purchase', () => {
     // Drive the login UI
     await page.goto('/login');
     await page.getByRole('button', { name: 'Email', exact: true }).click();
-    await page.getByLabel(/Email Address/).fill(email);
+    await page.getByLabel('Email', { exact: true }).fill(email);
     await page.getByLabel('Password').fill(password);
-    await page.getByRole('button', { name: 'Login', exact: true }).click();
+    await page.getByRole('button', { name: 'Sign in', exact: true }).click();
     await expect(page, 'login should redirect off /login').not.toHaveURL(/\/login(\?|$)/, {
       timeout: 10_000,
     });
@@ -170,9 +173,9 @@ test.describe('Nuray customer purchase', () => {
 
     await page.goto('/login');
     await page.getByRole('button', { name: 'Email', exact: true }).click();
-    await page.getByLabel(/Email Address/).fill(email);
+    await page.getByLabel('Email', { exact: true }).fill(email);
     await page.getByLabel('Password').fill(password);
-    await page.getByRole('button', { name: 'Login', exact: true }).click();
+    await page.getByRole('button', { name: 'Sign in', exact: true }).click();
     await expect(page).not.toHaveURL(/\/login(\?|$)/, { timeout: 10_000 });
 
     // Wait for the POST /cart/items response triggered by the Add-to-cart button.

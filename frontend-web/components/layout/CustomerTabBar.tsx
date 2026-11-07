@@ -64,15 +64,19 @@ export function CustomerTabBar() {
               aria-current={current ? 'page' : undefined}
               aria-label={label}
               className={cn(
-                'relative flex h-16 flex-col items-center justify-center gap-1 text-[11px]',
-                current ? 'font-extrabold text-brand-ink' : 'font-semibold text-muted',
+                'relative flex h-16 flex-col items-center justify-center gap-0.5 text-xs active:bg-raised',
+                current ? 'font-bold text-brand-soft-ink' : 'font-medium text-muted',
               )}
             >
-              <Icon className="h-[22px] w-[22px]" strokeWidth={current ? 2.4 : 2} aria-hidden />
-              <span aria-hidden>{id === 'tray' ? t('tabTray') : label}</span>
+              {/* The current tab's icon sits on a soft turquoise pill: colour alone is easy to miss in sunlight. */}
+              <span className={cn('grid h-7 w-14 place-items-center rounded-full transition-colors', current && 'bg-brand-soft')}>
+                <Icon className="h-[22px] w-[22px]" strokeWidth={current ? 2.4 : 2} aria-hidden />
+              </span>
+              {/* A leading- class lets the Urdu rule in globals.css give Nastaliq its taller line, so no descender is cut off */}
+              <span aria-hidden className="leading-4">{id === 'tray' ? t('tabTray') : label}</span>
               {id === 'tray' && count > 0 && (
-                <span aria-hidden className="absolute top-2 start-[calc(50%+4px)] flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-accent px-1 text-[11px] font-extrabold text-on-accent">
-                  {count}
+                <span aria-hidden className="absolute top-1.5 start-[calc(50%+6px)] flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-accent px-1 text-[11px] font-bold text-on-accent tabular-nums">
+                  {count > 9 ? '9+' : count}
                 </span>
               )}
             </Link>

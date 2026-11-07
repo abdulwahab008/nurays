@@ -22,8 +22,56 @@ import { assertKitchenTakesCash } from './kitchen-owing.service';
 import { onlinePaymentsAvailable } from './online-payment.service';
 import { newHandoverCode } from './handover.service';
 import { debitWallet } from './wallet.service';
-import { logger } from '../utils/logger';
+import { logEvent, logger } from '../utils/logger';
 import { thrownMessage, thrown } from '../utils/thrown';
+
+/** When each delivery window closes, in minutes after midnight Pakistan time (the windows checkout offers). */
+export const SLOT_END_MINUTES = { morning: 12 * 60, afternoon: 17 * 60, evening: 21 * 60 + 30 } as const;
+export type SlotTime = keyof typeof SLOT_END_MINUTES;
+
+const PKT_OFFSET_MS = 5 * 60 * 60 * 1000;
+
+/**
+ * Why a delivery slot can't be booked, or null when it can: a day before today, or today's window once it has closed
+ * (all in Pakistan time). A slot with no date is today's.
+ */
+export function slotProblem(slotTime: SlotTime | undefined, slotDate: string | undefined, now: Date = new Date()): string | null {
+  const pktNow = new Date(now.getTime() + PKT_OFFSET_MS);
+  const today = pktNow.toISOString().slice(0, 10);
+  const day = slotDate ? new Date(slotDate).toISOString().slice(0, 10) : today;
+  if (day < today) return 'The delivery day has already passed. Please choose another day.';
+  if (day === today && slotTime) {
+    const minutes = pktNow.getUTCHours() * 60 + pktNow.getUTCMinutes();
+    if (minutes >= SLOT_END_MINUTES[slotTime]) return 'That delivery window has already passed today. Please choose a later one.';
+  }
+  return null;
+}
+
+/** A transfer straight to the kitchen needs the kitchen's account for that method. */
+export function transferAccountMissing(
+  paymentMethod: string,
+  seller: Pick<Seller, 'bankAccountNumber' | 'jazzcashNumber' | 'easypaisaNumber'>
+): boolean {
+  if (paymentMethod === 'bank') return !seller.bankAccountNumber?.trim();
+  if (paymentMethod === 'jazzcash') return !seller.jazzcashNumber?.trim();
+  if (paymentMethod === 'easypaisa') return !seller.easypaisaNumber?.trim();
+  return false;
+}
+
+/**
+ * The total the checkout showed on its button must be the total charged. When the price moved in between (a deal ran out
+ * or was used up, a dish was repriced, the fee changed), the order is refused with the new total instead of being placed
+ * at an amount the customer did not agree to.
+ */
+export function quotedTotalProblem(expectedTotal: number | undefined, totalAmount: number): AppError | null {
+  if (expectedTotal == null || Math.round(expectedTotal) === Math.round(totalAmount)) return null;
+  return new AppError(
+    `The price of your order has changed to Rs ${Math.round(totalAmount).toLocaleString('en-PK')}. Please check your order and place it again.`,
+    409,
+    'PRICE_CHANGED',
+    { total: totalAmount, expectedTotal }
+  );
+}
 
 /** Placing an order: the cart's items priced, discounted, split by kitchen and written in one transaction. */
 export class OrderPlacement {
@@ -84,10 +132,11 @@ export class OrderPlacement {
       deliveryAddressId?: string;
       hubId?: string;
       deliverySlotDate?: string;
-      deliverySlotTime?: string;
+      deliverySlotTime?: SlotTime;
       paymentMethod: string;
       promotionCode?: string;
       deliveryInstructions?: string;
+      expectedTotal?: number;
     },
     opts: { idempotencyKey?: string } = {}
   ) {
@@ -304,8 +353,22 @@ export class OrderPlacement {
       }
       const accepting = await isAcceptingOrders(seller, new Date(), data.deliverySlotDate);
       if (!accepting.accepting) {
-        throw new AppError(`${seller.businessName}: ${accepting.reason}`, 400, 'SELLER_NOT_ACCEPTING_ORDERS');
+        throw new AppError(`${seller.businessName}: ${accepting.reason}`, 400, accepting.code, {
+          nextOpenAt: accepting.nextOpenAt?.toISOString() ?? null,
+        });
       }
+      if (transferAccountMissing(data.paymentMethod, seller)) {
+        throw new AppError(
+          `${seller.businessName} has not added an account for this payment method. Please choose another way to pay.`,
+          400,
+          'PAYMENT_METHOD_UNAVAILABLE'
+        );
+      }
+    }
+
+    const slotIssue = slotProblem(data.deliverySlotTime, data.deliverySlotDate);
+    if (slotIssue) {
+      throw new AppError(slotIssue, 400, 'DELIVERY_SLOT_PASSED');
     }
 
     // Apply seller-wide catalog/deal promotions to the actual charged unit price —
@@ -502,6 +565,8 @@ export class OrderPlacement {
 
     // 5% GST on the goods after discounts; the total in whole rupees (see priceOrder).
     const { taxAmount, totalAmount } = priceOrder(subtotal - discountAmount, deliveryFee);
+    const priceMoved = quotedTotalProblem(data.expectedTotal, totalAmount);
+    if (priceMoved) throw priceMoved;
 
     // Create order with items in transaction (retried with a new number on a clash)
     let order: Awaited<ReturnType<typeof placeOrder>>;
@@ -744,6 +809,14 @@ export class OrderPlacement {
 
     // The order is committed: nothing after this point may fail the request (a client
     // that saw an error would retry and, without a key, place it twice).
+    logEvent('order.placed', {
+      orderId: order.order.id,
+      orderNumber: order.order.orderNumber,
+      sellerIds: Array.from(new Set(order.items.map((item) => item.sellerId))),
+      actor: 'customer',
+      paymentMethod: order.order.paymentMethod,
+      amountMinor: Math.round(Number(order.order.totalAmount) * 100),
+    });
     try {
       await realtimeOrderService.emitNewOrderNotification(order.order.id);
     } catch (err) {

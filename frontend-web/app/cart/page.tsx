@@ -4,33 +4,33 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
-  ShoppingCart,
   Trash2,
-  Store,
   Truck,
   Tag,
   ShoppingBag,
-  Lock,
   Check,
-  ImageOff,
   ChevronLeft,
   ChevronRight,
   ChefHat,
   MapPin,
   X,
-  ShieldCheck,
   Flame,
   Snowflake,
   ArrowRight,
 } from 'lucide-react';
-import { cartService, CartResponse } from '@/lib/services/cart.service';
+import { cartService, CartResponse, type CartItem } from '@/lib/services/cart.service';
+import { productService } from '@/lib/services/product.service';
+import { useCommunityStore } from '@/lib/store/community-store';
+import { loginUrlFor } from '@/lib/auth-redirect';
+import { CoverImage } from '@/components/ui/CoverImage';
+import { kitchenMessages } from '@/lib/i18n/messages/kitchen';
 import { formatPrice, imageVariant, orderTotals } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { LoadError } from '@/components/ui/LoadError';
 import { useAuthStore } from '@/lib/store/auth-store';
-import { useCartStore, CartItem as LocalCartItem } from '@/lib/store/cart-store';
+import { useCartStore, trayFromServer, CartItem as LocalCartItem } from '@/lib/store/cart-store';
 import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
-import { apiClient, apiErrorMessage, errorMessage } from '@/lib/api-client';
+import { apiClient, apiErrorMessage } from '@/lib/api-client';
 import { useToast } from '@/components/ui/toast';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { DEFAULT_ADDRESS, useDeliveryEstimate } from '@/lib/hooks/use-delivery-estimate';
@@ -84,6 +84,8 @@ export default function CartPage() {
   const router = useRouter();
   const t = useT(checkoutMessages);
   const tc = useT(commonMessages);
+  const tk = useT(kitchenMessages);
+  const selectedCommunity = useCommunityStore((st) => st.selectedCommunity);
   const { isAuthenticated } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated })));
   const { showToast } = useToast();
   const storeItems = useCartStore((s) => s.items);
@@ -159,60 +161,9 @@ export default function CartPage() {
         const response = await cartService.getCart();
         const cartData = response.data;
 
-        if (cartData?.items?.length) {
-          setCart(cartData);
-          setItems(
-            cartData.items.map((i) => ({
-              id: i.id,
-              productId: i.product.id,
-              productName: i.product.name,
-              productImage: i.product.image,
-              sellerId: i.seller.id,
-              sellerName: i.seller.businessName,
-              quantity: i.quantity,
-              unitPrice: i.variant?.price ?? i.product.price,
-              stockType: i.stockType,
-              hubId: i.hubId,
-              subtotal: i.subtotal,
-            }))
-          );
-        } else if (localStoreItems.length > 0) {
-          // One-time sync of guest items to authenticated cart
-          for (const item of localStoreItems) {
-            try {
-              await cartService.addToCart({
-                productId: item.productId,
-                quantity: item.quantity,
-                stockType: item.stockType || 'direct',
-              });
-            } catch (err) {
-              console.warn('Syncing guest cart item to server:', errorMessage(err, ''));
-            }
-          }
-          const fresh = await cartService.getCart();
-          if (fresh.data?.items?.length) {
-            setCart(fresh.data);
-            setItems(
-              fresh.data.items.map((i) => ({
-                id: i.id,
-                productId: i.product.id,
-                productName: i.product.name,
-                productImage: i.product.image,
-                sellerId: i.seller.id,
-                sellerName: i.seller.businessName,
-                quantity: i.quantity,
-                unitPrice: i.variant?.price ?? i.product.price,
-                stockType: i.stockType,
-                hubId: i.hubId,
-                subtotal: i.subtotal,
-              }))
-            );
-          } else {
-            setCart(null);
-          }
-        } else {
-          setCart(null);
-        }
+        // Signed in, the server's tray is the truth: dishes added while signed out were merged in at sign-in.
+        setCart(cartData?.items?.length ? cartData : null);
+        setItems(trayFromServer(cartData?.items ?? []));
 
         if (cartData?.items?.length) {
           const productIds = cartData.items.map((i) => i.product.id).filter(Boolean);
@@ -388,7 +339,48 @@ export default function CartPage() {
   });
   const deliveryKnown = !!deliveryEstimate && deliveryEstimate.isDeliverable !== false;
   const isFreeDelivery = deliveryKnown && deliveryEstimate.isFree;
-  const deliveryFee = deliveryKnown && !deliveryEstimate.isFree ? deliveryEstimate.deliveryFee : 0;
+
+  // Without a saved address (a guest, or a customer who has not added one) the kitchen's quote for the chosen area stands
+  // in, as on the kitchen and dish pages; the same listing says which dishes are frozen (for the insulated pack).
+  const traySellerId = hasItems ? cart.activeSeller?.id || cart.items[0]?.seller.id || null : null;
+  const areaId = selectedCommunity?.id ?? null;
+  const [kitchenInfo, setKitchenInfo] = useState<{
+    key: string;
+    frozen: Set<string>;
+    quote: { deliverable: boolean; fee: number; reason: string | null } | null;
+  } | null>(null);
+  useEffect(() => {
+    if (!traySellerId) return;
+    let cancelled = false;
+    const key = `${traySellerId}:${areaId}`;
+    productService
+      .getProducts({ sellerId: traySellerId, limit: 50, communityId: areaId ?? undefined })
+      .then((res) => {
+        if (cancelled) return;
+        const list = res.data?.products ?? [];
+        const d = areaId ? list[0]?.delivery : null;
+        setKitchenInfo({
+          key,
+          frozen: new Set(list.filter((p) => p.productType === 'frozen').map((p) => p.id)),
+          quote: d ? { deliverable: d.deliverable, fee: d.fee, reason: d.reason } : null,
+        });
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [traySellerId, areaId]);
+  const info = kitchenInfo?.key === `${traySellerId}:${areaId}` ? kitchenInfo : null;
+  // Hub stock is the frozen range; a kitchen's own frozen dishes are known from its listing.
+  const isFrozenItem = (i: CartItem) => i.stockType === 'hub' || !!info?.frozen.has(i.product.id);
+  const areaQuote = !deliveryEstimate && !estimatePending ? info?.quote ?? null : null;
+  const areaQuoteKnown = !!areaQuote && areaQuote.deliverable;
+
+  const deliveryFee = deliveryKnown
+    ? (deliveryEstimate.isFree ? 0 : deliveryEstimate.deliveryFee)
+    : areaQuoteKnown
+      ? areaQuote.fee
+      : 0;
   const { gst, total: displayTotal } = orderTotals(discountedSubtotal, deliveryFee);
 
   // Progress towards free delivery, only for a kitchen that has an order amount which waives its fee, and measured the
@@ -434,7 +426,7 @@ export default function CartPage() {
     return (
       <DashboardLayout
         title={t('cartTitle')}
-        subtitle={t('emptySubtitle')}
+        subtitle=""
         sidebarItems={sidebarItems}
         userType="customer"
       >
@@ -442,11 +434,8 @@ export default function CartPage() {
           <div className="rounded-[24px] bg-surface border border-line p-8 sm:p-12 text-center">
 
             {/* Tray Icon */}
-            <div className="relative inline-flex items-center justify-center w-20 h-20 rounded-3xl bg-brand-soft mb-5">
-              <ShoppingBag className="w-10 h-10 text-brand-soft-ink" />
-              <span className="absolute -bottom-1.5 -end-1.5 px-2 py-0.5 rounded-full bg-accent text-on-accent text-[11px] font-extrabold">
-                {t('zeroItems')}
-              </span>
+            <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-brand-soft mb-5">
+              <ShoppingBag className="w-8 h-8 text-brand-soft-ink" aria-hidden />
             </div>
 
             <h2 className="text-2xl sm:text-[28px] font-extrabold text-ink tracking-tight mb-2">
@@ -458,39 +447,39 @@ export default function CartPage() {
 
             {/* Quick Cuisine Shortcut Pills */}
             <div className="mb-8">
-              <span className="text-[11px] font-bold text-muted uppercase tracking-wider block mb-2.5">
+              <span className="text-sm font-semibold text-muted block mb-2.5">
                 {t('popularNearby')}
               </span>
               <div className="flex flex-wrap items-center justify-center gap-2 max-w-lg mx-auto">
                 <Link
                   href="/products?category=biryani"
-                  className="px-3 py-1.5 rounded-xl bg-surface border border-line text-xs font-semibold text-ink hover:border-brand hover:text-brand-ink transition-colors shadow-2xs"
+                  className="inline-flex items-center h-11 px-4 rounded-full bg-surface border border-line text-sm font-semibold text-ink hover:border-brand hover:text-brand-ink transition-colors"
                 >
-                  🍛 {t('pill.biryani')}
+                  {t('pill.biryani')}
                 </Link>
                 <Link
                   href="/products?category=paratha"
-                  className="px-3 py-1.5 rounded-xl bg-surface border border-line text-xs font-semibold text-ink hover:border-brand hover:text-brand-ink transition-colors shadow-2xs"
+                  className="inline-flex items-center h-11 px-4 rounded-full bg-surface border border-line text-sm font-semibold text-ink hover:border-brand hover:text-brand-ink transition-colors"
                 >
-                  🫓 {t('pill.paratha')}
+                  {t('pill.paratha')}
                 </Link>
                 <Link
                   href="/products?productType=frozen"
-                  className="px-3 py-1.5 rounded-xl bg-surface border border-line text-xs font-semibold text-ink hover:border-frozen-ink hover:text-frozen-ink transition-colors shadow-2xs"
+                  className="inline-flex items-center h-11 px-4 rounded-full bg-surface border border-line text-sm font-semibold text-ink hover:border-brand hover:text-brand-ink transition-colors"
                 >
-                  ❄️ {t('pill.frozen')}
+                  {t('pill.frozen')}
                 </Link>
                 <Link
                   href="/products?category=bbq"
-                  className="px-3 py-1.5 rounded-xl bg-surface border border-line text-xs font-semibold text-ink hover:border-brand hover:text-brand-ink transition-colors shadow-2xs"
+                  className="inline-flex items-center h-11 px-4 rounded-full bg-surface border border-line text-sm font-semibold text-ink hover:border-brand hover:text-brand-ink transition-colors"
                 >
-                  🔥 {t('pill.kebab')}
+                  {t('pill.kebab')}
                 </Link>
                 <Link
                   href="/products?category=desserts"
-                  className="px-3 py-1.5 rounded-xl bg-surface border border-line text-xs font-semibold text-ink hover:border-accent hover:text-accent-soft-ink transition-colors shadow-2xs"
+                  className="inline-flex items-center h-11 px-4 rounded-full bg-surface border border-line text-sm font-semibold text-ink hover:border-brand hover:text-brand-ink transition-colors"
                 >
-                  🍯 {t('pill.kheer')}
+                  {t('pill.kheer')}
                 </Link>
               </div>
             </div>
@@ -518,53 +507,45 @@ export default function CartPage() {
 
   // ── CART WITH ITEMS ──
   const activeSeller = cart.activeSeller || cart.items[0]?.seller;
+  // Portions, not lines: two plates of one dish are two items, everywhere on this page.
+  const trayCount = cart.items.reduce((sum, i) => sum + i.quantity, 0);
 
   return (
     <DashboardLayout
       title={t('cartTitleFull')}
-      subtitle={t(cart.items.length > 1 ? 'cartSubtitleMany' : 'cartSubtitleOne', { count: cart.items.reduce((s, i) => s + i.quantity, 0) })}
+      subtitle={
+        activeSeller
+          ? t(trayCount === 1 ? 'cartSubtitleOne' : 'cartSubtitleMany', { count: trayCount, kitchen: activeSeller.businessName })
+          : t(trayCount === 1 ? 'itemsInTrayOne' : 'itemsInTrayMany', { count: trayCount })
+      }
       sidebarItems={sidebarItems}
       userType="customer"
     >
       <div className="space-y-6 pb-12">
         {/* Single Kitchen Context Banner */}
         {activeSeller && (
-          <div className="bg-surface rounded-[20px] border border-line p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-            <div className="flex items-center gap-3.5">
-              <div className="w-12 h-12 rounded-2xl bg-brand-soft text-brand-soft-ink flex items-center justify-center shrink-0">
-                <ChefHat className="w-6 h-6" />
+          <div className="bg-surface rounded-[20px] border border-line px-4 py-3 sm:px-5 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-10 h-10 rounded-xl bg-brand-soft text-brand-soft-ink flex items-center justify-center shrink-0">
+                <ChefHat className="w-5 h-5" aria-hidden />
               </div>
-              <div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <h3 className="font-extrabold text-ink text-base">
-                    {activeSeller.businessName}
-                  </h3>
-                  {activeSeller.community?.name && (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-raised text-ink">
-                      <MapPin className="w-3 h-3 text-brand-ink" />
-                      <span>{activeSeller.community.name}</span>
-                    </span>
-                  )}
-                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-brand-soft text-brand-soft-ink">
-                    <ShieldCheck className="w-3 h-3" />
-                    <span>{t('singleKitchenOrder')}</span>
-                  </span>
-                </div>
-                <p className="text-[13px] text-muted mt-1">
-                  {t('singleKitchenText')}
-                </p>
+              <div className="min-w-0">
+                <h3 className="font-extrabold text-ink text-base break-words">{activeSeller.businessName}</h3>
+                {activeSeller.community?.name && (
+                  <p className="flex items-center gap-1 text-xs text-muted truncate">
+                    <MapPin className="w-3 h-3 shrink-0" aria-hidden />
+                    <span>{activeSeller.community.name}</span>
+                  </p>
+                )}
               </div>
             </div>
-
-            <div className="flex items-center gap-2 self-end sm:self-center">
-              <Link
-                href={`/kitchens/${activeSeller.id}`}
-                className="inline-flex items-center gap-1.5 h-10 px-4 rounded-xl border border-line-strong hover:bg-raised text-sm font-bold text-brand-ink transition-colors"
-              >
-                <span>{t('addMoreDishes')}</span>
-                <ChevronRight className="rtl:-scale-x-100 w-3.5 h-3.5" />
-              </Link>
-            </div>
+            <Link
+              href={`/kitchens/${activeSeller.id}`}
+              className="shrink-0 inline-flex items-center gap-1 min-h-11 text-sm font-bold text-brand-ink hover:underline whitespace-nowrap"
+            >
+              <span>{t('addMoreDishes')}</span>
+              <ChevronRight className="rtl:-scale-x-100 w-3.5 h-3.5" aria-hidden />
+            </Link>
           </div>
         )}
 
@@ -606,22 +587,12 @@ export default function CartPage() {
           {/* ── LEFT: DISH ITEMS ── */}
           <div className="lg:col-span-2 space-y-4">
             <div className="flex items-center justify-between px-1">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-brand-soft text-brand-soft-ink flex items-center justify-center">
-                  <ShoppingCart className="w-4 h-4" />
-                </div>
-                <div>
-                  <h2 className="text-base font-extrabold text-ink leading-tight">{t('selectedDishes')}</h2>
-                  <span className="text-xs text-muted">
-                    {t(cart.items.length > 1 ? 'itemsInTrayMany' : 'itemsInTrayOne', { count: cart.items.length })}
-                  </span>
-                </div>
-              </div>
+              <h2 className="text-base font-extrabold text-ink">{t('selectedDishes')}</h2>
 
               <button
                 type="button"
                 onClick={() => setShowClearModal(true)}
-                className="text-sm font-bold text-muted hover:text-red-600 h-10 px-3 rounded-xl hover:bg-raised transition-colors flex items-center gap-1.5 cursor-pointer"
+                className="text-sm font-bold text-muted hover:text-red-600 h-11 px-3 rounded-xl hover:bg-raised transition-colors flex items-center gap-1.5 cursor-pointer"
               >
                 <Trash2 className="w-3.5 h-3.5" />
                 <span>{t('clearTray')}</span>
@@ -658,16 +629,14 @@ export default function CartPage() {
                             className="w-full h-full object-cover"
                           />
                         ) : (
-                          <div className="w-full h-full flex items-center justify-center text-muted">
-                            <ImageOff className="w-8 h-8" />
-                          </div>
+                          <CoverImage alt={item.product.name} label={item.product.name} size="sm" className="w-full h-full" />
                         )}
                         <span
                           className={`absolute bottom-1.5 start-1.5 px-2 py-0.5 rounded-full text-[11px] font-extrabold flex items-center gap-1 ${
-                            item.stockType === 'hub' ? 'bg-frozen-soft text-frozen-ink' : 'bg-surface/95 text-ink'
+                            isFrozenItem(item) ? 'bg-frozen-soft text-frozen-ink' : 'bg-surface/95 text-ink'
                           }`}
                         >
-                          {item.stockType === 'hub' ? (
+                          {isFrozenItem(item) ? (
                             <>
                               <Snowflake className="w-2.5 h-2.5" />
                               <span>{t('frozen')}</span>
@@ -690,16 +659,12 @@ export default function CartPage() {
                                 {item.product.name}
                               </h3>
                             </Link>
-                            <p className="text-xs text-muted mt-0.5 flex items-center gap-1.5">
-                              <Store className="w-3 h-3 text-muted shrink-0" />
-                              <span className="truncate">{item.seller.businessName}</span>
-                            </p>
                           </div>
 
                           <button
                             type="button"
                             onClick={() => handleRemoveItem(item.id)}
-                            className="w-9 h-9 rounded-xl text-muted hover:text-red-600 hover:bg-raised flex items-center justify-center transition-colors shrink-0"
+                            className="w-11 h-11 rounded-xl text-muted hover:text-red-600 hover:bg-raised flex items-center justify-center transition-colors shrink-0"
                             title={t('removeDish')}
                             aria-label={t('removeDish')}
                           >
@@ -716,11 +681,11 @@ export default function CartPage() {
 
                         {/* Quantity and Price Row */}
                         <div className="mt-3 flex items-center justify-between gap-3">
-                          <div className="flex items-center h-10 rounded-xl border border-line">
+                          <div className="flex items-center h-11 rounded-xl border border-line">
                             <button
                               type="button"
                               onClick={() => handleUpdateQuantity(item.id, item.quantity - 1)}
-                              className="w-10 h-10 rounded-s-xl text-ink font-extrabold hover:bg-raised flex items-center justify-center text-lg transition-colors"
+                              className="w-11 h-11 rounded-s-xl text-ink font-extrabold hover:bg-raised flex items-center justify-center text-lg transition-colors"
                               title={t('decrease')}
                               aria-label={t('decrease')}
                             >
@@ -732,7 +697,7 @@ export default function CartPage() {
                             <button
                               type="button"
                               onClick={() => handleUpdateQuantity(item.id, item.quantity + 1)}
-                              className="w-10 h-10 rounded-e-xl text-brand-ink font-extrabold hover:bg-raised flex items-center justify-center text-lg transition-colors"
+                              className="w-11 h-11 rounded-e-xl text-brand-ink font-extrabold hover:bg-raised flex items-center justify-center text-lg transition-colors"
                               title={t('increase')}
                               aria-label={t('increase')}
                             >
@@ -765,7 +730,7 @@ export default function CartPage() {
               <h3 className="text-base font-extrabold text-ink pb-3 border-b border-line flex items-center justify-between">
                 <span>{t('orderSummary')}</span>
                 <span className="text-xs font-semibold text-muted">
-                  {t(cart.items.length > 1 ? 'itemsMany' : 'itemsOne', { count: cart.items.length })}
+                  {t(trayCount === 1 ? 'itemsOne' : 'itemsMany', { count: trayCount })}
                 </span>
               </h3>
 
@@ -773,7 +738,7 @@ export default function CartPage() {
               <div className="space-y-2.5 text-sm">
                 <div className="flex justify-between text-muted font-medium">
                   <span>{t('dishesSubtotal')}</span>
-                  <span className="font-bold text-ink">{formatPrice(discountedSubtotal)}</span>
+                  <bdi dir="ltr" className="font-bold text-ink">{formatPrice(discountedSubtotal + promotionSavings)}</bdi>
                 </div>
 
                 {promotionSavings > 0 && (
@@ -782,25 +747,35 @@ export default function CartPage() {
                       <Tag className="w-3.5 h-3.5" />
                       <span>{t('promotionsSavings')}</span>
                     </span>
-                    <span>-{formatPrice(promotionSavings)}</span>
+                    <bdi dir="ltr">-{formatPrice(promotionSavings)}</bdi>
                   </div>
                 )}
-
-                <div className="flex justify-between text-muted font-medium">
-                  <span className="flex items-center gap-1.5">
-                    <Snowflake className="w-3.5 h-3.5 text-frozen-ink" />
-                    <span>{t('insulatedPack')}</span>
-                  </span>
-                  <span className="text-brand-ink font-bold text-xs">{tc('free')}</span>
-                </div>
 
                 <div className={`flex justify-between text-muted font-medium transition-opacity ${estimatePending ? 'opacity-60' : ''}`}>
                   <span className="flex items-center gap-1.5">
                     <Truck className="w-3.5 h-3.5 text-muted" />
-                    <span>{t('estimatedDelivery')}</span>
+                    <span>{areaQuote && selectedCommunity ? tk('trayDeliveryToArea', { area: selectedCommunity.name }) : t('estimatedDelivery')}</span>
                   </span>
-                  {!deliveryEstimate ? (
-                    <span className="font-semibold text-muted">{t('deliveryAtCheckout')}</span>
+                  {!deliveryEstimate && areaQuote ? (
+                    areaQuoteKnown ? (
+                      <span className="font-bold text-ink">
+                        {areaQuote.fee === 0 ? t('freeCaps') : tk('trayAbout', { amount: formatPrice(areaQuote.fee) })}
+                      </span>
+                    ) : (
+                      <span className="font-bold text-red-600">{t('deliveryNotAvailable')}</span>
+                    )
+                  ) : !deliveryEstimate ? (
+                    selectedCommunity ? (
+                      <span className="font-semibold text-muted">{t('deliveryAtCheckout')}</span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => useCommunityStore.getState().openSelectorModal()}
+                        className="font-semibold text-brand-ink hover:underline"
+                      >
+                        {tk('chooseArea')}
+                      </button>
+                    )
                   ) : !deliveryKnown ? (
                     <span className="font-bold text-red-600">{t('deliveryNotAvailable')}</span>
                   ) : (
@@ -812,9 +787,10 @@ export default function CartPage() {
                 {deliveryEstimate && !deliveryKnown && deliveryEstimate.reason && (
                   <p className="text-xs text-red-600 -mt-1">{deliveryEstimate.reason}</p>
                 )}
+                {areaQuote && !areaQuoteKnown && areaQuote.reason && <p className="text-xs text-red-600 -mt-1">{areaQuote.reason}</p>}
 
                 <div className="flex justify-between text-muted font-medium">
-                  <span>{t('salesTaxRegional')}</span>
+                  <span>{t('salesTax5')}</span>
                   <span className="font-bold text-ink">{formatPrice(gst)}</span>
                 </div>
               </div>
@@ -851,16 +827,16 @@ export default function CartPage() {
                         placeholder={t('promoPlaceholder')}
                         dir="ltr"
                         aria-label={t('voucherCode')}
-                        className="flex-1 min-w-0 h-10 px-3 text-sm border border-line rounded-xl focus:ring-2 focus:ring-brand/30 focus:border-brand focus:outline-none bg-surface text-ink font-mono uppercase"
+                        className="flex-1 min-w-0 h-11 px-3 text-sm border border-line rounded-xl focus:ring-2 focus:ring-brand/30 focus:border-brand focus:outline-none bg-surface text-ink font-mono uppercase placeholder:font-sans placeholder:normal-case"
                       />
                       <Button
                         type="button"
-                        size="sm"
+                        variant="outline"
                         disabled={!cartPromoInput.trim() || promoValidating}
                         onClick={handleApplyPromoInCart}
-                        className="h-10 text-sm font-extrabold bg-ink hover:bg-ink/90 text-page px-4 rounded-xl transition-colors"
+                        className="h-11 text-sm font-bold px-4 rounded-xl"
                       >
-                        {promoValidating ? '...' : t('apply')}
+                        {promoValidating ? t('checking') : t('apply')}
                       </Button>
                     </div>
                   )}
@@ -870,59 +846,44 @@ export default function CartPage() {
               {/* Total Row */}
               <div className="pt-3 border-t border-line">
                 <div className="flex items-baseline justify-between">
-                  <span className="text-sm font-bold text-ink">{deliveryKnown ? t('totalPayable') : t('totalBeforeDelivery')}</span>
+                  <span className="text-sm font-bold text-ink">
+                    {deliveryKnown ? t('totalPayable') : areaQuoteKnown ? tk('trayEstimatedTotal') : t('totalBeforeDelivery')}
+                  </span>
                   <span className="text-2xl font-extrabold text-ink">{formatPrice(displayTotal)}</span>
                 </div>
                 <span className="text-xs text-muted block mt-0.5">
-                  {deliveryKnown ? t('includesAll') : t('deliveryAddedAtCheckout')}
+                  {deliveryKnown ? t('includesAll') : areaQuoteKnown ? tk('trayAreaNote') : t('deliveryAddedAtCheckout')}
                 </span>
               </div>
 
               {/* Checkout CTA Button */}
               {isAuthenticated ? (
-                <Link href="/checkout" className="block pt-1">
-                  <button
-                    type="button"
-                    className="w-full h-14 rounded-2xl bg-brand hover:bg-brand-500 text-on-brand text-base font-extrabold transition-colors active:scale-98 flex items-center justify-center gap-2 cursor-pointer"
-                  >
-                    <ShoppingBag className="w-5 h-5" />
-                    <span>{t('proceedCheckout')}</span>
-                    <ArrowRight className="rtl:-scale-x-100 w-4 h-4 ms-1" />
-                  </button>
+                <Link
+                  href="/checkout"
+                  className="w-full h-14 rounded-2xl bg-brand hover:bg-brand-500 text-on-brand text-base font-extrabold transition-colors active:scale-98 flex items-center justify-center gap-2"
+                >
+                  <ShoppingBag className="w-5 h-5" aria-hidden />
+                  <span>{t('proceedCheckout')}</span>
+                  <ArrowRight className="rtl:-scale-x-100 w-4 h-4 ms-1" aria-hidden />
                 </Link>
               ) : (
-                <Link href="/login?redirect=/checkout" className="block pt-1">
-                  <button
-                    type="button"
-                    className="w-full h-14 rounded-2xl bg-brand hover:bg-brand-500 text-on-brand text-base font-extrabold transition-colors active:scale-98 flex items-center justify-center gap-2 cursor-pointer"
-                  >
-                    <span>{t('signInToComplete')}</span>
-                    <ArrowRight className="rtl:-scale-x-100 w-4 h-4 ms-1" />
-                  </button>
+                <Link
+                  href={loginUrlFor('/checkout')}
+                  className="w-full h-14 rounded-2xl bg-brand hover:bg-brand-500 text-on-brand text-base font-extrabold transition-colors active:scale-98 flex items-center justify-center gap-2"
+                >
+                  <span>{t('signInToComplete')}</span>
+                  <ArrowRight className="rtl:-scale-x-100 w-4 h-4 ms-1" aria-hidden />
                 </Link>
               )}
 
-              <Link href="/products" className="block">
-                <button
-                  type="button"
-                  className="w-full h-11 rounded-xl hover:bg-raised text-ink text-sm font-bold border border-line-strong transition-colors flex items-center justify-center gap-1.5"
-                >
-                  <ChevronLeft className="rtl:-scale-x-100 w-3.5 h-3.5" />
-                  <span>{t('continueExploring')}</span>
-                </button>
+              <Link
+                href="/products"
+                className="w-full h-11 rounded-xl hover:bg-raised text-ink text-sm font-bold border border-line-strong transition-colors flex items-center justify-center gap-1.5"
+              >
+                <ChevronLeft className="rtl:-scale-x-100 w-3.5 h-3.5" aria-hidden />
+                <span>{t('continueExploring')}</span>
               </Link>
 
-              {/* Trust Badges */}
-              <div className="pt-3 border-t border-line space-y-1.5 text-xs text-muted">
-                <div className="flex items-center gap-2">
-                  <ShieldCheck className="w-3.5 h-3.5 text-brand-soft-ink shrink-0" />
-                  <span>{t('trustHalal')}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Lock className="w-3.5 h-3.5 text-muted shrink-0" />
-                  <span>{t('trustEncrypted')}</span>
-                </div>
-              </div>
             </div>
           </div>
         </div>

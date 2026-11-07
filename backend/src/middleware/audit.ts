@@ -110,16 +110,17 @@ export function auditWrites(area: string, opts: { onlyAdmins?: boolean } = {}) {
     if (marked.auditRecorded) return next();
     marked.auditRecorded = true;
     res.on('finish', () => {
-      const routePath: string = req.route?.path ?? req.path;
-      const params = routeParams(routePath, req.originalUrl);
+      // An unmatched URL has no pattern; its raw path (ids and all) would make one action per request.
+      const routePath: string | undefined = req.route?.path;
+      const params = routePath ? routeParams(routePath, req.originalUrl) : {};
       const entityId = params.id ?? params.refundId ?? Object.values(params)[0] ?? null;
       const body = req.body && typeof req.body === 'object' && Object.keys(req.body).length > 0 ? sanitize(req.body) : undefined;
       prisma.auditLog
         .create({
           data: {
             userId: req.user?.userId ?? null,
-            action: `${area}:${req.method} ${routePath}`,
-            entityType: routePath.split('/').filter(Boolean)[0] ?? null,
+            action: `${area}:${req.method} ${routePath ?? 'unmatched'}`,
+            entityType: routePath?.split('/').filter(Boolean)[0] ?? null,
             entityId,
             ipAddress: req.ip ?? null,
             userAgent: req.get('user-agent')?.slice(0, 500) ?? null,

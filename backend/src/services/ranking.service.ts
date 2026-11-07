@@ -105,7 +105,8 @@ export async function recomputeRankings() {
 
 /**
  * Search relevance: dish ids matching any of the terms, best first. Matches in the name beat
- * matches in the description, and a name starting with the term beats one containing it.
+ * matches in the kitchen's name, which beat matches in the description, and a name starting with
+ * the term beats one containing it. A kitchen's name finds its dishes ("Saima" finds Saima's menu).
  * Near-misses ("biryni", "nihary") are found through trigram similarity, but only added when
  * there are few real matches, so a good search isn't padded with look-alikes.
  */
@@ -116,6 +117,13 @@ export async function searchRankedProductIds(terms: string[], max = 500): Promis
   if (clean.length === 0) return [];
   const likes = clean.map((t) => `%${t.replace(/[\\%_]/g, (c) => `\\${c}`)}%`);
   const prefixes = clean.map((t) => `${t.replace(/[\\%_]/g, (c) => `\\${c}`)}%`);
+  // The per-term filter below spans the unnest and the kitchen join, so on its own it only gets a
+  // sequential scan. This prefilter is plain column predicates the trigram indexes (and
+  // seller_id) answer with one bitmap scan each.
+  const candidates = Prisma.join(
+    clean.map((term, i) => Prisma.sql`p.name ILIKE ${likes[i]} OR p.name_urdu ILIKE ${likes[i]} OR p.description ILIKE ${likes[i]} OR ${term}::text <% p.name`),
+    ' OR '
+  );
   // Short dish names need a looser match than pg_trgm's default 0.6 ("biryni" vs "biryani"
   // is 0.57); set for this query only, so the trigram index still serves the search.
   const rows = await prisma.$transaction(async (tx) => {
@@ -123,17 +131,23 @@ export async function searchRankedProductIds(terms: string[], max = 500): Promis
     return tx.$queryRaw<Array<{ id: string; rel: number; exact: boolean }>>`
       SELECT x.id, MAX(x.rel) AS rel, BOOL_OR(x.exact) AS exact FROM (
         SELECT p.id,
-          (p.name ILIKE q.pattern OR COALESCE(p.name_urdu, '') ILIKE q.pattern OR COALESCE(p.description, '') ILIKE q.pattern) AS exact,
+          (p.name ILIKE q.pattern OR COALESCE(p.name_urdu, '') ILIKE q.pattern OR COALESCE(p.description, '') ILIKE q.pattern
+            OR s.business_name ILIKE q.pattern OR COALESCE(s.business_name_urdu, '') ILIKE q.pattern) AS exact,
           (CASE WHEN p.name ILIKE q.prefix THEN 3 WHEN p.name ILIKE q.pattern THEN 2 ELSE 0 END)
           + (CASE WHEN COALESCE(p.name_urdu, '') ILIKE q.pattern THEN 2 ELSE 0 END)
+          + (CASE WHEN s.business_name ILIKE q.pattern OR COALESCE(s.business_name_urdu, '') ILIKE q.pattern THEN 1 ELSE 0 END)
           + (CASE WHEN COALESCE(p.description, '') ILIKE q.pattern THEN 0.5 ELSE 0 END)
           + word_similarity(q.term, p.name)
           + 0.05 * LEAST(p.trend_score, 10) AS rel
         FROM products p
+        JOIN sellers s ON s.id = p.seller_id
         CROSS JOIN unnest(${clean}::text[], ${likes}::text[], ${prefixes}::text[]) AS q(term, pattern, prefix)
-        WHERE p.is_active AND p.approval_status = 'approved'
+        WHERE (${candidates}
+            OR p.seller_id = ANY(ARRAY(SELECT id FROM sellers WHERE business_name ILIKE ANY(${likes}::text[]) OR business_name_urdu ILIKE ANY(${likes}::text[]))))
+          AND p.is_active AND p.approval_status = 'approved'
           AND (p.name ILIKE q.pattern OR COALESCE(p.name_urdu, '') ILIKE q.pattern
-               OR COALESCE(p.description, '') ILIKE q.pattern OR q.term <% p.name)
+               OR COALESCE(p.description, '') ILIKE q.pattern OR q.term <% p.name
+               OR s.business_name ILIKE q.pattern OR COALESCE(s.business_name_urdu, '') ILIKE q.pattern)
       ) x
       GROUP BY x.id
       ORDER BY BOOL_OR(x.exact) DESC, rel DESC, x.id

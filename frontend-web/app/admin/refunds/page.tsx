@@ -6,8 +6,11 @@ import { AdminShell } from '@/components/layout/AdminShell';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { LoadError } from '@/components/ui/LoadError';
+import { AdminFilterTabs } from '@/components/admin/AdminFilterTabs';
+import { LoadingLine, PageHeader } from '@/components/admin/AdminListParts';
 import { apiClient, apiErrorMessage } from '@/lib/api-client';
-import { formatPrice, formatDateTime } from '@/lib/utils';
+import { formatPrice } from '@/lib/utils';
+import { formatDateTime } from '@/components/admin/admin-dates';
 
 interface RefundRow {
   id: string;
@@ -99,66 +102,57 @@ export default function AdminRefundsPage() {
 
   return (
     <AdminShell>
-      <div className="max-w-5xl mx-auto space-y-5">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Refunds</h1>
-          <p className="text-gray-600 mt-1">Money owed back to customers that has to be sent by hand. Wallet refunds happen instantly and don&apos;t appear here.</p>
-        </div>
+      <div className="max-w-5xl space-y-5">
+        <PageHeader title="Refunds" subtitle="Money owed back to customers that has to be sent by hand. Wallet refunds happen instantly and don't appear here." />
 
-        <div className="inline-flex rounded-xl border border-gray-200 bg-white p-1">
-          {TABS.map(([id, label]) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => {
-                setTab(id);
-                setPage(1);
-              }}
-              className={`px-4 py-2 rounded-lg text-sm font-semibold ${tab === id ? 'bg-gray-900 text-white' : 'text-gray-600 hover:bg-gray-100'}`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+        <AdminFilterTabs
+          label="Refunds"
+          value={tab}
+          onChange={(id) => {
+            setTab(id);
+            setPage(1);
+          }}
+          tabs={TABS.map(([id, label]) => ({ id, label }))}
+        />
 
         {loading && rows.length === 0 ? (
-          <div className="bg-white border border-gray-200 rounded-lg p-10 text-center text-gray-500">Loading…</div>
+          <LoadingLine text="Loading refunds" />
         ) : loadError ? (
           <LoadError error={loadError} onRetry={load} title="We couldn't load the refunds" />
         ) : rows.length === 0 ? (
-          <div className="bg-white border border-gray-200 rounded-lg p-10 text-center text-gray-500">
+          <div className="p-10 text-center text-sm text-muted">
             {tab === 'pending' ? 'Nothing to send. All refunds are settled.' : 'Nothing here yet.'}
           </div>
         ) : (
           <div className="space-y-3" data-testid="refunds-list">
             {rows.map((r) => (
-              <div key={r.id} className="bg-white border border-gray-200 rounded-lg p-5">
+              <div key={r.id} className="bg-surface border border-line rounded-2xl p-4 sm:p-5">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
-                    <p className="text-2xl font-bold text-gray-900">{formatPrice(r.amount)}</p>
-                    <p className="text-sm text-gray-600 mt-1">
-                      <Link href={`/admin/orders/${r.orderId}`} className="underline font-medium">
+                    <p className="text-2xl font-semibold text-ink tabular-nums"><bdi>{formatPrice(r.amount)}</bdi></p>
+                    <p className="text-sm text-muted mt-1">
+                      <Link href={`/admin/orders/${r.orderId}`} className="-my-3 inline-flex min-h-11 items-center text-brand-ink underline font-medium">
                         Order #{r.order.orderNumber}
                       </Link>{' '}
-                      · paid by {METHOD_LABEL[r.order.paymentMethod] ?? r.order.paymentMethod} · {formatDateTime(r.createdAt)}
+                      · paid by {METHOD_LABEL[r.order.paymentMethod] ?? r.order.paymentMethod} · <bdi>{formatDateTime(r.createdAt)}</bdi>
                     </p>
-                    {r.reason && <p className="text-sm text-gray-500 mt-1">Why: {r.reason}</p>}
+                    {r.reason && <p className="text-sm text-muted mt-1">Why: {r.reason}</p>}
                   </div>
-                  <div className="text-sm text-end">
-                    <p className="font-semibold text-gray-900">{r.customer?.name || 'Customer'}</p>
-                    <p className="text-gray-600">{r.customer?.phone}</p>
-                    {r.customer?.email && <p className="text-gray-500 text-xs">{r.customer.email}</p>}
+                  <div className="text-sm min-w-0">
+                    <p className="font-semibold text-ink">{r.customer?.name || 'Customer'}</p>
+                    {r.customer?.phone && <p className="text-muted" data-ltr>{r.customer.phone}</p>}
+                    {r.customer?.email && <p className="text-muted text-xs break-all">{r.customer.email}</p>}
                   </div>
                 </div>
                 {(r.order.paymentSenderAccount || r.order.paymentReferenceNumber) && (
-                  <p className="mt-3 text-xs text-gray-600 bg-gray-50 rounded-lg px-3 py-2">
+                  <p className="mt-3 text-xs text-ink bg-raised rounded-lg px-3 py-2">
                     They paid {r.order.paymentSenderAccount ? `from ${r.order.paymentSenderAccount}` : ''}
                     {r.order.paymentReferenceNumber ? ` (reference ${r.order.paymentReferenceNumber})` : ''}: send the refund back to the same account.
                   </p>
                 )}
                 {r.status !== 'pending' ? (
-                  <p className="mt-3 text-sm text-gray-600">
-                    {r.status === 'completed' ? 'Sent' : 'Dismissed'} {r.processedAt ? formatDateTime(r.processedAt) : ''}
+                  <p className="mt-3 text-sm text-muted">
+                    {r.status === 'completed' ? 'Sent' : 'Not owed'} {r.processedAt ? formatDateTime(r.processedAt) : ''}
                     {r.reference ? ` · ${r.status === 'completed' ? 'Ref' : 'Reason'}: ${r.reference}` : ''}
                   </p>
                 ) : acting?.id === r.id ? (
@@ -167,10 +161,11 @@ export default function AdminRefundsPage() {
                       value={text}
                       onChange={(e) => setText(e.target.value)}
                       placeholder={acting.kind === 'complete' ? 'Transaction ID / reference' : 'Why is this refund not owed?'}
-                      className="flex-1 min-w-[240px] px-3 py-2 rounded-lg border border-gray-200 text-sm"
+                      className="nuray-input flex-1 min-w-0 basis-60 text-sm"
+                      aria-label={acting.kind === 'complete' ? 'Transfer reference' : 'Why it is not owed'}
                       autoFocus
                     />
-                    <Button disabled={busy || (acting.kind === 'dismiss' && text.trim().length < 5)} onClick={submit} className={acting.kind === 'complete' ? 'bg-green-600 hover:bg-green-700 text-white' : ''} variant={acting.kind === 'complete' ? 'default' : 'destructive'}>
+                    <Button disabled={busy || (acting.kind === 'dismiss' && text.trim().length < 5)} onClick={submit} variant={acting.kind === 'complete' ? 'default' : 'destructive'}>
                       {busy ? 'Saving…' : acting.kind === 'complete' ? 'Record as sent' : 'Dismiss refund'}
                     </Button>
                     <Button variant="outline" onClick={() => { setActing(null); setText(''); }}>
@@ -179,10 +174,10 @@ export default function AdminRefundsPage() {
                   </div>
                 ) : (
                   <div className="mt-4 flex gap-2">
-                    <Button onClick={() => { setActing({ id: r.id, kind: 'complete' }); setText(''); }} className="bg-green-600 hover:bg-green-700 text-white" size="sm">
+                    <Button onClick={() => { setActing({ id: r.id, kind: 'complete' }); setText(''); }}>
                       I&apos;ve sent it
                     </Button>
-                    <Button variant="outline" size="sm" onClick={() => { setActing({ id: r.id, kind: 'dismiss' }); setText(''); }}>
+                    <Button variant="outline" onClick={() => { setActing({ id: r.id, kind: 'dismiss' }); setText(''); }}>
                       Not owed
                     </Button>
                   </div>
@@ -194,10 +189,10 @@ export default function AdminRefundsPage() {
 
         {totalPages > 1 && (
           <div className="flex justify-end gap-2">
-            <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage(page - 1)}>
+            <Button variant="outline" disabled={page <= 1} onClick={() => setPage(page - 1)}>
               Previous
             </Button>
-            <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage(page + 1)}>
+            <Button variant="outline" disabled={page >= totalPages} onClick={() => setPage(page + 1)}>
               Next
             </Button>
           </div>

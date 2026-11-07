@@ -2,12 +2,16 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { AdminShell } from '@/components/layout/AdminShell';
+import { DashboardLayout, adminSidebarFor } from '@/components/layout/DashboardShell';
 import { Button } from '@/components/ui/button';
+import { AdminFilterTabs } from '@/components/admin/AdminFilterTabs';
+import { LoadingLine, Pager, StatusPill } from '@/components/admin/AdminListParts';
+import { useAuthStore } from '@/lib/store/auth-store';
+import { useShallow } from 'zustand/react/shallow';
 import { useToast } from '@/components/ui/toast';
 import { LoadError } from '@/components/ui/LoadError';
 import { apiClient, apiErrorMessage } from '@/lib/api-client';
-import { formatDateTime } from '@/lib/utils';
+import { formatDateTime } from '@/components/admin/admin-dates';
 
 interface ReviewRow {
   id: string;
@@ -44,7 +48,6 @@ const EMPTY: Record<Tab, string> = {
   all: 'No reviews yet.',
 };
 
-const stars = (n: number | null) => (n ? `${'★'.repeat(n)}${'☆'.repeat(5 - n)}` : 'no rating');
 
 /**
  * What customers write is public, so people can report a review and staff decide: hide it (it leaves every public
@@ -52,6 +55,7 @@ const stars = (n: number | null) => (n ? `${'★'.repeat(n)}${'☆'.repeat(5 - n
  * or show a hidden one again. Who reported what is in the audit log.
  */
 export default function AdminReviewsPage() {
+  const { user } = useAuthStore(useShallow((s) => ({ user: s.user })));
   const { showToast } = useToast();
   const [tab, setTab] = useState<Tab>('reported');
   const [rows, setRows] = useState<ReviewRow[]>([]);
@@ -60,6 +64,7 @@ export default function AdminReviewsPage() {
   const [loadError, setLoadError] = useState<unknown>(null);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [total, setTotal] = useState(0);
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -68,6 +73,7 @@ export default function AdminReviewsPage() {
       const res = await apiClient.get('/admin/reviews', { params: { status: tab, page: String(page) } });
       setRows(res.data.data.reviews);
       setTotalPages(res.data.data.pagination.totalPages || 1);
+      setTotal(res.data.data.pagination.total ?? 0);
       setLoadError(null);
     } catch (error) {
       // The rows on the screen belong to the tab and page before this change, so they go with the failure.
@@ -96,50 +102,49 @@ export default function AdminReviewsPage() {
   };
 
   return (
-    <AdminShell>
-      <div className="max-w-5xl mx-auto space-y-5">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Reviews</h1>
-          <p className="text-gray-600 mt-1">
-            Customers can report a review. A report does not hide it: it waits here for a person to decide. A hidden review leaves every public page and stops counting towards the ratings.
-          </p>
-        </div>
-
-        <div className="inline-flex rounded-xl border border-gray-200 bg-white p-1">
-          {TABS.map(([id, label]) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => {
-                setTab(id);
-                setPage(1);
-              }}
-              className={`px-4 py-2 rounded-lg text-sm font-semibold ${tab === id ? 'bg-gray-900 text-white' : 'text-gray-600 hover:bg-gray-100'}`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+    <DashboardLayout
+      title="Reviews"
+      subtitle="A report does not hide a review: it waits here for a person to decide. A hidden review leaves every public page and stops counting towards the ratings."
+      sidebarItems={adminSidebarFor(user?.permissions)}
+      userType="admin"
+    >
+      <div className="max-w-4xl space-y-5">
+        <AdminFilterTabs
+          label="Which reviews"
+          value={tab}
+          onChange={(id) => {
+            setTab(id);
+            setPage(1);
+          }}
+          tabs={TABS.map(([id, label]) => ({ id, label }))}
+        />
 
         {loading && rows.length === 0 ? (
-          <div className="bg-white border border-gray-200 rounded-lg p-10 text-center text-gray-500">Loading…</div>
+          <LoadingLine text="Loading reviews" />
         ) : loadError ? (
           <LoadError error={loadError} onRetry={load} title="We couldn't load the reviews" />
         ) : rows.length === 0 ? (
-          <div className="bg-white border border-gray-200 rounded-lg p-10 text-center text-gray-500">{EMPTY[tab]}</div>
+          <p className="text-sm text-muted">{EMPTY[tab]}</p>
         ) : (
-          <div className="space-y-3" data-testid="reviews-list">
+          <ul className="divide-y divide-line border-y border-line" data-testid="reviews-list">
             {rows.map((r) => (
-              <div key={r.id} className="bg-white border border-gray-200 rounded-lg p-5" data-testid="review-row">
+              <li key={r.id} className="py-4" data-testid="review-row">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="text-amber-500 text-lg" aria-label={`${r.productRating ?? 0} out of 5`}>
-                      {stars(r.productRating)}
-                    </p>
-                    <p className="text-sm text-gray-600 mt-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span
+                        className="rounded-full bg-accent-soft px-2 py-0.5 text-xs font-semibold text-accent-soft-ink tabular-nums"
+                        aria-label={r.productRating ? `${r.productRating} out of 5` : 'No rating'}
+                      >
+                        {r.productRating ? `★ ${r.productRating} of 5` : 'No rating'}
+                      </span>
+                      {!r.isVisible && <StatusPill tone="problem">Hidden</StatusPill>}
+                      {r.isReported && r.isVisible && <StatusPill tone="waiting">Reported</StatusPill>}
+                    </div>
+                    <p className="mt-1 text-sm text-muted">
                       {r.productName ? (
                         r.productId ? (
-                          <Link href={`/products/${r.productId}`} className="underline font-medium">
+                          <Link href={`/products/${r.productId}`} className="-my-3 inline-flex min-h-11 items-center font-medium text-brand-ink hover:underline">
                             {r.productName}
                           </Link>
                         ) : (
@@ -148,65 +153,48 @@ export default function AdminReviewsPage() {
                       ) : (
                         'A dish that is gone'
                       )}{' '}
-                      · {r.businessName} · {formatDateTime(r.createdAt)}
+                      · <bdi>{r.businessName}</bdi> · <bdi>{formatDateTime(r.createdAt)}</bdi>
                     </p>
                   </div>
-                  <div className="text-sm text-end">
-                    <p className="font-semibold text-gray-900">{r.customerName}</p>
-                    <Link href={`/admin/users?search=${encodeURIComponent(r.customerName)}`} className="text-gray-500 text-xs underline">
-                      find this person
-                    </Link>
-                  </div>
+                  <p className="text-sm font-semibold text-ink">{r.customerName}</p>
                 </div>
 
-                <p className="mt-3 text-gray-800 whitespace-pre-wrap break-words">{r.comment || <span className="text-gray-500">No written comment</span>}</p>
-                {r.sellerResponse && <p className="mt-2 text-sm bg-gray-50 rounded-lg px-3 py-2 text-gray-600">The kitchen replied: {r.sellerResponse}</p>}
+                <p className="mt-3 whitespace-pre-wrap break-words text-ink">{r.comment || <span className="text-muted">No written comment</span>}</p>
+                {r.sellerResponse && <p className="mt-2 rounded-xl bg-raised px-3 py-2 text-sm text-ink">The kitchen replied: {r.sellerResponse}</p>}
 
                 {(r.isReported || r.reason) && (
-                  <p className="mt-3 text-sm bg-amber-50 border border-amber-200 text-amber-900 rounded-lg px-3 py-2" data-testid="report-reason">
+                  <p className="mt-3 rounded-xl bg-accent-soft px-3 py-2 text-sm text-accent-soft-ink" data-testid="report-reason">
                     {r.isReported ? 'Reported' : 'Was reported'}
                     {r.reportCount > 0 ? ` ${r.reportCount} time${r.reportCount === 1 ? '' : 's'}` : ''}
                     {r.reportedSince ? `, first ${formatDateTime(r.reportedSince)}` : ''}: {r.reason}
                   </p>
                 )}
 
-                <div className="mt-4 flex flex-wrap gap-2 items-center">
+                <div className="mt-3 flex flex-wrap items-center gap-2">
                   {!r.isVisible ? (
-                    <>
-                      <span className="text-xs font-semibold text-red-700 bg-red-50 rounded-full px-3 py-1">Hidden from the public</span>
-                      <Button size="sm" variant="outline" disabled={busyId === r.id} onClick={() => decide(r.id, 'restore')}>
-                        Show again
-                      </Button>
-                    </>
+                    <Button variant="outline" className="min-h-11" disabled={busyId === r.id} onClick={() => decide(r.id, 'restore')}>
+                      Show again
+                    </Button>
                   ) : (
                     <>
-                      <Button size="sm" variant="destructive" disabled={busyId === r.id} onClick={() => decide(r.id, 'hide')}>
-                        Hide review
-                      </Button>
                       {r.isReported && (
-                        <Button size="sm" variant="outline" disabled={busyId === r.id} onClick={() => decide(r.id, 'keep')}>
-                          Keep it (close the report)
+                        <Button variant="outline" className="min-h-11" disabled={busyId === r.id} onClick={() => decide(r.id, 'keep')}>
+                          Keep it
                         </Button>
                       )}
+                      <Button variant="outline" className="min-h-11 border-red-200 text-red-700 hover:bg-red-50" disabled={busyId === r.id} onClick={() => decide(r.id, 'hide')}>
+                        Hide review
+                      </Button>
                     </>
                   )}
                 </div>
-              </div>
+              </li>
             ))}
-          </div>
+          </ul>
         )}
 
-        {totalPages > 1 && (
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage(page - 1)}>
-              Previous
-            </Button>
-            <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage(page + 1)}>
-              Next
-            </Button>
-          </div>
-        )}
+        <Pager page={page} totalPages={totalPages} total={total} noun="reviews" one="review" onChange={setPage} />
       </div>
-    </AdminShell>
+    </DashboardLayout>
   );
 }

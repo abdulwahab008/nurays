@@ -14,20 +14,32 @@ import { useAuthStore } from '@/lib/store/auth-store';
 import { useSocket, type DeliveryTrackingEvent } from '@/lib/hooks/use-socket';
 import { useLiveRefresh } from '@/lib/hooks/use-live-refresh';
 import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
-import WriteReviewForm from '@/components/products/WriteReviewForm';
 import { apiClient, apiErrorMessage } from '@/lib/api-client';
 import { newAudioContext } from '@/lib/audio';
 import ManualPaymentCard from '@/components/orders/ManualPaymentCard';
 import OnlinePaymentCard from '@/components/orders/OnlinePaymentCard';
 import OrderChatModal from '@/components/orders/OrderChatModal';
 import TriPartiteReviewModal from '@/components/orders/TriPartiteReviewModal';
+import { OrderProgress } from '@/components/orders/OrderProgress';
+import { awaitingPayment, isPickupOrder } from '@/components/orders/order-progress';
+import { Mark } from '@/components/ui/Mark';
+import { CoverImage } from '@/components/ui/CoverImage';
 import dynamic from 'next/dynamic';
+import { ArrowLeft, Bike, ChevronDown, LifeBuoy, MapPin, MessageCircle, Phone, Printer, Receipt, Star, X } from 'lucide-react';
 import { useT } from '@/lib/i18n';
 import { commonMessages, statusKey } from '@/lib/i18n/messages/common';
 import { ordersMessages } from '@/lib/i18n/messages/orders';
+import { checkoutMessages } from '@/lib/i18n/messages/checkout';
 import { useShallow } from 'zustand/react/shallow';
+import { useNow } from '@/components/sellers/order-timing';
 
 type OrdersT = ReturnType<typeof useT<typeof ordersMessages.en>>;
+
+const CANCEL_CHOICES = ['mistake', 'changedMind', 'tooLong', 'other'] as const;
+type CancelChoice = (typeof CANCEL_CHOICES)[number];
+/** The server refuses a shorter reason (cancelOrderSchema). */
+const MIN_CANCEL_REASON = 5;
+const SLOT_TIMES = ['morning', 'afternoon', 'evening'];
 
 // Leaflet touches the DOM on import: load the map in the browser only.
 const RiderLiveMap = dynamic(() => import('@/components/orders/RiderLiveMap'), { ssr: false });
@@ -73,6 +85,8 @@ interface OrderDetail {
   customerPhone?: string;
   createdAt?: string;
   sellerName?: string;
+  /** Whether the customer has already rated this order (sent by servers that include the order's reviews). */
+  hasReview?: boolean;
   items: Array<{
     id: string;
     productId?: string;
@@ -196,6 +210,7 @@ function mapOrderToDetail(raw: OrderDetails): OrderDetail {
     cancellationReason: raw.cancellationReason ?? null,
     createdAt: raw.createdAt ? new Date(raw.createdAt).toISOString() : new Date().toISOString(),
     sellerName,
+    hasReview: Boolean((raw as OrderDetails & { reviews?: unknown[] }).reviews?.length),
     items: (raw.items ?? []).map((i) => ({
       id: i.id,
       productId: i.productId ?? i.product?.id,
@@ -235,7 +250,8 @@ function mapOrderToDetail(raw: OrderDetails): OrderDetail {
         raw.delivery?.rider ?
           {
             name: raw.delivery.rider.name ?? '',
-            phone: '',
+            // Sent to the order's customer only while the rider holds the job.
+            phone: (raw.delivery.rider as { phone?: string | null }).phone ?? '',
             vehicle: [raw.delivery.rider.vehicleType, raw.delivery.rider.vehicleNumber].filter(Boolean).join(' - '),
           }
         : undefined,
@@ -268,6 +284,7 @@ function OrderDetailContent() {
   const { isAuthenticated, user } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated, user: s.user })));
   const { showToast } = useToast();
   const { joinOrderRoom, onOrderStatusUpdate, onDeliveryTracking } = useSocket();
+  const now = useNow();
   const [order, setOrder] = useState<OrderDetail | null>(null);
   const [loading, setLoading] = useState(true);
   // Why the order could not be read when it was not a 404: an order that could not be read is not an order that does not exist.
@@ -275,7 +292,9 @@ function OrderDetailContent() {
   const [trackingData, setTrackingData] = useState<DeliveryTrackingEvent | null>(null);
   const [showPlacedBanner, setShowPlacedBanner] = useState(false);
   const [showCancelModal, setShowCancelModal] = useState(false);
+  const [cancelChoice, setCancelChoice] = useState<CancelChoice | null>(null);
   const [cancelReason, setCancelReason] = useState('');
+  const [reviewed, setReviewed] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
   const [reportDetails, setReportDetails] = useState('');
@@ -286,12 +305,9 @@ function OrderDetailContent() {
   const [showReceiptPreview, setShowReceiptPreview] = useState(false);
   const t = useT(ordersMessages);
   const tc = useT(commonMessages);
+  const tco = useT(checkoutMessages);
   const statusText = (s: string) =>
     statusKey(s) in commonMessages.en ? tc(statusKey(s)) : s.replace(/_/g, ' ');
-  const payStatusText = (s: string) => {
-    const key = `detail.payRaw.${s}` as keyof typeof ordersMessages.en;
-    return key in ordersMessages.en ? t(key) : s.replace(/_/g, ' ');
-  };
 
   useEffect(() => {
     if (searchParams.get('placed') === '1') setShowPlacedBanner(true);
@@ -361,7 +377,7 @@ function OrderDetailContent() {
   useEffect(() => {
     const token = apiClient.getAccessToken();
     if (!token && !isAuthenticated) {
-      router.push(loginUrlHere());
+      router.replace(loginUrlHere());
       return;
     }
     if (params.id) {
@@ -388,13 +404,21 @@ function OrderDetailContent() {
     }
   );
 
+  // The kitchen reads the reason, so a chosen one is sent in the words its screens use (English); "Other" as typed.
+  const cancelReasonText = cancelChoice === 'other' ? cancelReason.trim() : cancelChoice ? ordersMessages.en[`detail.cancelChoice.${cancelChoice}`] : '';
+  const cancelReasonValid = cancelChoice !== null && (cancelChoice !== 'other' || cancelReasonText.length >= MIN_CANCEL_REASON);
+  const closeCancelModal = () => {
+    setShowCancelModal(false);
+    setCancelChoice(null);
+    setCancelReason('');
+  };
+
   const handleCancelOrder = async () => {
-    if (!cancelReason.trim()) return;
+    if (!cancelReasonValid) return;
     try {
       setCancelling(true);
-      const res = await orderService.cancelOrder(params.id as string, cancelReason.trim());
-      setShowCancelModal(false);
-      setCancelReason('');
+      const res = await orderService.cancelOrder(params.id as string, cancelReasonText);
+      closeCancelModal();
       loadOrder();
       // Say what happens to money already paid, rather than a bare "cancelled".
       const d = res?.data ?? {};
@@ -471,10 +495,10 @@ function OrderDetailContent() {
         userType="customer"
       >
         <div className="max-w-xl mx-auto py-16 px-4 text-center">
-          <div className="w-16 h-16 rounded-full bg-raised text-muted flex items-center justify-center mx-auto mb-4 text-2xl shadow-xs">
-            📦
+          <div className="w-16 h-16 rounded-full bg-raised text-muted flex items-center justify-center mx-auto mb-4">
+            <Receipt className="w-7 h-7" aria-hidden />
           </div>
-          <h1 className="text-2xl font-extrabold text-ink mb-2">{t('detail.notFound')}</h1>
+          <h1 className="text-2xl font-bold text-ink mb-2">{t('detail.notFound')}</h1>
           <p className="text-sm text-muted mb-6 leading-relaxed">
             {t('detail.notFoundBody')}
           </p>
@@ -511,17 +535,63 @@ function OrderDetailContent() {
   const canCancel = orderStatus === 'pending';
   // Display names, with words for the ones the order doesn't carry.
   const sellerName = order.sellerName || t('detail.homeKitchen');
-  const customerName = order.customerName || t('detail.valuedCustomer');
-  const riderName = order.delivery?.rider ? order.delivery.rider.name || t('detail.yourRider') : t('detail.deliveryPartner');
+  // The receipt is the signed-in customer's own order, so their name is the one on their profile.
+  const customerName = order.customerName || user?.profile?.fullName || t('detail.customer');
+  const riderName = order.delivery?.rider ? order.delivery.rider.name.trim().split(/\s+/)[0] || t('detail.yourRider') : t('detail.deliveryPartner');
+
+  const pickup = isPickupOrder(order.delivery?.type);
+  const unpaid = awaitingPayment(effectiveStatus, order.paymentMethod, order.paymentStatus);
+  const delivered = effectiveStatus === 'delivered' || effectiveStatus === 'completed';
+  const active = !['delivered', 'completed', 'cancelled', 'refunded', 'delivery_failed'].includes(effectiveStatus);
+  const method = (order.paymentMethod ?? '').toLowerCase();
+  const headline = unpaid
+    ? t('headline.awaitingPayment')
+    : effectiveStatus === 'ready' && pickup
+      ? t('headline.readyToCollect')
+      : `headline.${effectiveStatus}` in ordersMessages.en
+        ? t(`headline.${effectiveStatus}` as keyof typeof ordersMessages.en)
+        : statusText(effectiveStatus);
+  // The window the customer chose: a day (today when none was given) and a part of it.
+  const slotLine = (() => {
+    const time = order.delivery?.slotTime;
+    if (!time || !SLOT_TIMES.includes(time)) return null;
+    const window = t(`slot.${time}` as keyof typeof ordersMessages.en);
+    return order.delivery?.slotDate ? t('detail.slotOn', { date: formatDate(order.delivery.slotDate), window }) : t('detail.slotToday', { window });
+  })();
+  // An estimate that has already gone by says nothing useful; the slot and the tracker still show.
+  const etaLine =
+    active && !unpaid && order.delivery?.estimatedAt && new Date(order.delivery.estimatedAt).getTime() > now
+      ? t('detail.expectedBy', { time: formatDateTime(order.delivery.estimatedAt) })
+      : null;
+  // Items are only marked one by one when they are not all at the same stage.
+  const itemsDiffer = new Set(order.items.map((i) => i.status)).size > 1;
+  const pinVisible =
+    !!order.delivery?.otp && !unpaid && (pickup ? ['ready', 'dispatched', 'in_transit'] : ['dispatched', 'in_transit']).includes(effectiveStatus);
+  const payLine = (() => {
+    if (order.paymentStatus === 'refunded') return t('detail.payLine.refunded');
+    if (order.paymentStatus === 'refund_pending') return t('detail.payLine.refundPending');
+    if (order.paymentStatus === 'paid') return t('detail.payLine.paid', { method: paymentChannelLabel(t, order.paymentMethod, order.paymentSenderAccount) });
+    if (!active) return t('detail.payLine.notCharged');
+    if (method === 'cod') return t(pickup ? 'detail.payLine.codPickup' : 'detail.payLine.cod', { amount: formatPrice(order.pricing.total) });
+    return paymentStatusLabel(t, order.paymentMethod, order.paymentStatus);
+  })();
+
+  const sectionTitle = 'text-base font-semibold text-ink';
+  const card = 'bg-surface rounded-[20px] border border-line p-4 sm:p-5';
 
   return (
     <DashboardLayout
       title={t('detail.pageTitle', { number: order.orderNumber })}
-      subtitle={t('detail.pageSubtitle', { status: statusText(effectiveStatus), payment: payStatusText(order.paymentStatus ?? 'pending') })}
+      subtitle={`\u2068${formatDateTime(order.createdAt)}\u2069`}
       sidebarItems={customerSidebarItems}
       userType="customer"
     >
-      <div className="print-hide space-y-6">
+      <div className="print-hide max-w-5xl mx-auto space-y-4 pb-8">
+        <Link href="/orders" className="hidden lg:inline-flex items-center gap-1.5 min-h-11 text-sm font-semibold text-brand-ink hover:underline">
+          <ArrowLeft className="w-4 h-4 rtl:-scale-x-100" aria-hidden />
+          {t('detail.backToOrders')}
+        </Link>
+
         {/* Back from the payment page */}
         {searchParams.get('payment') === 'paid' && (
           <div role="status" className="bg-brand-soft text-brand-soft-ink rounded-2xl p-4 text-sm font-semibold">
@@ -538,124 +608,99 @@ function OrderDetailContent() {
           </div>
         )}
 
-        {/* Just-placed confirmation banner */}
+        {/* Just placed: the kitchen has not said yes yet, so this says "placed", never "confirmed" */}
         {showPlacedBanner && (
-          <div role="status" className="bg-brand-soft text-brand-soft-ink rounded-[20px] p-4 sm:p-5 flex items-center justify-between flex-wrap gap-3">
-            <div className="flex items-center gap-3">
-              <span className="flex h-11 w-11 items-center justify-center rounded-full bg-brand text-on-brand flex-shrink-0">
-                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                </svg>
-              </span>
-              <div>
-                <p className="font-extrabold text-lg">{t('detail.placedTitle')}</p>
-                <p className="text-sm">{t('detail.placedBody')}</p>
-              </div>
+          <div role="status" className="bg-brand-soft text-brand-soft-ink rounded-[20px] p-4 flex items-start justify-between gap-3" data-testid="placed-banner">
+            <div>
+              <p className="font-semibold">{t('detail.placedTitle')}</p>
+              <p className="text-sm">
+                {unpaid
+                  ? t('detail.placedBodyPay', { amount: formatPrice(order.pricing.total) })
+                  : t('detail.placedBody', { kitchen: sellerName })}
+              </p>
+              {!pickup && (
+                <p className="text-sm mt-1" data-testid="placed-delivery">
+                  {order.pricing.deliveryFee
+                    ? t('detail.placedDelivery', { fee: formatPrice(order.pricing.deliveryFee), total: formatPrice(order.pricing.total) })
+                    : t('detail.placedFreeDelivery', { total: formatPrice(order.pricing.total) })}
+                </p>
+              )}
             </div>
             <button
               type="button"
               onClick={() => { setShowPlacedBanner(false); router.replace(`/orders/${params.id}`, { scroll: false }); }}
-              className="text-sm font-bold underline hover:no-underline"
+              className="shrink-0 min-h-11 px-2 text-sm font-semibold underline hover:no-underline"
             >
               {t('detail.dismiss')}
             </button>
           </div>
         )}
 
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-        <div className="flex items-center gap-2 flex-wrap">
-          <Link href="/orders">
-            <Button variant="outline" size="sm">{t('detail.backToOrders')}</Button>
-          </Link>
-        </div>
-
-        <div className="flex items-center gap-2 flex-wrap">
-          <button
-            onClick={() => window.print()}
-            className="inline-flex items-center gap-2 h-10 px-3.5 rounded-xl hover:bg-raised text-ink border border-line-strong text-sm font-bold transition-colors active:scale-95"
-            title={t('detail.printTitle')}
-          >
-            <span>🖨️</span>
-            <span>{t('detail.printReceipt')}</span>
-          </button>
-          <button
-            onClick={() => setShowReceiptPreview(true)}
-            className="inline-flex items-center gap-1.5 h-10 px-3.5 rounded-xl hover:bg-raised text-ink border border-line-strong text-sm font-bold transition-colors active:scale-95"
-            title={t('detail.previewTitle')}
-          >
-            <span>🧾</span>
-            <span>{t('detail.viewReceipt')}</span>
-          </button>
-          <button
-            onClick={() => setShowChatModal(true)}
-            className="inline-flex items-center gap-2 h-10 px-4 rounded-xl bg-ink hover:bg-ink/90 text-page text-sm font-extrabold transition-colors"
-          >
-            <span>💬</span>
-            <span>{t('detail.chatWith', { name: sellerName })}</span>
-          </button>
-          {(effectiveStatus === 'delivered' || effectiveStatus === 'completed') && (
-            <button
-              onClick={() => setShowReviewModal(true)}
-              className="inline-flex items-center gap-2 h-10 px-4 rounded-xl bg-brand hover:bg-brand-500 text-on-brand text-sm font-extrabold transition-colors"
-            >
-              <span>⭐</span>
-              <span>{t('detail.rateExperience')}</span>
-            </button>
-          )}
-        </div>
-      </div>
-
-      <div>
-        <div className="mb-6">
-          <div className="flex items-center gap-2.5 flex-wrap">
-            <span
-              className={`px-3 py-1.5 rounded-full text-sm font-extrabold ${
-                effectiveStatus === 'delivered' || effectiveStatus === 'completed'
-                  ? 'bg-brand-soft text-brand-soft-ink'
-                  : effectiveStatus === 'cancelled'
-                  ? 'bg-red-100 text-red-800'
-                  : effectiveStatus === 'pending'
-                  ? 'bg-accent-soft text-accent-soft-ink'
-                  : 'bg-brand text-on-brand'
-              }`}
-            >
-              {statusText(effectiveStatus).toUpperCase()}
-            </span>
-            <span
-              className={`px-3 py-1.5 rounded-full text-sm font-bold ${
-                order.paymentStatus === 'paid'
-                  ? 'bg-brand-soft text-brand-soft-ink'
-                  : order.paymentStatus === 'refunded'
-                  ? 'bg-frozen-soft text-frozen-ink'
-                  : order.paymentStatus === 'refund_pending'
-                  ? 'bg-accent-soft text-accent-soft-ink'
-                  : 'bg-raised text-ink'
-              }`}
-            >
-              {t('detail.paymentBadge', { status: payStatusText(order.paymentStatus ?? 'pending').toUpperCase() })}
-            </span>
-          </div>
-          {effectiveStatus === 'cancelled' && notice && (
-            <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-900" role="status">
-              <p className="font-semibold">{t(`detail.cancelledBy.${notice.who}`)}</p>
-              {notice.reason && <p className="mt-0.5">{t('detail.cancelReasonLine', { reason: notice.reason })}</p>}
-            </div>
-          )}
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
-          {/* Order Items */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6 items-start">
           <div className="lg:col-span-2 space-y-4">
+            {/* Where the order stands, and what happens next */}
+            <section className="bg-surface rounded-[20px] border border-line shadow-[var(--shadow-card)] p-4 sm:p-5 space-y-4" data-testid="order-status-card">
+              <div>
+                <h2 className="text-xl font-bold text-ink" data-testid="order-headline">{headline}</h2>
+                {(etaLine || slotLine) && (
+                  <p className="text-sm text-muted mt-1">{etaLine ?? slotLine}</p>
+                )}
+              </div>
+              {!unpaid && <OrderProgress status={effectiveStatus} deliveryType={order.delivery?.type} />}
+              {effectiveStatus === 'cancelled' && notice && (
+                <div className="rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-700" role="status">
+                  <p className="font-semibold">{t(`detail.cancelledBy.${notice.who}`)}</p>
+                  {notice.reason && <p className="mt-0.5">{t('detail.cancelReasonLine', { reason: notice.reason })}</p>}
+                </div>
+              )}
+              <div className="flex items-center justify-between gap-3 pt-3 border-t border-line">
+                <div className="min-w-0">
+                  <p className="text-xs text-muted">{t('detail.fromKitchen')}</p>
+                  <p className="font-semibold text-ink truncate">{sellerName}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowChatModal(true)}
+                  aria-label={t('detail.chatWith', { name: sellerName })}
+                  className="shrink-0 w-11 h-11 rounded-full bg-brand-soft text-brand-soft-ink hover:bg-brand/30 flex items-center justify-center transition-colors"
+                  data-testid="open-chat"
+                >
+                  <MessageCircle className="w-5 h-5" aria-hidden />
+                </button>
+              </div>
+              {active && order.delivery?.rider && (
+                <div className="flex items-center justify-between gap-3 pt-3 border-t border-line" data-testid="rider-row">
+                  <div className="min-w-0">
+                    <p className="text-xs text-muted">{t('detail.yourRider')}</p>
+                    <p className="font-semibold text-ink truncate">
+                      {riderName}
+                      {order.delivery.rider.vehicle && <span className="font-normal text-muted"> · {order.delivery.rider.vehicle}</span>}
+                    </p>
+                  </div>
+                  {order.delivery.rider.phone && (
+                    <a
+                      href={`tel:${order.delivery.rider.phone}`}
+                      aria-label={t('detail.callRider', { name: riderName })}
+                      className="shrink-0 w-11 h-11 rounded-full bg-brand-soft text-brand-soft-ink hover:bg-brand/30 flex items-center justify-center transition-colors"
+                      data-testid="call-rider"
+                    >
+                      <Phone className="w-5 h-5" aria-hidden />
+                    </a>
+                  )}
+                </div>
+              )}
+            </section>
+
             {/* Online payment not finished yet */}
             {!['cancelled', 'refunded'].includes(orderStatus) &&
-              ['safepay', 'card'].includes((order.paymentMethod ?? '').toLowerCase()) &&
+              ['safepay', 'card'].includes(method) &&
               ['pending', 'failed'].includes(order.paymentStatus ?? 'pending') && (
               <OnlinePaymentCard orderId={order.id} totalAmount={order.pricing?.total ?? 0} />
             )}
 
-            {/* Direct Manual Payment Card (transfer into the kitchen's own account) */}
+            {/* Transfer into the kitchen's own account */}
             {!['cancelled', 'refunded'].includes(orderStatus) &&
-              ['jazzcash', 'easypaisa', 'bank'].includes((order.paymentMethod ?? '').toLowerCase()) &&
+              ['jazzcash', 'easypaisa', 'bank'].includes(method) &&
               ['pending', 'failed', 'disputed', 'payment_submitted'].includes(order.paymentStatus ?? 'pending') && (
               <ManualPaymentCard
                 orderId={order.id}
@@ -669,111 +714,25 @@ function OrderDetailContent() {
               />
             )}
 
-            <div className="bg-surface rounded-[20px] border border-line p-4 sm:p-6">
-              <h2 className="text-lg font-extrabold text-ink mb-4">{t('detail.orderItems')}</h2>
-              <div className="space-y-4">
-                {order.items.map((item) => (
-                  <div key={item.id} className="flex gap-3 sm:gap-4 pb-4 border-b border-line last:border-0 last:pb-0">
-                    <div className="w-16 h-16 sm:w-20 sm:h-20 bg-raised rounded-2xl overflow-hidden flex-shrink-0">
-                      {item.productImage ? (
-                        <img
-                          src={item.productImage}
-                          alt={item.productName}
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center text-muted text-xs">
-                          {t('detail.noImage')}
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex-1">
-                      <h3 className="font-bold text-ink">{item.productName}</h3>
-                      {item.variantName && (
-                        <p className="text-sm text-muted">{item.variantName}</p>
-                      )}
-                      <p className="text-sm text-muted">{item.sellerName}</p>
-                      <div className="flex items-center justify-between mt-2">
-                        <div>
-                          <p className="text-sm text-muted">
-                            {t('detail.qty', { qty: item.quantity, price: formatPrice(item.unitPrice) })}
-                          </p>
-                          <p className="font-extrabold text-ink">
-                            {formatPrice(item.totalPrice)}
-                          </p>
-                        </div>
-                        <span className="text-sm text-muted capitalize">{statusText(item.status)}</span>
-                      </div>
-                      {(effectiveStatus === 'delivered' || effectiveStatus === 'completed') && item.productId && (
-                        <WriteReviewForm orderId={order.id} orderItemId={item.id} productName={item.productName} />
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Delivery Information */}
-            <div className="bg-surface rounded-[20px] border border-line p-4 sm:p-6 space-y-4">
-              <h2 className="text-lg font-extrabold text-ink">{t('detail.deliveryInfo')}</h2>
-
-              {/* Doorstep Handover PIN Card */}
-              {order.delivery?.otp && !['delivered', 'completed', 'cancelled', 'refunded'].includes(effectiveStatus) && (
-                <div className="bg-accent-soft rounded-[20px] p-4">
-                  <div className="flex items-center justify-between flex-wrap gap-3">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="inline-flex h-2.5 w-2.5 rounded-full bg-accent-soft-ink animate-pulse" />
-                        <span className="text-sm font-extrabold text-accent-soft-ink">{t('detail.pinTitle')}</span>
-                      </div>
-                      <p className="text-[13px] text-accent-soft-ink mt-1 max-w-sm">
-                        {t('detail.pinBody')}
-                      </p>
-                    </div>
-                    <div className="bg-surface border-2 border-accent px-5 py-2 rounded-2xl text-center">
-                      <span className="text-xs font-bold text-muted block">{t('detail.pinLabel')}</span>
-                      <span data-ltr className="text-3xl font-mono font-extrabold tracking-widest text-ink">{order.delivery.otp}</span>
-                    </div>
-                  </div>
+            {/* The code that completes the handover: only once there is something to hand over */}
+            {pinVisible && (
+              <div className="bg-accent-soft rounded-[20px] p-4 flex items-center justify-between gap-3" data-testid="handover-pin">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-accent-soft-ink">{t('detail.pinTitle')}</p>
+                  <p className="text-xs text-accent-soft-ink mt-1">{t('detail.pinBody')}</p>
                 </div>
-              )}
-
-              <div className="space-y-2 text-ink">
-                <p>
-                  <span className="font-semibold">{t('detail.address')}</span> {order.delivery?.address ?? '—'}
-                </p>
-                {order.delivery?.slotDate && (
-                  <p>
-                    <span className="font-semibold">{t('detail.slot')}</span> {order.delivery.slotDate} (
-                    {order.delivery.slotTime})
-                  </p>
-                )}
-                {order.delivery?.estimatedAt && (
-                  <p>
-                    <span className="font-semibold">{t('detail.estimatedDelivery')}</span>{' '}
-                    {formatDateTime(order.delivery.estimatedAt)}
-                  </p>
-                )}
-                {order.delivery?.rider && (
-                  <div className="mt-4 p-4 bg-raised rounded-2xl">
-                    <p className="font-bold mb-2 text-ink">{t('detail.assignedRider')}</p>
-                    <p className="text-sm"><span className="text-muted">{t('detail.riderName')}</span> {order.delivery.rider.name || t('detail.yourRider')}</p>
-                    {order.delivery.rider.phone && (
-                      <p className="text-sm"><span className="text-muted">{t('detail.riderPhone')}</span> <span data-ltr>{order.delivery.rider.phone}</span></p>
-                    )}
-                    {order.delivery.rider.vehicle && (
-                      <p className="text-sm"><span className="text-muted">{t('detail.riderVehicle')}</span> {order.delivery.rider.vehicle}</p>
-                    )}
-                  </div>
-                )}
+                <div className="shrink-0 bg-surface border-2 border-accent px-4 py-2 rounded-2xl text-center">
+                  <span className="text-xs text-muted block">{t('detail.pinLabel')}</span>
+                  <span data-ltr className="text-2xl font-mono font-bold tracking-widest text-ink">{order.delivery.otp}</span>
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Where the rider is, while the food is on its way */}
             {liveRider && (
-              <div className="bg-surface rounded-[20px] border border-line p-4 sm:p-6" data-testid="rider-live-tracking">
+              <div className={card} data-testid="rider-live-tracking">
                 <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
-                  <h2 className="text-lg font-extrabold text-ink flex items-center gap-2">
+                  <h2 className={`${sectionTitle} flex items-center gap-2`}>
                     <span className="inline-flex h-2.5 w-2.5 rounded-full bg-brand animate-pulse" />
                     {t('detail.onItsWay')}
                   </h2>
@@ -789,116 +748,186 @@ function OrderDetailContent() {
               </div>
             )}
 
-            {/* Timeline */}
-            <div className="bg-surface rounded-[20px] border border-line p-4 sm:p-6">
-              <h2 className="text-lg font-extrabold text-ink mb-4">{t('detail.timeline')}</h2>
-              <div className="space-y-3">
-                {(order.timeline ?? []).map((event, index) => (
-                  <div key={index} className="flex items-start gap-3">
-                    <div className="w-2.5 h-2.5 rounded-full bg-brand mt-1.5 ring-4 ring-brand/20 flex-shrink-0"></div>
-                    <div>
-                      <p className="font-bold text-ink capitalize">{statusText(event.status ?? '')}</p>
-                      <p className="text-sm text-muted">{formatDateTime(event.timestamp)}</p>
+            {/* Items */}
+            <section className={card}>
+              <h2 className={`${sectionTitle} mb-3`}>{t('detail.orderItems')}</h2>
+              <ul className="divide-y divide-line">
+                {order.items.map((item) => (
+                  <li key={item.id} className="flex gap-3 py-3 first:pt-0 last:pb-0">
+                    <CoverImage src={item.productImage} alt="" label={item.productName} size="sm" className="w-14 h-14 rounded-xl overflow-hidden flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-ink">{item.productName}</p>
+                      {item.variantName && <p className="text-sm text-muted">{item.variantName}</p>}
+                      <p className="text-sm text-muted">{t('detail.qty', { qty: item.quantity, price: formatPrice(item.unitPrice) })}</p>
+                      {itemsDiffer && <p className="text-xs text-muted mt-0.5">{statusText(item.status)}</p>}
                     </div>
-                  </div>
+                    <p className="font-semibold text-ink shrink-0">{formatPrice(item.totalPrice)}</p>
+                  </li>
                 ))}
+              </ul>
+            </section>
+
+            {/* Delivery or pickup */}
+            <section className={`${card} space-y-3`}>
+              <h2 className={sectionTitle}>{pickup ? t('detail.pickupInfo') : t('detail.deliveryInfo')}</h2>
+              <div className="flex items-start gap-2.5 text-sm text-ink">
+                <MapPin className="w-4 h-4 text-muted mt-0.5 shrink-0" aria-hidden />
+                <p>{pickup ? t('detail.pickupFrom', { kitchen: sellerName }) : order.delivery?.address ?? '—'}</p>
               </div>
-            </div>
+              {!active && order.delivery?.rider && (
+                <div className="flex items-center gap-2.5 text-sm text-ink">
+                  <Bike className="w-4 h-4 text-muted shrink-0" aria-hidden />
+                  <p>
+                    {t('detail.riderLine', { name: order.delivery.rider.name || t('detail.yourRider') })}
+                    {order.delivery.rider.vehicle && <span className="text-muted"> · {order.delivery.rider.vehicle}</span>}
+                  </p>
+                </div>
+              )}
+            </section>
+
+            {/* Timeline */}
+            {(order.timeline ?? []).length > 0 && (
+              <details className={`${card} group`}>
+                <summary className="flex items-center justify-between gap-3 min-h-11 -my-2 cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+                  <h2 className={sectionTitle}>{t('detail.timeline')}</h2>
+                  <ChevronDown className="w-4 h-4 text-muted transition-transform group-open:rotate-180" aria-hidden />
+                </summary>
+                <ol className="space-y-3 mt-3">
+                  {order.timeline.map((event, index) => (
+                    <li key={index} className="flex items-start gap-3">
+                      <span className="w-2.5 h-2.5 rounded-full bg-brand mt-1.5 ring-4 ring-brand/20 flex-shrink-0" />
+                      <div>
+                        <p className="font-medium text-ink">{statusText(event.status ?? '')}</p>
+                        <p className="text-sm text-muted">{formatDateTime(event.timestamp)}</p>
+                      </div>
+                    </li>
+                  ))}
+                </ol>
+              </details>
+            )}
           </div>
 
-          {/* Order Summary */}
-          <div className="lg:col-span-1">
-            <div className="bg-surface rounded-[20px] border border-line p-4 sm:p-6 lg:sticky lg:top-[calc(5rem+var(--safe-top))]">
-              <h2 className="text-lg font-extrabold text-ink mb-4">{t('detail.summary')}</h2>
-              <div className="space-y-2 mb-4">
+          {/* Payment and the things to do with the order */}
+          <div className="lg:col-span-1 space-y-4 lg:sticky lg:top-[calc(5rem+var(--safe-top))]">
+            <section className={card} data-testid="payment-card">
+              <h2 className={`${sectionTitle} mb-1`}>{t('detail.summary')}</h2>
+              <p className="text-sm text-muted mb-3" data-testid="pay-line">{payLine}</p>
+              <dl className="space-y-2 text-sm">
                 <div className="flex justify-between text-muted">
-                  <span>{tc('subtotal')}</span>
-                  <span>{formatPrice(order.pricing?.subtotal ?? 0)}</span>
+                  <dt>{tc('subtotal')}</dt>
+                  <dd>{formatPrice(order.pricing?.subtotal ?? 0)}</dd>
                 </div>
-                <div className="flex justify-between text-muted">
-                  <span>{t('detail.deliveryFee')}</span>
-                  <span>{formatPrice(order.pricing?.deliveryFee ?? 0)}</span>
-                </div>
+                {!pickup && (
+                  <div className="flex justify-between text-muted">
+                    <dt>{t('detail.deliveryFee')}</dt>
+                    <dd>{order.pricing?.deliveryFee ? formatPrice(order.pricing.deliveryFee) : tc('free')}</dd>
+                  </div>
+                )}
                 {(order.pricing?.discount ?? 0) > 0 && (
-                  <div className="flex justify-between text-brand-ink font-semibold">
-                    <span>{tc('discount')}</span>
-                    <span>-{formatPrice(order.pricing?.discount ?? 0)}</span>
+                  <div className="flex justify-between text-brand-ink font-medium">
+                    <dt>{tc('discount')}</dt>
+                    <dd><bdi dir="ltr">-{formatPrice(order.pricing?.discount ?? 0)}</bdi></dd>
                   </div>
                 )}
                 <div className="flex justify-between text-muted">
-                  <span>{t('detail.gst')}</span>
-                  <span>{formatPrice(order.pricing?.tax ?? 0)}</span>
+                  <dt>{tco('salesTax5')}</dt>
+                  <dd>{formatPrice(order.pricing?.tax ?? 0)}</dd>
                 </div>
-                <div className="border-t border-line pt-3 mt-3">
-                  <div className="flex justify-between font-extrabold text-lg text-ink">
-                    <span>{tc('total')}</span>
-                    <span>{formatPrice(order.pricing?.total ?? 0)}</span>
-                  </div>
+                <div className="flex justify-between font-bold text-lg text-ink border-t border-line pt-3 mt-1">
+                  <dt>{tc('total')}</dt>
+                  <dd>{formatPrice(order.pricing?.total ?? 0)}</dd>
                 </div>
-              </div>
-              {canCancel && (
-                <Button
-                  variant="destructive"
-                  className="w-full"
-                  onClick={() => setShowCancelModal(true)}
-                >
-                  {t('detail.cancelOrder')}
-                </Button>
-              )}
-              {(effectiveStatus === 'delivered' || effectiveStatus === 'completed') && (
-                reported ? (
-                  <p className="text-sm text-muted text-center mt-2">
-                    {t('detail.reportedNote')}
+              </dl>
+            </section>
+
+            {delivered && (
+              <section className={`${card} space-y-2`}>
+                {reviewed || order.hasReview ? (
+                  <p className="text-sm text-muted flex items-center gap-2" data-testid="reviewed-note">
+                    <Star className="w-4 h-4 fill-accent text-accent" aria-hidden />
+                    {t('detail.reviewedNote')}
                   </p>
                 ) : (
-                  <Button
-                    variant="outline"
-                    className="w-full mt-2 border-red-200 text-red-600 hover:bg-red-50"
-                    onClick={() => setShowReportModal(true)}
-                  >
+                  <Button className="w-full min-h-11" onClick={() => setShowReviewModal(true)} data-testid="rate-order">
+                    <Star className="w-4 h-4" aria-hidden />
+                    {t('detail.rateExperience')}
+                  </Button>
+                )}
+                <Link href={`/support?orderId=${order.id}&category=quality`} className="block">
+                  <Button variant="outline" className="w-full min-h-11">
+                    <LifeBuoy className="w-4 h-4" aria-hidden />
+                    {t('detail.getHelp')}
+                  </Button>
+                </Link>
+                {reported ? (
+                  <p className="text-sm text-muted text-center">{t('detail.reportedNote')}</p>
+                ) : (
+                  <Button variant="ghost" className="w-full min-h-11 text-red-700 hover:bg-red-50" onClick={() => setShowReportModal(true)}>
                     {t('detail.didntReceive')}
                   </Button>
-                )
-              )}
-            </div>
+                )}
+              </section>
+            )}
+
+            <section className={`${card} flex items-center justify-between gap-2`}>
+              <p className="text-sm font-medium text-ink">{t('detail.receipt')}</p>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setShowReceiptPreview(true)}
+                  className="min-h-11 px-3 rounded-xl text-sm font-semibold text-brand-ink hover:bg-brand-soft inline-flex items-center gap-1.5"
+                >
+                  <Receipt className="w-4 h-4" aria-hidden />
+                  {t('detail.viewReceipt')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  aria-label={t('detail.printReceipt')}
+                  title={t('detail.printReceipt')}
+                  className="w-11 h-11 rounded-xl text-ink hover:bg-raised inline-flex items-center justify-center"
+                >
+                  <Printer className="w-4 h-4" aria-hidden />
+                </button>
+              </div>
+            </section>
+
+            {canCancel && (
+              <Button
+                variant="outline"
+                className="w-full min-h-11 text-red-700 border-red-200 hover:bg-red-50"
+                onClick={() => setShowCancelModal(true)}
+              >
+                {t('detail.cancelOrder')}
+              </Button>
+            )}
           </div>
         </div>
       </div>
-    </div>
 
       {/* Report Non-Receipt Modal */}
       {showReportModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-surface rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
-            <div className="bg-red-500 px-6 py-4">
-              <h2 className="text-white font-bold text-lg">{t('detail.reportTitle')}</h2>
-            </div>
-            <div className="p-6 space-y-4">
-              <p className="text-sm text-muted">
-                {t('detail.reportBody')}
-              </p>
-              <textarea
-                value={reportDetails}
-                onChange={(e) => setReportDetails(e.target.value)}
-                rows={4}
-                placeholder={t('detail.reportPlaceholder')}
-                className="w-full px-3 py-2 border border-line-strong rounded-lg text-sm focus:ring-2 focus:ring-red-500"
-              />
-              <div className="flex items-center gap-3">
-                <Button
-                  variant="destructive"
-                  onClick={handleReportNonReceipt}
-                  disabled={reporting || !reportDetails.trim()}
-                >
-                  {reporting ? t('detail.submitting') : t('detail.submitReport')}
-                </Button>
-                <button
-                  onClick={() => { setShowReportModal(false); setReportDetails(''); }}
-                  className="text-sm text-muted hover:text-ink"
-                >
-                  {tc('cancel')}
-                </button>
-              </div>
+        <div
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-4"
+          onClick={(e) => { if (e.target === e.currentTarget) { setShowReportModal(false); setReportDetails(''); } }}
+        >
+          <div role="dialog" aria-modal="true" aria-labelledby="report-title" className="bg-surface rounded-2xl shadow-2xl w-full max-w-md p-5 space-y-4">
+            <h2 id="report-title" className="text-lg font-semibold text-ink">{t('detail.reportTitle')}</h2>
+            <p className="text-sm text-muted">{t('detail.reportBody')}</p>
+            <textarea
+              value={reportDetails}
+              onChange={(e) => setReportDetails(e.target.value)}
+              rows={4}
+              placeholder={t('detail.reportPlaceholder')}
+              className="w-full px-3 py-2 border border-line-strong rounded-xl text-sm bg-surface text-ink focus:ring-2 focus:ring-brand/30 focus:border-brand outline-none"
+            />
+            <div className="flex gap-3">
+              <Button className="flex-1" onClick={handleReportNonReceipt} disabled={reporting || !reportDetails.trim()}>
+                {reporting ? t('detail.submitting') : t('detail.submitReport')}
+              </Button>
+              <Button variant="outline" className="flex-1" onClick={() => { setShowReportModal(false); setReportDetails(''); }}>
+                {tc('cancel')}
+              </Button>
             </div>
           </div>
         </div>
@@ -906,50 +935,53 @@ function OrderDetailContent() {
 
       {/* Cancel Order Modal */}
       {showCancelModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-surface rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
-            {/* Header */}
-            <div className="bg-red-500 px-6 py-4 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                </svg>
-                <h2 className="text-white font-bold text-lg">{t('detail.cancelOrder')}</h2>
-              </div>
-              <button onClick={() => { setShowCancelModal(false); setCancelReason(''); }} className="text-white/70 hover:text-white" aria-label={t('detail.closeAria')}>
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
+        <div
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-4"
+          onClick={(e) => { if (e.target === e.currentTarget) closeCancelModal(); }}
+        >
+          <div role="dialog" aria-modal="true" aria-labelledby="cancel-title" className="bg-surface rounded-2xl shadow-2xl w-full max-w-md p-5 space-y-4" data-testid="cancel-dialog">
+            <div>
+              <h2 id="cancel-title" className="text-lg font-semibold text-ink">{t('detail.cancelTitle', { number: order.orderNumber })}</h2>
+              <p className="text-sm text-muted mt-1">{t('detail.cancelBody')}</p>
             </div>
-            {/* Body */}
-            <div className="px-6 py-5">
-              <p className="text-muted text-sm mb-4">
-                {t('detail.cancelConfirmBefore')}<strong data-ltr>#{order.orderNumber}</strong>{t('detail.cancelConfirmAfter')}
-              </p>
-              <label className="block text-sm font-medium text-ink mb-1">{t('detail.cancelReason')} <span className="text-red-500">*</span></label>
-              <textarea
-                className="w-full border border-line rounded-xl px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-red-400 resize-none"
-                rows={3}
-                placeholder={t('detail.cancelPlaceholder')}
-                value={cancelReason}
-                onChange={(e) => setCancelReason(e.target.value)}
-              />
-              <div className="flex gap-3 mt-4">
+            <div role="radiogroup" aria-label={t('detail.cancelReason')} className="flex flex-wrap gap-2">
+              {CANCEL_CHOICES.map((choice) => (
                 <button
-                  onClick={handleCancelOrder}
-                  disabled={!cancelReason.trim() || cancelling}
-                  className="flex-1 bg-red-500 hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-2.5 rounded-xl text-sm transition-all active:scale-95"
+                  key={choice}
+                  type="button"
+                  role="radio"
+                  aria-checked={cancelChoice === choice}
+                  onClick={() => setCancelChoice(choice)}
+                  className={`min-h-11 px-4 rounded-full border text-sm font-medium transition-colors ${
+                    cancelChoice === choice ? 'border-brand bg-brand-soft text-brand-soft-ink' : 'border-line text-ink hover:border-line-strong'
+                  }`}
                 >
-                  {cancelling ? t('detail.cancelling') : t('detail.yesCancel')}
+                  {t(`detail.cancelChoice.${choice}`)}
                 </button>
-                <button
-                  onClick={() => { setShowCancelModal(false); setCancelReason(''); }}
-                  className="flex-1 bg-raised hover:bg-line text-ink font-medium py-2.5 rounded-xl text-sm transition-all active:scale-95"
-                >
-                  {t('detail.keepOrder')}
-                </button>
+              ))}
+            </div>
+            {cancelChoice === 'other' && (
+              <div>
+                <label htmlFor="cancel-reason" className="block text-sm font-medium text-ink mb-1">{t('detail.cancelReason')}</label>
+                <textarea
+                  id="cancel-reason"
+                  className="w-full border border-line-strong rounded-xl px-3 py-2 text-sm text-ink bg-surface focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand resize-none"
+                  rows={3}
+                  placeholder={t('detail.cancelPlaceholder')}
+                  value={cancelReason}
+                  onChange={(e) => setCancelReason(e.target.value)}
+                  aria-describedby="cancel-reason-hint"
+                />
+                <p id="cancel-reason-hint" className="text-xs text-muted mt-1">{t('detail.cancelReasonHint', { count: MIN_CANCEL_REASON })}</p>
               </div>
+            )}
+            <div className="flex gap-3">
+              <Button variant="destructive" className="flex-1" onClick={handleCancelOrder} disabled={!cancelReasonValid || cancelling} data-testid="confirm-cancel">
+                {cancelling ? t('detail.cancelling') : t('detail.yesCancel')}
+              </Button>
+              <Button variant="outline" className="flex-1" onClick={closeCancelModal}>
+                {t('detail.keepOrder')}
+              </Button>
             </div>
           </div>
         </div>
@@ -976,23 +1008,22 @@ function OrderDetailContent() {
         riderName={riderName}
         isOpen={showReviewModal}
         onClose={() => setShowReviewModal(false)}
-        onReviewed={() => loadOrder(true)}
+        onReviewed={() => setReviewed(true)}
       />
 
       {/* Official Professional Printable Tax Invoice & Receipt (Displayed cleanly on window.print()) */}
       <div id="printable-order-receipt" className="hidden print:block font-sans text-ink bg-surface p-6 max-w-3xl mx-auto">
         {/* Receipt Header */}
-        <div className="flex items-start justify-between border-b-2 border-slate-900 pb-4 mb-5">
+        <div className="flex items-start justify-between border-b-2 border-ink pb-4 mb-5">
           <div>
             <div className="flex items-center gap-2 mb-1">
-              <span className="text-2xl font-black tracking-tight text-ink">NURAY FOOD &amp; FROST</span>
-              <span className="text-[11px] font-black bg-brand-soft text-brand-soft-ink px-2 py-0.5 rounded-full uppercase">{t('receipt.verifiedKitchen')}</span>
+              <Mark size={28} />
+              <span className="text-2xl font-bold text-ink">Nuray</span>
             </div>
             <p className="text-xs text-muted">{t('receipt.network')}</p>
-            <p className="text-[11px] text-muted font-medium">{t('receipt.officialInvoice')}</p>
           </div>
           <div className="text-end">
-            <h2 className="text-xl font-black text-ink tracking-tight">{t('receipt.heading')}</h2>
+            <h2 className="text-xl font-bold text-ink">{t('receipt.heading')}</h2>
             <p className="text-xs font-mono font-bold text-ink">{t('receipt.orderNumber', { number: order.orderNumber })}</p>
             <p className="text-[11px] text-muted mt-0.5">{t('receipt.date', { date: formatDate(order.createdAt || new Date().toISOString()) })}</p>
           </div>
@@ -1001,21 +1032,19 @@ function OrderDetailContent() {
         {/* Kitchen & Customer Credentials */}
         <div className="grid grid-cols-2 gap-6 border-b border-line pb-4 mb-5 text-xs">
           <div>
-            <span className="text-[11px] font-black uppercase text-muted tracking-wider block mb-1">
+            <span className="text-xs font-medium text-muted block mb-1">
               {t('receipt.preparedBy')}
             </span>
-            <h4 className="font-extrabold text-sm text-ink">{sellerName}</h4>
-            <p className="text-muted">{t('receipt.certifiedChef')}</p>
-            <p className="text-muted text-[11px]">{t('receipt.cluster')}</p>
+            <h4 className="font-bold text-sm text-ink">{sellerName}</h4>
           </div>
 
           <div>
-            <span className="text-[11px] font-black uppercase text-muted tracking-wider block mb-1">
-              {t('receipt.billedTo')}
+            <span className="text-xs font-medium text-muted block mb-1">
+              {t(pickup ? 'receipt.billedToPickup' : 'receipt.billedTo')}
             </span>
-            <h4 className="font-extrabold text-sm text-ink">{customerName}</h4>
+            <h4 className="font-bold text-sm text-ink">{customerName}</h4>
             {order.customerPhone && <p data-ltr className="text-muted font-mono text-[11px]">{order.customerPhone}</p>}
-            <p className="text-muted text-[11px] leading-relaxed mt-0.5">{order.delivery.address}</p>
+            {!pickup && <p className="text-muted text-[11px] leading-relaxed mt-0.5">{order.delivery.address}</p>}
           </div>
         </div>
 
@@ -1023,12 +1052,12 @@ function OrderDetailContent() {
         <div className="mb-5">
           <table className="w-full text-start text-xs border-collapse">
             <thead>
-              <tr className="border-b-2 border-slate-800 text-[11px] uppercase tracking-wider text-muted">
-                <th className="py-2 pe-2 font-black">#</th>
-                <th className="py-2 px-2 font-black">{t('receipt.colItem')}</th>
-                <th className="py-2 px-2 font-black text-center">{t('receipt.colQty')}</th>
-                <th className="py-2 px-2 font-black text-end">{t('receipt.colUnitPrice')}</th>
-                <th className="py-2 ps-2 font-black text-end">{t('receipt.colAmount')}</th>
+              <tr className="border-b-2 border-ink text-xs text-muted">
+                <th className="py-2 pe-2 font-semibold">#</th>
+                <th className="py-2 px-2 font-semibold">{t('receipt.colItem')}</th>
+                <th className="py-2 px-2 font-semibold text-center">{t('receipt.colQty')}</th>
+                <th className="py-2 px-2 font-semibold text-end">{t('receipt.colUnitPrice')}</th>
+                <th className="py-2 ps-2 font-semibold text-end">{t('receipt.colAmount')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-line">
@@ -1053,10 +1082,10 @@ function OrderDetailContent() {
         </div>
 
         {/* Payment Summary & Financial Totals */}
-        <div className="grid grid-cols-2 gap-6 border-t-2 border-slate-800 pt-4 mb-6 text-xs">
+        <div className="grid grid-cols-2 gap-6 border-t-2 border-ink pt-4 mb-6 text-xs">
           {/* Payment Method Statement */}
           <div className="space-y-2">
-            <span className="text-[11px] font-black uppercase text-muted tracking-wider block">
+            <span className="text-xs font-medium text-muted block">
               {t('receipt.paymentDetails')}
             </span>
             <div className="bg-raised p-3.5 rounded-xl border border-line space-y-1.5">
@@ -1080,7 +1109,6 @@ function OrderDetailContent() {
               )}
               {order.paymentProofUrl && (
                 <div className="pt-2 border-t border-line flex items-center gap-2">
-                  <span className="text-xs">🧾</span>
                   <span className="text-[11px] text-brand-soft-ink font-bold">
                     {t('receipt.proofArchived')}
                   </span>
@@ -1095,10 +1123,12 @@ function OrderDetailContent() {
               <span className="text-muted">{t('receipt.subtotal')}</span>
               <span className="font-mono text-ink">{formatPrice(order.pricing.subtotal)}</span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-muted">{t('receipt.communityDelivery')}</span>
-              <span className="font-mono text-ink">{formatPrice(order.pricing.deliveryFee)}</span>
-            </div>
+            {!pickup && (
+              <div className="flex justify-between">
+                <span className="text-muted">{t('receipt.communityDelivery')}</span>
+                <span className="font-mono text-ink">{order.pricing.deliveryFee ? formatPrice(order.pricing.deliveryFee) : tc('free')}</span>
+              </div>
+            )}
             {order.pricing.tax > 0 && (
               <div className="flex justify-between">
                 <span className="text-muted">{t('receipt.salesTax')}</span>
@@ -1108,10 +1138,10 @@ function OrderDetailContent() {
             {order.pricing.discount > 0 && (
               <div className="flex justify-between text-brand-soft-ink font-bold">
                 <span>{t('receipt.promoDiscount')}</span>
-                <span className="font-mono">-{formatPrice(order.pricing.discount)}</span>
+                <bdi dir="ltr" className="font-mono">-{formatPrice(order.pricing.discount)}</bdi>
               </div>
             )}
-            <div className="flex justify-between border-t-2 border-line-strong pt-2 text-base font-black text-ink">
+            <div className="flex justify-between border-t-2 border-line-strong pt-2 text-base font-bold text-ink">
               <span>{t('receipt.grandTotalPkr')}</span>
               <span className="text-brand-soft-ink font-mono">{formatPrice(order.pricing.total)}</span>
             </div>
@@ -1120,7 +1150,7 @@ function OrderDetailContent() {
 
         {/* Footer & Watermark */}
         <div className="border-t border-line pt-4 text-center text-[11px] text-muted space-y-1">
-          <p className="font-extrabold text-ink">{t('receipt.thanks')}</p>
+          <p className="font-semibold text-ink">{t('receipt.thanks')}</p>
           <p>{t('receipt.support')}</p>
           <p className="text-[11px] text-muted">{t('receipt.computerGenerated')}</p>
         </div>
@@ -1128,41 +1158,45 @@ function OrderDetailContent() {
 
       {/* Interactive Receipt Preview Modal */}
       {showReceiptPreview && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-200">
-          <div className="relative w-full max-w-2xl bg-surface rounded-3xl shadow-2xl border border-line overflow-hidden flex flex-col max-h-[92vh]">
-            <div className="px-6 py-4 bg-[#0C1016] text-white flex items-center justify-between border-b border-slate-800">
-              <div className="flex items-center gap-2">
-                <span className="text-xl">🧾</span>
-                <h3 className="font-black text-sm">{t('receipt.preview')}</h3>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-3 sm:p-4 animate-in fade-in duration-200"
+          onClick={(e) => { if (e.target === e.currentTarget) setShowReceiptPreview(false); }}
+        >
+          <div role="dialog" aria-modal="true" aria-labelledby="receipt-title" className="relative w-full max-w-2xl bg-surface rounded-3xl shadow-2xl border border-line overflow-hidden flex flex-col max-h-[92vh]">
+            <div className="px-4 py-3 flex items-center justify-between gap-2 border-b border-line">
+              <h3 id="receipt-title" className="font-semibold text-ink">{t('receipt.preview')}</h3>
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="ghost"
                   onClick={() => {
                     setShowReceiptPreview(false);
                     setTimeout(() => window.print(), 150);
                   }}
-                  className="px-3.5 py-1.5 bg-brand-700 hover:bg-brand-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5"
                 >
-                  <span>🖨️</span>
-                  <span>{t('receipt.printNow')}</span>
-                </button>
+                  <Printer className="w-4 h-4" aria-hidden />
+                  {t('receipt.printNow')}
+                </Button>
                 <button
+                  type="button"
                   onClick={() => setShowReceiptPreview(false)}
                   aria-label={t('detail.closeAria')}
-                  className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center text-sm transition-colors"
+                  className="w-11 h-11 rounded-full bg-raised hover:bg-line text-ink flex items-center justify-center transition-colors"
                 >
-                  ✕
+                  <X className="w-5 h-5" aria-hidden />
                 </button>
               </div>
             </div>
 
-            <div className="p-6 overflow-y-auto bg-raised/50">
-              <div className="bg-surface p-6 rounded-2xl shadow-sm border border-line space-y-5">
+            <div className="p-3 sm:p-6 overflow-y-auto bg-raised/50">
+              <div className="bg-surface p-4 sm:p-6 rounded-2xl border border-line space-y-5">
                 {/* Header */}
-                <div className="flex items-start justify-between border-b-2 border-slate-900 pb-4">
+                <div className="flex items-start justify-between border-b-2 border-ink pb-4">
                   <div>
-                    <span className="text-xl font-black text-ink block">NURAY FOOD &amp; FROST</span>
-                    <span className="text-[11px] text-muted font-medium">{t('receipt.kitchenInvoice')}</span>
+                    <span className="flex items-center gap-2">
+                      <Mark size={24} />
+                      <span className="text-xl font-bold text-ink">Nuray</span>
+                    </span>
+                    <span className="text-xs text-muted">{t('receipt.kitchenInvoice')}</span>
                   </div>
                   <div className="text-end">
                     <span className="font-mono font-bold text-sm text-ink block"><span data-ltr>#{order.orderNumber}</span></span>
@@ -1173,19 +1207,18 @@ function OrderDetailContent() {
                 {/* Details */}
                 <div className="grid grid-cols-2 gap-4 text-xs">
                   <div>
-                    <span className="text-[11px] uppercase font-bold text-muted block">{t('receipt.soldBy')}</span>
-                    <span className="font-bold text-ink block">{sellerName}</span>
-                    <span className="text-muted text-[11px]">{t('receipt.communityKitchen')}</span>
+                    <span className="text-xs text-muted block">{t('receipt.soldBy')}</span>
+                    <span className="font-semibold text-ink block">{sellerName}</span>
                   </div>
                   <div>
-                    <span className="text-[11px] uppercase font-bold text-muted block">{t('receipt.deliveredTo')}</span>
-                    <span className="font-bold text-ink block">{customerName}</span>
-                    <span className="text-muted text-[11px]">{order.delivery.address}</span>
+                    <span className="text-xs text-muted block">{t(pickup ? 'receipt.collectedBy' : 'receipt.deliveredTo')}</span>
+                    <span className="font-semibold text-ink block">{customerName}</span>
+                    {!pickup && <span className="text-muted text-xs">{order.delivery.address}</span>}
                   </div>
                 </div>
 
                 {/* Line Items */}
-                <div className="border rounded-xl overflow-hidden divide-y divide-line text-xs">
+                <div className="border border-line rounded-xl overflow-hidden divide-y divide-line text-xs">
                   {order.items.map((it, idx) => (
                     <div key={idx} className="p-2.5 flex items-center justify-between">
                       <span className="font-semibold text-ink">{it.quantity} × {it.productName}</span>
@@ -1218,7 +1251,7 @@ function OrderDetailContent() {
                       </span>
                     </div>
                   )}
-                  <div className="flex justify-between border-t border-line pt-2 text-sm font-black text-ink">
+                  <div className="flex justify-between border-t border-line pt-2 text-sm font-bold text-ink">
                     <span>{t('receipt.grandTotal')}</span>
                     <span className="text-brand-soft-ink font-mono">{formatPrice(order.pricing.total)}</span>
                   </div>

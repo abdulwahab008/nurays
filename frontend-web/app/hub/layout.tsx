@@ -5,7 +5,7 @@ import { RoleGuard } from '@/components/RoleGuard';
 
 export default function HubLayout({ children }: { children: ReactNode }) {
   return (
-    <RoleGuard allowedRoles={['hub_manager']} redirectUnauthenticated="/login" redirectWrongRole="/products">
+    <RoleGuard allowedRoles={['hub_manager']} redirectUnauthenticated="/login">
       {children}
     </RoleGuard>
   );

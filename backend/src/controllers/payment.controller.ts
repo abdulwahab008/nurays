@@ -15,7 +15,7 @@ import {
   TOPUP_MAX,
 } from '../services/online-payment.service';
 import { listWalletTransactions } from '../services/wallet.service';
-import { logger } from '../utils/logger';
+import { logEvent, logger } from '../utils/logger';
 
 const userIdOf = (req: Request) => {
   if (!req.user) throw new AppError('Authentication required', 401, 'AUTH_REQUIRED');
@@ -76,6 +76,7 @@ export const safepayReturn = async (req: Request, res: Response) => {
 
   if (!tracker || !verifySafepayReturn(tracker, sig)) {
     logger.warn({ tracker }, 'Safepay return with a missing or invalid signature');
+    logEvent('payment.failed', { via: 'return', reason: tracker ? 'invalid_signature' : 'missing_tracker' });
     // The customer is mid-redirect here too: a tracker the database refuses must not turn the landing page into a JSON error.
     const attempt = tracker ? await attemptByTracker(tracker).catch(() => null) : null;
     return res.redirect(
@@ -90,6 +91,7 @@ export const safepayReturn = async (req: Request, res: Response) => {
     // The customer is mid-redirect from Safepay: a page that says "we could not confirm your
     // payment yet" beats a JSON error on the API domain. The webhook or the sweep settles it.
     logger.error({ err, tracker }, 'Safepay return could not be settled');
+    logEvent('payment.failed', { via: 'return', reason: 'settle_error' });
     reportError(err as Error, { path: req.path, method: req.method, tracker });
     const attempt = await attemptByTracker(tracker).catch(() => null);
     return res.redirect(
@@ -109,6 +111,7 @@ export const safepayWebhook = async (req: Request, res: Response) => {
   const signature = req.get('x-sfpy-signature') ?? undefined;
   if (!verifySafepayWebhook(req.body, signature)) {
     logger.warn('Safepay webhook with an invalid signature: rejected');
+    logEvent('payment.failed', { via: 'webhook', reason: 'invalid_signature' });
     throw new AppError('Invalid webhook signature', 401, 'INVALID_WEBHOOK_SIGNATURE');
   }
   const tracker = successfulTrackerFromWebhook(req.body);
@@ -121,6 +124,7 @@ export const safepayWebhook = async (req: Request, res: Response) => {
     return res.status(200).json({ received: true, outcome: result.outcome });
   } catch (err) {
     logger.error({ err, tracker }, 'Safepay webhook could not be applied');
+    logEvent('payment.failed', { via: 'webhook', reason: 'settle_error' });
     throw err; // the error handler answers 500 in the usual shape, and Safepay retries
   }
 };

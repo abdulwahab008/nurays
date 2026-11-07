@@ -18,19 +18,18 @@ test.describe('Seller Studio Analytics Section', () => {
     await expect(page).toHaveURL(/\/sellers\/analytics/);
 
     // 3. Verify Page Header & Controls
-    await expect(page.locator('h1', { hasText: /Analytics & Sales Velocity/i })).toBeVisible();
-    await expect(page.getByText(/Live Kitchen Performance Telemetry/i)).toBeVisible();
+    await expect(page.locator('h1', { hasText: /Reports/i })).toBeVisible();
 
-    // 4. Verify 4 Core KPI Cards are rendered
-    await expect(page.getByText(/Net Revenue/i)).toBeVisible();
-    await expect(page.getByText(/Dishes Sold/i)).toBeVisible();
-    await expect(page.getByText(/Fulfillment Rate/i)).toBeVisible();
-    await expect(page.getByText(/Avg. Order Value/i)).toBeVisible();
+    // 4. Verify the four figures are rendered
+    await expect(page.getByText('Earned', { exact: true })).toBeVisible();
+    await expect(page.getByText('Dishes sold', { exact: true })).toBeVisible();
+    await expect(page.getByText('Orders delivered', { exact: true })).toBeVisible();
+    await expect(page.getByText('Average order', { exact: true })).toBeVisible();
 
-    // 5. Verify Revenue Velocity Chart exists
-    await expect(page.getByText(/Revenue Velocity & Trajectory/i)).toBeVisible();
+    // 5. Verify the earnings chart section exists (a kitchen with no sales sees one line instead of the drawing)
+    await expect(page.getByText(/Earnings by day/i)).toBeVisible();
     const svgChart = page.locator('svg[viewBox="0 0 1000 300"]');
-    await expect(svgChart).toBeVisible();
+    const hasSales = await svgChart.isVisible();
 
     // 6. Test Period Filter Switching
     const period7d = page.locator('#period-btn-7d');
@@ -46,40 +45,38 @@ test.describe('Seller Studio Analytics Section', () => {
     // Switch to 7 Days
     await period7d.click();
     await page.waitForTimeout(600);
-    await expect(period7d).toHaveClass(/bg-slate-900/);
+    await expect(period7d).toHaveAttribute('aria-selected', 'true');
 
     // Switch to 90 Days
     await period90d.click();
     await page.waitForTimeout(600);
-    await expect(period90d).toHaveClass(/bg-slate-900/);
+    await expect(period90d).toHaveAttribute('aria-selected', 'true');
 
     // Switch to 1 Year
     await period1y.click();
     await page.waitForTimeout(600);
-    await expect(period1y).toHaveClass(/bg-slate-900/);
+    await expect(period1y).toHaveAttribute('aria-selected', 'true');
 
     // Switch back to 30 Days
     await period30d.click();
     await page.waitForTimeout(600);
-    await expect(period30d).toHaveClass(/bg-slate-900/);
+    await expect(period30d).toHaveAttribute('aria-selected', 'true');
 
-    // 7. Test Chart View Switcher (Bars vs Wave)
-    const waveBtn = page.getByRole('button', { name: 'Wave' });
-    const barsBtn = page.getByRole('button', { name: 'Bars' });
+    // 7. Test Chart View Switcher (Bars vs Line)
+    if (hasSales) {
+      await page.getByRole('button', { name: 'Line' }).click();
+      await expect(svgChart.locator('path[fill="none"]')).toBeVisible();
+      await page.getByRole('button', { name: 'Bars' }).click();
+    } else {
+      await expect(page.getByText(/No sales in the last 30 days/i)).toBeVisible();
+    }
 
-    await waveBtn.click();
-    await page.waitForTimeout(400);
-    await expect(svgChart.locator('path[stroke="#10B981"]')).toBeVisible();
+    // 8. Verify the orders section
+    await expect(page.getByRole('heading', { name: 'Orders' })).toBeVisible();
+    await expect(page.getByText(/Cancelled or refunded/i)).toBeVisible();
 
-    await barsBtn.click();
-    await page.waitForTimeout(400);
-
-    // 8. Verify Kitchen Fulfillment Quality Section
-    await expect(page.getByText(/Kitchen Fulfillment Quality/i)).toBeVisible();
-    await expect(page.getByText(/Delivery completion & cancellation health/i)).toBeVisible();
-
-    // 9. Verify Top Performing Dishes
-    await expect(page.getByText(/Top Performing Dishes/i)).toBeVisible();
+    // 9. Verify the best-selling dishes section
+    await expect(page.getByRole('heading', { name: 'Best-selling dishes' })).toBeVisible();
 
     // 10. Verify Sidebar has Analytics highlighted and proper SVG icon
     await expect(analyticsLink).toBeVisible();

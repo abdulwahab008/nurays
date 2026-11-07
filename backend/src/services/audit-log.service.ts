@@ -1,7 +1,7 @@
 import prisma from '../config/database';
 import { AppError } from '../middleware/errorHandler';
 
-/** What an audit-trail page's filters (the address bar's query) ask for: a record, an admin, an action, a date range, a result. */
+/** What an audit-trail page's filters (the address bar's query) ask for: a record, an admin, an action, a date range, a result, and whether to leave out sign-ins. */
 export const auditFilter = (query: Record<string, unknown>) => {
   const str = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : undefined);
   const date = (v: unknown) => {
@@ -22,6 +22,7 @@ export const auditFilter = (query: Record<string, unknown>) => {
     ...(from || to ? { createdAt: { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) } } : {}),
     // result: ok (2xx/3xx), refused (4xx/5xx)
     ...(result === 'ok' ? { responseStatus: { lt: 400 } } : result === 'refused' ? { responseStatus: { gte: 400 } } : {}),
+    ...(str(query.hideSignIns) === '1' ? { NOT: { action: { in: ['auth:LOGIN', 'auth:LOGOUT'] } } } : {}),
   };
 };
 

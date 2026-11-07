@@ -8,21 +8,19 @@ import { useAuthStore } from '@/lib/store/auth-store';
 import { useToast } from '@/components/ui/toast';
 import { useT } from '@/lib/i18n';
 import { shellMessages } from '@/lib/i18n/messages/shell';
-import { MapPin, Navigation, Search, X, Check, ChevronDown, Sparkles } from 'lucide-react';
+import { MapPin, Navigation, Search, X, Check, ChevronDown, ChevronRight } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
+import { groupAreasByCity } from './saved-area';
 
 interface CommunitySelectorProps {
   variant?: 'navbar' | 'compact' | 'hero';
 }
-
-const CORE_LAHORE_SLUGS = ['askari-11', 'askari-10', 'dha-phase-5', 'dha-phase-6', 'dha-9-town'];
 
 export function CommunitySelector({ variant = 'navbar' }: CommunitySelectorProps) {
   const t = useT(shellMessages);
   const [localIsOpen, setLocalIsOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [showOtherCities, setShowOtherCities] = useState(false);
 
   const {
     selectedCommunity,
@@ -31,11 +29,24 @@ export function CommunitySelector({ variant = 'navbar' }: CommunitySelectorProps
     setSelectedCommunity,
     detectCommunityFromGPS,
     resolveCommunityFromText,
+    restoreSavedArea,
     isDetecting,
     isSelectorModalOpen,
-    openSelectorModal,
     closeSelectorModal,
-  } = useCommunityStore(useShallow((s) => ({ selectedCommunity: s.selectedCommunity, communities: s.communities, loadCommunities: s.loadCommunities, setSelectedCommunity: s.setSelectedCommunity, detectCommunityFromGPS: s.detectCommunityFromGPS, resolveCommunityFromText: s.resolveCommunityFromText, isDetecting: s.isDetecting, isSelectorModalOpen: s.isSelectorModalOpen, openSelectorModal: s.openSelectorModal, closeSelectorModal: s.closeSelectorModal })));
+  } = useCommunityStore(
+    useShallow((s) => ({
+      selectedCommunity: s.selectedCommunity,
+      communities: s.communities,
+      loadCommunities: s.loadCommunities,
+      setSelectedCommunity: s.setSelectedCommunity,
+      detectCommunityFromGPS: s.detectCommunityFromGPS,
+      resolveCommunityFromText: s.resolveCommunityFromText,
+      restoreSavedArea: s.restoreSavedArea,
+      isDetecting: s.isDetecting,
+      isSelectorModalOpen: s.isSelectorModalOpen,
+      closeSelectorModal: s.closeSelectorModal,
+    })),
+  );
 
   const { isAuthenticated, user } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated, user: s.user })));
   const { showToast } = useToast();
@@ -56,44 +67,44 @@ export function CommunitySelector({ variant = 'navbar' }: CommunitySelectorProps
     loadCommunities();
   }, [loadCommunities]);
 
-  // Lock body scroll when modal is open
+  // A signed-in customer gets back the area they chose before (or their address's) instead of "Choose your area".
+  const userType = user?.userType || user?.user_type;
   useEffect(() => {
-    if (isOpen) {
-      const originalOverflow = document.body.style.overflow;
-      document.body.style.overflow = 'hidden';
-      return () => {
-        document.body.style.overflow = originalOverflow;
-      };
-    }
-  }, [isOpen]);
+    if (!isAuthenticated || !user?.id || (userType && userType !== 'customer')) return;
+    void restoreSavedArea(user.id, user.profile);
+  }, [isAuthenticated, user?.id, user?.profile, userType, restoreSavedArea]);
 
-  // Close on Escape key
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isOpen) {
-        handleClose();
+    if (!isOpen) return;
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setLocalIsOpen(false);
+        closeSelectorModal();
+        setSearchQuery('');
       }
     };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen]);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      document.body.style.overflow = originalOverflow;
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [isOpen, closeSelectorModal]);
 
-  // Select community handler
   const handleSelect = async (comm: Community) => {
     setSelectedCommunity(comm);
     handleClose();
     showToast(t('locationSet', { name: comm.name }), 'info');
-
     if (isAuthenticated) {
       try {
         await communityService.setPrimaryCommunity(comm.id);
       } catch {
-        // Non-fatal
+        // The area still applies on this device; it just is not remembered on the account.
       }
     }
   };
 
-  // GPS auto-detection with smart match
   const handleGPSDetect = async () => {
     const { community: detected, reason } = await detectCommunityFromGPS();
     if (detected) {
@@ -104,294 +115,200 @@ export function CommunitySelector({ variant = 'navbar' }: CommunitySelectorProps
     }
   };
 
-  // Live smart match based on user search text
   const smartMatch = useMemo(() => {
     if (!searchQuery.trim()) return null;
     return resolveCommunityFromText(searchQuery);
   }, [searchQuery, resolveCommunityFromText]);
 
-  // Split communities into Core Lahore societies and others
-  const { coreCommunities, otherCommunities } = useMemo(() => {
-    const core: Community[] = [];
-    const others: Community[] = [];
-
-    // Sort core societies in user-requested order
-    for (const slug of CORE_LAHORE_SLUGS) {
-      const match = communities.find((c) => c.slug === slug);
-      if (match) core.push(match);
-    }
-
-    for (const c of communities) {
-      if (!CORE_LAHORE_SLUGS.includes(c.slug)) {
-        others.push(c);
-      }
-    }
-
-    return { coreCommunities: core, otherCommunities: others };
-  }, [communities]);
-
-  // Filtered lists if search query is active
-  const filteredList = useMemo(() => {
+  const visible = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    if (!q) return null;
-
-    return communities.filter((comm) => {
-      const name = comm.name.toLowerCase();
-      const city = comm.city.toLowerCase();
-      const area = (comm.areaDescription || '').toLowerCase();
-      return name.includes(q) || city.includes(q) || area.includes(q);
-    });
+    if (!q) return communities;
+    return communities.filter((comm) =>
+      [comm.name, comm.city, comm.areaDescription || ''].some((v) => v.toLowerCase().includes(q)),
+    );
   }, [communities, searchQuery]);
+
+  const groups = useMemo(
+    () => groupAreasByCity(visible, selectedCommunity?.city || user?.profile?.city),
+    [visible, selectedCommunity?.city, user?.profile?.city],
+  );
+
+  const onWhite = variant !== 'hero';
 
   return (
     <>
-      {/* Trigger Button */}
       <button
         type="button"
         onClick={() => setLocalIsOpen(true)}
-        className={`group inline-flex max-w-full items-center gap-2.5 border transition-all text-start ${
+        className={`group inline-flex max-w-full items-center gap-1 sm:gap-2 border transition-colors text-start ${
           variant === 'navbar'
-            ? 'h-11 rounded-xl px-3 border-line bg-surface hover:bg-raised text-ink active:scale-95'
+            ? 'h-11 rounded-xl px-1.5 sm:px-3 border-line bg-surface hover:bg-raised text-ink'
             : variant === 'hero'
-            ? 'rounded-full px-4 py-2 border-brand/40 bg-brand/10 hover:bg-brand/20 text-white shadow-lg active:scale-95'
-            : 'rounded-full px-2.5 py-1 text-xs border-line bg-raised hover:bg-raised text-ink'
+            ? 'min-h-11 rounded-full px-4 border-brand/40 bg-brand/10 hover:bg-brand/20 text-white'
+            : 'min-h-11 rounded-full px-3 text-xs border-line bg-raised text-ink'
         }`}
-        title={t('changeLocation')}
+        aria-label={t('changeLocation')}
       >
-        <span className="relative flex h-2.5 w-2.5 shrink-0">
-          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand opacity-75"></span>
-          <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-brand"></span>
-        </span>
-        <div className="flex min-w-0 flex-col">
-          <span
-            className={`text-[9.5px] uppercase font-bold tracking-wider leading-none ${
-              variant === 'navbar' ? 'text-muted' : 'text-muted'
-            }`}
-          >
+        <MapPin
+          className={`h-4 w-4 shrink-0 ${onWhite ? 'text-brand-ink' : 'text-white'} ${variant === 'navbar' ? 'max-sm:hidden' : ''}`}
+          aria-hidden
+        />
+        <span className="flex min-w-0 flex-col">
+          <span className={`text-[11px] font-medium leading-none max-sm:hidden ${onWhite ? 'text-muted' : 'text-white/80'}`}>
             {selectedCommunity ? t('deliveringTo') : t('yourArea')}
           </span>
           <span
-            className={`text-xs sm:text-sm font-extrabold truncate max-w-[130px] sm:max-w-[170px] leading-tight ${
-              variant === 'navbar' ? 'text-ink' : 'text-white'
+            dir="auto"
+            className={`text-[13px] sm:text-sm font-bold truncate sm:max-w-[170px] leading-tight sm:mt-0.5 ${
+              onWhite ? 'text-ink' : 'text-white'
             }`}
           >
             {selectedCommunity ? selectedCommunity.name : t('chooseArea')}
           </span>
-        </div>
-        <ChevronDown
-          className={`w-3.5 h-3.5 transition-transform group-hover:translate-y-0.5 shrink-0 ${
-            variant === 'navbar' ? 'text-brand-ink' : 'text-muted'
-          }`}
-        />
+        </span>
+        <ChevronDown className={`h-4 w-4 shrink-0 ${onWhite ? 'text-muted' : 'text-white/80'} ${variant === 'navbar' ? 'max-sm:hidden' : ''}`} aria-hidden />
       </button>
 
-      {/* Clean, Nordic-Standard Modal */}
       {mounted &&
         isOpen &&
         createPortal(
           <div
-            className="fixed inset-0 z-[99999] flex items-center justify-center p-4 sm:p-6 bg-[rgba(6,20,18,0.55)] animate-in fade-in duration-150"
+            className="fixed inset-0 z-[99999] flex items-end sm:items-center justify-center sm:p-6 bg-[rgba(6,20,18,0.55)] animate-in fade-in duration-150"
             onClick={handleClose}
           >
             <div
               role="dialog"
               aria-modal="true"
-              className="relative w-full max-w-lg rounded-[24px] border border-line bg-surface p-5 sm:p-6 shadow-xl animate-in zoom-in-95 duration-150"
+              aria-labelledby="area-picker-title"
+              className="relative flex max-h-[88vh] w-full max-w-lg flex-col rounded-t-3xl sm:rounded-3xl border border-line bg-surface shadow-xl pb-(--safe-bottom) sm:pb-0"
               onClick={(e) => e.stopPropagation()}
             >
-              {/* Header */}
-              <div className="flex items-center justify-between pb-3.5 border-b border-line">
-                <div>
-                  <h3 className="text-xl font-extrabold text-ink">
+              <div className="flex items-start justify-between gap-3 px-4 pt-4 sm:px-6 sm:pt-6">
+                <div className="min-w-0">
+                  <h3 id="area-picker-title" className="text-lg font-bold text-ink">
                     {t('deliveryLocation')}
                   </h3>
                   <p className="text-sm text-muted mt-0.5">
-                    {t('deliveryLocationSub')}
+                    {selectedCommunity
+                      ? t('deliveringToArea', { name: selectedCommunity.name, city: selectedCommunity.city })
+                      : t('deliveryLocationSub')}
                   </p>
                 </div>
                 <button
                   type="button"
                   onClick={handleClose}
                   aria-label={t('closeDialog')}
-                  className="w-10 h-10 rounded-full bg-raised hover:bg-line text-muted hover:text-ink flex items-center justify-center transition-all active:scale-95"
+                  className="h-11 w-11 shrink-0 rounded-full bg-raised text-muted hover:text-ink flex items-center justify-center"
                 >
-                  <X className="w-4 h-4" />
+                  <X className="h-4 w-4" aria-hidden />
                 </button>
               </div>
 
-              {/* Current Active Location Pill */}
-              <div className="mt-4 p-3 rounded-2xl bg-brand-soft flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <div className="w-9 h-9 rounded-xl bg-brand text-on-brand flex items-center justify-center shrink-0">
-                    <MapPin className="w-4 h-4" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-xs font-bold text-brand-soft-ink">
-                      {t('currentLocation')}
-                    </p>
-                    <p className="text-xs font-bold text-ink truncate">
-                      {selectedCommunity ? `${selectedCommunity.name}, ${selectedCommunity.city}` : t('noAreaYet')}
-                    </p>
-                  </div>
-                </div>
-                <span className="text-[11px] font-extrabold text-brand-soft-ink bg-surface px-2 py-0.5 rounded-full shrink-0">
-                  {t('active')}
-                </span>
-              </div>
+              <div className="px-4 sm:px-6 pt-4 space-y-2">
+                <button
+                  type="button"
+                  onClick={handleGPSDetect}
+                  disabled={isDetecting}
+                  className="w-full min-h-12 px-3 rounded-xl border border-line hover:bg-raised text-ink text-sm font-semibold flex items-center gap-3 text-start disabled:opacity-70"
+                >
+                  {isDetecting ? (
+                    <span className="h-4 w-4 border-2 border-brand-ink border-t-transparent rounded-full animate-spin" aria-hidden />
+                  ) : (
+                    <Navigation className="h-4 w-4 text-brand-ink" aria-hidden />
+                  )}
+                  <span className="flex-1">{isDetecting ? t('detectingGps') : t('useGps')}</span>
+                  <ChevronRight className="h-4 w-4 text-muted rtl:-scale-x-100" aria-hidden />
+                </button>
 
-              {/* GPS Auto-Detect Button */}
-              <button
-                type="button"
-                onClick={handleGPSDetect}
-                disabled={isDetecting}
-                className="w-full mt-3 min-h-12 p-3 rounded-2xl border border-line hover:border-line-strong hover:bg-raised text-ink font-bold text-sm transition flex items-center justify-between group"
-              >
-                <div className="flex items-center gap-2.5">
-                  <div className="w-9 h-9 rounded-xl bg-brand-soft text-brand-soft-ink flex items-center justify-center">
-                    {isDetecting ? (
-                      <span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                    ) : (
-                      <Navigation className="w-3.5 h-3.5" />
-                    )}
-                  </div>
-                  <span>{isDetecting ? t('detectingGps') : t('useGps')}</span>
+                <div className="relative">
+                  <Search className="w-4 h-4 text-muted absolute start-3.5 top-1/2 -translate-y-1/2 pointer-events-none" aria-hidden />
+                  <input
+                    type="search"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder={t('searchSociety')}
+                    aria-label={t('searchSociety')}
+                    className="w-full h-12 ps-10 pe-11 rounded-xl bg-raised border border-transparent text-[15px] text-ink placeholder:text-muted focus:bg-surface focus:border-brand focus:ring-2 focus:ring-brand/20 outline-none"
+                  />
+                  {searchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchQuery('')}
+                      aria-label={t('clearSearch')}
+                      className="absolute end-1 top-1/2 -translate-y-1/2 h-10 w-10 rounded-full flex items-center justify-center text-muted hover:text-ink"
+                    >
+                      <X className="h-4 w-4" aria-hidden />
+                    </button>
+                  )}
                 </div>
-                <span className="text-[11px] font-bold text-brand-ink group-hover:translate-x-0.5 rtl:group-hover:-translate-x-0.5 transition-transform">
-                  {t('detect')}
-                </span>
-              </button>
 
-              {/* Minimal Search Bar */}
-              <div className="relative mt-3">
-                <Search className="w-4 h-4 text-muted absolute start-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder={t('searchSociety')}
-                  className="w-full h-12 ps-10 pe-10 rounded-[14px] bg-raised border border-transparent text-[15px] font-semibold text-ink placeholder:text-muted placeholder:font-medium focus:bg-surface focus:border-brand focus:ring-2 focus:ring-brand/20 outline-none transition"
-                />
-                {searchQuery && (
+                {smartMatch?.community && !visible.some((c) => c.id === smartMatch.community.id) && (
                   <button
                     type="button"
-                    onClick={() => setSearchQuery('')}
-                    aria-label={t('clearSearch')}
-                    className="absolute end-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full flex items-center justify-center text-muted hover:text-ink hover:bg-line"
+                    onClick={() => handleSelect(smartMatch.community)}
+                    className="w-full min-h-12 px-3 rounded-xl bg-brand-soft text-start flex items-center justify-between gap-3"
                   >
-                    <X className="w-3.5 h-3.5" />
+                    <span className="min-w-0">
+                      <span className="block text-xs font-medium text-brand-soft-ink">{t('smartMatch')}</span>
+                      <span className="block text-sm font-semibold text-ink truncate">
+                        {smartMatch.community.name}, {smartMatch.community.city}
+                      </span>
+                    </span>
+                    <span className="text-sm font-semibold text-brand-ink">{t('select')}</span>
                   </button>
                 )}
               </div>
 
-              {/* Smart Match Banner (if query typed) */}
-              {smartMatch && smartMatch.community && (
-                <div
-                  onClick={() => handleSelect(smartMatch.community)}
-                  className="mt-3 p-3 rounded-2xl bg-accent-soft text-ink cursor-pointer transition flex items-center justify-between"
-                >
-                  <div className="flex items-center gap-2.5">
-                    <Sparkles className="w-4 h-4 text-accent-soft-ink shrink-0" />
-                    <div>
-                      <p className="text-xs font-bold text-accent-soft-ink">
-                        {t('smartMatch')}
-                      </p>
-                      <p className="text-xs font-bold text-ink">
-                        {smartMatch.community.name} ({smartMatch.community.city})
-                      </p>
-                    </div>
-                  </div>
-                  <span className="px-3 py-1.5 rounded-xl bg-brand text-on-brand text-xs font-extrabold">
-                    {t('select')}
-                  </span>
-                </div>
-              )}
-
-              {/* Community List */}
-              <div className="mt-3.5 max-h-[260px] overflow-y-auto space-y-1.5 pe-0.5 custom-scrollbar">
-                {filteredList ? (
-                  filteredList.length === 0 ? (
-                    <div className="py-6 text-center text-xs text-muted">
-                      {t('noSocieties')}
-                    </div>
-                  ) : (
-                    filteredList.map((comm) => renderCommunityRow(comm))
-                  )
+              <div className="mt-3 flex-1 overflow-y-auto px-4 sm:px-6 pb-4 sm:pb-6 custom-scrollbar">
+                {groups.length === 0 ? (
+                  <p className="py-6 text-center text-sm text-muted">{t('noSocieties')}</p>
                 ) : (
-                  <>
-                    <div className="px-1 py-1">
-                      <p className="text-xs font-bold text-muted">
-                        {t('lahoreCommunities')}
-                      </p>
-                    </div>
-                    {coreCommunities.map((comm) => renderCommunityRow(comm))}
-
-                    {/* Toggle for other communities */}
-                    {otherCommunities.length > 0 && (
-                      <div className="pt-2">
-                        <button
-                          type="button"
-                          onClick={() => setShowOtherCities(!showOtherCities)}
-                          className="w-full h-10 text-center text-sm font-bold text-muted hover:text-ink flex items-center justify-center gap-1 transition"
-                        >
-                          <span>{showOtherCities ? t('hideOther') : t('showMore', { count: otherCommunities.length })}</span>
-                          <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showOtherCities ? 'rotate-180' : ''}`} />
-                        </button>
-
-                        {showOtherCities && (
-                          <div className="space-y-1.5 pt-1">
-                            {otherCommunities.map((comm) => renderCommunityRow(comm))}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </>
+                  groups.map((group) => (
+                    <section key={group.city} className="pt-2">
+                      <h4 className="py-2 text-sm font-semibold text-ink">{group.city}</h4>
+                      <ul className="divide-y divide-line border-y border-line">
+                        {group.areas.map((comm) => (
+                          <li key={comm.id}>{renderCommunityRow(comm)}</li>
+                        ))}
+                      </ul>
+                    </section>
+                  ))
                 )}
               </div>
             </div>
           </div>,
-          document.body
+          document.body,
         )}
     </>
   );
 
   function renderCommunityRow(comm: Community) {
     const isSelected = selectedCommunity?.id === comm.id || selectedCommunity?.slug === comm.slug;
+    const kitchens = comm.sellerCount ?? 0;
     return (
       <button
-        key={comm.id}
         type="button"
         onClick={() => handleSelect(comm)}
-        className={`w-full text-start min-h-14 px-3.5 py-2.5 rounded-2xl border transition flex items-center justify-between ${
-          isSelected
-            ? 'border-brand bg-brand-soft/50'
-            : 'border-line hover:border-line-strong hover:bg-raised'
+        aria-pressed={isSelected}
+        className={`w-full text-start min-h-14 px-2 py-2 flex items-center justify-between gap-3 transition-colors ${
+          isSelected ? 'bg-brand-soft' : 'hover:bg-raised'
         }`}
       >
-        <div className="min-w-0 pe-2">
-          <div className="flex items-center gap-2">
-            <span className="text-[15px] font-bold text-ink truncate">
-              {comm.name}
-            </span>
-            <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-raised text-muted shrink-0">
-              {comm.city}
-            </span>
-          </div>
-          <p className="text-xs text-muted truncate mt-0.5">
-            {comm.areaDescription || t('defaultArea')}
-          </p>
-        </div>
-
-        <div className="shrink-0 flex items-center gap-2">
-          {isSelected ? (
-            <span className="w-6 h-6 rounded-full bg-brand text-on-brand flex items-center justify-center">
-              <Check className="w-3 h-3 stroke-[3]" />
-            </span>
-          ) : (
-            <span className="text-sm font-bold text-brand-ink">
-              {t('select')}
+        <span className="min-w-0">
+          <span className="block text-[15px] font-semibold text-ink truncate">{comm.name}</span>
+          {(comm.areaDescription || kitchens > 0) && (
+            <span className="block text-xs text-muted truncate mt-0.5">
+              {[kitchens > 0 ? t(kitchens === 1 ? 'kitchenInArea' : 'kitchensInArea', { count: kitchens }) : null, comm.areaDescription]
+                .filter(Boolean)
+                .join(' · ')}
             </span>
           )}
-        </div>
+        </span>
+        {isSelected ? (
+          <span className="shrink-0 h-6 w-6 rounded-full bg-brand text-on-brand flex items-center justify-center" aria-label={t('selected')}>
+            <Check className="h-3.5 w-3.5" strokeWidth={3} aria-hidden />
+          </span>
+        ) : null}
       </button>
     );
   }

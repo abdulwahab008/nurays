@@ -19,6 +19,7 @@ import {
   deliverOrderSchema,
   deliveryFailedSchema,
   rejectOrderSchema,
+  acceptOrderSchema,
 } from '../validators/seller-order.validator';
 import { authenticate, authorize, blockSuspendedSeller } from '../middleware/auth.middleware';
 import { auditWrites } from '../middleware/audit';
@@ -41,7 +42,7 @@ router.get('/orders', validateQuery(getSellerOrdersQuerySchema), getSellerOrders
 router.get('/orders/:id', getSellerOrderDetails);
 
 // Whole order lifecycle actions (Section 7 & 10)
-router.post('/orders/:id/accept', acceptOrder);
+router.post('/orders/:id/accept', validate(acceptOrderSchema), acceptOrder);
 router.post('/orders/:id/reject', validate(rejectOrderSchema), rejectOrder);
 router.post('/orders/:id/ready', markOrderReady);
 // Self-delivery / pickup: the kitchen hands the order over itself

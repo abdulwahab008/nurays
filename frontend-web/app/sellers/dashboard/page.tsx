@@ -2,92 +2,25 @@
 
 import PushPrompt from '@/components/notifications/PushPrompt';
 import { loginUrlHere } from '@/lib/auth-redirect';
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, useCallback, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+import { ChevronRight, Plus } from 'lucide-react';
 import { DashboardLayout, SELLER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { LoadError } from '@/components/ui/LoadError';
-import { useDialogs } from '@/components/ui/Dialogs';
+import { OrderStatusPill } from '@/components/ui/StatusPill';
+import { OrderNo, ReadyBy, useAge, useNow, useReadyFor } from '@/components/sellers/order-timing';
+import { NewOrderAlertSlot } from '@/components/sellers/new-order-alert';
+import { useLiveRefresh } from '@/lib/hooks/use-live-refresh';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient, apiErrorMessage, apiErrorStatus } from '@/lib/api-client';
 import { formatPrice } from '@/lib/utils';
-import { SellerOnboardingModal } from '@/components/SellerOnboardingModal';
 import { useT } from '@/lib/i18n';
 import { commonMessages } from '@/lib/i18n/messages/common';
 import { kitchenOrderMessages, kitchenStatusLabel } from '@/lib/i18n/messages/kitchen-orders';
 import { useShallow } from 'zustand/react/shallow';
-
-// Professional SVG Icons
-const Icons = {
-  products: (
-    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" />
-    </svg>
-  ),
-  orders: (
-    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25zM6.75 12h.008v.008H6.75V12zm0 3h.008v.008H6.75V15zm0 3h.008v.008H6.75V18z" />
-    </svg>
-  ),
-  pending: (
-    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
-    </svg>
-  ),
-  earnings: (
-    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18.75a60.07 60.07 0 0115.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 013 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 00-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 01-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 003 15h-.75M15 10.5a3 3 0 11-6 0 3 3 0 016 0zm3 0h.008v.008H18V10.5zm-12 0h.008v.008H6V10.5z" />
-    </svg>
-  ),
-  payout: (
-    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5z" />
-    </svg>
-  ),
-  add: (
-    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-    </svg>
-  ),
-  view: (
-    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
-      <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-    </svg>
-  ),
-  analytics: (
-    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
-    </svg>
-  ),
-  money: (
-    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-    </svg>
-  ),
-  check: (
-    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-    </svg>
-  ),
-  warning: (
-    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
-    </svg>
-  ),
-  package: (
-    <svg className="w-12 h-12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5m8.25 3v6.75m0 0l-3-3m3 3l3-3M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" />
-    </svg>
-  ),
-  food: (
-    <svg className="w-12 h-12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M12 8.25v-1.5m0 1.5c-1.355 0-2.697.056-4.024.166C6.845 8.51 6 9.473 6 10.608v2.513m6-4.87c1.355 0 2.697.055 4.024.165C17.155 8.51 18 9.473 18 10.608v2.513m-3-4.87v-1.5m-6 1.5v-1.5m12 9.75l-1.5.75a3.354 3.354 0 01-3 0 3.354 3.354 0 00-3 0 3.354 3.354 0 01-3 0 3.354 3.354 0 00-3 0 3.354 3.354 0 01-3 0L3 16.5m15-3.38a48.474 48.474 0 00-6-.37c-2.032 0-4.034.125-6 .37m12 0c.39.049.777.102 1.163.16 1.07.16 1.837 1.094 1.837 2.175v5.17c0 .62-.504 1.124-1.125 1.124H4.125A1.125 1.125 0 013 20.625v-5.17c0-1.08.768-2.014 1.837-2.174A47.78 47.78 0 016 13.12M12.265 3.11a.375.375 0 11-.53 0L12 2.845l.265.265zm-3 0a.375.375 0 11-.53 0L9 2.845l.265.265zm6 0a.375.375 0 11-.53 0L15 2.845l.265.265z" />
-    </svg>
-  ),
-};
 
 interface SellerDashboard {
   id: string;
@@ -97,6 +30,9 @@ interface SellerDashboard {
   rejectionReason?: string | null;
   isStoreOpen?: boolean;
   primaryCommunityName?: string | null;
+  /** What a pending application still lacks (empty when it is complete and waiting for Nuray). */
+  applicationMissing?: string[];
+  hasPayoutAccount?: boolean;
   overview: {
     totalProducts: number;
     activeOrders: number;
@@ -113,31 +49,59 @@ interface SellerDashboard {
     netEarnings?: number;
     pendingSettlement?: number;
     paidSettlement?: number;
+    awaitingRiderCash?: number;
   };
-  recentOrders: Array<{
-    orderId: string;
-    orderNumber: string;
-    productName: string;
-    quantity: number;
-    totalPrice: number;
-    orderStatus: string;
-    createdAt: string;
-  }>;
   lowStockProducts: Array<{
     id: string;
     name: string;
     stockQuantity: number;
-    images?: Array<{ imageUrl: string }>;
   }>;
+}
+
+/** An order still in the kitchen's hands, as the orders list gives it. */
+interface LiveOrder {
+  order: {
+    id: string;
+    orderNumber: string;
+    orderStatus: string;
+    createdAt: string;
+    estimatedDeliveryAt?: string | null;
+    readyAt?: string | null;
+    /** The server's one rule for an order that waits on the kitchen (the orders list's Now count uses it too). */
+    needsKitchen?: boolean;
+  };
+  items: Array<{ id: string; quantity: number; product: { name: string } | null }>;
+}
+
+// New orders first (oldest first: they have waited longest), then what is cooking (soonest due first), then what is ready.
+const URGENCY: Record<string, number> = { pending: 0, confirmed: 0, preparing: 1, ready: 2 };
+const SHOWN_ORDERS = 3;
+
+function byUrgency(a: LiveOrder, b: LiveOrder): number {
+  const rank = (o: LiveOrder) => URGENCY[o.order.orderStatus] ?? 3;
+  const due = (o: LiveOrder) => new Date(o.order.estimatedDeliveryAt ?? o.order.createdAt).getTime();
+  return rank(a) - rank(b) || due(a) - due(b);
+}
+
+// What the server calls each missing part of an application (utils/kitchenApplication.ts), in the kitchen's words.
+const GAP_KEYS = {
+  community: 'dash.gap.community',
+  'kitchen location': 'dash.gap.location',
+  'CNIC photos (both sides)': 'dash.gap.cnic',
+} as const;
+
+function Spinner({ label }: { label: string }) {
+  return (
+    <div className="py-24 text-center" role="status">
+      <div className="animate-spin rounded-full h-8 w-8 border-2 border-line border-t-brand-600 mx-auto mb-4" />
+      <p className="text-sm text-muted">{label}</p>
+    </div>
+  );
 }
 
 export default function SellerDashboardPage() {
   return (
-    <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600"></div>
-      </div>
-    }>
+    <Suspense fallback={<div className="min-h-screen bg-page" />}>
       <SellerDashboardContent />
     </Suspense>
   );
@@ -148,7 +112,6 @@ function SellerDashboardContent() {
   const searchParams = useSearchParams();
   const { isAuthenticated, user } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated, user: s.user })));
   const { showToast } = useToast();
-  const { confirm: confirmDialog } = useDialogs();
   const t = useT(kitchenOrderMessages);
   const tc = useT(commonMessages);
   const [loading, setLoading] = useState(true);
@@ -156,40 +119,74 @@ function SellerDashboardContent() {
   // that has to register, which is what the page said.
   const [loadError, setLoadError] = useState<unknown>(null);
   const [dashboard, setDashboard] = useState<SellerDashboard | null>(null);
-  const [showOnboarding, setShowOnboarding] = useState(false);
-  const [needsOnboarding, setNeedsOnboarding] = useState(false);
+  // No kitchen yet (the server answered 404): the one application form is where it is made.
+  const [noKitchen, setNoKitchen] = useState(false);
+  // The orders the kitchen is working on, most urgent first; null until read (or when they could not be).
+  const [liveOrders, setLiveOrders] = useState<LiveOrder[] | null>(null);
+  const [needYouCount, setNeedYouCount] = useState<number | null>(null);
+  const now = useNow();
+  const age = useAge();
+  const readyFor = useReadyFor();
 
   const sidebarItems = SELLER_SIDEBAR_ITEMS;
 
-  const loadDashboard = async () => {
+  const loadLiveOrders = useCallback(async () => {
     try {
-      setLoading(true);
+      const res = await apiClient.get('/seller/orders', { params: { view: 'active', limit: 100 } });
+      const data = res.data?.data;
+      setLiveOrders(((data?.orders ?? []) as LiveOrder[]).filter((o) => o.order.needsKitchen).sort(byUrgency));
+      setNeedYouCount(data?.counts?.needYou ?? null);
+    } catch {
+      // The dashboard still says how many are waiting, and the orders page lists them.
+      setLiveOrders(null);
+      setNeedYouCount(null);
+    }
+  }, []);
+
+  const loadDashboard = async (silent = false) => {
+    try {
+      if (!silent) setLoading(true);
       const response = await apiClient.get('/sellers/me/dashboard');
       if (response.data.success) {
         setDashboard(response.data.data);
-        setNeedsOnboarding(false);
+        setNoKitchen(false);
+        if (!silent && response.data.data?.verificationStatus === 'approved') void loadLiveOrders();
       }
       setLoadError(null);
     } catch (error) {
-      console.error('Failed to load seller dashboard:', error);
-      
-      // If seller profile doesn't exist (404), show onboarding modal
       if (apiErrorStatus(error) === 404) {
-        setNeedsOnboarding(true);
-        setShowOnboarding(true);
+        setNoKitchen(true);
         setLoadError(null);
         return;
       }
-      
-      setLoadError(error);
+
+      if (!silent) setLoadError(error);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
+  // A delivered order changes what the kitchen earned as well as its list: both are read again.
+  useLiveRefresh(() => {
+    void loadLiveOrders();
+    void loadDashboard(true);
+  }, {
+    events: ['order:new', 'order:status:update', 'order:item:status:update', 'delivery:assigned'],
+    enabled: isAuthenticated && dashboard?.verificationStatus === 'approved',
+  });
+
+  useEffect(() => {
+    window.addEventListener('seller-orders-updated', loadLiveOrders);
+    window.addEventListener('seller-order-status-changed', loadLiveOrders);
+    return () => {
+      window.removeEventListener('seller-orders-updated', loadLiveOrders);
+      window.removeEventListener('seller-order-status-changed', loadLiveOrders);
+    };
+  }, [loadLiveOrders]);
+
   useEffect(() => {
     if (!isAuthenticated) {
-      router.push(loginUrlHere());
+      router.replace(loginUrlHere());
       return;
     }
 
@@ -201,12 +198,10 @@ function SellerDashboardContent() {
       return;
     }
 
-    // Check if onboarding modal should be shown
-    const onboardingParam = searchParams.get('onboarding');
-    if (onboardingParam === 'true') {
-      setShowOnboarding(true);
-      // Clean URL
-      window.history.replaceState({}, '', '/sellers/dashboard');
+    // Sign-up used to open a second, shorter form here: the kitchen application is the one place a kitchen is set up.
+    if (searchParams.get('onboarding') === 'true') {
+      router.replace('/sellers/register');
+      return;
     }
 
     loadDashboard();
@@ -233,432 +228,292 @@ function SellerDashboardContent() {
     }
   };
 
-  const handleOnboardingComplete = () => {
-    setShowOnboarding(false);
-    setNeedsOnboarding(false);
-    loadDashboard();
-    showToast(t('dash.onboardingDone'), 'success');
-  };
-
-  const handleOnboardingClose = async () => {
-    if (needsOnboarding) {
-      // If they haven't completed onboarding, show a warning
-      if ((await confirmDialog({ message: t('dash.onboardingCloseConfirm'), variant: 'warning' }))) {
-        setShowOnboarding(false);
-        router.push('/products');
-      }
-    } else {
-      setShowOnboarding(false);
-    }
-  };
-
-  const getStatusColor = (status: string) => 'bg-gray-100 text-gray-800';
-
-  const getVerificationBadge = (status: string) => {
-    if (status === 'approved') {
-      return <span className="px-3 py-1 bg-gray-200 text-gray-800 text-xs font-medium rounded-full">{t('dash.badgeApproved')}</span>;
-    } else if (status === 'pending') {
-      return <span className="px-3 py-1 bg-gray-100 text-gray-700 text-xs font-medium rounded-full">{t('dash.badgePending')}</span>;
-    } else if (status === 'rejected') {
-      return <span className="px-3 py-1 bg-gray-200 text-gray-700 text-xs font-medium rounded-full">{t('dash.badgeRejected')}</span>;
-    }
-    return null;
-  };
-
   if (!isAuthenticated) {
     return null;
   }
 
   if (loading) {
     return (
-      <DashboardLayout
-        title={t('dash.title')}
-        subtitle={t('dash.loadingSubtitle')}
-        sidebarItems={sidebarItems}
-        userType="seller"
-      >
-        <div className="flex items-center justify-center h-64">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-600"></div>
-        </div>
+      <DashboardLayout title={t('dash.title')} sidebarItems={sidebarItems} userType="seller">
+        <Spinner label={tc('loading')} />
       </DashboardLayout>
     );
   }
 
   if (!dashboard && loadError) {
     return (
-      <DashboardLayout title={t('dash.title')} subtitle={t('dash.loadingSubtitle')} sidebarItems={sidebarItems} userType="seller">
-        <LoadError error={loadError} onRetry={loadDashboard} title={t('dash.loadFailed')} />
+      <DashboardLayout title={t('dash.title')} sidebarItems={sidebarItems} userType="seller">
+        <LoadError error={loadError} onRetry={() => loadDashboard()} title={t('dash.loadFailed')} />
       </DashboardLayout>
     );
   }
 
-  if (!dashboard && !loading) {
+  if (!dashboard) {
     return (
-      <>
-        <SellerOnboardingModal
-          isOpen={showOnboarding}
-          onClose={handleOnboardingClose}
-          onComplete={handleOnboardingComplete}
-        />
-        <DashboardLayout
-          title={t('dash.title')}
-          subtitle={t('dash.registerSubtitle')}
-          sidebarItems={sidebarItems}
-          userType="seller"
-        >
-          <div className="text-center py-12">
-            <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-6">
-              <svg className="w-12 h-12 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
-              </svg>
-            </div>
-            <h3 className="text-xl font-bold text-gray-900 mb-2">{t('dash.completeProfileTitle')}</h3>
-            <p className="text-gray-600 mb-6 max-w-md mx-auto">
-              {t('dash.completeProfileBody')}
-            </p>
-            <Button 
-              onClick={() => setShowOnboarding(true)}
-              className="bg-gray-700 hover:bg-gray-800 text-white px-8 py-3"
-            >
-              {t('dash.startRegistration')}
-            </Button>
-          </div>
-        </DashboardLayout>
-      </>
-    );
-  }
-
-  return (
-    <>
-      {/* Onboarding Modal - can be triggered manually */}
-      <SellerOnboardingModal
-        isOpen={showOnboarding}
-        onClose={handleOnboardingClose}
-        onComplete={handleOnboardingComplete}
-      />
-      
-      <DashboardLayout
-        title={t('dash.title')}
-        subtitle={t('dash.welcome', { name: `${dashboard?.businessName || t('dash.sellerFallback')}${dashboard?.businessNameUrdu ? ` (${dashboard.businessNameUrdu})` : ''}` })}
-        sidebarItems={sidebarItems}
-        userType="seller"
-      >
-        {dashboard?.verificationStatus === 'approved' && (
-          <PushPrompt text={t('dash.pushText')} />
-        )}
-        {/* Verification Status / Rejection Banner */}
-        {dashboard && dashboard.verificationStatus === 'rejected' && (
-          <div className="mb-6 bg-rose-50 border border-rose-200 rounded-2xl p-5 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="w-6 h-6 rounded-full bg-rose-500 text-white flex items-center justify-center text-xs font-bold">✕</span>
-                <h3 className="text-base font-bold text-rose-900">{t('dash.rejectedTitle')}</h3>
-              </div>
-              <p className="text-sm text-rose-700 mt-1 font-medium">
-                <span className="font-bold">{t('dash.reasonLabel')}</span> {dashboard.rejectionReason || t('dash.rejectedFallback')}
-              </p>
-            </div>
+      <DashboardLayout title={t('dash.title')} subtitle={t('dash.registerSubtitle')} sidebarItems={sidebarItems} userType="seller">
+        {noKitchen && (
+          <div className="max-w-md py-10">
+            <h2 className="text-lg font-semibold text-ink">{t('dash.completeProfileTitle')}</h2>
+            <p className="text-sm text-muted mt-1 mb-5">{t('dash.completeProfileBody')}</p>
             <Link href="/sellers/register">
-              <Button className="bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs px-5 py-2.5 rounded-xl shadow-sm">
-                {t('dash.fixResubmit')}
-              </Button>
+              <Button>{t('dash.startRegistration')}</Button>
             </Link>
           </div>
         )}
+      </DashboardLayout>
+    );
+  }
 
-        {dashboard && dashboard.verificationStatus === 'pending' && (
-          <div className="mb-6 bg-amber-50 border border-amber-200 rounded-2xl p-5 shadow-sm flex items-center justify-between">
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="w-6 h-6 rounded-full bg-amber-600 text-white flex items-center justify-center text-xs font-bold">⏳</span>
-                <h3 className="text-base font-bold text-amber-900">{t('dash.reviewTitle')}</h3>
+  const { overview } = dashboard;
+  // Until the live orders are read, the dashboard's own count of orders to accept or cook.
+  const needYou = needYouCount ?? liveOrders?.length ?? overview.pendingOrders ?? 0;
+  const shownOrders = (liveOrders ?? []).slice(0, SHOWN_ORDERS);
+  const moreOrders = liveOrders ? needYou - shownOrders.length : 0;
+  const newCount = (liveOrders ?? []).filter((o) => o.order.orderStatus === 'pending' || o.order.orderStatus === 'confirmed').length;
+  const approved = dashboard.verificationStatus === 'approved';
+  const missing = dashboard.applicationMissing ?? [];
+  const missingWords = missing.map((gap) => (gap in GAP_KEYS ? t(GAP_KEYS[gap as keyof typeof GAP_KEYS]) : gap)).join(', ');
+  const awaitingRiderCash = overview.awaitingRiderCash ?? 0;
+  const kitchenName = `${dashboard.businessName}${dashboard.businessNameUrdu ? ` (${dashboard.businessNameUrdu})` : ''}`;
+  const subtitle = [kitchenName, dashboard.primaryCommunityName].filter(Boolean).join(', ');
+
+  return (
+    <>
+      <DashboardLayout title={t('dash.title')} subtitle={subtitle} sidebarItems={sidebarItems} userType="seller">
+        <div className="max-w-6xl">
+          {approved && <PushPrompt text={t('dash.pushText')} />}
+
+          {dashboard.verificationStatus === 'rejected' && (
+            <div className="mb-6 rounded-xl bg-red-50 px-4 py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-red-700">{t('dash.rejectedTitle')}</p>
+                <p className="text-sm text-ink mt-0.5">
+                  {t('dash.reasonLabel')} {dashboard.rejectionReason || t('dash.rejectedFallback')}
+                </p>
               </div>
-              <p className="text-sm text-amber-700 mt-1 font-medium">
-                {t('dash.reviewBody')}
-              </p>
+              <Link href="/sellers/register" className="shrink-0">
+                <Button className="w-full sm:w-auto">{t('dash.fixResubmit')}</Button>
+              </Link>
             </div>
-            {getVerificationBadge('pending')}
-          </div>
-        )}
+          )}
 
-        {/* Top Control Bar: Store Status & Quick Actions */}
-        {dashboard && dashboard.verificationStatus === 'approved' && (
-          <div className="mb-6 bg-white border border-slate-200/90 rounded-2xl p-4 sm:p-5 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-            <div className="flex flex-wrap items-center gap-2.5">
+          {dashboard.verificationStatus === 'pending' && missing.length > 0 && (
+            <div className="mb-6 rounded-xl bg-accent-soft text-accent-soft-ink px-4 py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold">{t('dash.incompleteTitle')}</p>
+                <p className="text-sm mt-0.5">{t('dash.incompleteBody', { items: missingWords })}</p>
+              </div>
+              <Link href="/sellers/register" className="shrink-0">
+                <Button className="w-full sm:w-auto">{t('dash.finishApplication')}</Button>
+              </Link>
+            </div>
+          )}
+
+          {dashboard.verificationStatus === 'pending' && missing.length === 0 && (
+            <div className="mb-6 rounded-xl bg-accent-soft text-accent-soft-ink px-4 py-3.5">
+              <p className="text-sm font-semibold">{t('dash.reviewTitle')}</p>
+              <p className="text-sm mt-0.5">{t('dash.reviewBody')}</p>
+            </div>
+          )}
+
+          {!approved && (
+            <section className="max-w-xl space-y-2 text-sm text-muted">
+              <p>{t('dash.notLiveYet')}</p>
+              <p>{t('dash.addDishesMeanwhile')}</p>
+              <div className="flex flex-wrap gap-x-5 pt-1">
+                <Link href="/sellers/products/new" className="inline-flex items-center gap-1.5 min-h-11 font-semibold text-brand-ink hover:underline">
+                  <Plus className="w-4 h-4" aria-hidden="true" />
+                  {t('dash.addFoodItem')}
+                </Link>
+                <Link href="/sellers/products" className="inline-flex items-center min-h-11 font-semibold text-brand-ink hover:underline">
+                  {t('dash.manage')}
+                </Link>
+              </div>
+            </section>
+          )}
+
+          {approved && (
+            <section className="flex items-center justify-between gap-4 pb-5 mb-6 border-b border-line">
+              <div className="min-w-0">
+                <p className={`text-[15px] font-semibold ${dashboard.isStoreOpen ? 'text-ink' : 'text-muted'}`}>
+                  {dashboard.isStoreOpen ? t('dash.kitchenOpen') : t('dash.kitchenClosed')}
+                </p>
+                <p className="text-sm text-muted mt-0.5">{dashboard.isStoreOpen ? t('dash.openHint') : t('dash.closedHint')}</p>
+              </div>
               <button
                 type="button"
                 id="store-live-toggle-btn"
+                role="switch"
+                aria-checked={!!dashboard.isStoreOpen}
+                aria-label={dashboard.isStoreOpen ? t('dash.kitchenOpen') : t('dash.kitchenClosed')}
                 onClick={handleToggleStoreLive}
                 disabled={togglingLive}
-                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl font-bold text-xs transition-colors cursor-pointer ${
-                  dashboard.isStoreOpen
-                    ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-                    : 'bg-slate-100 text-slate-700 border border-slate-200'
+                className="shrink-0 flex items-center min-h-11 px-1 rounded-full disabled:opacity-60 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-brand/40"
+              >
+                <span aria-hidden="true" className={`relative w-12 h-7 rounded-full transition-colors ${dashboard.isStoreOpen ? 'bg-brand-600' : 'bg-line-strong'}`}>
+                  <span className={`absolute top-1 w-5 h-5 rounded-full bg-white shadow-sm transition-[inset-inline-start] ${dashboard.isStoreOpen ? 'start-6' : 'start-1'}`} />
+                </span>
+              </button>
+            </section>
+          )}
+
+          {approved && <NewOrderAlertSlot />}
+
+          {approved && (
+          <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_300px] gap-x-10 gap-y-8">
+            {/* What needs the cook now: the one raised surface on this screen */}
+            <article className="min-w-0 self-start rounded-[20px] bg-surface border border-line shadow-[var(--shadow-card)] overflow-hidden">
+              <header className="px-5 pt-5 pb-4">
+                <h2 className="text-lg font-semibold text-ink">
+                  {needYou === 0 ? t('dash.nothingToCook') : needYou === 1 ? t('dash.needYouOne') : t('dash.needYou', { count: needYou })}
+                </h2>
+                {needYou === 0 && <p className="text-sm text-muted mt-0.5">{t('dash.allQuiet')}</p>}
+              </header>
+
+              {shownOrders.length > 0 && (
+                <ul className="border-t border-line divide-y divide-line">
+                  {shownOrders.map(({ order, items }) => {
+                    const isNew = order.orderStatus === 'pending' || order.orderStatus === 'confirmed';
+                    return (
+                      <li key={order.id}>
+                        <Link
+                          href={`/sellers/orders/${order.id}`}
+                          className="flex items-center gap-3 sm:gap-4 px-5 py-3.5 min-h-11 hover:bg-raised focus-visible:outline-none focus-visible:bg-raised"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <p dir="auto" className="text-[15px] text-ink truncate rtl:text-right">
+                              {items.map((i, n) => (
+                                <span key={i.id}>
+                                  {n > 0 && ', '}
+                                  <bdi>{i.quantity} × {i.product?.name ?? ''}</bdi>
+                                </span>
+                              ))}
+                            </p>
+                            <p className="text-sm text-muted">
+                              {order.orderStatus === 'preparing' && order.estimatedDeliveryAt ? (
+                                <ReadyBy at={order.estimatedDeliveryAt} now={now} />
+                              ) : order.orderStatus === 'ready' && order.readyAt ? (
+                                readyFor(order.readyAt, now)
+                              ) : (
+                                age(order.createdAt, now)
+                              )}
+                              , <OrderNo number={order.orderNumber} />
+                            </p>
+                          </div>
+                          <OrderStatusPill
+                            status={order.orderStatus}
+                            label={isNew ? t('statusNew') : kitchenStatusLabel(order.orderStatus, t, tc)}
+                            className="shrink-0"
+                          />
+                          <ChevronRight className="w-4 h-4 text-muted shrink-0 rtl:-scale-x-100" aria-hidden="true" />
+                        </Link>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+
+              <Link
+                href="/sellers/orders"
+                className={`flex items-center justify-between gap-3 min-h-12 px-5 border-t border-line text-sm font-semibold hover:bg-raised focus-visible:outline-none focus-visible:bg-raised ${
+                  newCount > 0 ? 'bg-brand text-on-brand hover:bg-brand-500' : 'text-brand-ink'
                 }`}
               >
-                <span className={`w-2 h-2 rounded-full ${dashboard.isStoreOpen ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`} />
-                <span>{dashboard.isStoreOpen ? t('dash.kitchenOpen') : t('dash.kitchenClosed')}</span>
-              </button>
+                <span>
+                  {moreOrders > 0 ? t('dash.moreActive', { count: moreOrders }) : t('dash.viewAll')}
+                </span>
+                <ChevronRight className="w-4 h-4 shrink-0 rtl:-scale-x-100" aria-hidden="true" />
+              </Link>
+            </article>
 
-              {dashboard.primaryCommunityName && (
-                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-700 text-xs font-medium">
-                  <span className="text-brand-ink">📍</span>
-                  <span>{dashboard.primaryCommunityName}</span>
+            <aside className="space-y-7 lg:pt-1">
+              <section>
+                <h3 className="text-sm font-semibold text-ink">{t('dash.today')}</h3>
+                <dl className="mt-3 grid grid-cols-2 gap-4">
+                  <div>
+                    <dt className="text-sm text-muted">{t('dash.todayEarnings')}</dt>
+                    <dd className="text-2xl font-semibold text-ink tabular-nums">{formatPrice(overview.todayEarnings ?? 0)}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-sm text-muted">{t('dash.ordersToday')}</dt>
+                    <dd className="text-2xl font-semibold text-ink tabular-nums">{overview.todayOrders ?? 0}</dd>
+                  </div>
+                </dl>
+                <p className="text-sm text-muted mt-2">{t('dash.earnedMeans')}</p>
+              </section>
+
+              <section className="pt-6 border-t border-line">
+                <h3 className="text-sm font-semibold text-ink">{t('dash.money')}</h3>
+                <dl className="mt-3 grid grid-cols-2 gap-4">
+                  <div>
+                    <dt className="text-sm text-muted">{t('dash.comingToYouLabel')}</dt>
+                    <dd className="text-2xl font-semibold text-ink tabular-nums">{formatPrice((overview.pendingPayout ?? 0) + awaitingRiderCash)}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-sm text-muted">{t('dash.earnedSoFar')}</dt>
+                    <dd className="text-[15px] text-ink tabular-nums mt-1.5">{formatPrice(overview.totalEarnings ?? 0)}</dd>
+                  </div>
+                </dl>
+                {awaitingRiderCash > 0 && (
+                  <p className="text-sm text-muted mt-1">
+                    {awaitingRiderCash >= (overview.pendingPayout ?? 0) + awaitingRiderCash
+                      ? t('dash.allAfterRiderCash')
+                      : t('dash.afterRiderCash', { amount: formatPrice(awaitingRiderCash) })}
+                  </p>
+                )}
+                {dashboard.hasPayoutAccount === false && (
+                  <p className="mt-3 rounded-lg bg-accent-soft px-3 py-2 text-sm text-accent-soft-ink">
+                    {t('dash.noPayoutAccount')}{' '}
+                    <Link href="/sellers/settings#payout-heading" className="font-semibold underline underline-offset-2">
+                      {t('dash.addPayoutAccount')}
+                    </Link>
+                  </p>
+                )}
+                <Link href="/sellers/earnings" className="inline-flex items-center min-h-11 text-sm font-semibold text-brand-ink hover:underline">
+                  {t('dash.earningsLink')}
+                </Link>
+              </section>
+
+              <section className="pt-6 border-t border-line">
+                <div className="flex items-baseline justify-between gap-3">
+                  <h3 className="text-sm font-semibold text-ink">{t('dash.menu')}</h3>
+                  <Link href="/sellers/products" className="inline-flex items-center min-h-11 text-sm font-semibold text-brand-ink hover:underline">
+                    {t('dash.manage')}
+                  </Link>
                 </div>
-              )}
-            </div>
+                <p className="text-sm text-muted mt-2">{t('dash.menuDishes', { count: overview.totalProducts ?? 0 })}</p>
 
-            <div className="flex items-center gap-2">
-              <Link href="/sellers/products/new">
-                <Button className="bg-brand hover:bg-brand-500 text-on-brand font-bold text-xs rounded-xl px-4 py-2 shadow-xs">
+                {dashboard.lowStockProducts.length === 0 ? (
+                  <p className="text-sm text-muted mt-1">{t('dash.allStocked')}</p>
+                ) : (
+                  <>
+                    <h4 className="text-sm text-muted mt-4">{t('dash.lowStock')}</h4>
+                    <ul className="mt-1 divide-y divide-line">
+                      {dashboard.lowStockProducts.map((product) => (
+                        <li key={product.id}>
+                          <Link
+                            href={`/sellers/products/${product.id}/edit`}
+                            className="flex items-center justify-between gap-3 min-h-11 py-2 text-sm hover:underline"
+                          >
+                            <span className="text-ink truncate">{product.name}</span>
+                            <span className="shrink-0 text-accent-soft-ink font-medium tabular-nums">{t('dash.onlyLeft', { count: product.stockQuantity })}</span>
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                )}
+
+                <Link href="/sellers/products/new" className="mt-2 inline-flex items-center gap-1.5 min-h-11 text-sm font-semibold text-brand-ink hover:underline">
+                  <Plus className="w-4 h-4" aria-hidden="true" />
                   {t('dash.addFoodItem')}
-                </Button>
-              </Link>
-              <Link href="/sellers/orders">
-                <Button variant="outline" className="font-semibold text-xs rounded-xl px-4 py-2 border-slate-200 text-slate-700">
-                  {t('dash.kitchenOrders')}
-                </Button>
-              </Link>
-            </div>
+                </Link>
+              </section>
+            </aside>
           </div>
-        )}
-
-        {/* Stats Cards */}
-        {dashboard && (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-          {/* Today's Sales */}
-          <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/90 shadow-xs hover:border-slate-300 transition-colors">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">{t('dash.todayEarnings')}</p>
-                <p className="text-xl sm:text-2xl font-black text-slate-900">{formatPrice(dashboard.overview.todayEarnings ?? 0)}</p>
-                <p className="text-[11px] text-slate-500 mt-1">{t('dash.ordersToday', { count: dashboard.overview.todayOrders ?? 0 })}</p>
-              </div>
-              <div className="w-10 h-10 bg-brand-50 text-brand-ink rounded-xl flex items-center justify-center font-bold text-base">
-                ₨
-              </div>
-            </div>
-          </div>
-
-          {/* In Kitchen */}
-          <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/90 shadow-xs hover:border-slate-300 transition-colors">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">{t('dash.inKitchen')}</p>
-                <p className="text-xl sm:text-2xl font-black text-slate-900">{dashboard.overview.activeOrders ?? 0}</p>
-                <p className="text-[11px] text-purple-600 font-semibold mt-1">{t('dash.activeOrders')}</p>
-              </div>
-              <div className="w-10 h-10 bg-purple-50 text-purple-600 rounded-xl flex items-center justify-center">
-                {Icons.orders}
-              </div>
-            </div>
-          </div>
-
-          {/* Menu Items */}
-          <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/90 shadow-xs hover:border-slate-300 transition-colors">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">{t('dash.menuDishes')}</p>
-                <p className="text-xl sm:text-2xl font-black text-slate-900">{dashboard.overview.totalProducts ?? 0}</p>
-                <p className="text-[11px] text-slate-500 mt-1">{t('dash.activeDishes')}</p>
-              </div>
-              <div className="w-10 h-10 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center">
-                {Icons.products}
-              </div>
-            </div>
-          </div>
-
-          {/* Net Earnings */}
-          <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/90 shadow-xs hover:border-slate-300 transition-colors">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">{t('dash.totalEarnings')}</p>
-                <p className="text-xl sm:text-2xl font-black text-emerald-700">{formatPrice(dashboard.overview.totalEarnings ?? 0)}</p>
-                <p className="text-[11px] text-slate-500 mt-1">{t('dash.pendingAmount', { amount: formatPrice(dashboard.overview.pendingPayout ?? 0) })}</p>
-              </div>
-              <div className="w-10 h-10 bg-emerald-50 text-emerald-700 rounded-xl flex items-center justify-center">
-                {Icons.earnings}
-              </div>
-            </div>
-          </div>
+          )}
         </div>
-        )}
-
-      {dashboard && (
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Recent Orders - Enhanced */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="px-6 py-4 bg-gradient-to-r from-gray-50 to-white border-b border-gray-100">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-gray-100 rounded-xl flex items-center justify-center text-gray-600">
-                  {Icons.orders}
-                </div>
-                <h2 className="text-lg font-bold text-gray-900">{t('dash.recentOrders')}</h2>
-              </div>
-              <Link href="/sellers/orders">
-                <Button variant="outline" size="sm" className="text-sm hover:bg-gray-50">
-                  {t('dash.viewAll')}
-                </Button>
-              </Link>
-            </div>
-          </div>
-
-          <div className="p-6">
-            {dashboard.recentOrders.length === 0 ? (
-              <div className="text-center py-12">
-                <div className="text-gray-300 mb-4">{Icons.package}</div>
-                <p className="text-gray-500 font-medium">{t('dash.noOrders')}</p>
-                <p className="text-gray-500 text-sm mt-1">{t('dash.noOrdersHint')}</p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {dashboard.recentOrders.map((order, index) => (
-                  <Link
-                    key={index}
-                    href={`/sellers/orders/${order.orderId}`}
-                    className="block border border-gray-100 rounded-xl p-4 hover:shadow-md hover:border-gray-200 transition-all duration-200 bg-gray-50/50 hover:bg-white"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <h3 className="font-semibold text-gray-900"><span data-ltr>#{order.orderNumber}</span></h3>
-                          <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${getStatusColor(order.orderStatus)}`}>
-                            {kitchenStatusLabel(order.orderStatus, t, tc)}
-                          </span>
-                        </div>
-                        <p className="text-sm text-gray-600">{order.productName} × {order.quantity}</p>
-                        <p className="text-sm font-bold text-gray-900 mt-1">{formatPrice(order.totalPrice)}</p>
-                      </div>
-                      <svg className="w-5 h-5 text-gray-500 rtl:-scale-x-100" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                      </svg>
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Low Stock Products - Enhanced */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="px-6 py-4 bg-gradient-to-r from-gray-50 to-white border-b border-gray-100">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-gray-100 rounded-xl flex items-center justify-center text-gray-600">
-                  {Icons.warning}
-                </div>
-                <h2 className="text-lg font-bold text-gray-900">{t('dash.lowStock')}</h2>
-              </div>
-              <Link href="/sellers/products">
-                <Button variant="outline" size="sm" className="text-sm hover:bg-gray-50">
-                  {t('dash.manage')}
-                </Button>
-              </Link>
-            </div>
-          </div>
-
-          <div className="p-6">
-            {dashboard.lowStockProducts.length === 0 ? (
-              <div className="text-center py-12">
-                <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4 text-gray-600">
-                  {Icons.check}
-                </div>
-                <p className="text-gray-500 font-medium">{t('dash.allStocked')}</p>
-                <p className="text-gray-500 text-sm mt-1">{t('dash.allStockedHint')}</p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {dashboard.lowStockProducts.map((product) => (
-                  <Link
-                    key={product.id}
-                    href={`/sellers/products/${product.id}/edit`}
-                    className="flex items-center gap-4 border border-gray-100 rounded-xl p-4 hover:shadow-md hover:border-gray-200 transition-all duration-200 bg-gray-50/50 hover:bg-white"
-                  >
-                    <div className="w-14 h-14 bg-gray-100 rounded-xl flex items-center justify-center overflow-hidden flex-shrink-0">
-                      {product.images && product.images[0] ? (
-                        <img src={product.images[0].imageUrl} alt={product.name} className="w-full h-full object-cover" />
-                      ) : (
-                        <div className="text-gray-500">{Icons.food}</div>
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h3 className="font-semibold text-gray-900 truncate">{product.name}</h3>
-                      <p className="text-sm text-gray-700 font-medium flex items-center gap-1">
-                        <svg className="w-4 h-4 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                        </svg>
-                        {t('dash.onlyLeft', { count: product.stockQuantity })}
-                      </p>
-                    </div>
-                    <Button size="sm" className="bg-gray-700 hover:bg-gray-800 text-white">
-                      {t('dash.restock')}
-                    </Button>
-                  </Link>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-      )}
-
-      {/* Quick Actions - Enhanced */}
-      <div className="mt-8 bg-white rounded-2xl shadow-sm p-6 border border-gray-100">
-        <h2 className="text-lg font-bold text-gray-900 mb-5">{t('dash.quickActions')}</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Link href="/sellers/products/new" className="group">
-            <div className="flex items-center gap-4 p-4 rounded-xl border-2 border-dashed border-gray-200 hover:border-gray-400 hover:bg-gray-50 transition-all duration-200">
-              <div className="w-12 h-12 bg-gray-100 rounded-xl flex items-center justify-center text-gray-600 group-hover:bg-gray-600 group-hover:text-white transition-colors">
-                {Icons.add}
-              </div>
-              <div>
-                <p className="font-semibold text-gray-900">{t('dash.addProduct')}</p>
-                <p className="text-sm text-gray-500">{t('dash.addProductHint')}</p>
-              </div>
-            </div>
-          </Link>
-          
-          <Link href="/sellers/orders" className="group">
-            <div className="flex items-center gap-4 p-4 rounded-xl border-2 border-dashed border-gray-200 hover:border-gray-400 hover:bg-gray-50 transition-all duration-200">
-              <div className="w-12 h-12 bg-gray-100 rounded-xl flex items-center justify-center text-gray-600 group-hover:bg-gray-600 group-hover:text-white transition-colors">
-                {Icons.view}
-              </div>
-              <div>
-                <p className="font-semibold text-gray-900">{t('dash.viewOrders')}</p>
-                <p className="text-sm text-gray-500">{t('dash.viewOrdersHint')}</p>
-              </div>
-            </div>
-          </Link>
-          
-          <Link href="/sellers/earnings" className="group">
-            <div className="flex items-center gap-4 p-4 rounded-xl border-2 border-dashed border-gray-200 hover:border-gray-400 hover:bg-gray-50 transition-all duration-200">
-              <div className="w-12 h-12 bg-gray-100 rounded-xl flex items-center justify-center text-gray-600 group-hover:bg-gray-600 group-hover:text-white transition-colors">
-                {Icons.money}
-              </div>
-              <div>
-                <p className="font-semibold text-gray-900">{t('dash.requestPayout')}</p>
-                <p className="text-sm text-gray-500">{t('dash.requestPayoutHint')}</p>
-              </div>
-            </div>
-          </Link>
-          
-          <Link href="/sellers/analytics" className="group">
-            <div className="flex items-center gap-4 p-4 rounded-xl border-2 border-dashed border-gray-200 hover:border-gray-400 hover:bg-gray-50 transition-all duration-200">
-              <div className="w-12 h-12 bg-gray-100 rounded-xl flex items-center justify-center text-gray-600 group-hover:bg-gray-600 group-hover:text-white transition-colors">
-                {Icons.analytics}
-              </div>
-              <div>
-                <p className="font-semibold text-gray-900">{t('dash.viewAnalytics')}</p>
-                <p className="text-sm text-gray-500">{t('dash.viewAnalyticsHint')}</p>
-              </div>
-            </div>
-          </Link>
-        </div>
-      </div>
       </DashboardLayout>
     </>
   );
 }
-

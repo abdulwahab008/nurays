@@ -10,18 +10,37 @@ export function isPasswordRequired(error: unknown): boolean {
   return code === 'PASSWORD_REQUIRED';
 }
 
+/** Whether an API error says the password given was wrong. */
+export function isWrongPassword(error: unknown): boolean {
+  const code = (error as { response?: { data?: { error?: { code?: unknown } } } } | null | undefined)?.response?.data?.error?.code;
+  return code === 'INVALID_PASSWORD';
+}
+
+/** How many times a wrong password is asked for again before the failure goes back to the page (the server also locks out). */
+export const PASSWORD_TRIES = 3;
+
 /**
  * `send` makes the request (with the password when it has one). When the API asks for the password, `ask` puts the question to the
- * person; their answer is sent along in a second request. Resolves undefined when they cancel the question: nothing was done.
- * Every other failure is thrown, a wrong password included (the person starts again).
+ * person; their answer is sent along in a second request. A wrong password asks again (`ask(true)`), so the person does not have to
+ * start over, up to PASSWORD_TRIES times. Resolves undefined when they cancel the question: nothing was done. Every other failure
+ * is thrown, as is the last wrong password.
  */
-export async function sendAskingForPassword<T>(send: (password?: string) => Promise<T>, ask: () => Promise<string | null>): Promise<T | undefined> {
+export async function sendAskingForPassword<T>(
+  send: (password?: string) => Promise<T>,
+  ask: (wrongBefore: boolean) => Promise<string | null>,
+): Promise<T | undefined> {
   try {
     return await send();
   } catch (error) {
     if (!isPasswordRequired(error)) throw error;
-    const password = await ask();
+  }
+  for (let attempt = 1; ; attempt++) {
+    const password = await ask(attempt > 1);
     if (!password) return undefined;
-    return send(password);
+    try {
+      return await send(password);
+    } catch (error) {
+      if (!isWrongPassword(error) || attempt >= PASSWORD_TRIES) throw error;
+    }
   }
 }

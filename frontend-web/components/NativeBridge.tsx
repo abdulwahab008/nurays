@@ -2,10 +2,11 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { mirroredTokenStore, nativePlugins, notificationPath, secureKV, syncTokens, appPathFromUrl, type NativeWindow } from '@/lib/native-shell';
+import { mirroredTokenStore, nativePlugins, notificationPath, removeListener, secureKV, syncTokens, appPathFromUrl, type Listening, type NativeWindow } from '@/lib/native-shell';
 import { setTokenStore, tokenStore } from '@/lib/token-store';
 import { apiClient, type ApiResponse } from '@/lib/api-client';
 import { useAuthStore, type User } from '@/lib/store/auth-store';
+import { canGoBack, trackHistoryDepth } from '@/lib/native-back';
 
 /**
  * Inside the Nuray store app (mobile/), connects the website to the phone; in a browser it does nothing.
@@ -39,8 +40,9 @@ export function NativeBridge() {
         .catch(() => undefined);
     }
 
-    const listeners: Array<Promise<{ remove(): Promise<void> }>> = [];
+    const listeners: Listening[] = [];
     const App = plugins.App;
+    const untrackHistory = App ? trackHistoryDepth(window.history) : undefined;
     if (App) {
       listeners.push(
         App.addListener('appUrlOpen', ({ url }) => {
@@ -49,8 +51,8 @@ export function NativeBridge() {
         })
       );
       listeners.push(
-        App.addListener('backButton', ({ canGoBack }) => {
-          if (canGoBack) window.history.back();
+        App.addListener('backButton', (event) => {
+          if (canGoBack(event.canGoBack, window.history.state)) window.history.back();
           else void App.exitApp();
         })
       );
@@ -69,7 +71,8 @@ export function NativeBridge() {
     void plugins.SplashScreen?.hide().catch(() => undefined);
 
     return () => {
-      for (const handle of listeners) void handle.then((h) => h.remove()).catch(() => undefined);
+      listeners.forEach(removeListener);
+      untrackHistory?.();
     };
   }, [router]);
 

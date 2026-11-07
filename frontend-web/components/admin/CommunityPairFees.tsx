@@ -20,7 +20,7 @@ interface PairFee {
   communityB: Place;
 }
 
-const field = 'w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-green-500';
+const field = 'nuray-input w-full text-sm';
 
 /**
  * Nuray delivery prices between two communities. A pair price replaces the distance formula
@@ -67,8 +67,8 @@ export function CommunityPairFees({ communities }: { communities: Place[] }) {
 
   const add = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!first || !second || fee.trim() === '') return;
-    if (await save(first, second, Number(fee))) {
+    if (!valid) return;
+    if (await save(first, second, feeNumber)) {
       setFirst('');
       setSecond('');
       setFee('');
@@ -88,22 +88,47 @@ export function CommunityPairFees({ communities }: { communities: Place[] }) {
     }
   };
 
+  const feeNumber = Number(fee);
+  const valid = !!first && !!second && first !== second && fee.trim() !== '' && Number.isFinite(feeNumber) && feeNumber >= 0 && feeNumber <= 5000;
   const sorted = [...communities].sort((a, b) => a.city.localeCompare(b.city) || a.name.localeCompare(b.name));
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-4" data-testid="pair-fees">
+    <section className="border-t border-line pt-6 space-y-4" data-testid="pair-fees">
       <div>
-        <h2 className="font-bold text-gray-900">Prices between two communities</h2>
-        <p className="text-sm text-gray-500 mt-1">
+        <h2 className="text-sm font-semibold text-ink">Prices between two communities</h2>
+        <p className="text-sm text-muted mt-1">
           When a Nuray rider delivers between these two communities (either way), the customer pays this price instead of
           the distance-based fee. Trips between any other communities are still priced by distance.
         </p>
       </div>
 
+      {loadError && pairs.length === 0 ? (
+        <LoadError compact error={loadError} onRetry={load} title="We couldn't load the pair prices" />
+      ) : pairs.length === 0 ? (
+        <p className="text-sm text-muted">No pair prices yet: every trip between communities is priced by distance.</p>
+      ) : (
+        <ul className="divide-y divide-line border-y border-line">
+          {pairs.map((p) => (
+            <li key={p.id} className="flex items-center gap-3 py-2">
+              <div className="min-w-0 flex-1">
+                <p className="text-sm text-ink">
+                  {p.communityA.name} <span className="text-muted">and</span> {p.communityB.name}
+                </p>
+                <p className="text-xs text-muted">{p.communityA.city === p.communityB.city ? p.communityA.city : `${p.communityA.city} / ${p.communityB.city}`}</p>
+              </div>
+              <span className="text-sm font-semibold text-ink tabular-nums">{formatPrice(p.fee)}</span>
+              <Button variant="outline" disabled={busy} onClick={() => remove(p.id)}>
+                Remove
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
+
       <form onSubmit={add} className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_8rem_auto] gap-3 items-end">
         <div>
-          <label htmlFor="pair-first" className="block text-xs font-medium text-gray-600 mb-1">Community</label>
-          <select id="pair-first" value={first} onChange={(e) => setFirst(e.target.value)} className={field} required>
+          <label htmlFor="pair-first" className="block text-xs font-medium text-muted mb-1">Community</label>
+          <select id="pair-first" value={first} onChange={(e) => { setFirst(e.target.value); if (e.target.value === second) setSecond(''); }} className={field} required>
             <option value="">Choose…</option>
             {sorted.map((c) => (
               <option key={c.id} value={c.id}>{c.name} ({c.city})</option>
@@ -111,7 +136,7 @@ export function CommunityPairFees({ communities }: { communities: Place[] }) {
           </select>
         </div>
         <div>
-          <label htmlFor="pair-second" className="block text-xs font-medium text-gray-600 mb-1">and community</label>
+          <label htmlFor="pair-second" className="block text-xs font-medium text-muted mb-1">and community</label>
           <select id="pair-second" value={second} onChange={(e) => setSecond(e.target.value)} className={field} required>
             <option value="">Choose…</option>
             {sorted.filter((c) => c.id !== first).map((c) => (
@@ -120,45 +145,13 @@ export function CommunityPairFees({ communities }: { communities: Place[] }) {
           </select>
         </div>
         <div>
-          <label htmlFor="pair-fee" className="block text-xs font-medium text-gray-600 mb-1">Price (Rs)</label>
+          <label htmlFor="pair-fee" className="block text-xs font-medium text-muted mb-1">Price (Rs)</label>
           <input id="pair-fee" type="number" min={0} max={5000} step="1" value={fee} onChange={(e) => setFee(e.target.value)} className={field} required />
         </div>
-        <Button type="submit" disabled={busy} className="bg-green-600 hover:bg-green-700">
+        <Button type="submit" disabled={busy || !valid}>
           Save price
         </Button>
       </form>
-
-      {loadError && pairs.length === 0 ? (
-        <LoadError compact error={loadError} onRetry={load} title="We couldn't load the pair prices" />
-      ) : pairs.length === 0 ? (
-        <p className="text-sm text-gray-500">No pair prices yet: every trip between communities is priced by distance.</p>
-      ) : (
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-start text-xs text-gray-500 border-b">
-              <th className="py-2 text-start font-medium">Between</th>
-              <th className="py-2 text-start font-medium">Price</th>
-              <th className="py-2" />
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {pairs.map((p) => (
-              <tr key={p.id}>
-                <td className="py-2.5 text-gray-900">
-                  {p.communityA.name} <span className="text-gray-500">⇄</span> {p.communityB.name}
-                  <span className="text-xs text-gray-500 ms-1">{p.communityA.city === p.communityB.city ? p.communityA.city : `${p.communityA.city} / ${p.communityB.city}`}</span>
-                </td>
-                <td className="py-2.5 font-semibold">{formatPrice(p.fee)}</td>
-                <td className="py-2.5 text-end">
-                  <Button variant="outline" size="sm" disabled={busy} onClick={() => remove(p.id)}>
-                    Remove
-                  </Button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-    </div>
+    </section>
   );
 }

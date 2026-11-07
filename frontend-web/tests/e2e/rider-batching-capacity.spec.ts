@@ -7,9 +7,9 @@ test('Rider 2-Order Capacity Cap & InDrive Corridor Bidding Verification', async
   // 1. Login as rider
   await page.goto('/login');
   await page.getByRole('button', { name: 'Email', exact: true }).click();
-  await page.getByLabel(/Email Address/).fill('rider@nuray.test');
+  await page.getByLabel('Email', { exact: true }).fill('rider@nuray.test');
   await page.getByLabel('Password').fill('Password123!');
-  await page.getByRole('button', { name: 'Login', exact: true }).click();
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
 
   // 2. Expect redirection to rider dashboard
   await expect(page).toHaveURL(/\/riders\/dashboard/, { timeout: 15_000 });

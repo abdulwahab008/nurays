@@ -7,6 +7,8 @@ jest.mock('../src/config/database', () => ({
   __esModule: true,
   default: {
     seller: { findMany: jest.fn(), findFirst: jest.fn() },
+    product: { groupBy: jest.fn().mockResolvedValue([]) },
+    review: { groupBy: jest.fn().mockResolvedValue([]) },
   },
 }));
 

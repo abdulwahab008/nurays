@@ -2,14 +2,13 @@
 
 import { LoadError } from '@/components/ui/LoadError';
 import { CategoryNode, PRODUCT_TYPE_OPTIONS, ProductType, locateCategory } from '@/lib/product-form';
+import { chipClass, labelClass, optionClass } from './fields';
+import { useT } from '@/lib/i18n';
+import { kitchenProductFormMessages } from '@/lib/i18n/messages/kitchen-product-form';
 
 export type GroupedCategories = Record<ProductType, CategoryNode[]>;
 
 export const NO_CATEGORIES: GroupedCategories = { frozen: [], fresh: [], ready_to_eat: [], ready_to_cook: [] };
-
-const Step = ({ n }: { n: number }) => (
-  <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-500 text-white text-xs font-bold me-2">{n}</span>
-);
 
 /**
  * Product type, then category, then subcategory when the category has some. Changing the type
@@ -37,15 +36,14 @@ export default function CategoryPicker({
   const categories = productType ? grouped[productType] || [] : [];
   const parent = categories.find((c) => c.id === parentId) || null;
   const selected = locateCategory(categories, categoryId);
-  const typeOption = PRODUCT_TYPE_OPTIONS.find((t) => t.value === productType);
+  const t = useT(kitchenProductFormMessages);
 
   return (
     <>
-      <div className="mb-6">
-        <label className="block text-sm font-medium text-gray-700 mb-3">
-          <Step n={1} />
-          Product Type <span className="text-red-500">*</span>
-        </label>
+      <div role="group" aria-labelledby="product-type-label">
+        <p id="product-type-label" className={labelClass}>
+          {t('type')}
+        </p>
         <div className="grid grid-cols-2 gap-3">
           {PRODUCT_TYPE_OPTIONS.map((type) => {
             const isSelected = productType === type.value;
@@ -53,18 +51,14 @@ export default function CategoryPicker({
               <button
                 key={type.value}
                 type="button"
+                aria-pressed={isSelected}
                 onClick={() => {
                   if (!isSelected) onChange({ productType: type.value, categoryId: '', parentId: null });
                 }}
-                className={`p-4 rounded-xl text-start transition-all border-2 ${
-                  isSelected ? `${type.selected} shadow-md` : 'bg-gray-50 border-gray-200 hover:border-gray-300'
-                }`}
+                className={optionClass(isSelected)}
               >
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-xl">{type.icon}</span>
-                  <span className="font-semibold text-gray-900">{type.label}</span>
-                </div>
-                <p className="text-xs text-gray-500">{type.description}</p>
+                <span className="block text-[15px] font-semibold text-ink">{t(`ptype.${type.value}`)}</span>
+                <span className="mt-0.5 block text-sm text-muted">{t(`ptype.${type.value}.desc`)}</span>
               </button>
             );
           })}
@@ -72,90 +66,70 @@ export default function CategoryPicker({
       </div>
 
       {productType && (
-        <div className="mb-6">
-          <label className="block text-sm font-medium text-gray-700 mb-3">
-            <Step n={2} />
-            Category <span className="text-red-500">*</span>
-          </label>
+        <div role="group" aria-labelledby="product-category-label">
+          <p id="product-category-label" className={labelClass}>
+            {t('category')}
+          </p>
           {categories.length > 0 ? (
-            <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-thin">
+            <div className="flex flex-wrap gap-2">
               {categories.map((cat) => (
                 <button
                   key={cat.id}
                   type="button"
-                  onClick={() =>
-                    onChange({ categoryId: cat.children && cat.children.length > 0 ? '' : cat.id, parentId: cat.id })
-                  }
-                  className={`px-4 py-2.5 rounded-xl text-sm font-medium transition-all flex items-center gap-2 whitespace-nowrap flex-shrink-0 ${
-                    parentId === cat.id ? 'bg-blue-500 text-white shadow-lg shadow-blue-200' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
+                  aria-pressed={parentId === cat.id}
+                  onClick={() => onChange({ categoryId: cat.children && cat.children.length > 0 ? '' : cat.id, parentId: cat.id })}
+                  className={chipClass(parentId === cat.id)}
                 >
-                  <span>{cat.iconUrl || '📦'}</span>
-                  <span>{cat.name}</span>
-                  {cat.children && cat.children.length > 0 && <span className="text-xs opacity-70 ms-1">({cat.children.length})</span>}
+                  {cat.name}
+                  {cat.children && cat.children.length > 0 && <span className="text-muted tabular-nums">({cat.children.length})</span>}
                 </button>
               ))}
             </div>
           ) : loadError ? (
-            <LoadError compact error={loadError} onRetry={onRetry} title="We couldn't load the categories" />
+            <LoadError compact error={loadError} onRetry={onRetry} title={t('categoriesFailed')} />
           ) : (
-            <div className="bg-gray-50 rounded-xl p-4 text-center text-gray-500 text-sm">
-              No categories available for {typeOption?.label}
-            </div>
+            <p className="text-sm text-muted">{t('noCategories')}</p>
           )}
         </div>
       )}
 
       {parent?.children && parent.children.length > 0 && (
-        <div className="mb-6">
-          <label className="block text-sm font-medium text-gray-700 mb-3">
-            <Step n={3} />
-            Subcategory in <span className="font-semibold">{parent.name}</span>
-          </label>
-          <div className="bg-gray-50 rounded-xl p-4 border border-gray-200">
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-              {parent.children.map((sub) => (
-                <button
-                  key={sub.id}
-                  type="button"
-                  onClick={() => onChange({ categoryId: sub.id, parentId: parent.id })}
-                  className={`px-3 py-2.5 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${
-                    categoryId === sub.id ? 'bg-emerald-700 text-white shadow-md' : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'
-                  }`}
-                >
-                  <span>{sub.iconUrl || '•'}</span>
-                  <span>{sub.name}</span>
-                </button>
-              ))}
-            </div>
+        <div role="group" aria-labelledby="product-subcategory-label">
+          <p id="product-subcategory-label" className={labelClass}>
+            {t('kindOf', { name: parent.name })}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {parent.children.map((sub) => (
+              <button
+                key={sub.id}
+                type="button"
+                aria-pressed={categoryId === sub.id}
+                onClick={() => onChange({ categoryId: sub.id, parentId: parent.id })}
+                className={chipClass(categoryId === sub.id)}
+              >
+                {sub.name}
+              </button>
+            ))}
           </div>
         </div>
       )}
 
       {productType && (
-        <div className="mb-6">
-          <button
-            type="button"
-            onClick={onRequestCategory}
-            className="inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700 font-medium px-3 py-2 rounded-lg hover:bg-blue-50 transition-colors"
-          >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-            </svg>
-            Can&apos;t find your category? Request a new one
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+          {selected ? (
+            <p className="text-sm text-muted">
+              {t('listedUnder')}{' '}
+              <span className="font-medium text-ink">
+                {selected.parent ? `${selected.parent.name}, ` : ''}
+                {selected.category.name}
+              </span>
+            </p>
+          ) : (
+            <span />
+          )}
+          <button type="button" onClick={onRequestCategory} className="min-h-11 text-sm font-medium text-brand-ink underline-offset-4 hover:underline">
+            {t('askCategory')}
           </button>
-        </div>
-      )}
-
-      {selected && (
-        <div className="flex items-center gap-2 text-sm text-green-600 bg-green-50 px-4 py-3 rounded-xl mb-6 border border-green-200">
-          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-          </svg>
-          <span className="font-medium">
-            {typeOption?.icon} {typeOption?.label} → {selected.parent ? `${selected.parent.name} → ` : ''}
-            {selected.category.name}
-          </span>
         </div>
       )}
     </>

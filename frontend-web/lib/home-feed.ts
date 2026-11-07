@@ -62,7 +62,8 @@ function formatKitchenTime(t: HomeT, locale: Locale, value?: string | null): str
   if (!value) return null;
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return null;
-  const time = new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit', timeZone: PK_TIME_ZONE }).format(date);
+  const clock = new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit', timeZone: PK_TIME_ZONE }).format(date).replace(/\s/g, '\u00a0');
+  const time = locale === 'ur' ? `\u2066${clock}\u2069` : clock;
   const now = new Date();
   const day = pkDayKey(date);
   if (day === pkDayKey(now)) return time;

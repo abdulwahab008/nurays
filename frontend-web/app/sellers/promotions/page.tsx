@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef, ReactNode } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { loginUrlHere } from '@/lib/auth-redirect';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
+import { Copy, Pencil, Plus, Search, Trash2, X } from 'lucide-react';
 import { DashboardLayout, SELLER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { Button } from '@/components/ui/button';
 import { LoadError } from '@/components/ui/LoadError';
@@ -13,100 +13,14 @@ import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient, apiErrorMessage, apiErrorDetails } from '@/lib/api-client';
 import { formatPrice } from '@/lib/utils';
 import { useShallow } from 'zustand/react/shallow';
+import { StatusPill } from '@/components/ui/StatusPill';
+import { dateClock } from '@/components/sellers/order-timing';
+import { useLocale, useT } from '@/lib/i18n';
+import { kitchenPromotionMessages } from '@/lib/i18n/messages/kitchen-promotions';
+
+type PromoT = ReturnType<typeof useT<typeof kitchenPromotionMessages.en>>;
 
 const sidebarItems = SELLER_SIDEBAR_ITEMS;
-
-// Clean Modern Icons
-const Icons = {
-  products: (
-    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
-    </svg>
-  ),
-  inventory: (
-    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" />
-    </svg>
-  ),
-  discounts: (
-    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M9.568 3H5.25A2.25 2.25 0 003 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.386a11.175 11.175 0 004.914-4.914c.486-.827.313-1.908-.386-2.607L11.159 3.659A2.25 2.25 0 009.568 3z" />
-      <path strokeLinecap="round" strokeLinejoin="round" d="M6 6h.008v.008H6V6z" />
-    </svg>
-  ),
-  plus: (
-    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-    </svg>
-  ),
-  tag: (
-    <svg className="w-12 h-12 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M9.568 3H5.25A2.25 2.25 0 003 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.386a11.175 11.175 0 004.914-4.914c.486-.827.313-1.908-.386-2.607L11.159 3.659A2.25 2.25 0 009.568 3z" />
-      <path strokeLinecap="round" strokeLinejoin="round" d="M6 6h.008v.008H6V6z" />
-    </svg>
-  ),
-  clock: (
-    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
-    </svg>
-  ),
-  trash: (
-    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
-    </svg>
-  ),
-  edit: (
-    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
-    </svg>
-  ),
-  fire: (
-    <svg className="w-4 h-4 text-brand-ink" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M15.362 5.214A8.252 8.252 0 0112 21 8.25 8.25 0 016.038 7.048 8.287 8.287 0 009 9.6a8.983 8.983 0 013.361-6.867 8.21 8.21 0 003 2.48z" />
-      <path strokeLinecap="round" strokeLinejoin="round" d="M12 18a3.75 3.75 0 00.495-7.467 5.99 5.99 0 00-1.925 3.546 5.974 5.974 0 01-2.133-1A3.75 3.75 0 0012 18z" />
-    </svg>
-  ),
-  calendar: (
-    <svg className="w-4 h-4 text-sky-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 9v7.5" />
-    </svg>
-  ),
-  chart: (
-    <svg className="w-4 h-4 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
-    </svg>
-  ),
-  copy: (
-    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-    </svg>
-  ),
-  percent: (
-    <svg className="w-5 h-5 text-brand-ink" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M9 14.25l6-6m4.5 1.5a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-11 6a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" />
-    </svg>
-  ),
-  cash: (
-    <svg className="w-5 h-5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18.75a60.07 60.07 0 0115.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 013 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 00-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 01-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 003 15h-.75M15 10.5a3 3 0 11-6 0 3 3 0 016 0zm3 0h.008v.008H18V10.5zm-12 0h.008v.008H6V10.5z" />
-    </svg>
-  ),
-  gift: (
-    <svg className="w-5 h-5 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M21 11.25v8.25a1.5 1.5 0 01-1.5 1.5H4.5a1.5 1.5 0 01-1.5-1.5v-8.25M12 4.875A2.625 2.625 0 109.375 7.5H12m0-2.625V7.5m0-2.625A2.625 2.625 0 1114.625 7.5H12m0 0V21m-8.625-9.75h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" />
-    </svg>
-  ),
-  bundle: (
-    <svg className="w-5 h-5 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5m16.5 0H3.75m16.5 0a2.25 2.25 0 00-2.25-2.25H6a2.25 2.25 0 00-2.25 2.25m16.5 0v3.75a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V7.5" />
-    </svg>
-  ),
-  lightbulb: (
-    <svg className="w-5 h-5 text-amber-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M12 18v-5.25m0 0a6.01 6.01 0 001.5-.189m-1.5.189a6.01 6.01 0 01-1.5-.189m3.75 7.5h-4.5a.75.75 0 01-.75-.75v-.75a.75.75 0 01.75-.75h4.5a.75.75 0 01.75.75v.75a.75.75 0 01-.75.75zm-6-8.25a6 6 0 1112 0c0 2.26-1.25 4.228-3.09 5.25H9.09A5.986 5.986 0 016 11.25z" />
-    </svg>
-  ),
-};
 
 interface Promotion {
   id: string;
@@ -153,18 +67,49 @@ interface PromotionFormValues {
   maxUsage: string;
 }
 
-/** The form's starting values: the promotion being edited, or a week-long 15% deal starting now. */
 /** What the form sends: its values and the dishes the deal applies to. */
 type PromotionPayload = PromotionFormValues & { applyTo: 'selected'; selectedProductIds: string[] };
 
+type Tab = 'all' | 'active' | 'scheduled' | 'expired';
+
+const TYPE_OPTIONS = ['percentage', 'fixed', 'buy_x_get_y', 'bundle'] as const;
+
+const FIELD =
+  'w-full min-h-11 px-3.5 rounded-xl bg-surface border border-line-strong text-[15px] text-ink placeholder:text-muted focus:outline-none focus:border-brand-600 focus:ring-3 focus:ring-brand/30';
+const LABEL = 'block text-sm font-medium text-ink mb-1.5';
+
+function offLabel(p: Pick<Promotion, 'type' | 'discountValue'>, t: PromoT): string {
+  if (p.type === 'percentage') return t('percentOff', { value: p.discountValue });
+  if (p.type === 'fixed') return t('amountOff', { amount: formatPrice(p.discountValue) });
+  if (p.type === 'buy_x_get_y') return t('type.buy_x_get_y');
+  return t('comboDeal');
+}
+
+function whenLabel(p: Promotion, t: PromoT, locale: string): string {
+  if (p.status === 'active') return t('ends', { when: dateClock(p.endDate, locale) });
+  if (p.status === 'scheduled') return t('starts', { when: dateClock(p.startDate, locale) });
+  if (p.status === 'expired') return t('ended', { when: dateClock(p.endDate, locale) });
+  return t('notLive');
+}
+
+/**
+ * A time as a date-and-time box shows it: the phone's local time, YYYY-MM-DDTHH:MM. toISOString() alone gives UTC, which the box
+ * then reads back as local time, moving the deal five hours earlier in Pakistan on every save.
+ */
+function toLocalInput(at: Date | string): string {
+  const d = new Date(at);
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
+}
+
+/** The form's starting values: the promotion being edited, or a week-long 15% deal starting now. */
 function promotionFormFor(initialData?: Promotion | null): PromotionFormValues {
   if (initialData) {
     return {
       name: initialData.name,
       type: initialData.type === 'fixed' ? 'fixed' : 'percentage',
       discountValue: String(initialData.discountValue),
-      startDate: initialData.startDate.slice(0, 16),
-      endDate: initialData.endDate.slice(0, 16),
+      startDate: toLocalInput(initialData.startDate),
+      endDate: toLocalInput(initialData.endDate),
       code: initialData.code || '',
       minOrderValue: initialData.minOrderAmount != null ? String(initialData.minOrderAmount) : '',
       maxUsage: initialData.usageLimitTotal != null ? String(initialData.usageLimitTotal) : '',
@@ -174,8 +119,8 @@ function promotionFormFor(initialData?: Promotion | null): PromotionFormValues {
     name: '',
     type: 'percentage',
     discountValue: '15',
-    startDate: new Date().toISOString().slice(0, 16),
-    endDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 16),
+    startDate: toLocalInput(new Date()),
+    endDate: toLocalInput(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)),
     code: '',
     minOrderValue: '',
     maxUsage: '',
@@ -195,6 +140,7 @@ function PromotionForm({
   initialData,
   promotionId,
 }: CreatePromotionModalProps) {
+  const t = useT(kitchenPromotionMessages);
   const isEditMode = Boolean(promotionId && initialData);
   const [formData, setFormData] = useState(() => promotionFormFor(initialData));
   const [selectedProductIds, setSelectedProductIds] = useState<string[]>(
@@ -244,13 +190,13 @@ function PromotionForm({
         const isNetwork = err.code === 'ERR_NETWORK' || err.message?.includes('Network Error');
         setProductsLoadError(
           isNetwork
-            ? 'Connection refused — the backend is not running.'
-            : err.response?.data?.error?.message ?? err.response?.data?.message ?? err.message ?? 'Failed to load products'
+            ? t('offline')
+            : err.response?.data?.error?.message ?? err.response?.data?.message ?? err.message ?? t('dishesLoadFailed')
         );
-        if (!isNetwork) onErrorRef.current?.(err.response?.data?.error?.message ?? err.message ?? 'Failed to load products');
+        if (!isNetwork) onErrorRef.current?.(err.response?.data?.error?.message ?? err.message ?? t('dishesLoadFailed'));
       })
       .finally(() => setProductsLoading(false));
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     fetchProducts();
@@ -288,258 +234,240 @@ function PromotionForm({
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
-      <div className="bg-white rounded-3xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl border border-slate-100 flex flex-col">
-        {/* Modal Header */}
-        <div className="p-6 border-b border-slate-100 flex items-center justify-between">
-          <div>
-            <h2 className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
-              <span className="text-brand-ink">{Icons.discounts}</span>
-              <span>{isEditMode ? 'Edit Promotion Campaign' : 'Create Special Deal & Discount'}</span>
-            </h2>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Attract customer orders with time-sensitive vouchers and percentage discounts.
-            </p>
-          </div>
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 sm:p-4">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="promo-form-title"
+        className="bg-surface w-full sm:max-w-xl max-h-[92vh] flex flex-col rounded-t-[20px] sm:rounded-[20px] border border-line shadow-[var(--shadow-card)]"
+      >
+        <div className="flex items-center justify-between gap-3 px-5 sm:px-6 pt-5 pb-4 border-b border-line">
+          <h2 id="promo-form-title" className="text-lg font-semibold text-ink">
+            {isEditMode ? t('editTitle') : t('newTitle')}
+          </h2>
           <button
+            type="button"
             onClick={handleClose}
-            className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center font-bold text-sm transition-colors"
+            aria-label={t('close')}
+            className="-me-2 w-11 h-11 rounded-full flex items-center justify-center text-muted hover:text-ink hover:bg-raised focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-brand/40"
           >
-            ✕
+            <X className="w-5 h-5" aria-hidden="true" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-6 flex-1">
-          {/* Promotion Name */}
-          <div>
-            <label className="block text-xs font-black uppercase tracking-wider text-slate-700 mb-1.5">
-              Campaign Name <span className="text-rose-500">*</span>
-            </label>
-            <input
-              type="text"
-              value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              placeholder="e.g. Weekend Flash Feast / Eid Mubarak Offer"
-              className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand focus:bg-white transition-all"
-              required
-            />
-          </div>
-
-          {/* Promotion Type Selector */}
-          <div>
-            <label className="block text-xs font-black uppercase tracking-wider text-slate-700 mb-2">
-              Discount Structure <span className="text-rose-500">*</span>
-            </label>
-            <div className="grid grid-cols-2 gap-2.5">
-              {[
-                { value: 'percentage', label: 'Percentage Off', desc: 'e.g. 20% savings', icon: Icons.percent },
-                { value: 'fixed', label: 'Fixed Cash Off', desc: 'e.g. ₨ 200 off', icon: Icons.cash },
-                { value: 'buy_x_get_y', label: 'Buy X Get Y', desc: 'e.g. B2G1 free meal', icon: Icons.gift },
-                { value: 'bundle', label: 'Combo Bundle', desc: 'Curated value pack', icon: Icons.bundle },
-              ].map((type) => (
-                <button
-                  key={type.value}
-                  type="button"
-                  onClick={() => setFormData({ ...formData, type: type.value })}
-                  className={`p-3.5 rounded-2xl border text-start transition-all ${
-                    formData.type === type.value
-                      ? 'border-brand bg-brand-50/60 ring-1 ring-brand shadow-xs'
-                      : 'border-slate-200 hover:border-slate-300 bg-white'
-                  }`}
-                >
-                  <div className="w-8 h-8 rounded-xl bg-slate-100 flex items-center justify-center mb-1">
-                    {type.icon}
-                  </div>
-                  <div className="font-bold text-slate-900 text-xs sm:text-sm mt-1">{type.label}</div>
-                  <div className="text-[11px] text-slate-500 font-medium">{type.desc}</div>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Discount Value & Promo Code */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <form onSubmit={handleSubmit} className="flex-1 min-h-0 flex flex-col">
+          <div className="flex-1 overflow-y-auto px-5 sm:px-6 py-5 space-y-6">
             <div>
-              <label className="block text-xs font-black uppercase tracking-wider text-slate-700 mb-1.5">
-                Discount Amount <span className="text-rose-500">*</span>
+              <label htmlFor="promo-name" className={LABEL}>
+                {t('name')}
               </label>
-              <div className="relative">
-                {formData.type === 'fixed' && (
-                  <span className="absolute start-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-500">₨</span>
-                )}
+              <input
+                id="promo-name"
+                type="text"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                placeholder={t('namePlaceholder')}
+                className={FIELD}
+                required
+              />
+            </div>
+
+            <fieldset>
+              <legend className={LABEL}>{t('kind')}</legend>
+              <div className="grid grid-cols-2 gap-2">
+                {TYPE_OPTIONS.map((type) => (
+                  <label
+                    key={type}
+                    className="min-h-11 rounded-xl border border-line-strong px-3.5 py-2.5 cursor-pointer hover:bg-raised has-[:checked]:border-brand-600 has-[:checked]:bg-brand-soft has-[:focus-visible]:ring-3 has-[:focus-visible]:ring-brand/40"
+                  >
+                    <input
+                      type="radio"
+                      name="promo-type"
+                      value={type}
+                      checked={formData.type === type}
+                      onChange={() => setFormData({ ...formData, type })}
+                      className="sr-only"
+                    />
+                    <span className="block text-sm font-medium text-ink">{t(`type.${type}`)}</span>
+                    <span className="block text-xs text-muted">{t(`type.${type}.hint`)}</span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label htmlFor="promo-value" className={LABEL}>
+                  {formData.type === 'fixed' ? t('type.fixed') : formData.type === 'percentage' ? t('type.percentage') : t('howMuchOff')}
+                </label>
+                <div className="relative">
+                  {formData.type === 'fixed' && (
+                    <span className="absolute start-3.5 top-1/2 -translate-y-1/2 text-sm text-muted" aria-hidden="true">Rs</span>
+                  )}
+                  <input
+                    id="promo-value"
+                    type="number"
+                    value={formData.discountValue}
+                    onChange={(e) => setFormData({ ...formData, discountValue: e.target.value })}
+                    placeholder={formData.type === 'percentage' ? '20' : '200'}
+                    className={`${FIELD} tabular-nums ${formData.type === 'fixed' ? 'ps-10' : ''} ${formData.type === 'percentage' ? 'pe-9' : ''}`}
+                    required
+                  />
+                  {formData.type === 'percentage' && (
+                    <span className="absolute end-3.5 top-1/2 -translate-y-1/2 text-sm text-muted" aria-hidden="true">%</span>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <label htmlFor="promo-code" className={LABEL}>
+                  {t('code')} <span className="font-normal text-muted">{t('optional')}</span>
+                </label>
                 <input
-                  type="number"
-                  value={formData.discountValue}
-                  onChange={(e) => setFormData({ ...formData, discountValue: e.target.value })}
-                  placeholder={formData.type === 'percentage' ? '20' : '200'}
-                  className={`w-full py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand focus:bg-white transition-all ${
-                    formData.type === 'fixed' ? 'ps-9 pe-4' : 'px-4'
-                  }`}
+                  id="promo-code"
+                  type="text"
+                  value={formData.code}
+                  onChange={(e) => setFormData({ ...formData, code: e.target.value.toUpperCase() })}
+                  placeholder={t('codePlaceholder')}
+                  aria-describedby="promo-code-hint"
+                  className={`${FIELD} font-mono uppercase placeholder:normal-case placeholder:font-sans`}
+                />
+                <p id="promo-code-hint" className="mt-1 text-xs text-muted">{t('codeHint')}</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label htmlFor="promo-start" className={LABEL}>
+                  {t('startsLabel')}
+                </label>
+                <input
+                  id="promo-start"
+                  type="datetime-local"
+                  value={formData.startDate}
+                  onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
+                  className={FIELD}
                   required
                 />
-                {formData.type === 'percentage' && (
-                  <span className="absolute end-3.5 top-1/2 -translate-y-1/2 text-xs font-black text-slate-500">%</span>
-                )}
               </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-black uppercase tracking-wider text-slate-700 mb-1.5">
-                Coupon Code (Optional)
-              </label>
-              <input
-                type="text"
-                value={formData.code}
-                onChange={(e) => setFormData({ ...formData, code: e.target.value.toUpperCase() })}
-                placeholder="e.g. NURAYFEAST"
-                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono font-bold text-slate-900 uppercase focus:outline-none focus:ring-2 focus:ring-brand focus:bg-white transition-all"
-              />
-            </div>
-          </div>
-
-          {/* Date Range */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-black uppercase tracking-wider text-slate-700 mb-1.5">
-                Campaign Starts <span className="text-rose-500">*</span>
-              </label>
-              <input
-                type="datetime-local"
-                value={formData.startDate}
-                onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
-                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand focus:bg-white transition-all"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-black uppercase tracking-wider text-slate-700 mb-1.5">
-                Campaign Ends <span className="text-rose-500">*</span>
-              </label>
-              <input
-                type="datetime-local"
-                value={formData.endDate}
-                onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
-                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand focus:bg-white transition-all"
-                required
-              />
-            </div>
-          </div>
-
-          {/* Min Order & Max Usage */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-black uppercase tracking-wider text-slate-700 mb-1.5">
-                Minimum Order Requirement
-              </label>
-              <div className="relative">
-                <span className="absolute start-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-500">₨</span>
+              <div>
+                <label htmlFor="promo-end" className={LABEL}>
+                  {t('endsLabel')}
+                </label>
                 <input
-                  type="number"
-                  value={formData.minOrderValue}
-                  onChange={(e) => setFormData({ ...formData, minOrderValue: e.target.value })}
-                  placeholder="0 (no minimum)"
-                  className="w-full ps-9 pe-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand focus:bg-white transition-all"
+                  id="promo-end"
+                  type="datetime-local"
+                  value={formData.endDate}
+                  onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
+                  className={FIELD}
+                  required
                 />
               </div>
             </div>
-            <div>
-              <label className="block text-xs font-black uppercase tracking-wider text-slate-700 mb-1.5">
-                Total Redemption Cap
-              </label>
-              <input
-                type="number"
-                value={formData.maxUsage}
-                onChange={(e) => setFormData({ ...formData, maxUsage: e.target.value })}
-                placeholder="Leave blank for unlimited"
-                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand focus:bg-white transition-all"
-              />
-            </div>
-          </div>
 
-          {/* Product Selection List */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="block text-xs font-black uppercase tracking-wider text-slate-700">
-                Applicable Menu Items ({selectedProductIds.length} included)
-              </label>
-              {!productsLoadError && filteredModalProducts.length > 0 && (
-                <div className="flex gap-2 text-xs font-bold">
-                  <button
-                    type="button"
-                    onClick={() => setSelectedProductIds(products.map((p) => p.id))}
-                    className="text-brand-ink hover:text-brand-ink"
-                  >
-                    Select All
-                  </button>
-                  <span className="text-slate-300">|</span>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedProductIds([])}
-                    className="text-slate-500 hover:text-slate-700"
-                  >
-                    Clear
-                  </button>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label htmlFor="promo-min" className={LABEL}>
+                  {t('smallestOrder')} <span className="font-normal text-muted">{t('optional')}</span>
+                </label>
+                <div className="relative">
+                  <span className="absolute start-3.5 top-1/2 -translate-y-1/2 text-sm text-muted" aria-hidden="true">Rs</span>
+                  <input
+                    id="promo-min"
+                    type="number"
+                    value={formData.minOrderValue}
+                    onChange={(e) => setFormData({ ...formData, minOrderValue: e.target.value })}
+                    placeholder={t('anyAmount')}
+                    className={`${FIELD} ps-10 tabular-nums`}
+                  />
                 </div>
-              )}
+              </div>
+              <div>
+                <label htmlFor="promo-max" className={LABEL}>
+                  {t('timesUsable')} <span className="font-normal text-muted">{t('optional')}</span>
+                </label>
+                <input
+                  id="promo-max"
+                  type="number"
+                  value={formData.maxUsage}
+                  onChange={(e) => setFormData({ ...formData, maxUsage: e.target.value })}
+                  placeholder={t('noLimit')}
+                  className={`${FIELD} tabular-nums`}
+                />
+              </div>
             </div>
 
-            <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 space-y-2.5">
-              {!productsLoadError && products.length > 0 && (
-                <input
-                  type="text"
-                  value={productSearch}
-                  onChange={(e) => setProductSearch(e.target.value)}
-                  placeholder="Filter dishes by name..."
-                  className="w-full px-3 py-1.5 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-brand bg-white"
-                />
-              )}
-
-              <div className="max-h-44 overflow-y-auto space-y-1.5 pe-1">
-                {productsLoadError ? (
-                  <div className="py-4 text-center">
-                    <p className="text-xs font-bold text-rose-600">{productsLoadError}</p>
+            <fieldset>
+              <div className="flex items-center justify-between gap-3 mb-1.5">
+                <legend className="text-sm font-medium text-ink">
+                  {t('dishes')} <span className="font-normal text-muted tabular-nums">{t('picked', { count: selectedProductIds.length })}</span>
+                </legend>
+                {!productsLoadError && filteredModalProducts.length > 0 && (
+                  <div className="flex -me-2">
                     <button
                       type="button"
-                      onClick={loadProductsForPromotion}
-                      className="mt-2 px-3 py-1 bg-brand text-on-brand text-xs font-bold rounded-lg"
+                      onClick={() => setSelectedProductIds(products.map((p) => p.id))}
+                      className="min-h-11 px-2 text-sm font-medium text-brand-ink hover:underline"
                     >
-                      Retry
+                      {t('pickAll')}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedProductIds([])}
+                      className="min-h-11 px-2 text-sm font-medium text-muted hover:text-ink"
+                    >
+                      {t('clear')}
                     </button>
                   </div>
+                )}
+              </div>
+
+              {!productsLoadError && products.length > 0 && (
+                <div className="relative mb-2">
+                  <Search className="w-4 h-4 text-muted absolute start-3.5 top-1/2 -translate-y-1/2" aria-hidden="true" />
+                  <input
+                    type="search"
+                    value={productSearch}
+                    onChange={(e) => setProductSearch(e.target.value)}
+                    placeholder={t('findDish')}
+                    aria-label={t('findDish')}
+                    className={`${FIELD} ps-10`}
+                  />
+                </div>
+              )}
+
+              <div className="max-h-56 overflow-y-auto rounded-xl border border-line divide-y divide-line">
+                {productsLoadError ? (
+                  <div className="px-4 py-5 text-center">
+                    <p className="text-sm text-red-700">{productsLoadError}</p>
+                    <Button type="button" variant="outline" onClick={loadProductsForPromotion} className="mt-3">
+                      {t('tryAgain')}
+                    </Button>
+                  </div>
                 ) : productsLoading ? (
-                  <div className="py-6 text-center text-xs text-slate-500 font-medium">
-                    Loading your dishes...
-                  </div>
+                  <p className="px-4 py-5 text-center text-sm text-muted">{t('loadingDishes')}</p>
                 ) : filteredModalProducts.length === 0 ? (
-                  <div className="py-6 text-center text-xs text-slate-500 font-medium">
+                  <p className="px-4 py-5 text-center text-sm text-muted">
                     {products.length === 0
-                      ? 'No products available yet. Add products to your kitchen first.'
-                      : 'No dishes match filter.'}
-                  </div>
+                      ? t('noDishesYet')
+                      : t('noDishMatch')}
+                  </p>
                 ) : (
                   filteredModalProducts.map((product) => {
                     const isChecked = selectedProductIds.includes(product.id);
                     return (
                       <label
                         key={product.id}
-                        className={`flex items-center gap-3 p-2.5 rounded-xl border transition-all cursor-pointer ${
-                          isChecked
-                            ? 'bg-brand-50/70 border-brand-300'
-                            : 'bg-white border-slate-200 hover:border-slate-300'
-                        }`}
+                        className={`flex items-center gap-3 min-h-11 px-3.5 py-2 cursor-pointer ${isChecked ? 'bg-brand-soft' : 'hover:bg-raised'}`}
                       >
                         <input
                           type="checkbox"
                           checked={isChecked}
                           onChange={() => toggleProduct(product.id)}
-                          className="rounded text-brand-ink focus:ring-brand w-4 h-4"
+                          className="w-4 h-4 accent-brand-600"
                         />
-                        <span className="flex-1 text-xs font-bold text-slate-900 truncate">
-                          {product.name}
-                        </span>
-                        <span className="text-xs font-semibold text-slate-500 shrink-0">
-                          {formatPrice(product.price)}
-                        </span>
+                        <bdi className="flex-1 min-w-0 text-[15px] text-ink truncate">{product.name}</bdi>
+                        <span className="text-sm text-muted tabular-nums shrink-0">{formatPrice(product.price)}</span>
                       </label>
                     );
                   })
@@ -547,29 +475,17 @@ function PromotionForm({
               </div>
 
               {selectedProductIds.length === 0 && !productsLoadError && !productsLoading && (
-                <p className="text-[11px] text-amber-600 font-bold flex items-center gap-1">
-                  <span>Please select at least one menu item to apply this discount.</span>
-                </p>
+                <p className="mt-2 text-sm text-muted">{t('pickOne')}</p>
               )}
-            </div>
+            </fieldset>
           </div>
 
-          {/* Modal Buttons */}
-          <div className="flex gap-3 pt-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handleClose}
-              className="flex-1 rounded-xl font-bold text-xs"
-            >
-              Cancel
+          <div className="flex gap-3 px-5 sm:px-6 py-4 border-t border-line">
+            <Button type="button" variant="outline" onClick={handleClose} className="flex-1">
+              {t('cancel')}
             </Button>
-            <Button
-              type="submit"
-              disabled={selectedProductIds.length === 0}
-              className="flex-1 bg-brand hover:bg-brand-500 text-on-brand rounded-xl font-bold text-xs shadow-md shadow-brand/20 disabled:opacity-50"
-            >
-              {isEditMode ? 'Update Campaign' : 'Launch Campaign'}
+            <Button type="submit" disabled={selectedProductIds.length === 0} className="flex-1">
+              {isEditMode ? t('saveChanges') : t('create')}
             </Button>
           </div>
         </form>
@@ -578,17 +494,103 @@ function PromotionForm({
   );
 }
 
+interface DealRowProps {
+  promo: Promotion;
+  quiet?: boolean;
+  onCopy: (code: string) => void;
+  onDetails: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+}
+
+function DealRow({ promo, quiet, onCopy, onDetails, onEdit, onDelete }: DealRowProps) {
+  const t = useT(kitchenPromotionMessages);
+  const { locale } = useLocale();
+  const hasLimit = promo.usageLimitTotal != null && promo.usageLimitTotal > 0;
+  const usagePercent = hasLimit ? Math.min(100, Math.round((promo.usageCount / promo.usageLimitTotal!) * 100)) : 0;
+  const dishCount = promo.products?.length ?? 0;
+  const facts = [
+    whenLabel(promo, t, locale),
+    promo.minOrderAmount != null && promo.minOrderAmount > 0 ? t('ordersOver', { amount: formatPrice(promo.minOrderAmount) }) : null,
+    dishCount > 0 ? (dishCount === 1 ? t('dishCountOne') : t('dishCount', { count: dishCount })) : null,
+  ].filter(Boolean);
+
+  return (
+    <li className="flex flex-col lg:flex-row lg:items-center gap-3 lg:gap-6 py-4">
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
+          <p className={`text-lg font-semibold tabular-nums ${quiet ? 'text-muted' : 'text-ink'}`}>{offLabel(promo, t)}</p>
+          <p className={`text-[15px] min-w-0 break-words ${quiet ? 'text-muted' : 'text-ink'}`}><bdi>{promo.name}</bdi></p>
+          {promo.status === 'draft' && <StatusPill>{t('notLive')}</StatusPill>}
+        </div>
+        <p className="mt-1 text-sm text-muted">{facts.join(', ')}</p>
+        {hasLimit && !quiet ? (
+          <div className="mt-2.5 flex items-center gap-3 max-w-sm">
+            <div className="h-1.5 flex-1 rounded-full bg-raised overflow-hidden" aria-hidden="true">
+              <div className="h-full rounded-full bg-brand-600" style={{ width: `${usagePercent}%` }} />
+            </div>
+            <span className="text-sm text-muted tabular-nums whitespace-nowrap">
+              {t('usedOf', { used: promo.usageCount, total: promo.usageLimitTotal ?? 0 })}
+            </span>
+          </div>
+        ) : (
+          <p className="mt-1 text-sm text-muted tabular-nums">
+            {hasLimit
+              ? t('usedOf', { used: promo.usageCount, total: promo.usageLimitTotal ?? 0 })
+              : promo.usageCount === 1
+                ? t('usedOnce')
+                : t('usedTimes', { count: promo.usageCount })}
+          </p>
+        )}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2 shrink-0">
+        {promo.code && (
+          <button
+            type="button"
+            onClick={() => onCopy(promo.code!)}
+            aria-label={t('copyCode', { code: promo.code })}
+            className="inline-flex items-center gap-2 min-h-11 px-3 rounded-xl bg-raised text-ink font-mono text-sm hover:bg-brand-soft focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-brand/40"
+          >
+            {promo.code}
+            <Copy className="w-4 h-4 text-muted" aria-hidden="true" />
+          </button>
+        )}
+        <div className="flex items-center gap-1">
+          <Button type="button" variant="ghost" onClick={onDetails} className="px-3">
+            {t('details')}
+          </Button>
+          <Button type="button" variant={quiet ? 'ghost' : 'outline'} onClick={onEdit} className={quiet ? 'px-3 text-muted hover:text-ink hover:bg-raised' : 'px-4'}>
+            <Pencil className="w-4 h-4" aria-hidden="true" />
+            {t('edit')}
+          </Button>
+          <button
+            type="button"
+            onClick={onDelete}
+            aria-label={t('deleteNamed', { name: promo.name })}
+            className="w-11 h-11 rounded-xl flex items-center justify-center text-muted hover:text-red-700 hover:bg-red-50 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-brand/40"
+          >
+            <Trash2 className="w-4 h-4" aria-hidden="true" />
+          </button>
+        </div>
+      </div>
+    </li>
+  );
+}
+
 export default function SellerPromotionsPage() {
   const router = useRouter();
   const { isAuthenticated, user } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated, user: s.user })));
   const { showToast } = useToast();
   const { confirm: confirmDialog } = useDialogs();
+  const t = useT(kitchenPromotionMessages);
+  const { locale } = useLocale();
 
   const [loading, setLoading] = useState(true);
-  // Why the promotions could not be read; shown instead of "No Active Promotions", which would be untrue.
+  // Why the promotions could not be read; shown instead of "no discounts yet", which would be untrue.
   const [loadError, setLoadError] = useState<unknown>(null);
   const [promotions, setPromotions] = useState<Promotion[]>([]);
-  const [activeTab, setActiveTab] = useState<'all' | 'active' | 'scheduled' | 'expired'>('all');
+  const [activeTab, setActiveTab] = useState<Tab>('all');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [detailPromo, setDetailPromo] = useState<Promotion | null>(null);
   const [editingPromo, setEditingPromo] = useState<Promotion | null>(null);
@@ -644,13 +646,13 @@ export default function SellerPromotionsPage() {
 
   useEffect(() => {
     if (!isAuthenticated) {
-      router.push(loginUrlHere());
+      router.replace(loginUrlHere());
       return;
     }
 
     if (user?.userType !== 'seller' && user?.user_type !== 'seller') {
       router.push('/dashboard');
-      showToast('Access denied. Seller privileges required.', 'error');
+      showToast(t('accessDenied'), 'error');
       return;
     }
 
@@ -688,17 +690,17 @@ export default function SellerPromotionsPage() {
     try {
       const response = await apiClient.post('/promotions', payload);
       if (response.data.success) {
-        showToast('Promotion launched successfully!', 'success');
+        showToast(t('created'), 'success');
         setShowCreateModal(false);
         loadPromotions();
       } else {
-        showToast('Failed to create promotion', 'error');
+        showToast(t('createFailed'), 'error');
       }
     } catch (error) {
       const details = apiErrorDetails(error) as Array<{ field?: string; message?: string }> | undefined;
       const msg = details?.length
         ? details.map((d) => (d.field ? `${d.field}: ${d.message}` : d.message)).join('. ')
-        : apiErrorMessage(error, 'Failed to create promotion');
+        : apiErrorMessage(error, t('createFailed'));
       showToast(msg, 'error');
     }
   };
@@ -734,27 +736,27 @@ export default function SellerPromotionsPage() {
     try {
       const response = await apiClient.patch(`/promotions/${id}`, payload);
       if (response.data.success) {
-        showToast('Promotion updated successfully!', 'success');
+        showToast(t('savedToast'), 'success');
         setShowCreateModal(false);
         setEditingPromo(null);
         loadPromotions();
       } else {
-        showToast('Failed to update promotion', 'error');
+        showToast(t('saveFailed'), 'error');
       }
     } catch (error) {
       const details = apiErrorDetails(error) as Array<{ field?: string; message?: string }> | undefined;
       const msg = details?.length
         ? details.map((d) => (d.field ? `${d.field}: ${d.message}` : d.message)).join('. ')
-        : apiErrorMessage(error, 'Failed to update promotion');
+        : apiErrorMessage(error, t('saveFailed'));
       showToast(msg, 'error');
     }
   };
 
   const handleDeletePromotion = async (id: string) => {
-    if (!(await confirmDialog({ title: 'Delete this promotion?', message: 'Are you sure you want to delete this promotion?', confirmText: 'Delete' }))) return;
+    if (!(await confirmDialog({ title: t('deleteTitle'), message: t('deleteBody'), confirmText: t('delete') }))) return;
     try {
       await apiClient.delete(`/promotions/${id}`);
-      showToast('Promotion deleted', 'success');
+      showToast(t('deleted'), 'success');
       setPromotions((prev) => prev.filter((p) => p.id !== id));
       if (detailPromo?.id === id) setDetailPromo(null);
       if (editingPromo?.id === id) {
@@ -762,20 +764,28 @@ export default function SellerPromotionsPage() {
         setShowCreateModal(false);
       }
     } catch (error) {
-      showToast(apiErrorMessage(error, 'Failed to delete promotion'), 'error');
+      showToast(apiErrorMessage(error, t('deleteFailed')), 'error');
     }
   };
 
   const copyPromoCode = (code: string) => {
     navigator.clipboard.writeText(code);
-    showToast(`Code "${code}" copied to clipboard!`, 'success');
+    showToast(t('copied', { code }), 'success');
   };
 
-  // Metrics
+  const openNew = () => {
+    setEditingPromo(null);
+    setShowCreateModal(true);
+  };
+
+  const openEdit = (promo: Promotion) => {
+    setEditingPromo(promo);
+    setShowCreateModal(true);
+  };
+
   const activeDeals = promotions.filter((p) => p.status === 'active');
   const scheduledDeals = promotions.filter((p) => p.status === 'scheduled');
   const expiredDeals = promotions.filter((p) => p.status === 'expired');
-  const totalRedemptions = promotions.reduce((acc, p) => acc + p.usageCount, 0);
 
   const filteredPromotions = promotions.filter((p) => {
     if (activeTab !== 'all' && p.status !== activeTab) return false;
@@ -788,568 +798,259 @@ export default function SellerPromotionsPage() {
     return true;
   });
 
-  const getStatusBadge = (status: string) => {
-    const styles = {
-      active: 'bg-emerald-100 text-emerald-800 border-emerald-200',
-      scheduled: 'bg-sky-100 text-sky-800 border-sky-200',
-      expired: 'bg-slate-100 text-slate-600 border-slate-200',
-      draft: 'bg-amber-100 text-amber-800 border-amber-200',
-    };
-    return styles[status as keyof typeof styles] || styles.draft;
-  };
-
-  const getTypeIcon = (type: string): ReactNode => {
-    if (type === 'percentage') return Icons.percent;
-    if (type === 'fixed') return Icons.cash;
-    if (type === 'buy_x_get_y') return Icons.gift;
-    if (type === 'bundle') return Icons.bundle;
-    return Icons.discounts;
-  };
-
   if (!isAuthenticated) {
     return null;
   }
 
   // The promotions could not be read (and none from an earlier read are on the screen).
   const couldNotRead = !loading && Boolean(loadError) && promotions.length === 0;
+  const hasAny = promotions.length > 0;
+
+  const rowFor = (promo: Promotion, quiet?: boolean) => (
+    <DealRow
+      key={promo.id}
+      promo={promo}
+      quiet={quiet}
+      onCopy={copyPromoCode}
+      onDetails={() => setDetailPromo(promo)}
+      onEdit={() => openEdit(promo)}
+      onDelete={() => handleDeletePromotion(promo.id)}
+    />
+  );
+
+  const running = filteredPromotions.filter((p) => p.status === 'active');
+  const runningRedemptions = running.reduce((a, p) => a + p.usageCount, 0);
+  const later = filteredPromotions.filter((p) => p.status === 'scheduled' || p.status === 'draft');
+  const ended = filteredPromotions.filter((p) => p.status === 'expired');
+  const searching = searchFilter.trim().length > 0;
+
+  const tabs: Array<{ id: Tab; label: string; count: number }> = [
+    { id: 'all', label: t('tab.all'), count: promotions.length },
+    { id: 'active', label: t('tab.active'), count: activeDeals.length },
+    { id: 'scheduled', label: t('tab.scheduled'), count: scheduledDeals.length },
+    { id: 'expired', label: t('tab.expired'), count: expiredDeals.length },
+  ];
+
+  const runningCard =
+    running.length > 0 ? (
+      <ul className="rounded-[20px] bg-surface border border-line shadow-[var(--shadow-card)] px-5 divide-y divide-line">
+        {running.map((p) => rowFor(p))}
+      </ul>
+    ) : (
+      <p className="rounded-[20px] bg-surface border border-line shadow-[var(--shadow-card)] px-5 py-6 text-[15px] text-muted">
+        {searching ? t('noRunningMatch') : t('nothingRunning')}
+      </p>
+    );
+
+  const flatList = (list: Promotion[], quiet?: boolean) => (
+    <ul className="divide-y divide-line">{list.map((p) => rowFor(p, quiet))}</ul>
+  );
 
   return (
     <DashboardLayout
-      title="Promotions"
-      subtitle="Manage discount codes and special deals"
+      title={t('title')}
+      subtitle={t('subtitle')}
       sidebarItems={sidebarItems}
       userType="seller"
     >
-      <div className="max-w-7xl mx-auto space-y-6">
-        {/* ========================================================================= */}
-        {/* Sleek Sub-navigation Tabs */}
-        {/* ========================================================================= */}
-        <div className="bg-white rounded-2xl p-1.5 border border-slate-200 shadow-sm flex items-center justify-between flex-wrap gap-2">
-          <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto">
-            {[
-              { label: 'All Products', icon: Icons.products, href: '/sellers/products', isActive: false },
-              { label: 'Inventory & Stock', icon: Icons.inventory, href: '/sellers/products?view=inventory', isActive: false },
-              {
-                label: 'Discounts & Deals',
-                icon: Icons.discounts,
-                href: '/sellers/promotions',
-                isActive: true,
-                count: couldNotRead ? undefined : promotions.length,
-              },
-            ].map((tab) => (
-              <Link
-                key={tab.href}
-                href={tab.href}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all duration-200 whitespace-nowrap ${
-                  tab.isActive
-                    ? 'bg-brand text-on-brand shadow-sm'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                }`}
-              >
-                <span className="shrink-0">{tab.icon}</span>
-                <span>{tab.label}</span>
-                {tab.count !== undefined && (
-                  <span
-                    className={`text-xs px-2 py-0.5 rounded-full font-bold ${
-                      tab.isActive ? 'bg-black/20 text-white' : 'bg-slate-100 text-slate-700'
-                    }`}
-                  >
-                    {tab.count}
-                  </span>
-                )}
-              </Link>
-            ))}
-          </div>
-
-          <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-            <Button
-              onClick={() => {
-                setEditingPromo(null);
-                setShowCreateModal(true);
-              }}
-              className="bg-brand hover:bg-brand-500 text-on-brand font-bold text-xs sm:text-sm rounded-xl shadow-md shadow-brand/20 flex items-center gap-2 px-4 py-2"
-            >
-              {Icons.plus}
-              Create Deal
-            </Button>
-          </div>
-        </div>
-
-        {/* Counters and filters describe a list; with no list to describe (it could not be read) they would all say "0". */}
-        {!couldNotRead && (
-          <>
-            {/* ========================================================================= */}
-            {/* KPI Summary Cards with Clean Icons */}
-            {/* ========================================================================= */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-              {/* Active Deals */}
-              <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200 shadow-sm relative overflow-hidden group hover:border-brand-200 transition-all">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-[11px] font-black uppercase tracking-wider text-brand-ink">
-                    Active Campaigns
-                  </span>
-                  <div className="w-8 h-8 rounded-xl bg-brand-50 text-brand-ink flex items-center justify-center font-bold text-sm">
-                    {Icons.fire}
-                  </div>
-                </div>
-                <div className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
-                  {activeDeals.length}
-                </div>
-                <div className="mt-2 text-xs font-medium text-brand-ink flex items-center gap-1">
-                  <span>Currently live on storefront</span>
-                </div>
-              </div>
-
-              {/* Scheduled */}
-              <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200 shadow-sm relative overflow-hidden group hover:border-sky-200 transition-all">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-[11px] font-black uppercase tracking-wider text-sky-600">
-                    Scheduled Deals
-                  </span>
-                  <div className="w-8 h-8 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center font-bold text-sm">
-                    {Icons.calendar}
-                  </div>
-                </div>
-                <div className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
-                  {scheduledDeals.length}
-                </div>
-                <div className="mt-2 text-xs font-medium text-sky-600">
-                  Starts automatically
-                </div>
-              </div>
-
-              {/* Total Usage */}
-              <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200 shadow-sm relative overflow-hidden group hover:border-purple-200 transition-all">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-[11px] font-black uppercase tracking-wider text-purple-600">
-                    Total Redemptions
-                  </span>
-                  <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center font-bold text-sm">
-                    {Icons.chart}
-                  </div>
-                </div>
-                <div className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
-                  {totalRedemptions}
-                </div>
-                <div className="mt-2 text-xs font-medium text-purple-600">
-                  Orders placed with vouchers
-                </div>
-              </div>
-
-              {/* Expired */}
-              <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200 shadow-sm relative overflow-hidden group hover:border-slate-300 transition-all">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-[11px] font-black uppercase tracking-wider text-slate-500">
-                    Completed & Expired
-                  </span>
-                  <div className="w-8 h-8 rounded-xl bg-slate-100 text-slate-600 flex items-center justify-center font-bold text-sm">
-                    {Icons.clock}
-                  </div>
-                </div>
-                <div className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
-                  {expiredDeals.length}
-                </div>
-                <div className="mt-2 text-xs font-medium text-slate-500">
-                  Archived campaigns
-                </div>
-              </div>
-            </div>
-
-            {/* ========================================================================= */}
-            {/* Controls & Tab Filter Bar */}
-            {/* ========================================================================= */}
-            <div className="bg-white rounded-3xl p-4 border border-slate-200 shadow-sm flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
-              {/* Search Box */}
-              <div className="relative flex-1">
-                <svg
-                  className="w-4 h-4 text-slate-500 absolute start-3.5 top-1/2 -translate-y-1/2"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth={2}
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
-                </svg>
-                <input
-                  type="text"
-                  value={searchFilter}
-                  onChange={(e) => setSearchFilter(e.target.value)}
-                  placeholder="Search promotions by campaign title or promo code..."
-                  className="w-full ps-10 pe-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand focus:bg-white transition-all placeholder:text-slate-400"
-                />
-              </div>
-
-              {/* Status Tabs */}
-              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0">
-                {[
-                  { id: 'all', label: 'All Deals', count: promotions.length },
-                  { id: 'active', label: 'Active', count: activeDeals.length },
-                  { id: 'scheduled', label: 'Scheduled', count: scheduledDeals.length },
-                  { id: 'expired', label: 'Expired', count: expiredDeals.length },
-                ].map((tab) => (
+      <div className="max-w-5xl">
+        {!couldNotRead && !loading && hasAny ? (
+          <div className="flex flex-col-reverse md:flex-row md:items-end md:justify-between gap-3 border-b border-line mb-6">
+            <div role="tablist" aria-label={t('showDiscounts')} className="flex gap-5 overflow-x-auto [scrollbar-width:none]">
+              {tabs.map((tab) => {
+                const selected = activeTab === tab.id;
+                return (
                   <button
                     key={tab.id}
-                    onClick={() => setActiveTab(tab.id as typeof activeTab)}
-                    className={`px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 ${
-                      activeTab === tab.id
-                        ? 'bg-slate-900 text-white shadow-sm'
-                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200/70'
+                    type="button"
+                    role="tab"
+                    aria-selected={selected}
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`relative -mb-px flex items-center gap-2 min-h-11 pb-1 text-[15px] whitespace-nowrap border-b-2 transition-colors ${
+                      selected ? 'border-brand-600 text-ink font-semibold' : 'border-transparent text-muted hover:text-ink'
                     }`}
                   >
-                    <span>{tab.label}</span>
-                    <span
-                      className={`text-[11px] px-1.5 py-0.2 rounded-full font-bold ${
-                        activeTab === tab.id ? 'bg-white/20 text-white' : 'bg-white text-slate-700 shadow-xs'
-                      }`}
-                    >
-                      {tab.count}
-                    </span>
+                    {tab.label}
+                    {tab.count > 0 && (
+                      <span className="min-w-6 px-1.5 py-0.5 rounded-full text-xs font-semibold tabular-nums bg-raised text-muted">
+                        {tab.count}
+                      </span>
+                    )}
                   </button>
-                ))}
-              </div>
+                );
+              })}
             </div>
-          </>
-        )}
-
-        {/* ========================================================================= */}
-        {/* Promotions List */}
-        {/* ========================================================================= */}
-        {loading ? (
-          <div className="space-y-4">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm animate-pulse flex flex-col sm:flex-row gap-4 items-center">
-                <div className="w-24 h-24 bg-slate-100 rounded-2xl shrink-0" />
-                <div className="flex-1 space-y-2.5 w-full">
-                  <div className="h-5 bg-slate-200 rounded w-1/3" />
-                  <div className="h-4 bg-slate-100 rounded w-1/2" />
-                  <div className="h-3 bg-slate-100 rounded w-1/4" />
-                </div>
+            <div className="flex gap-2 md:pb-2">
+              <div className="relative flex-1 md:w-64 md:flex-none">
+                <Search className="w-4 h-4 text-muted absolute start-3.5 top-1/2 -translate-y-1/2 pointer-events-none" aria-hidden="true" />
+                <input
+                  type="search"
+                  value={searchFilter}
+                  onChange={(e) => setSearchFilter(e.target.value)}
+                  placeholder={t('searchPlaceholder')}
+                  aria-label={t('searchLabel')}
+                  className={`${FIELD} ps-10`}
+                />
               </div>
-            ))}
-          </div>
-        ) : loadError && promotions.length === 0 ? (
-          <LoadError error={loadError} onRetry={loadPromotions} title="We couldn't load your promotions" className="max-w-2xl mx-auto" />
-        ) : filteredPromotions.length === 0 ? (
-          <div className="bg-white rounded-3xl shadow-sm border border-slate-200 p-12 sm:p-16 text-center max-w-2xl mx-auto">
-            <div className="w-16 h-16 bg-brand-50 rounded-2xl flex items-center justify-center mx-auto mb-5 text-brand-ink shadow-inner">
-              <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9.568 3H5.25A2.25 2.25 0 003 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.386a11.175 11.175 0 004.914-4.914c.486-.827.313-1.908-.386-2.607L11.159 3.659A2.25 2.25 0 009.568 3z" />
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 6h.008v.008H6V6z" />
-              </svg>
+              <Button onClick={openNew} className="shrink-0">
+                <Plus className="w-4 h-4" aria-hidden="true" />
+                {t('newTitle')}
+              </Button>
             </div>
-            <h2 className="text-2xl font-black text-slate-900 tracking-tight mb-2">
-              {activeTab === 'all' ? 'No Active Promotions' : `No ${activeTab} promotions`}
-            </h2>
-            <p className="text-sm text-slate-500 mb-6 leading-relaxed max-w-md mx-auto">
-              Boost your kitchen sales and reach new foodies with time-sensitive deals and voucher codes.
-            </p>
-            <Button
-              onClick={() => {
-                setEditingPromo(null);
-                setShowCreateModal(true);
-              }}
-              className="bg-brand hover:bg-brand-500 text-on-brand font-bold rounded-2xl shadow-lg shadow-brand/20 px-6 py-2.5"
-            >
-              Create Your First Deal
-            </Button>
           </div>
         ) : (
-          <div className="space-y-4">
-            {filteredPromotions.map((promo) => {
-              const hasLimit = promo.usageLimitTotal != null && promo.usageLimitTotal > 0;
-              const usagePercent = hasLimit
-                ? Math.min(100, Math.round((promo.usageCount / promo.usageLimitTotal!) * 100))
-                : 0;
-
-              return (
-                <div
-                  key={promo.id}
-                  className="bg-white rounded-3xl shadow-sm border border-slate-200 hover:border-slate-300 hover:shadow-lg transition-all duration-200 overflow-hidden group"
-                >
-                  <div className="flex flex-col lg:flex-row items-stretch">
-                    {/* Left Voucher Coupon Badge */}
-                    <div className="lg:w-52 bg-gradient-to-br from-brand to-amber-600 p-5 text-on-brand flex flex-col justify-between relative overflow-hidden shrink-0">
-                      {/* Decorative background watermark */}
-                      <div className="absolute -end-3 -bottom-3 w-20 h-20 opacity-15 select-none pointer-events-none text-white">
-                        {getTypeIcon(promo.type)}
-                      </div>
-
-                      <div>
-                        <span className="text-[11px] font-black uppercase tracking-widest text-brand-200">
-                          {promo.type === 'percentage'
-                            ? 'DISCOUNT VOUCHER'
-                            : promo.type === 'fixed'
-                            ? 'FLAT CASH OFF'
-                            : 'SPECIAL COMBO'}
-                        </span>
-                        <div className="text-2xl sm:text-3xl font-black tracking-tight mt-1">
-                          {promo.type === 'percentage' && `${promo.discountValue}% OFF`}
-                          {promo.type === 'fixed' && `${formatPrice(promo.discountValue)} OFF`}
-                          {promo.type === 'buy_x_get_y' && 'B2G1 FREE'}
-                          {promo.type === 'bundle' && 'BUNDLE DEAL'}
-                        </div>
-                      </div>
-
-                      {promo.code && (
-                        <div className="mt-4 pt-3 border-t border-white/20">
-                          <button
-                            type="button"
-                            onClick={() => copyPromoCode(promo.code!)}
-                            className="flex items-center justify-between w-full bg-black/20 hover:bg-black/30 px-2.5 py-1.5 rounded-xl text-xs font-mono font-bold tracking-wider text-white transition-colors"
-                            title="Click to copy code"
-                          >
-                            <span>{promo.code}</span>
-                            {Icons.copy}
-                          </button>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Middle Campaign Info */}
-                    <div className="p-5 sm:p-6 flex-1 flex flex-col justify-between space-y-4">
-                      <div>
-                        <div className="flex flex-wrap items-center gap-2 mb-1.5">
-                          <h3 className="text-lg font-bold text-slate-900 group-hover:text-brand-ink transition-colors">
-                            {promo.name}
-                          </h3>
-                          <span
-                            className={`px-2.5 py-0.5 rounded-full text-xs font-bold capitalize border ${getStatusBadge(
-                              promo.status
-                            )}`}
-                          >
-                            {promo.status}
-                          </span>
-                        </div>
-
-                        {/* Validity Dates & Terms */}
-                        <div className="flex flex-wrap items-center gap-y-1 gap-x-4 text-xs font-medium text-slate-500">
-                          <span className="flex items-center gap-1.5 text-slate-600">
-                            {Icons.clock}
-                            <span>
-                              {new Date(promo.startDate).toLocaleDateString()} —{' '}
-                              {new Date(promo.endDate).toLocaleDateString()}
-                            </span>
-                          </span>
-
-                          {promo.minOrderAmount != null && promo.minOrderAmount > 0 && (
-                            <span className="text-slate-600">
-                              Min. order: <strong className="text-slate-900">{formatPrice(promo.minOrderAmount)}</strong>
-                            </span>
-                          )}
-
-                          {promo.products && promo.products.length > 0 && (
-                            <span className="text-slate-600">
-                              Applies to <strong className="text-slate-900">{promo.products.length} menu items</strong>
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Usage Progress Bar */}
-                      {hasLimit && (
-                        <div className="space-y-1">
-                          <div className="flex items-center justify-between text-[11px] font-bold text-slate-500">
-                            <span>Redemption Cap</span>
-                            <span>
-                              {promo.usageCount} / {promo.usageLimitTotal} claimed ({usagePercent}%)
-                            </span>
-                          </div>
-                          <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
-                            <div
-                              className="h-full bg-brand rounded-full transition-all duration-300"
-                              style={{ width: `${usagePercent}%` }}
-                            />
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Right Action Center */}
-                    <div className="p-5 sm:p-6 lg:border-s border-slate-100 flex lg:flex-col items-center justify-between lg:justify-center gap-3 shrink-0 bg-slate-50/50">
-                      <div className="text-center">
-                        <div className="text-2xl font-black text-slate-900 tracking-tight">
-                          {promo.usageCount}
-                        </div>
-                        <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                          Orders Placed
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="rounded-xl font-bold text-xs border-slate-200 hover:bg-slate-100"
-                          onClick={() => setDetailPromo(promo)}
-                        >
-                          Details
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="rounded-xl font-bold text-xs border-slate-200 hover:bg-slate-100"
-                          onClick={() => {
-                            setEditingPromo(promo);
-                            setShowCreateModal(true);
-                          }}
-                        >
-                          {Icons.edit}
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="rounded-xl font-bold text-xs text-rose-600 border-rose-200 hover:bg-rose-50"
-                          onClick={() => handleDeletePromotion(promo.id)}
-                        >
-                          {Icons.trash}
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+          <div className="mb-6">
+            <Button onClick={openNew}>
+              <Plus className="w-4 h-4" aria-hidden="true" />
+              {t('newTitle')}
+            </Button>
           </div>
         )}
 
-        {/* ========================================================================= */}
-        {/* Pro Marketing & Pricing Advisory with SVG Icons */}
-        {/* ========================================================================= */}
-        <div className="bg-gradient-to-r from-brand-50 via-amber-50 to-brand-50 rounded-3xl p-6 border border-brand-200/80 shadow-xs">
-          <div className="flex items-start gap-4">
-            <div className="w-10 h-10 rounded-2xl bg-brand text-on-brand flex items-center justify-center shadow-sm shrink-0">
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 18v-5.25m0 0a6.01 6.01 0 001.5-.189m-1.5.189a6.01 6.01 0 01-1.5-.189m3.75 7.5h-4.5a.75.75 0 01-.75-.75v-.75a.75.75 0 01.75-.75h4.5a.75.75 0 01.75.75v.75a.75.75 0 01-.75.75zm-6-8.25a6 6 0 1112 0c0 2.26-1.25 4.228-3.09 5.25H9.09A5.986 5.986 0 016 11.25z" />
-              </svg>
-            </div>
-            <div>
-              <h3 className="font-bold text-slate-900 text-base mb-1">
-                Kitchen Playbook: High-Impact Promotions
-              </h3>
-              <p className="text-xs text-slate-600 mb-3 leading-relaxed">
-                Strategic discounting protects your kitchen margins while dramatically increasing order volume and customer repeat frequency.
-              </p>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs font-semibold text-slate-700">
-                <div className="bg-white/80 rounded-2xl p-3 border border-brand-100">
-                  <div className="flex items-center gap-1.5 font-bold text-brand-ink mb-1">
-                    {Icons.clock}
-                    <span>Limited-Time Windows</span>
-                  </div>
-                  Create 48-hour weekend specials to induce immediate purchase action.
-                </div>
-                <div className="bg-white/80 rounded-2xl p-3 border border-brand-100">
-                  <div className="flex items-center gap-1.5 font-bold text-brand-ink mb-1">
-                    {Icons.bundle}
-                    <span>Bundle Pairings</span>
-                  </div>
-                  Pair slow-moving sides with high-margin signature curries & frozen packs.
-                </div>
-                <div className="bg-white/80 rounded-2xl p-3 border border-brand-100">
-                  <div className="flex items-center gap-1.5 font-bold text-brand-ink mb-1">
-                    {Icons.discounts}
-                    <span>Minimum Baskets</span>
-                  </div>
-                  Set a minimum order (e.g. ₨ 1,200) so average ticket value rises with discounts.
-                </div>
-              </div>
-            </div>
+        {loading ? (
+          <div className="flex items-center gap-3 py-10 text-[15px] text-muted">
+            <span className="animate-spin rounded-full h-5 w-5 border-2 border-line border-t-brand-600" aria-hidden="true" />
+            {t('loading')}
           </div>
-        </div>
+        ) : loadError && promotions.length === 0 ? (
+          <LoadError error={loadError} onRetry={loadPromotions} title={t('loadFailed')} className="max-w-2xl" />
+        ) : !hasAny ? (
+          <p className="py-6 text-[15px] text-muted max-w-xl">
+            {t('empty')}
+          </p>
+        ) : activeTab === 'all' ? (
+          <div className="space-y-6">
+            <section aria-labelledby="running-heading">
+              <h2 id="running-heading" className="text-sm font-semibold text-ink mb-3">
+                {t('runningNow')}
+                {running.length > 0 && (
+                  <span className="font-normal text-muted tabular-nums">
+                    {runningRedemptions === 1 ? t('usedOnOrdersOne') : t('usedOnOrders', { count: runningRedemptions })}
+                  </span>
+                )}
+              </h2>
+              {runningCard}
+            </section>
+            {later.length > 0 && (
+              <section aria-labelledby="later-heading" className="pt-6 border-t border-line">
+                <h2 id="later-heading" className="text-sm font-semibold text-ink">{t('startingLater')}</h2>
+                {flatList(later)}
+              </section>
+            )}
+            {ended.length > 0 && (
+              <section aria-labelledby="ended-heading" className="pt-6 border-t border-line">
+                <h2 id="ended-heading" className="text-sm font-semibold text-muted">{t('endedHeading')}</h2>
+                {flatList(ended, true)}
+              </section>
+            )}
+            {searching && filteredPromotions.length === 0 && (
+              <p className="text-[15px] text-muted">{t('noMatch')}</p>
+            )}
+          </div>
+        ) : activeTab === 'active' ? (
+          runningCard
+        ) : filteredPromotions.length === 0 ? (
+          <p className="py-6 text-[15px] text-muted">
+            {searching
+              ? t('noMatch')
+              : activeTab === 'scheduled'
+              ? t('noneWaiting')
+              : t('noneEnded')}
+          </p>
+        ) : (
+          flatList(filteredPromotions, activeTab === 'expired')
+        )}
+
+        {!couldNotRead && !loading && (
+          <section aria-labelledby="tips-heading" className="mt-10 pt-6 border-t border-line">
+            <h2 id="tips-heading" className="text-sm font-semibold text-ink mb-2">{t('whatWorks')}</h2>
+            <ul className="space-y-1.5 text-sm text-muted list-disc ps-5 max-w-2xl">
+              <li>{t('tip1')}</li>
+              <li>{t('tip2')}</li>
+              <li>{t('tip3')}</li>
+            </ul>
+          </section>
+        )}
       </div>
 
-      {/* ========================================================================= */}
-      {/* Detail Modal */}
-      {/* ========================================================================= */}
       {detailPromo && (
         <div
-          className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200"
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 sm:p-4"
           onClick={() => setDetailPromo(null)}
         >
           <div
-            className="bg-white rounded-3xl max-w-lg w-full shadow-2xl border border-slate-100 overflow-hidden"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="promo-detail-title"
+            className="bg-surface w-full sm:max-w-md rounded-t-[20px] sm:rounded-[20px] border border-line shadow-[var(--shadow-card)]"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="p-6 border-b border-slate-100 flex items-center justify-between">
-              <h2 className="text-xl font-black text-slate-900 tracking-tight">Campaign Blueprint</h2>
+            <div className="flex items-start justify-between gap-3 px-5 sm:px-6 pt-5">
+              <div className="min-w-0">
+                <h2 id="promo-detail-title" className="text-lg font-semibold text-ink break-words">{detailPromo.name}</h2>
+                <p className="text-sm text-muted">{whenLabel(detailPromo, t, locale)}</p>
+              </div>
               <button
                 type="button"
                 onClick={() => setDetailPromo(null)}
-                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center font-bold text-sm transition-colors"
+                aria-label={t('close')}
+                className="-me-2 -mt-2 w-11 h-11 shrink-0 rounded-full flex items-center justify-center text-muted hover:text-ink hover:bg-raised focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-brand/40"
               >
-                ✕
+                <X className="w-5 h-5" aria-hidden="true" />
               </button>
             </div>
-            <div className="p-6 space-y-4 text-xs sm:text-sm">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Campaign Name</p>
-                <p className="font-bold text-slate-900 text-base">{detailPromo.name}</p>
+            <dl className="px-5 sm:px-6 mt-4 divide-y divide-line border-y border-line">
+              <div className="flex justify-between gap-4 py-3">
+                <dt className="text-sm text-muted">{t('discount')}</dt>
+                <dd className="text-[15px] font-semibold text-ink tabular-nums text-end">{offLabel(detailPromo, t)}</dd>
               </div>
               {detailPromo.code && (
-                <div>
-                  <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Promo Code</p>
-                  <span className="inline-block mt-1 font-mono font-black text-sm bg-slate-100 px-3 py-1 rounded-xl text-slate-900 border border-slate-200">
-                    {detailPromo.code}
-                  </span>
+                <div className="flex justify-between gap-4 py-3">
+                  <dt className="text-sm text-muted">{t('code')}</dt>
+                  <dd className="text-[15px] font-mono text-ink">{detailPromo.code}</dd>
                 </div>
               )}
-              <div>
-                <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Discount Offered</p>
-                <p className="font-black text-brand-ink text-base">
-                  {detailPromo.type === 'percentage' && `${detailPromo.discountValue}% OFF`}
-                  {detailPromo.type === 'fixed' && `${formatPrice(detailPromo.discountValue)} OFF`}
-                  {detailPromo.type === 'buy_x_get_y' && 'Buy X Get Y'}
-                  {detailPromo.type === 'bundle' && 'Bundle deal'}
-                </p>
+              <div className="flex justify-between gap-4 py-3">
+                <dt className="text-sm text-muted">{t('startsLabel')}</dt>
+                <dd className="text-[15px] text-ink text-end">{dateClock(detailPromo.startDate, locale)}</dd>
               </div>
-              <div>
-                <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Active Duration</p>
-                <p className="font-medium text-slate-700">
-                  {new Date(detailPromo.startDate).toLocaleString()} —{' '}
-                  {new Date(detailPromo.endDate).toLocaleString()}
-                </p>
+              <div className="flex justify-between gap-4 py-3">
+                <dt className="text-sm text-muted">{t('endsLabel')}</dt>
+                <dd className="text-[15px] text-ink text-end">{dateClock(detailPromo.endDate, locale)}</dd>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Total Usage</p>
-                  <p className="font-bold text-slate-900">{detailPromo.usageCount} orders</p>
+              <div className="flex justify-between gap-4 py-3">
+                <dt className="text-sm text-muted">{t('usedOn')}</dt>
+                <dd className="text-[15px] text-ink tabular-nums">
+                  {detailPromo.usageCount === 1 ? t('ordersOne') : t('orders', { count: detailPromo.usageCount })}
+                </dd>
+              </div>
+              {detailPromo.minOrderAmount != null && detailPromo.minOrderAmount > 0 && (
+                <div className="flex justify-between gap-4 py-3">
+                  <dt className="text-sm text-muted">{t('smallestOrder')}</dt>
+                  <dd className="text-[15px] text-ink tabular-nums">{formatPrice(detailPromo.minOrderAmount)}</dd>
                 </div>
-                {detailPromo.minOrderAmount != null && detailPromo.minOrderAmount > 0 && (
-                  <div>
-                    <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Min. Basket</p>
-                    <p className="font-bold text-slate-900">{formatPrice(detailPromo.minOrderAmount)}</p>
-                  </div>
-                )}
-              </div>
-              <div className="pt-4 flex gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="flex-1 rounded-xl font-bold text-xs"
-                  onClick={() => setDetailPromo(null)}
-                >
-                  Close
-                </Button>
-                <Button
-                  type="button"
-                  className="flex-1 bg-brand hover:bg-brand-500 text-on-brand rounded-xl font-bold text-xs"
-                  onClick={() => {
-                    setEditingPromo(detailPromo);
-                    setDetailPromo(null);
-                    setShowCreateModal(true);
-                  }}
-                >
-                  Edit Campaign
-                </Button>
-              </div>
+              )}
+            </dl>
+            <div className="flex gap-3 px-5 sm:px-6 py-4">
+              <Button type="button" variant="outline" className="flex-1" onClick={() => setDetailPromo(null)}>
+                {t('close')}
+              </Button>
+              <Button
+                type="button"
+                className="flex-1"
+                onClick={() => {
+                  setEditingPromo(detailPromo);
+                  setDetailPromo(null);
+                  setShowCreateModal(true);
+                }}
+              >
+                {t('editTitle')}
+              </Button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Create / Edit Promotion Modal */}
       <CreatePromotionModal
         isOpen={showCreateModal}
         onClose={() => {

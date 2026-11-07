@@ -12,6 +12,7 @@ export const getSellerOrders = async (req: Request, res: Response) => {
     limit: req.query.limit as number | undefined,
     status: req.query.status as string | undefined,
     orderStatus: req.query.orderStatus as string | undefined,
+    view: req.query.view as 'active' | 'delivered' | 'cancelled' | undefined,
     dateFrom: req.query.dateFrom as string | undefined,
     dateTo: req.query.dateTo as string | undefined,
   };
@@ -78,7 +79,8 @@ export const acceptOrder = async (req: Request, res: Response) => {
   }
 
   const { id } = req.params;
-  const result = await sellerOrderService.acceptOrder(id, req.user.userId);
+  const preparationTime = (req.body as { preparationTime?: number } | undefined)?.preparationTime;
+  const result = await sellerOrderService.acceptOrder(id, req.user.userId, preparationTime);
 
   res.status(200).json({
     success: true,

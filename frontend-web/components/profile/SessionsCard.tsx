@@ -9,9 +9,14 @@ import { LoadError } from '@/components/ui/LoadError';
 import { useToast } from '@/components/ui/toast';
 import { apiClient, apiErrorMessage } from '@/lib/api-client';
 import { useAuthStore } from '@/lib/store/auth-store';
-import { useLocale, useT } from '@/lib/i18n';
+import { formatDateTime } from '@/lib/utils';
+import { useT } from '@/lib/i18n';
 import { accountMessages } from '@/lib/i18n/messages/account';
 import { describeDevice, sortDevices, type SignedInDevice } from '@/lib/sessions';
+import { isPrivateIp } from './private-ip';
+
+/** How many devices show before "See all": this one and the latest others. */
+const SHOWN_DEVICES = 3;
 
 /**
  * The profile's "Signed-in devices": every device the account is signed in on, from GET /auth/sessions. Signing one
@@ -20,7 +25,6 @@ import { describeDevice, sortDevices, type SignedInDevice } from '@/lib/sessions
  */
 export function SessionsCard() {
   const t = useT(accountMessages);
-  const { locale } = useLocale();
   const { showToast } = useToast();
   const logout = useAuthStore((s) => s.logout);
   const router = useRouter();
@@ -29,6 +33,7 @@ export function SessionsCard() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [confirmAll, setConfirmAll] = useState(false);
   const [endingAll, setEndingAll] = useState(false);
+  const [showAll, setShowAll] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -43,9 +48,6 @@ export function SessionsCard() {
   useEffect(() => {
     void load();
   }, [load]);
-
-  const when = (iso: string) =>
-    new Date(iso).toLocaleString(locale === 'ur' ? 'ur-PK' : 'en-PK', { dateStyle: 'medium', timeStyle: 'short' });
 
   const name = (d: SignedInDevice) => {
     const { browser, os } = describeDevice(d.userAgent);
@@ -81,12 +83,12 @@ export function SessionsCard() {
 
   return (
     <div className="p-4 bg-raised rounded-xl" data-testid="sessions-card">
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
         <div className="min-w-0">
           <p className="font-medium text-ink">{t('devicesTitle')}</p>
           <p className="text-xs text-muted">{t('devicesDesc')}</p>
         </div>
-        <Button variant="outline" size="sm" className="shrink-0" onClick={() => setConfirmAll(true)} data-testid="sessions-sign-out-all">
+        <Button variant="outline" size="sm" className="shrink-0 self-start" onClick={() => setConfirmAll(true)} data-testid="sessions-sign-out-all">
           {t('devicesSignOutAll')}
         </Button>
       </div>
@@ -95,7 +97,7 @@ export function SessionsCard() {
 
       {devices && (
         <ul className="mt-3 divide-y divide-line" data-testid="sessions-list">
-          {devices.map((d) => {
+          {(showAll ? devices : devices.slice(0, SHOWN_DEVICES)).map((d) => {
             const mobile = /iPhone|Android|iPad/.test(d.userAgent ?? '');
             const Icon = mobile ? Smartphone : Laptop;
             return (
@@ -110,13 +112,13 @@ export function SessionsCard() {
                       )}
                     </p>
                     <p className="text-xs text-muted">
-                      {t('deviceLastActive', { when: when(d.lastActiveAt) })}
-                      {d.ipAddress ? <span dir="ltr"> · {d.ipAddress}</span> : null}
+                      {t('deviceLastActive', { when: formatDateTime(d.lastActiveAt) })}
+                      {!isPrivateIp(d.ipAddress) ? <span dir="ltr"> · {d.ipAddress}</span> : null}
                     </p>
                   </div>
                 </div>
                 {!d.current && (
-                  <Button variant="outline" size="sm" className="shrink-0" disabled={busyId === d.id} onClick={() => signOut(d)} data-testid="session-sign-out">
+                  <Button variant="outline" size="sm" className="shrink-0" disabled={busyId === d.id} onClick={() => signOut(d)} aria-label={t('deviceSignOutNamed', { device: name(d) })} data-testid="session-sign-out">
                     {t('deviceSignOut')}
                   </Button>
                 )}
@@ -125,6 +127,16 @@ export function SessionsCard() {
           })}
           {devices.every((d) => d.current) && <li className="py-3 text-xs text-muted">{t('devicesNone')}</li>}
         </ul>
+      )}
+      {devices && devices.length > SHOWN_DEVICES && (
+        <button
+          type="button"
+          onClick={() => setShowAll((v) => !v)}
+          className="min-h-11 text-sm font-semibold text-brand-ink hover:underline"
+          data-testid="sessions-see-all"
+        >
+          {showAll ? t('devicesShowFewer') : t('devicesSeeAll', { count: devices.length })}
+        </button>
       )}
 
       <ConfirmModal

@@ -1,14 +1,15 @@
 'use client';
 
-/** The home page's kitchens: trending now, the avatar row, and the grid of kitchen cards with its states. */
+/** The home page's kitchens: trending now, and the grid of kitchen cards with its states. */
 import Link from 'next/link';
-import { Flame, ChevronRight, Sparkles, ChefHat, Heart, Clock, ShieldCheck, MapPin, Star, Bike } from 'lucide-react';
+import { Flame, ChevronRight, ChefHat, Heart, Clock, ShieldCheck, MapPin, Star, Bike } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { CoverImage } from '@/components/ui/CoverImage';
 import { useT } from '@/lib/i18n';
 import { homeMessages } from '@/lib/i18n/messages/home';
-import { countLabel, kitchenCaption } from '@/lib/home-feed';
+import { countLabel } from '@/lib/home-feed';
 import { formatCount, type HomeKitchen, type LoadState } from '@/lib/home-filters';
-import { KitchenAvatarSkeleton, KitchenCardSkeleton, RetryButton, SectionNotice } from './HomeStates';
+import { KitchenCardSkeleton, RetryButton, SectionNotice } from './HomeStates';
 
 type ToggleFavorite = (kitchenId: string, e: React.MouseEvent) => void;
 
@@ -49,62 +50,6 @@ export function TrendingKitchens({ kitchens: trendingKitchens }: { kitchens: Hom
   );
 }
 
-/** "Kitchens on Nuray" as a row of avatars. Hidden when there is nothing to show; the grid below explains why. */
-export function KitchenAvatarRow({ kitchens, state }: { kitchens: HomeKitchen[]; state: LoadState }) {
-  const t = useT(homeMessages);
-  if (!(state === 'loading' || (state === 'ready' && kitchens.length > 0))) return null;
-  return (
-    <section className="max-w-[1280px] mx-auto px-4 sm:px-8 py-6">
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h3 className="text-lg sm:text-[22px] font-extrabold text-ink tracking-tight">{t('kitchensOnNuray')}</h3>
-          <p className="text-xs text-muted font-medium mt-0.5">{t('kitchensOnNuraySub')}</p>
-        </div>
-        <Link href="/kitchens" className="text-xs font-bold text-brand-ink hover:underline flex items-center gap-1">
-          <span>{t('seeAll')}</span>
-          <ChevronRight className="rtl:-scale-x-100 w-3.5 h-3.5" />
-        </Link>
-      </div>
-
-      {/* Compact Avatar Row */}
-      <div className="flex items-center gap-4 sm:gap-6 overflow-x-auto scrollbar-none py-1 px-0.5">
-        {state === 'loading'
-          ? Array.from({ length: 8 }, (_, i) => <KitchenAvatarSkeleton key={i} />)
-          : kitchens.map((k) => {
-              const caption = kitchenCaption(t, k);
-              return (
-                <Link key={k.id} href={k.href} className="flex-shrink-0 flex flex-col items-center gap-1.5 group text-center">
-                  <div className="relative w-14 h-14 sm:w-16 sm:h-16 rounded-full overflow-hidden border border-line group-hover:border-brand transition-all shadow-2xs">
-                    <CoverImage
-                      src={k.avatar || k.coverPhoto}
-                      alt={k.name}
-                      label={k.name}
-                      size="sm"
-                      className="w-full h-full group-hover:scale-105 transition-transform"
-                    />
-                    {k.statusLabel && (
-                      <span
-                        className={`absolute bottom-0.5 end-0.5 w-3 h-3 rounded-full border-2 border-page ${
-                          k.isOpen ? 'bg-brand' : 'bg-line-strong'
-                        }`}
-                        title={k.statusLabel}
-                      />
-                    )}
-                  </div>
-                  <div>
-                    <span className="block text-xs font-semibold text-ink group-hover:text-brand-ink max-w-[85px] sm:max-w-[95px] truncate">
-                      {k.name}
-                    </span>
-                    {caption && <span className="block text-[11px] text-muted font-medium">{caption}</span>}
-                  </div>
-                </Link>
-              );
-            })}
-      </div>
-    </section>
-  );
-}
-
 export function KitchenCard({
   kitchen,
   isFav,
@@ -116,12 +61,9 @@ export function KitchenCard({
 }) {
   const t = useT(homeMessages);
   return (
-    <Link
-      href={kitchen.href}
-      className="group flex flex-col bg-surface rounded-[20px] border border-line hover:border-line-strong hover:shadow-[var(--shadow-card)] transition-all duration-200 overflow-hidden"
-    >
+    <div className="group relative flex flex-col bg-surface rounded-[20px] border border-line hover:border-line-strong hover:shadow-[var(--shadow-card)] transition-all duration-200 overflow-hidden">
       {/* The kitchen's own cover photo, nothing laid over it but the deal and the heart */}
-      <div className="relative aspect-[16/10] w-full overflow-hidden bg-raised">
+      <div className="relative aspect-[2/1] sm:aspect-[16/10] w-full overflow-hidden bg-raised">
         <CoverImage
           src={kitchen.coverPhoto}
           alt={kitchen.name}
@@ -137,20 +79,33 @@ export function KitchenCard({
           </span>
         )}
 
+        {/* 36px to look at, 44px to tap */}
         <button
+          type="button"
           onClick={(e) => onToggleFavorite(kitchen.id, e)}
-          className="absolute top-3 end-3 w-9 h-9 rounded-full bg-surface/95 flex items-center justify-center text-ink hover:scale-105 transition-transform shadow-xs"
+          className="absolute z-10 top-1 end-1 w-11 h-11 flex items-center justify-center"
           aria-label={isFav ? t('removeSaved') : t('saveFav')}
           aria-pressed={isFav}
         >
-          <Heart className={`w-4 h-4 transition-colors ${isFav ? 'fill-red-500 text-red-500' : 'text-muted hover:text-red-500'}`} />
+          <span className="w-9 h-9 rounded-full bg-surface/95 flex items-center justify-center shadow-xs">
+            <Heart className={`w-4 h-4 transition-colors ${isFav ? 'fill-red-500 text-red-500' : 'text-muted'}`} aria-hidden />
+          </span>
         </button>
       </div>
 
       <div className="p-4 flex-1 flex flex-col gap-2">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <h3 className="text-base font-extrabold text-ink truncate">{kitchen.name}</h3>
+            <h3 className="text-base font-extrabold text-ink flex items-center gap-1 min-w-0">
+              <Link
+                href={kitchen.href}
+                className="truncate after:absolute after:inset-0 after:rounded-[20px] focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-inset focus-visible:after:ring-brand"
+              >
+                {kitchen.name}
+              </Link>
+              {/* Every listed kitchen is verified */}
+              <ShieldCheck className="w-4 h-4 shrink-0 text-brand-ink" aria-label={kitchen.badge} />
+            </h3>
             {(kitchen.chef || kitchen.area) && (
               <p className="text-[13px] text-muted truncate flex items-center gap-1">
                 {kitchen.chef && <span>{kitchen.chef}</span>}
@@ -215,18 +170,15 @@ export function KitchenCard({
           {kitchen.minOrder && <span className="text-muted">{t('minOrder', { amount: kitchen.minOrder })}</span>}
         </div>
 
-        {/* Every listed kitchen is verified */}
-        <span className="flex items-center gap-1 text-[11px] font-bold text-brand-ink">
-          <ShieldCheck className="w-3.5 h-3.5" aria-hidden />
-          <span>{kitchen.badge}</span>
-        </span>
       </div>
-    </Link>
+    </div>
   );
 }
 
 /** Every verified kitchen the filters let through, or why there are none: loading, could not load, none yet, none match. */
 export function KitchenGrid({
+  title,
+  areaPrompt,
   kitchens,
   filteredKitchens,
   state,
@@ -235,7 +187,12 @@ export function KitchenGrid({
   isAuthenticated,
   favoriteKitchenIds,
   onToggleFavorite,
+  phoneLimit,
 }: {
+  /** The heading; "Home kitchens" when no area is chosen. */
+  title?: string;
+  /** Shown above the kitchens while no area is chosen: they are then every kitchen, not the ones that deliver to you. */
+  areaPrompt?: { text: string; action: string; onChoose: () => void };
   kitchens: HomeKitchen[];
   filteredKitchens: HomeKitchen[];
   state: LoadState;
@@ -244,23 +201,31 @@ export function KitchenGrid({
   isAuthenticated: boolean;
   favoriteKitchenIds: Set<string>;
   onToggleFavorite: ToggleFavorite;
+  /** On a phone show only the first three cards (View all has the rest), so the dishes below are not a long scroll away. */
+  phoneLimit?: boolean;
 }) {
   const t = useT(homeMessages);
   return (
     <section id="kitchens" className="max-w-[1280px] mx-auto px-4 sm:px-8 py-6 scroll-mt-[calc(var(--header-offset)+4.5rem)]">
-      <div className="flex items-end justify-between mb-5">
-        <div>
-          <div className="inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-brand-ink mb-0.5">
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>{t('verifiedKitchens')}</span>
-          </div>
-          <h2 className="text-[22px] sm:text-[28px] font-extrabold text-ink tracking-tight">{t('browseHomeKitchens')}</h2>
-        </div>
-        <Link href="/kitchens" className="text-xs font-bold text-brand-ink hover:underline flex items-center gap-1">
+      <div className="flex items-end justify-between gap-3 mb-4">
+        <h2 className="text-[22px] sm:text-[28px] font-extrabold text-ink tracking-tight">{title ?? t('browseHomeKitchens')}</h2>
+        <Link href="/kitchens" className="shrink-0 min-h-11 text-sm font-bold text-brand-ink hover:underline flex items-center gap-1">
           <span>{t('viewAll')}</span>
-          <ChevronRight className="rtl:-scale-x-100 w-3.5 h-3.5" />
+          <ChevronRight className="rtl:-scale-x-100 w-4 h-4" aria-hidden />
         </Link>
       </div>
+
+      {areaPrompt && (
+        <div className="mb-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl bg-brand-soft p-4">
+          <p className="flex items-start gap-2 text-sm text-brand-soft-ink">
+            <MapPin className="w-4 h-4 mt-0.5 shrink-0" aria-hidden />
+            <span>{areaPrompt.text}</span>
+          </p>
+          <Button onClick={areaPrompt.onChoose} className="h-11 shrink-0 rounded-xl">
+            {areaPrompt.action}
+          </Button>
+        </div>
+      )}
 
       {state === 'loading' ? (
         <div role="status" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
@@ -300,8 +265,7 @@ export function KitchenGrid({
           }
         />
       ) : (
-        /* Responsive Grid */
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+        <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 ${phoneLimit ? 'max-sm:[&>:nth-child(n+4)]:hidden' : ''}`}>
           {filteredKitchens.map((kitchen) => (
             <KitchenCard
               key={kitchen.id}

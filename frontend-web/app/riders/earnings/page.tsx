@@ -1,19 +1,42 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { loginUrlHere } from '@/lib/auth-redirect';
-import { useRouter } from 'next/navigation';
-import { Wallet, Banknote, TrendingUp, ArrowDownLeft, ArrowUpRight } from 'lucide-react';
 import { DashboardLayout, RIDER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
+import { Button } from '@/components/ui/button';
 import { useAuthStore } from '@/lib/store/auth-store';
-import { apiClient, apiErrorMessage } from '@/lib/api-client';
+import { apiErrorMessage } from '@/lib/api-client';
 import { useToast } from '@/components/ui/toast';
 import { useLiveRefresh } from '@/lib/hooks/use-live-refresh';
 import { riderService, RiderEarnings, RiderLedgerEntry } from '@/lib/services/rider.service';
-import { formatPrice, formatDateTime } from '@/lib/utils';
+import { formatPrice, formatDate, formatTime } from '@/lib/utils';
 import { useT } from '@/lib/i18n';
 import { riderMessages, riderKeyFor } from '@/lib/i18n/messages/rider';
 import { useShallow } from 'zustand/react/shallow';
+
+interface HistoryRow {
+  key: string;
+  orderNumber: string | null;
+  entries: RiderLedgerEntry[];
+}
+
+const dayKey = (iso: string) => new Date(iso).toDateString();
+
+/** Entries by day, newest first as the server sends them; a delivery's fee, bonus and cash collected are one row. */
+function groupByDay(entries: RiderLedgerEntry[]): { day: string; first: string; rows: HistoryRow[] }[] {
+  const days: { day: string; first: string; rows: HistoryRow[] }[] = [];
+  for (const e of entries) {
+    const day = dayKey(e.createdAt);
+    let group = days.find((d) => d.day === day);
+    if (!group) {
+      group = { day, first: e.createdAt, rows: [] };
+      days.push(group);
+    }
+    const row = e.orderId ? group.rows.find((r) => r.key === e.orderId) : undefined;
+    if (row) row.entries.push(e);
+    else group.rows.push({ key: e.orderId ?? e.id, orderNumber: e.orderNumber, entries: [e] });
+  }
+  return days;
+}
 
 /**
  * A rider's money with Nuray: what they've earned, the cash they carry for cash orders, and
@@ -21,7 +44,6 @@ import { useShallow } from 'zustand/react/shallow';
  * hold, usually keeping what they're owed.
  */
 export default function RiderEarningsPage() {
-  const router = useRouter();
   const { isAuthenticated, user } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated, user: s.user })));
   const { showToast } = useToast();
   const t = useT(riderMessages);
@@ -47,18 +69,10 @@ export default function RiderEarningsPage() {
     }
   }, [t]);
 
+  // app/riders/layout.tsx sends signed-out people to sign in and other accounts to their own home.
   useEffect(() => {
-    if (!isAuthenticated && !apiClient.getAccessToken()) {
-      router.push(loginUrlHere());
-      return;
-    }
-    if (!user) return;
-    if (!isRider) {
-      router.push('/products');
-      return;
-    }
-    load();
-  }, [isAuthenticated, user, isRider, router, load]);
+    if (isRider) load();
+  }, [isRider, load]);
 
   // A delivery completed (on this or another device) changes the numbers.
   useLiveRefresh(load, {
@@ -81,107 +95,160 @@ export default function RiderEarningsPage() {
 
   return (
     <DashboardLayout title={t('earn.title')} subtitle={t('earn.subtitle')} sidebarItems={RIDER_SIDEBAR_ITEMS} userType="rider">
-      <div className="max-w-4xl mx-auto space-y-5 pb-16">
+      <div className="max-w-6xl mx-auto pb-16">
         {loading ? (
-          <div className="h-40 rounded-3xl bg-slate-100 animate-pulse" />
+          <div className="py-24 text-center" role="status">
+            <div className="animate-spin rounded-full h-8 w-8 border-2 border-line border-t-brand-600 mx-auto mb-4" />
+            <p className="text-sm text-muted">{t('earn.loading')}</p>
+          </div>
         ) : error || !data ? (
-          <div className="rounded-3xl border border-red-200 bg-red-50 p-6 text-center">
-            <p className="text-sm font-semibold text-red-800">{error ?? t('earn.loadFailed')}</p>
-            <button type="button" onClick={load} className="mt-3 px-4 py-2 rounded-xl border border-red-300 text-sm text-red-700">
+          <div className="max-w-md mx-auto py-16 text-center">
+            <p className="text-base font-semibold text-ink">{error ?? t('earn.loadFailed')}</p>
+            <Button variant="outline" onClick={load} className="mt-4">
               {t('earn.retry')}
-            </button>
+            </Button>
           </div>
         ) : (
-          <>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="rounded-3xl bg-slate-900 text-white p-5" data-testid="rider-balance">
-                <div className="flex items-center gap-2 text-slate-300 text-xs font-semibold uppercase tracking-wider">
-                  <Wallet className="w-4 h-4" /> {data.balance >= 0 ? t('nurayOwesYou') : t('youOweNuray')}
-                </div>
-                <div className="mt-2 text-3xl font-black">{formatPrice(Math.abs(data.balance))}</div>
-                <p className="mt-2 text-[11px] text-slate-400">
-                  {t('earn.balanceNote')}
-                </p>
-              </div>
-
-              <div className="rounded-3xl bg-white border border-slate-200 p-5" data-testid="rider-cash-held">
-                <div className="flex items-center gap-2 text-slate-500 text-xs font-semibold uppercase tracking-wider">
-                  <Banknote className="w-4 h-4" /> {t('cashInHand')}
-                </div>
-                <div className="mt-2 text-3xl font-black text-slate-900">{formatPrice(data.cashHeld)}</div>
-                <div className="mt-3 w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                  <div
-                    className={`h-full ${cashPercent >= 100 ? 'bg-red-500' : cashPercent > 80 ? 'bg-amber-500' : 'bg-emerald-500'}`}
-                    style={{ width: `${cashPercent}%` }}
-                  />
-                </div>
-                <p className="mt-2 text-[11px] text-slate-500">{t('earn.limitNote', { limit: formatPrice(data.cashLimit) })}</p>
-              </div>
-
-              <div className="rounded-3xl bg-white border border-slate-200 p-5">
-                <div className="flex items-center gap-2 text-slate-500 text-xs font-semibold uppercase tracking-wider">
-                  <TrendingUp className="w-4 h-4" /> {t('earn.earned')}
-                </div>
-                <div className="mt-2 grid grid-cols-2 gap-2">
-                  <div>
-                    <p className="text-[11px] text-slate-500">{t('earn.today')}</p>
-                    <p className="text-lg font-black text-slate-900" data-testid="rider-earned-today">{formatPrice(data.earnedToday)}</p>
-                    <p className="text-[11px] text-slate-500">{t(data.deliveriesToday === 1 ? 'earn.delivery' : 'earn.deliveries', { count: data.deliveriesToday })}</p>
+          <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_300px] lg:grid-rows-[auto_1fr] gap-x-10 gap-y-8">
+            <div className="min-w-0 space-y-8 lg:col-start-1">
+              <section className="rounded-[20px] bg-surface border border-line shadow-[var(--shadow-card)] p-5 sm:p-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-10 sm:gap-y-6 max-sm:divide-y max-sm:divide-line max-sm:[&>*:not(:first-child)]:pt-5 max-sm:[&>*:not(:last-child)]:pb-5">
+                  <div data-testid="rider-balance">
+                    <p className="text-sm text-muted">{data.balance >= 0 ? t('nurayOwesYou') : t('youOweNuray')}</p>
+                    <p className="mt-1 text-[26px] sm:text-4xl leading-tight font-semibold text-ink tabular-nums">{formatPrice(Math.abs(data.balance))}</p>
+                    <p className="mt-2 text-sm text-muted leading-relaxed">{t('earn.balanceNote')}</p>
                   </div>
-                  <div>
-                    <p className="text-[11px] text-slate-500">{t('earn.thisWeek')}</p>
-                    <p className="text-lg font-black text-slate-900">{formatPrice(data.earnedThisWeek)}</p>
-                    <p className="text-[11px] text-slate-500">{t(data.deliveriesThisWeek === 1 ? 'earn.delivery' : 'earn.deliveries', { count: data.deliveriesThisWeek })}</p>
+                  <div data-testid="rider-cash-held">
+                    <div className="flex items-baseline justify-between gap-3">
+                      <p className="text-sm text-muted">{t('cashInHand')}</p>
+                      {cashPercent > 80 && (
+                        <span className={`text-xs font-medium ${cashPercent >= 100 ? 'text-red-700' : 'text-accent-soft-ink'}`}>
+                          {cashPercent >= 100 ? t('limitReached') : t('nearLimit')}
+                        </span>
+                      )}
+                    </div>
+                    <p className="mt-1 text-[26px] sm:text-4xl leading-tight font-semibold text-ink tabular-nums">{formatPrice(data.cashHeld)}</p>
+                    <div className="mt-3 h-1.5 rounded-full bg-raised overflow-hidden" role="presentation">
+                      <div
+                        className={`h-full rounded-full ${cashPercent >= 100 ? 'bg-red-600' : cashPercent > 80 ? 'bg-accent-500' : 'bg-brand-600'}`}
+                        style={{ width: `${cashPercent}%` }}
+                      />
+                    </div>
+                    <p className="mt-2 text-sm text-muted leading-relaxed">{t('earn.limitNote', { limit: formatPrice(data.cashLimit) })}</p>
                   </div>
                 </div>
-                <p className="mt-2 text-[11px] text-slate-500">{t('earn.allTime', { earned: formatPrice(data.earned), paid: formatPrice(data.paidOut) })}</p>
-              </div>
+              </section>
             </div>
 
-            <div className="rounded-3xl border border-emerald-200 bg-emerald-50/60 p-4 text-xs text-emerald-900">
-              <strong>{t('earn.settleTitle')}</strong> {t('earn.settleBody')}
-            </div>
+            <aside className="space-y-7 lg:pt-1 lg:col-start-2 lg:row-start-1 lg:row-span-2">
+              <section>
+                <h2 className="text-sm font-semibold text-ink">{t('earn.earned')}</h2>
+                <dl className="mt-3 grid grid-cols-2 gap-4">
+                  <div>
+                    <dt className="text-sm text-muted">{t('earn.today')}</dt>
+                    <dd className="text-2xl font-semibold text-ink tabular-nums" data-testid="rider-earned-today">{formatPrice(data.earnedToday)}</dd>
+                    <dd className="text-sm text-muted">{t(data.deliveriesToday === 1 ? 'earn.delivery' : 'earn.deliveries', { count: data.deliveriesToday })}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-sm text-muted">{t('earn.thisWeek')}</dt>
+                    <dd className="text-2xl font-semibold text-ink tabular-nums">{formatPrice(data.earnedThisWeek)}</dd>
+                    <dd className="text-sm text-muted">{t(data.deliveriesThisWeek === 1 ? 'earn.delivery' : 'earn.deliveries', { count: data.deliveriesThisWeek })}</dd>
+                  </div>
+                </dl>
+              </section>
 
-            <div className="rounded-3xl border border-slate-200 bg-white overflow-hidden">
-              <h2 className="px-5 sm:px-6 pt-5 text-sm font-bold text-slate-900">{t('earn.history')}</h2>
+              <section className="pt-6 border-t border-line">
+                <h2 className="text-sm font-semibold text-ink">{t('earn.allTimeTitle')}</h2>
+                <dl className="mt-3 text-sm">
+                  <div className="flex items-baseline justify-between gap-3 py-1.5">
+                    <dt className="text-muted">{t('earn.allTimeEarned')}</dt>
+                    <dd className="text-ink tabular-nums">{formatPrice(data.earned)}</dd>
+                  </div>
+                  <div className="flex items-baseline justify-between gap-3 py-1.5">
+                    <dt className="text-muted">{t('earn.allTimePaid')}</dt>
+                    <dd className="text-ink tabular-nums">{formatPrice(data.paidOut)}</dd>
+                  </div>
+                </dl>
+              </section>
+
+              <section className="pt-6 border-t border-line">
+                <h2 className="text-sm font-semibold text-ink">{t('earn.settleTitle')}</h2>
+                <p className="mt-1 text-sm text-muted leading-relaxed">{t('earn.settleBody')}</p>
+              </section>
+            </aside>
+
+            <section className="min-w-0 lg:col-start-1 max-lg:pt-6 max-lg:border-t max-lg:border-line">
+              <h2 className="text-sm font-semibold text-ink">{t('earn.history')}</h2>
               {entries.length === 0 ? (
-                <p className="px-5 sm:px-6 py-8 text-sm text-slate-500">{t('earn.empty')}</p>
+                <p className="mt-3 text-sm text-muted">{t('earn.empty')}</p>
               ) : (
-                <ul className="mt-3 divide-y divide-slate-100" data-testid="rider-ledger">
-                  {entries.map((e) => {
-                    const plus = e.amount > 0;
-                    const typeKey = riderKeyFor('ledger', e.type);
+                <div className="mt-2 space-y-5" data-testid="rider-ledger">
+                  {groupByDay(entries).map((group) => {
+                    const yesterday = new Date();
+                    yesterday.setDate(yesterday.getDate() - 1);
+                    const heading =
+                      group.day === new Date().toDateString()
+                        ? t('earn.today')
+                        : group.day === yesterday.toDateString()
+                          ? t('earn.yesterday')
+                          : formatDate(group.first);
                     return (
-                      <li key={e.id} className="px-5 sm:px-6 py-3.5 flex items-center gap-3">
-                        <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${plus ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-600'}`}>
-                          {plus ? <ArrowDownLeft className="w-4 h-4" /> : <ArrowUpRight className="w-4 h-4" />}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-semibold text-slate-900 truncate">{typeKey ? t(typeKey) : e.type}</p>
-                          <p className="text-xs text-slate-500 truncate">
-                            {formatDateTime(e.createdAt)}
-                            {e.note ? ` · ${e.note}` : ''}
-                            {e.reference ? ` · ${t('earn.ref', { ref: e.reference })}` : ''}
-                          </p>
-                        </div>
-                        <p className={`text-sm font-bold ${plus ? 'text-emerald-600' : 'text-slate-900'}`}>
-                          {plus ? '+' : '−'}
-                          {formatPrice(Math.abs(e.amount))}
-                        </p>
-                      </li>
+                      <section key={group.day} aria-label={heading}>
+                        <h3 className="pt-2 pb-1 text-sm font-medium text-muted">{heading}</h3>
+                        <ul className="divide-y divide-line border-t border-line">
+                          {group.rows.map((row) => {
+                            const single = row.entries.length === 1 ? row.entries[0] : null;
+                            // A delivery's several amounts sit under its order line on a phone, so the order number keeps to one line.
+                            const stacked = row.entries.length > 1;
+                            const typeLabel = (e: RiderLedgerEntry) => {
+                              const typeKey = riderKeyFor('ledger', e.type);
+                              return typeKey ? t(typeKey) : e.type;
+                            };
+                            const references = row.entries.map((e) => e.reference).filter(Boolean);
+                            // A delivery's entries are named by its order; the note on them only repeats the type in English.
+                            const detail = [row.orderNumber ? null : single?.note, ...references.map((ref) => t('earn.ref', { ref }))].filter(Boolean).join(', ');
+                            return (
+                              <li key={row.key} className={`py-3.5 flex gap-4 ${stacked ? 'max-sm:flex-col max-sm:gap-1.5 sm:items-start sm:justify-between' : 'items-start justify-between'}`}>
+                                <div className="min-w-0">
+                                  <p className="text-sm font-medium text-ink">
+                                    {row.orderNumber ? t('orderNo', { number: row.orderNumber }) : single ? typeLabel(single) : null}
+                                  </p>
+                                  <p className="text-sm text-muted tabular-nums">
+                                    {formatTime(row.entries[0].createdAt)}
+                                    {detail && <span className="tabular-nums">, {detail}</span>}
+                                  </p>
+                                </div>
+                                <dl className={`space-y-0.5 ${stacked ? 'sm:shrink-0 sm:text-end' : 'shrink-0 text-end'}`}>
+                                  {row.entries.map((e) => (
+                                    <div key={e.id} className={`flex items-baseline gap-2 ${stacked ? 'max-sm:justify-between sm:justify-end' : 'justify-end'}`}>
+                                      {row.orderNumber && <dt className="text-xs text-muted">{typeLabel(e)}</dt>}
+                                      <dd className={`text-sm font-semibold tabular-nums ${e.amount > 0 ? 'text-brand-ink' : 'text-ink'}`}>
+                                        <bdi dir="ltr">
+                                          {e.amount > 0 ? '+' : '−'}
+                                          {formatPrice(Math.abs(e.amount))}
+                                        </bdi>
+                                      </dd>
+                                    </div>
+                                  ))}
+                                </dl>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      </section>
                     );
                   })}
-                </ul>
-              )}
-              {page < data.pagination.totalPages && (
-                <div className="p-4 text-center border-t border-slate-100">
-                  <button type="button" onClick={loadMore} className="text-sm font-semibold text-emerald-700 hover:underline">
-                    {t('earn.showOlder')}
-                  </button>
                 </div>
               )}
-            </div>
-          </>
+              {page < data.pagination.totalPages && (
+                <div className="pt-2 border-t border-line">
+                  <Button variant="ghost" onClick={loadMore} className="px-3 -ms-3">
+                    {t('earn.showOlder')}
+                  </Button>
+                </div>
+              )}
+            </section>
+          </div>
         )}
       </div>
     </DashboardLayout>

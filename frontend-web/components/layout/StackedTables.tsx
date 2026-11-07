@@ -5,12 +5,13 @@ import { useEffect } from 'react';
 /**
  * On phones a table with many columns is turned into one card per row: every cell shows its column
  * name next to its value (see the `.stack-table` rules in globals.css). It marks the tables in the
- * page once they render and again when their rows change, so no table needs rewriting.
+ * page once they render and again when their rows change, so no table needs rewriting. A table that brings its own phone
+ * layout opts out with `data-no-stack`.
  */
 export function StackedTables() {
   useEffect(() => {
     const mark = () => {
-      document.querySelectorAll<HTMLTableElement>('main table').forEach((table) => {
+      document.querySelectorAll<HTMLTableElement>('main table:not([data-no-stack])').forEach((table) => {
         const heads = Array.from(table.querySelectorAll('thead th')).map((th) => (th.textContent || '').trim());
         if (heads.length < 3) return;
         table.classList.add('stack-table');

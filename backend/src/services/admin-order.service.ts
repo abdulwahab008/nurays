@@ -15,7 +15,7 @@ import { issueRefund, IssuedRefund } from './refund.service';
 import ledgerService from './ledger.service';
 import { postDeliveryEntries } from './rider-ledger.service';
 import { releaseHubAllocations } from './hub-allocation.service';
-import { logger } from '../utils/logger';
+import { logEvent, logger } from '../utils/logger';
 
 // The main happy-path order pipeline — admin can only move an order exactly
 // one step forward at a time (no skipping straight to 'dispatched'/'delivered',
@@ -58,6 +58,7 @@ export class AdminOrderService {
     dateFrom?: string;
     dateTo?: string;
     orderNumber?: string;
+    search?: string;
   }) {
     const { page, limit, skip } = pageArgs(filters.page, filters.limit);
 
@@ -77,6 +78,19 @@ export class AdminOrderService {
 
     if (filters.orderNumber) {
       where.orderNumber = { contains: filters.orderNumber, mode: 'insensitive' };
+    }
+
+    // Support is usually given the customer's phone or email, not the order number.
+    const search = filters.search?.trim();
+    if (search) {
+      const digits = search.replace(/\D/g, '');
+      where.OR = [
+        { orderNumber: { contains: search, mode: 'insensitive' } },
+        { customer: { email: { contains: search, mode: 'insensitive' } } },
+        { customer: { profile: { fullName: { contains: search, mode: 'insensitive' } } } },
+        // 0300 123 4567 and +92 300 1234567 are the same phone: matched on its last ten digits.
+        ...(digits.length >= 4 ? [{ customer: { phone: { contains: digits.length > 10 ? digits.slice(-10) : digits.replace(/^0/, '') } } }] : []),
+      ];
     }
 
     if (filters.dateFrom || filters.dateTo) {
@@ -161,6 +175,7 @@ export class AdminOrderService {
         paymentMethod: order.paymentMethod,
         itemsCount: order._count.items,
         sellersCount: new Set(order.items.map((item) => item.sellerId)).size,
+        items: order.items.map((item) => ({ seller: item.seller ? { id: item.seller.id, businessName: item.seller.businessName } : null })),
         createdAt: order.createdAt,
         estimatedDeliveryAt: order.estimatedDeliveryAt,
         deliveredAt: order.deliveredAt,
@@ -362,71 +377,77 @@ export class AdminOrderService {
     // Update order status. Guarded on the status we validated against, so a
     // concurrent change can't be silently overwritten. Delivery carries the same
     // side effects as the seller/rider paths: delivery time, and COD is paid
-    // at the door.
+    // at the door. Everything below commits together: a failure part-way must not leave
+    // a delivered order with open items, an open rider job or an unpaid rider.
     const isDelivered = status === 'delivered';
     const isCodDelivery = isDelivered && isCashAtDoor(order);
-    const applied = await prisma.order.updateMany({
-      where: { id: orderId, orderStatus: order.orderStatus },
-      data: {
-        orderStatus: status,
-        ...(isDelivered ? { deliveredAt: new Date() } : {}),
-        ...(isCodDelivery ? { paymentStatus: 'paid', paymentCollectedBy: codCollectorOf(order), paidAt: new Date() } : {}),
-      },
-    });
-    if (applied.count === 0) {
-      throw new AppError('Order status changed while updating; please retry', 409, 'ORDER_STATUS_CONFLICT');
-    }
-    if (isDelivered) {
-      await prisma.orderItem.updateMany({
-        where: { orderId, status: { notIn: ['cancelled', 'delivered'] } },
-        data: { status: 'delivered' },
+    const updatedOrder = await prisma.$transaction(async (tx) => {
+      if (isDelivered) {
+        // Same lock order as the rider's own "delivered" (order, then its job).
+        await tx.$queryRaw`SELECT id FROM orders WHERE id = ${orderId} FOR UPDATE`;
+      }
+      const applied = await tx.order.updateMany({
+        where: { id: orderId, orderStatus: order.orderStatus },
+        data: {
+          orderStatus: status,
+          ...(isDelivered ? { deliveredAt: new Date() } : {}),
+          ...(isCodDelivery ? { paymentStatus: 'paid', paymentCollectedBy: codCollectorOf(order), paidAt: new Date() } : {}),
+        },
       });
-    }
-    const updatedOrder = await prisma.order.findUniqueOrThrow({ where: { id: orderId } });
-    if (isDelivered) {
-      // The rider's job closes with the order (otherwise it keeps taking one of their two
-      // slots), and they are paid their fee and charged the cash as if they had delivered it.
-      try {
-        await prisma.$transaction(async (tx) => {
-          const job = await tx.delivery.findFirst({
-            where: { orderId, riderId: { not: null }, status: { notIn: ['cancelled', 'delivered', 'delivery_failed'] } },
-          });
-          if (!job || !job.riderId) return;
+      if (applied.count === 0) {
+        throw new AppError('Order status changed while updating; please retry', 409, 'ORDER_STATUS_CONFLICT');
+      }
+      const updated = await tx.order.findUniqueOrThrow({ where: { id: orderId } });
+      if (isDelivered) {
+        await tx.orderItem.updateMany({
+          where: { orderId, status: { notIn: ['cancelled', 'delivered'] } },
+          data: { status: 'delivered' },
+        });
+        // The rider's job closes with the order (otherwise it keeps taking one of their two
+        // slots), and they are paid their fee and charged the cash as if they had delivered it.
+        const job = await tx.delivery.findFirst({
+          where: { orderId, riderId: { not: null }, status: { notIn: ['cancelled', 'delivered', 'delivery_failed'] } },
+        });
+        if (job?.riderId) {
           const closed = await tx.delivery.updateMany({
             where: { id: job.id, status: job.status },
             data: { status: 'delivered', deliveryTime: new Date() },
           });
-          if (closed.count === 0) return;
-          await tx.rider.update({ where: { id: job.riderId }, data: { totalDeliveries: { increment: 1 } } });
-          await postDeliveryEntries(tx, {
-            riderId: job.riderId,
-            deliveryId: job.id,
-            orderId,
-            orderNumber: updatedOrder.orderNumber,
-            fee: Number(job.riderFee ?? 0),
-            bonus: Number(job.riderBonus ?? 0),
-            cashCollected: isCodDelivery && codCollectorOf(order) === 'rider' ? Number(updatedOrder.totalAmount) : 0,
-          });
-        });
-      } catch (jobErr) {
-        logger.error({ err: jobErr, orderId }, 'Failed to close the rider job');
+          if (closed.count > 0) {
+            await tx.rider.update({ where: { id: job.riderId }, data: { totalDeliveries: { increment: 1 } } });
+            await postDeliveryEntries(tx, {
+              riderId: job.riderId,
+              deliveryId: job.id,
+              orderId,
+              orderNumber: updated.orderNumber,
+              fee: Number(job.riderFee ?? 0),
+              bonus: Number(job.riderBonus ?? 0),
+              cashCollected: isCodDelivery && codCollectorOf(order) === 'rider' ? Number(updated.totalAmount) : 0,
+            });
+          }
+        }
       }
+      await tx.orderStatusHistory.create({
+        data: {
+          orderId,
+          status,
+          notes: notes || `Status updated by admin`,
+          changedBy: adminId,
+        },
+      });
+      return updated;
+    });
+
+    logEvent(`order.${status}`, { orderId, orderNumber: updatedOrder.orderNumber, actor: 'admin', from: order.orderStatus });
+
+    if (isDelivered) {
+      // Runs its own transaction that locks this order, so it cannot run inside the one above.
       try {
         await ledgerService.recordOrderCompletion(orderId);
       } catch (ledgerErr) {
         logger.error({ err: ledgerErr, orderId }, 'Failed to record ledger entries');
       }
     }
-
-    // Add status history
-    await prisma.orderStatusHistory.create({
-      data: {
-        orderId,
-        status,
-        notes: notes || `Status updated by admin`,
-        changedBy: adminId,
-      },
-    });
 
     // Emit order status update
     await realtimeOrderService.emitOrderStatusUpdate(orderId, status, adminId);
@@ -445,7 +466,7 @@ export class AdminOrderService {
     const order = await prisma.order.findUnique({
       where: { id: orderId },
       include: {
-        items: true,
+        items: { include: { seller: { select: { deliveryProvider: true } } } },
       },
     });
 
@@ -454,9 +475,19 @@ export class AdminOrderService {
     }
 
     // Check if order can be cancelled — a failed delivery is included since
-    // the alternative to cancelling+refunding it is retryDelivery below.
+    // the alternative to cancelling+refunding it is retryDelivery below. An admin can also
+    // cancel a 'ready' order no rider has taken (rider shortage); that is checked under lock below.
     const cancellableStatuses = ['pending', 'confirmed', 'preparing', 'delivery_failed'];
-    if (!cancellableStatuses.includes(order.orderStatus)) {
+    // Only an order waiting on a platform rider: a self-pickup or kitchen-delivered order has no rider job, so the
+    // no-rider check below would always pass. Mirrors riderService.ensureDeliveryForOrder's needsPlatformRider.
+    const uncancelledItems = order.items.filter((i) => i.status !== 'cancelled');
+    const awaitsPlatformRider =
+      order.deliveryType === 'home_delivery' &&
+      (order.deliveryProvider
+        ? order.deliveryProvider === 'platform' && uncancelledItems.length > 0
+        : uncancelledItems.some((i) => i.fulfillmentType === 'hub' || i.seller?.deliveryProvider !== 'self'));
+    const cancellingReady = by === 'admin' && order.orderStatus === 'ready' && awaitsPlatformRider;
+    if (!cancellableStatuses.includes(order.orderStatus) && !cancellingReady) {
       throw new AppError(
         `Order cannot be cancelled. Current status: ${order.orderStatus}`,
         400,
@@ -468,11 +499,20 @@ export class AdminOrderService {
     let refundIssued = null as IssuedRefund | null;
     let cancelledDelivery = null as CancelledDelivery | null;
     const cancelledOrder = await prisma.$transaction(async (tx) => {
+      if (cancellingReady) {
+        // Same lock order as the rider path (order, then its job). Holding the job row makes a
+        // concurrent rider claim wait and then miss it, as cancelOpenDelivery below closes it.
+        await tx.$queryRaw`SELECT id FROM orders WHERE id = ${orderId} FOR UPDATE`;
+        const [job] = await tx.$queryRaw<{ rider_id: string | null }[]>`SELECT rider_id FROM deliveries WHERE "orderId" = ${orderId} FOR UPDATE`;
+        if (job?.rider_id) {
+          throw new AppError('A rider has already taken this order, so it can no longer be cancelled', 409, 'RIDER_ASSIGNED');
+        }
+      }
       // Claim the cancellation: only one of any concurrent cancel/accept/ready
       // transitions can move the order out of a cancellable status. Without this
       // a stale read let a cancel revive-or-double-restock an order.
       const claimed = await tx.order.updateMany({
-        where: { id: orderId, orderStatus: { in: cancellableStatuses } },
+        where: { id: orderId, orderStatus: { in: cancellingReady ? ['ready'] : cancellableStatuses } },
         data: {
           orderStatus: 'cancelled',
           cancellationReason: reason,
@@ -487,9 +527,12 @@ export class AdminOrderService {
 
       // Items already cancelled (e.g. by their seller) were restocked when that
       // happened; only restock what is still live. Read before the cascade below.
-      const liveItems = await tx.orderItem.findMany({
-        where: { orderId, status: { notIn: ['cancelled', 'delivered'] } },
-      });
+      // Restocked in the same product/variant order placement takes stock in, so the two can't deadlock.
+      const liveItems = (
+        await tx.orderItem.findMany({
+          where: { orderId, status: { notIn: ['cancelled', 'delivered'] } },
+        })
+      ).sort((a, b) => ((a.productId ?? '') + (a.variantId ?? '')).localeCompare((b.productId ?? '') + (b.variantId ?? '')));
 
       // Cascade cancellation to all order items so the seller UI doesn't
       // show stale "Pending/Confirmed/Preparing" rows with action buttons
@@ -519,7 +562,6 @@ export class AdminOrderService {
         }
       }
 
-
       // A cancelled order shouldn't keep consuming the promo's quota.
       await releasePromotionUsage(tx, orderId);
 
@@ -545,6 +587,10 @@ export class AdminOrderService {
 
       return updatedOrder;
     });
+
+    logEvent('order.cancelled', { orderId, orderNumber: order.orderNumber, actor: by, from: order.orderStatus });
+    // Written out rather than through refund.service's logRefundIssued, which tests that mock that module would lose.
+    if (refundIssued) logEvent('refund.issued', { orderId, orderNumber: order.orderNumber, actor: by, refundId: refundIssued.refundId, method: refundIssued.method, status: refundIssued.status, fullyRefunded: refundIssued.fullyRefunded, amountMinor: Math.round(refundIssued.amount * 100) });
 
     // Emit order status update
     await realtimeOrderService.emitOrderStatusUpdate(cancelledOrder.id, 'cancelled', adminId ?? 'system');
@@ -608,6 +654,7 @@ export class AdminOrderService {
       });
       return previous;
     });
+    logEvent('order.delivery_retried', { orderId, orderNumber: order.orderNumber, actor: 'admin', deliveryId: reopened?.id, previousRiderId: reopened?.riderId });
 
     if (previousRider?.rider?.userId) socketManager.removeUserFromOrder(previousRider.rider.userId, orderId);
     await realtimeOrderService.emitOrderStatusUpdate(orderId, 'ready', adminId);
@@ -672,6 +719,7 @@ export class AdminOrderService {
       }
       return r;
     });
+    logEvent('refund.issued', { orderId, orderNumber: order.orderNumber, actor: 'admin', refundId: issued.refundId, method: issued.method, status: issued.status, fullyRefunded: issued.fullyRefunded, amountMinor: Math.round(issued.amount * 100) });
     const result = await prisma.order.findUniqueOrThrow({ where: { id: orderId } });
 
     await realtimeOrderService.emitOrderStatusUpdate(
@@ -727,6 +775,8 @@ export class AdminOrderService {
       revenueThisMonth,
       allTimeOrders,
       allTimeRevenue,
+      newCustomersThisWeek,
+      newKitchensThisWeek,
     ] = await Promise.all([
       // Total orders (in period)
       prisma.order.count({
@@ -750,12 +800,13 @@ export class AdminOrderService {
         _sum: {
           totalAmount: true,
         },
+        _count: true,
       }),
 
-      // Total users (all customers)
-      prisma.user.count({ where: { userType: 'customer' } }),
-      // Total sellers (all sellers)
-      prisma.seller.count(),
+      // Customers with a working account (not suspended, banned or deleted)
+      prisma.user.count({ where: { userType: 'customer', status: 'active' } }),
+      // Live kitchens: approved and not suspended or closed down
+      prisma.seller.count({ where: { verificationStatus: 'approved', status: 'active' } }),
 
       // Active users (users who placed orders in period)
       prisma.order.findMany({
@@ -815,18 +866,18 @@ export class AdminOrderService {
         },
       }),
 
-      // Revenue by day (last 30 days)
+      // created_at holds UTC wall time; the days are Pakistan calendar days, as the dashboard shows them.
       prisma.$queryRaw`
-        SELECT 
-          DATE(created_at) as date,
+        SELECT
+          (created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Karachi')::date as date,
           COUNT(*) as orders,
           SUM(total_amount) as revenue
         FROM orders
         WHERE created_at >= ${dateFrom}
           AND created_at <= ${dateTo}
           AND payment_status = 'paid'
-        GROUP BY DATE(created_at)
-        ORDER BY date ASC
+        GROUP BY 1
+        ORDER BY 1 ASC
       `,
 
       // Orders today
@@ -872,6 +923,8 @@ export class AdminOrderService {
         where: { paymentStatus: 'paid' },
         _sum: { totalAmount: true },
       }),
+      prisma.user.count({ where: { userType: 'customer', status: 'active', createdAt: { gte: weekStart } } }),
+      prisma.seller.count({ where: { verificationStatus: 'approved', status: 'active', createdAt: { gte: weekStart } } }),
     ]);
 
     const totalRevenueNum = Number(totalRevenue._sum.totalAmount || 0);
@@ -882,8 +935,11 @@ export class AdminOrderService {
         totalOrders: allTimeOrders,
         totalRevenue: Number(allTimeRevenue._sum.totalAmount || 0),
         periodRevenue: totalRevenueNum,
+        periodPaidOrders: totalRevenue._count,
         totalUsers,
         totalSellers,
+        newUsersThisWeek: newCustomersThisWeek,
+        newSellersThisWeek: newKitchensThisWeek,
         activeUsers: activeUsers.filter((u) => u.customerId).length,
         activeSellers: activeSellers.length,
         totalCommission: Number(totalCommission._sum.commissionAmount || 0),
@@ -920,29 +976,26 @@ export class AdminOrderService {
    * Get order statistics
    */
   async getOrderStatistics() {
+    const todayStart = new Date(new Date().setHours(0, 0, 0, 0));
     const [
-      todayOrders,
+      todayPlaced,
+      todayCancelled,
       todayRevenue,
-      pendingOrders,
-      inTransitOrders,
+      waitingForKitchen,
+      beingPrepared,
+      onTheWay,
+      failedDeliveries,
       cancelledOrders,
       averageOrderValue,
     ] = await Promise.all([
-      // Today's orders
-      prisma.order.count({
-        where: {
-          createdAt: {
-            gte: new Date(new Date().setHours(0, 0, 0, 0)),
-          },
-        },
-      }),
+      // Today's orders that still stand (a cancelled one is counted on its own below)
+      prisma.order.count({ where: { createdAt: { gte: todayStart }, orderStatus: { not: 'cancelled' } } }),
+      prisma.order.count({ where: { createdAt: { gte: todayStart }, orderStatus: 'cancelled' } }),
 
       // Today's revenue
       prisma.order.aggregate({
         where: {
-          createdAt: {
-            gte: new Date(new Date().setHours(0, 0, 0, 0)),
-          },
+          createdAt: { gte: todayStart },
           paymentStatus: 'paid',
         },
         _sum: {
@@ -950,19 +1003,14 @@ export class AdminOrderService {
         },
       }),
 
-      // Pending orders
-      prisma.order.count({
-        where: {
-          orderStatus: 'pending',
-        },
-      }),
-
-      // In transit orders
-      prisma.order.count({
-        where: {
-          orderStatus: 'in_transit',
-        },
-      }),
+      // Placed and not yet accepted by the kitchen
+      prisma.order.count({ where: { orderStatus: 'pending' } }),
+      // Accepted and in the kitchen: cooking or ready for collection
+      prisma.order.count({ where: { orderStatus: { in: ['confirmed', 'preparing', 'ready'] } } }),
+      // With a rider: picked up ('dispatched') or on the road ('in_transit'), see utils/deliveryStatus.ts
+      prisma.order.count({ where: { orderStatus: { in: ['dispatched', 'in_transit'] } } }),
+      // A rider could not hand it over; an admin has to decide what happens to it
+      prisma.order.count({ where: { orderStatus: 'delivery_failed' } }),
 
       // Cancelled orders (last 7 days)
       prisma.order.count({
@@ -974,7 +1022,7 @@ export class AdminOrderService {
         },
       }),
 
-      // Average order value
+      // Average order value (last 30 days)
       prisma.order.aggregate({
         where: {
           paymentStatus: 'paid',
@@ -990,15 +1038,22 @@ export class AdminOrderService {
 
     return {
       today: {
-        orders: todayOrders,
+        orders: todayPlaced,
+        cancelled: todayCancelled,
         revenue: Number(todayRevenue._sum.totalAmount || 0),
       },
-      pendingOrders,
-      inTransitOrders,
+      // Every order not yet with a rider: waiting for the kitchen plus being prepared.
+      pendingOrders: waitingForKitchen + beingPrepared,
+      waitingForKitchen,
+      beingPrepared,
+      inTransitOrders: onTheWay,
+      failedDeliveries,
       cancelledOrdersLast7Days: cancelledOrders,
       averageOrderValue: Number(averageOrderValue._avg.totalAmount || 0),
+      averageOrderValueDays: 30,
     };
   }
+
 }
 
 export default new AdminOrderService();

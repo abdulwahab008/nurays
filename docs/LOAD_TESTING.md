@@ -133,8 +133,13 @@ What the run showed, in the order to look at it:
   target for the lists, so this stays the first thing to watch on staging with two instances.
 - **The dish search scans every dish.** The plan of the search (Q3 in `explain.sql`) is a sequential scan of 10,000 dishes
   and takes 71 ms in the database (the next slowest, the total behind the listing pages, 19 ms; everything else under
-  10 ms). At 50 users it is the only read over its target. A trigram index is the usual answer; it is a schema change,
-  so it waits for approval.
+  10 ms). At 50 users it is the only read over its target. The trigram indexes were already there
+  (`products_name_trgm_idx`, `products_name_urdu_trgm_idx`, `products_description_trgm_idx`, from the baseline
+  migration), but the search's per-term filter spans the term list and the kitchen join, so the planner could not use
+  them. `searchRankedProductIds` (`services/ranking.service.ts`) now first narrows the dishes with plain column
+  predicates (`ILIKE` on name, Urdu name and description, `<%` on the name, or a kitchen whose name matches) that
+  those indexes can answer. The numbers above were measured before that change; re-run `browse` and `explain.sql` Q3
+  to confirm the plan no longer scans every dish.
 - **Refusals were rules at work, not faults.** 87 of 300 claims were refused with `409 CASH_LIMIT_REACHED`: those seeded
   riders already have cash orders running, and one more would take them over the Rs 10,000 cash limit. A few position
   updates arrived a moment after the job was delivered and were answered `409 DELIVERY_NOT_ACTIVE`.

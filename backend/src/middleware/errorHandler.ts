@@ -2,6 +2,9 @@ import { Request, Response, NextFunction } from 'express';
 import { logger } from '../utils/logger';
 import { reportError } from '../config/sentry';
 
+/** Set on res.locals for a 5xx logged here with its stack, so the request log line does not log it again. */
+export const ERROR_LOGGED = 'errorLogged';
+
 export class AppError extends Error {
   statusCode: number;
   code: string;
@@ -123,9 +126,11 @@ export const errorHandler = (
   const isDev = process.env.NODE_ENV === 'development';
   const expected = err instanceof AppError && (err.statusCode < 500 || err.isExpected);
 
+  if (!expected) res.locals[ERROR_LOGGED] = true;
+
   if (expected) {
     // A client mistake (validation, not found, forbidden...) or a known state such as a switched-off feature: worth a line, not an alert.
-    logger.warn({ code: (err as AppError).code, status: (err as AppError).statusCode, path: req.path, method: req.method }, err.message);
+    logger.warn({ errorCode: (err as AppError).code, status: (err as AppError).statusCode, path: req.path, method: req.method }, err.message);
   } else {
     // A bug or an outage: the full stack goes to the logs and to error tracking, never to the client.
     logger.error({ err, path: req.path, method: req.method }, 'Request failed');
@@ -140,7 +145,8 @@ export const errorHandler = (
         code: err.code || 'INTERNAL_ERROR',
         message: err.message || 'Internal Server Error',
         ...(err.details ? { details: err.details } : {}),
-        ...(isDev && err.stack && { stack: err.stack }),
+        // A stack helps with a fault while developing; a client mistake (a 4xx) or a known state has nothing to debug.
+        ...(isDev && !expected && err.stack && { stack: err.stack }),
       },
       requestId,
       timestamp: new Date().toISOString(),

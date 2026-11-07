@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { useAuthStore } from '@/lib/store/auth-store';
@@ -16,6 +15,7 @@ import { productService, Product } from '@/lib/services/product.service';
 import { communityService, CommunityDetail } from '@/lib/services/community.service';
 import { cartService } from '@/lib/services/cart.service';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
+import { RoleGuard } from '@/components/RoleGuard';
 import { CoverImage } from '@/components/ui/CoverImage';
 import { LoadError } from '@/components/ui/LoadError';
 import { CuisineCarousel, PLATFORM_CUISINES } from '@/components/marketplace/CuisineCarousel';
@@ -132,7 +132,7 @@ function DealBadge({ dish }: { dish: DashboardDish }) {
   const percentOff = Math.round((1 - dish.price / dish.originalPrice) * 100);
   if (percentOff <= 0) return null;
   return (
-    <span className="absolute top-2.5 start-2.5 px-2 py-0.5 rounded-lg text-on-brand text-[11px] font-bold bg-brand shadow-xs uppercase tracking-wider flex items-center gap-1">
+    <span className="absolute top-2.5 start-2.5 px-2 py-0.5 rounded-lg text-on-brand text-[11px] font-bold bg-brand shadow-xs flex items-center gap-1">
       <Tag className="w-3 h-3" />
       <span>{t('percentOff', { percent: percentOff })}</span>
     </span>
@@ -164,31 +164,20 @@ function shuffleArray<T>(items: T[]): T[] {
 }
 
 export default function CustomerDashboardPage() {
-  const router = useRouter();
-  const { isAuthenticated, user } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated, user: s.user })));
+  return (
+    <RoleGuard allowedRoles={['customer']} redirectUnauthenticated="/login" allowGuests>
+      <CustomerDashboard />
+    </RoleGuard>
+  );
+}
+
+function CustomerDashboard() {
+  const { isAuthenticated } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated })));
   const { selectedCommunity } = useCommunityStore(useShallow((s) => ({ selectedCommunity: s.selectedCommunity })));
   const { addItem: addCartItem, appliedPromoCode, setAppliedPromoCode } = useCartStore(useShallow((s) => ({ addItem: s.addItem, appliedPromoCode: s.appliedPromoCode, setAppliedPromoCode: s.setAppliedPromoCode })));
   const { showToast } = useToast();
   const t = useT(dashboardMessages);
   const tc = useT(commonMessages);
-
-  // Strict RBAC: Route non-customer roles directly to their specialized dashboards
-  useEffect(() => {
-    if (!isAuthenticated || !user) return;
-    const role = user.userType || user.user_type;
-    if (role === 'seller') {
-      router.replace('/sellers/dashboard');
-      return;
-    }
-    if (role === 'rider') {
-      router.replace('/riders/dashboard');
-      return;
-    }
-    if (role === 'admin') {
-      router.replace('/admin/dashboard');
-      return;
-    }
-  }, [isAuthenticated, user, router]);
 
   const [loading, setLoading] = useState(true);
   const [activeOrder, setActiveOrder] = useState<Order | null>(null);
@@ -499,11 +488,11 @@ export default function CustomerDashboardPage() {
                 <div>
                   <div className="flex items-center gap-2">
                     <span className="w-2 h-2 rounded-full bg-brand animate-pulse" />
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-brand-soft-ink">{t('activeDelivery')}</span>
+                    <span className="text-[11px] font-bold text-brand-soft-ink">{t('activeDelivery')}</span>
                   </div>
                   <p className="text-sm font-bold text-ink mt-0.5">{t('orderNumber', { number: activeOrder.orderNumber })}</p>
                   <p className="text-xs text-muted font-medium">
-                    {t('statusLabel')} <span className="capitalize font-semibold text-ink">{statusKey(activeOrder.orderStatus) in commonMessages.en ? tc(statusKey(activeOrder.orderStatus)) : activeOrder.orderStatus.replace('_', ' ')}</span> · {t('itemsCount', { count: activeOrder.itemsCount })}
+                    {t('statusLabel')} <span className="font-semibold text-ink">{statusKey(activeOrder.orderStatus) in commonMessages.en ? tc(statusKey(activeOrder.orderStatus)) : activeOrder.orderStatus.replace('_', ' ')}</span> · {activeOrder.itemsCount === 1 ? t('itemsCountOne') : t('itemsCount', { count: activeOrder.itemsCount })}
                   </p>
                 </div>
               </div>
@@ -522,7 +511,7 @@ export default function CustomerDashboardPage() {
         <div className="bg-surface rounded-2xl border border-line p-4 sm:p-5 shadow-2xs">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
             <div>
-              <div className="inline-flex items-center gap-1.5 text-[11px] font-bold text-brand-ink uppercase tracking-wider mb-0.5">
+              <div className="inline-flex items-center gap-1.5 text-[11px] font-bold text-brand-ink mb-0.5">
                 <ChefHat className="w-3.5 h-3.5 text-brand-ink" />
                 <span>{t('handcrafted')}</span>
               </div>
@@ -540,10 +529,10 @@ export default function CustomerDashboardPage() {
               <button
                 type="button"
                 onClick={() => { setViewMode('all'); setSelectedCuisine(''); }}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                className={`min-h-11 px-4 rounded-full text-sm font-semibold transition-colors flex items-center gap-1.5 ${
                   viewMode === 'all' && !selectedCuisine
-                    ? 'bg-ink text-page shadow-xs'
-                    : 'bg-raised text-muted hover:bg-line'
+                    ? 'bg-brand-soft text-brand-soft-ink border border-brand'
+                    : 'bg-surface text-ink border border-line hover:bg-raised'
                 }`}
               >
                 <Layers className="w-3.5 h-3.5" />
@@ -554,10 +543,10 @@ export default function CustomerDashboardPage() {
               <button
                 type="button"
                 onClick={() => { setViewMode('top10'); setSelectedCuisine(''); }}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                className={`min-h-11 px-4 rounded-full text-sm font-semibold transition-colors flex items-center gap-1.5 ${
                   viewMode === 'top10' && !selectedCuisine
-                    ? 'bg-brand text-on-brand shadow-xs'
-                    : 'bg-raised text-muted hover:bg-line'
+                    ? 'bg-brand-soft text-brand-soft-ink border border-brand'
+                    : 'bg-surface text-ink border border-line hover:bg-raised'
                 }`}
               >
                 <Trophy className="w-3.5 h-3.5" />
@@ -568,10 +557,10 @@ export default function CustomerDashboardPage() {
               <button
                 type="button"
                 onClick={() => { setViewMode('kitchens'); setSelectedCuisine(''); }}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                className={`min-h-11 px-4 rounded-full text-sm font-semibold transition-colors flex items-center gap-1.5 ${
                   viewMode === 'kitchens' && !selectedCuisine
-                    ? 'bg-ink text-page shadow-xs'
-                    : 'bg-raised text-muted hover:bg-line'
+                    ? 'bg-brand-soft text-brand-soft-ink border border-brand'
+                    : 'bg-surface text-ink border border-line hover:bg-raised'
                 }`}
               >
                 <ChefHat className="w-3.5 h-3.5" />
@@ -582,9 +571,9 @@ export default function CustomerDashboardPage() {
               <button
                 type="button"
                 onClick={handleRandomize}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                className={`min-h-11 px-4 rounded-full text-sm font-semibold transition-colors flex items-center gap-1.5 ${
                   isRandomOrder
-                    ? 'bg-ink text-page'
+                    ? 'bg-brand-soft text-brand-soft-ink border border-brand'
                     : 'bg-surface text-ink border border-line hover:bg-raised'
                 }`}
                 title={t('randomizeTitle')}
@@ -628,7 +617,7 @@ export default function CustomerDashboardPage() {
             <section>
               <div className="flex items-center justify-between mb-3">
                 <div>
-                  <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-raised text-ink text-[11px] font-bold uppercase tracking-wider mb-1">
+                  <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-raised text-ink text-[11px] font-bold mb-1">
                     <ChefHat className="w-3.5 h-3.5 text-brand-ink" />
                     <span>{t('verifiedDomesticCooks')}</span>
                   </div>
@@ -742,7 +731,7 @@ export default function CustomerDashboardPage() {
             <section>
               <div className="flex items-center justify-between mb-3">
                 <div>
-                  <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-brand-100 text-brand-ink text-[11px] font-bold uppercase tracking-wider mb-1">
+                  <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-brand-soft text-brand-soft-ink text-[11px] font-bold mb-1">
                     <Flame className="w-3.5 h-3.5 text-brand-ink" />
                     <span>{t('popularDishes')}</span>
                   </div>
@@ -819,7 +808,7 @@ export default function CustomerDashboardPage() {
                           <button
                             type="button"
                             onClick={() => handleAddToCart(dish)}
-                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-ink hover:bg-brand hover:text-on-brand text-page text-xs font-bold transition-colors shadow-2xs active:scale-95"
+                            className="inline-flex items-center gap-1 min-h-11 px-4 rounded-xl bg-brand hover:bg-brand-500 text-on-brand text-sm font-bold transition-colors active:scale-95"
                           >
                             <Plus className="w-3.5 h-3.5 stroke-[3]" />
                             <span>{t('add')}</span>
@@ -976,7 +965,7 @@ export default function CustomerDashboardPage() {
                             <button
                               type="button"
                               onClick={() => handleAddToCart(dish)}
-                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-ink hover:bg-brand hover:text-on-brand text-page text-xs font-bold transition-colors shadow-2xs active:scale-95"
+                              className="inline-flex items-center gap-1 min-h-11 px-4 rounded-xl bg-brand hover:bg-brand-500 text-on-brand text-sm font-bold transition-colors active:scale-95"
                             >
                               <Plus className="w-3.5 h-3.5 stroke-[3]" />
                               <span>{t('add')}</span>
@@ -995,7 +984,7 @@ export default function CustomerDashboardPage() {
               <section>
                 <div className="flex items-center justify-between mb-3">
                   <div>
-                    <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-raised text-ink text-[11px] font-bold uppercase tracking-wider mb-1">
+                    <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-raised text-ink text-[11px] font-bold mb-1">
                       <ChefHat className="w-3.5 h-3.5 text-brand-ink" />
                       <span>{t('verifiedHomeCooks')}</span>
                     </div>
@@ -1118,7 +1107,7 @@ export default function CustomerDashboardPage() {
               <section>
                 <div className="flex items-center justify-between mb-3">
                   <div>
-                    <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-accent-soft text-accent-soft-ink text-[11px] font-bold uppercase tracking-wider mb-1">
+                    <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-accent-soft text-accent-soft-ink text-[11px] font-bold mb-1">
                       <Sparkles className="w-3.5 h-3.5 text-brand-ink" />
                       <span>{t('generationalRecipes')}</span>
                     </div>
@@ -1191,7 +1180,7 @@ export default function CustomerDashboardPage() {
                             <button
                               type="button"
                               onClick={() => handleAddToCart(dish)}
-                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-ink hover:bg-brand hover:text-on-brand text-page text-xs font-bold transition-colors shadow-2xs active:scale-95"
+                              className="inline-flex items-center gap-1 min-h-11 px-4 rounded-xl bg-brand hover:bg-brand-500 text-on-brand text-sm font-bold transition-colors active:scale-95"
                             >
                               <Plus className="w-3.5 h-3.5 stroke-[3]" />
                               <span>{t('add')}</span>
@@ -1210,7 +1199,7 @@ export default function CustomerDashboardPage() {
               <section>
                 <div className="flex items-center justify-between mb-3">
                   <div>
-                    <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-red-100 text-red-700 text-[11px] font-bold uppercase tracking-wider mb-1">
+                    <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-raised text-ink text-[11px] font-bold mb-1">
                       <Flame className="w-3.5 h-3.5 text-red-600" />
                       <span>{t('slowBraised')}</span>
                     </div>
@@ -1283,7 +1272,7 @@ export default function CustomerDashboardPage() {
                             <button
                               type="button"
                               onClick={() => handleAddToCart(dish)}
-                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-ink hover:bg-brand hover:text-on-brand text-page text-xs font-bold transition-colors shadow-2xs active:scale-95"
+                              className="inline-flex items-center gap-1 min-h-11 px-4 rounded-xl bg-brand hover:bg-brand-500 text-on-brand text-sm font-bold transition-colors active:scale-95"
                             >
                               <Plus className="w-3.5 h-3.5 stroke-[3]" />
                               <span>{t('add')}</span>
@@ -1302,7 +1291,7 @@ export default function CustomerDashboardPage() {
               <section>
                 <div className="flex items-center justify-between mb-3">
                   <div>
-                    <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-frozen-soft text-frozen-ink text-[11px] font-bold uppercase tracking-wider mb-1">
+                    <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-frozen-soft text-frozen-ink text-[11px] font-bold mb-1">
                       <Snowflake className="w-3.5 h-3.5 text-frozen-ink" />
                       <span>{t('freezerReady')}</span>
                     </div>
@@ -1350,7 +1339,7 @@ export default function CustomerDashboardPage() {
                             className="w-full h-full group-hover:scale-105 transition-transform duration-300"
                           />
                           {dish.isFrozen ? (
-                            <span className="absolute top-2.5 start-2.5 px-2 py-0.5 rounded-lg text-white text-[11px] font-bold bg-frozen shadow-xs uppercase tracking-wider flex items-center gap-1">
+                            <span className="absolute top-2.5 start-2.5 px-2 py-0.5 rounded-lg text-white text-[11px] font-bold bg-frozen shadow-xs flex items-center gap-1">
                               <Snowflake className="w-3 h-3" />
                               <span>{t('frozen')}</span>
                             </span>
@@ -1382,7 +1371,7 @@ export default function CustomerDashboardPage() {
                             <button
                               type="button"
                               onClick={() => handleAddToCart(dish)}
-                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-ink hover:bg-brand hover:text-on-brand text-page text-xs font-bold transition-colors shadow-2xs active:scale-95"
+                              className="inline-flex items-center gap-1 min-h-11 px-4 rounded-xl bg-brand hover:bg-brand-500 text-on-brand text-sm font-bold transition-colors active:scale-95"
                             >
                               <Plus className="w-3.5 h-3.5 stroke-[3]" />
                               <span>{t('add')}</span>

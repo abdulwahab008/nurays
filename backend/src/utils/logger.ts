@@ -30,6 +30,59 @@ function prettyTransport() {
   }
 }
 
+const SECRET_KEYS = new Set(
+  [
+    'password',
+    'newPassword',
+    'currentPassword',
+    'token',
+    'accessToken',
+    'refreshToken',
+    'access_token',
+    'refresh_token',
+    'authorization',
+    'cookie',
+    'otp',
+    'otpCode',
+    'otpCodeOrPassword',
+    'deliveryOtp',
+    'handoverCode',
+    'code',
+    'sig',
+    'signature',
+    'secret',
+    'cardNumber',
+    'cvv',
+  ].map((key) => key.toLowerCase())
+);
+const REDACTED = '[redacted]';
+const MAX_DEPTH = 8;
+
+/**
+ * Pino's redact paths have no recursive wildcard ('*.key' is exactly one level) and each wildcard path
+ * costs about 1 µs per line, so secret keys are scrubbed here at any depth instead, copying only the
+ * branches that change. Errors are left to pino's error serializer (their `code` is an error code).
+ */
+function scrubSecrets(value: unknown, depth = 0): unknown {
+  if (value === null || typeof value !== 'object' || depth > MAX_DEPTH) return value;
+  if (Array.isArray(value)) {
+    let out: unknown[] | undefined;
+    value.forEach((item, i) => {
+      const clean = scrubSecrets(item, depth + 1);
+      if (clean !== item) (out ??= value.slice())[i] = clean;
+    });
+    return out ?? value;
+  }
+  const proto = Object.getPrototypeOf(value);
+  if (proto !== Object.prototype && proto !== null) return value;
+  let out: Record<string, unknown> | undefined;
+  for (const [key, item] of Object.entries(value)) {
+    const clean = SECRET_KEYS.has(key.toLowerCase()) ? REDACTED : scrubSecrets(item, depth + 1);
+    if (clean !== item) (out ??= { ...value })[key] = clean;
+  }
+  return out ?? value;
+}
+
 export const logger = pino({
   level: process.env.LOG_LEVEL || (runtimeMode() === 'test' ? 'warn' : 'info'),
   base: { service: 'nuray-api' },
@@ -38,22 +91,9 @@ export const logger = pino({
     return ctx ? { requestId: ctx.requestId, ...(ctx.userId ? { userId: ctx.userId } : {}) } : {};
   },
   // Never let credentials reach the logs, whatever a caller passes in.
-  redact: {
-    paths: [
-      'req.headers.authorization',
-      'req.headers.cookie',
-      'headers.authorization',
-      '*.password',
-      '*.newPassword',
-      '*.currentPassword',
-      '*.otpCode',
-      '*.otpCodeOrPassword',
-      '*.token',
-      '*.refreshToken',
-      '*.handoverCode',
-    ],
-    censor: '[redacted]',
-  },
+  formatters: { log: (obj) => scrubSecrets(obj) as Record<string, unknown> },
+  // An HTTP client's error carries the request it sent, headers included.
+  redact: { paths: ['err.config.headers.authorization', 'err.response.config.headers.authorization'], censor: REDACTED },
   transport: prettyTransport(),
 });
 
@@ -61,6 +101,11 @@ export const logger = pino({
 export function setLogUser(userId: string) {
   const ctx = requestContext.getStore();
   if (ctx) ctx.userId = userId;
+}
+
+/** Log a structured domain event (e.g. logEvent('order.placed', { orderId })) at info, tagged with the current request id. */
+export function logEvent(name: string, fields: Record<string, unknown> = {}) {
+  logger.info({ ...fields, event: name }, name);
 }
 
 /**

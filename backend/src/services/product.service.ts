@@ -10,7 +10,8 @@ import { getPlatformDeliveryPricing } from './delivery-pricing.service';
 import { searchRankedProductIds } from './ranking.service';
 import { AppError } from '../middleware/errorHandler';
 import { computeSellerAvailability, isAcceptingOrders, type SellerAvailabilityInput } from './availability.service';
-import { getDeliveryFeeForSeller, haversineKm, type SellerDeliveryPolicy } from '../utils/deliveryFee';
+import { getDeliveryFeeForSeller, haversineKm, type PlatformDeliveryPricing, type SellerDeliveryPolicy } from '../utils/deliveryFee';
+import { splitDeliveryFees } from '../utils/orderPricing';
 import { isOnMenu, menuNote, normalizeMenuInput, onMenuWhere } from '../utils/menu';
 import { notifyApprovers } from './approvals.service';
 import { notifySeller } from './notify.service';
@@ -140,6 +141,9 @@ async function sellersPassingComputedFilters(
     maxDistanceKm?: number;
     customerLat?: number;
     customerLng?: number;
+    /** Only kitchens that deliver to the customer (their area and/or address) for no charge to the customer. */
+    freeDelivery?: boolean;
+    customerCommunityId?: string;
   }
 ): Promise<string[]> {
   const hasLocation = opts.customerLat != null && opts.customerLng != null;
@@ -159,12 +163,17 @@ async function sellersPassingComputedFilters(
 
   const sellers = await prisma.seller.findMany({
     where: box.length > 0 ? { AND: [sellerWhere, ...box] } : sellerWhere,
-    select: { id: true, latitude: true, longitude: true, minPrepTimeMinutes: true, ...SELLER_AVAILABILITY_SELECT },
+    select: { ...SELLER_ORDERING_SELECT, ...SELLER_AVAILABILITY_SELECT },
   });
+  const pricing = opts.freeDelivery ? await getPlatformDeliveryPricing() : null;
 
   return sellers
     .filter((seller) => {
       if (opts.openNow && !computeSellerAvailability(seller).isOpen) return false;
+      if (pricing) {
+        const quote = customerDeliveryQuote(seller, opts.customerLat, opts.customerLng, opts.customerCommunityId, pricing);
+        if (!quote.deliverable || quote.fee > 0) return false;
+      }
       const distanceKm =
         hasLocation && seller.latitude != null && seller.longitude != null
           ? haversineKm(opts.customerLat!, opts.customerLng!, Number(seller.latitude), Number(seller.longitude))
@@ -186,6 +195,32 @@ async function sellersPassingComputedFilters(
  * cutoff time and daily cap), and — only when we know where the customer is —
  * delivery fee, distance, eligibility, and an ETA.
  */
+/** The farthest a delivery can go: the most an admin can set as the Nuray rider range (admin.validator deliveryMaxKm). */
+export const MAX_PLAUSIBLE_TRIP_KM = 200;
+
+/**
+ * The kitchen's delivery to this customer, with `fee` the amount the customer pays for it: the rule the order charges by
+ * (splitDeliveryFees), where a Nuray rider's fee is the kitchen's to pay and only a kitchen's own fee is the customer's.
+ */
+function customerDeliveryQuote(
+  seller: SellerDeliveryPolicy & { id: string },
+  customerLat: number | null | undefined,
+  customerLng: number | null | undefined,
+  customerCommunityId: string | null | undefined,
+  pricing: PlatformDeliveryPricing
+) {
+  const result = getDeliveryFeeForSeller(
+    seller,
+    { latitude: customerLat, longitude: customerLng, communityId: customerCommunityId },
+    seller.latitude != null ? Number(seller.latitude) : null,
+    seller.longitude != null ? Number(seller.longitude) : null,
+    undefined,
+    { pricing }
+  );
+  const { deliveryFee } = splitDeliveryFees([{ sellerId: seller.id, fee: result.fee, pricedByPlatform: result.pricing != null }]);
+  return { ...result, fee: deliveryFee };
+}
+
 export async function computeCustomerFacingSellerInfo(
   seller: Parameters<typeof isAcceptingOrders>[0] &
     SellerDeliveryPolicy & {
@@ -201,15 +236,11 @@ export async function computeCustomerFacingSellerInfo(
   if ((customerLat == null || customerLng == null) && !customerCommunityId) {
     return { isAcceptingOrders: accepting.accepting, acceptingReason: accepting.reason, delivery: null };
   }
-  const feeResult = getDeliveryFeeForSeller(
-    seller,
-    { latitude: customerLat, longitude: customerLng, communityId: customerCommunityId },
-    seller.latitude != null ? Number(seller.latitude) : null,
-    seller.longitude != null ? Number(seller.longitude) : null,
-    undefined,
-    { pricing: await getPlatformDeliveryPricing() }
-  );
+  const feeResult = customerDeliveryQuote(seller, customerLat, customerLng, customerCommunityId, await getPlatformDeliveryPricing());
   const eta = estimateDeliveryMinutes(seller.minPrepTimeMinutes, feeResult.distanceKm);
+  // A community fee is quoted whatever the distance, so a kitchen pinned in the wrong city still quotes one; the trip
+  // time from that pin is not real, so none is given.
+  const plausibleTrip = feeResult.distanceKm == null || feeResult.distanceKm <= MAX_PLAUSIBLE_TRIP_KM;
   return {
     isAcceptingOrders: accepting.accepting,
     acceptingReason: accepting.reason,
@@ -219,8 +250,8 @@ export async function computeCustomerFacingSellerInfo(
       distanceKm: feeResult.distanceKm != null ? Math.round(feeResult.distanceKm * 10) / 10 : null,
       reason: feeResult.reason,
       // A time for a trip the kitchen will not make is worse than none: a buyer in another city was told "3,094 min".
-      estimatedMinMinutes: feeResult.deliverable ? eta.minMinutes : null,
-      estimatedMaxMinutes: feeResult.deliverable ? eta.maxMinutes : null,
+      estimatedMinMinutes: feeResult.deliverable && plausibleTrip ? eta.minMinutes : null,
+      estimatedMaxMinutes: feeResult.deliverable && plausibleTrip ? eta.maxMinutes : null,
     },
   };
 }
@@ -286,6 +317,73 @@ export function contentChanged(existing: Record<string, unknown>, data: Record<s
     if (JSON.stringify(next) !== JSON.stringify(prev)) return true;
   }
   return false;
+}
+
+/** Approved reviews and order lines per dish, counted only for these dishes. */
+async function productCounts(ids: string[]) {
+  const counts = new Map(ids.map((id) => [id, { reviews: 0, orderItems: 0 }]));
+  if (ids.length === 0) return counts;
+  const [reviews, orderItems] = await Promise.all([
+    prisma.review.groupBy({ by: ['productId'], where: { productId: { in: ids }, isApproved: true }, _count: { _all: true } }),
+    prisma.orderItem.groupBy({ by: ['productId'], where: { productId: { in: ids } }, _count: { _all: true } }),
+  ]);
+  for (const r of reviews) {
+    const c = r.productId ? counts.get(r.productId) : undefined;
+    if (c) c.reviews = r._count._all;
+  }
+  for (const r of orderItems) {
+    const c = r.productId ? counts.get(r.productId) : undefined;
+    if (c) c.orderItems = r._count._all;
+  }
+  return counts;
+}
+
+/*
+ * Dish views are counted in memory and written in one statement every VIEW_FLUSH_MS. A per-view
+ * UPDATE queued behind the stock-decrement row locks of order placement and held a pool
+ * connection while it waited; the batch skips rows an order has locked and retries them next time.
+ */
+const VIEW_FLUSH_MS = 30_000;
+const pendingViews = new Map<string, number>();
+let viewFlushTimer: NodeJS.Timeout | null = null;
+
+function scheduleViewFlush() {
+  if (!viewFlushTimer) viewFlushTimer = setTimeout(() => void flushProductViews(), VIEW_FLUSH_MS).unref();
+}
+
+export function recordProductView(productId: string) {
+  pendingViews.set(productId, (pendingViews.get(productId) ?? 0) + 1);
+  scheduleViewFlush();
+}
+
+export async function flushProductViews() {
+  if (viewFlushTimer) clearTimeout(viewFlushTimer);
+  viewFlushTimer = null;
+  if (pendingViews.size === 0) return;
+  const batch = [...pendingViews];
+  pendingViews.clear();
+  const ids = batch.map(([id]) => id);
+  let retry: Set<string>;
+  try {
+    const written = await prisma.$queryRaw<Array<{ id: string }>>`
+      WITH v AS (SELECT * FROM unnest(${ids}::text[], ${batch.map(([, n]) => n)}::int[]) AS v(id, n)),
+      free AS (SELECT p.id FROM products p JOIN v ON v.id = p.id FOR UPDATE OF p SKIP LOCKED)
+      UPDATE products p SET views_count = p.views_count + v.n
+      FROM v JOIN free ON free.id = v.id
+      WHERE p.id = v.id
+      RETURNING p.id`;
+    const done = new Set(written.map((r) => r.id));
+    const missed = ids.filter((id) => !done.has(id));
+    // Only rows that still exist were skipped for a lock; a deleted dish's views are dropped.
+    retry = new Set(missed.length === 0 ? [] : (await prisma.product.findMany({ where: { id: { in: missed } }, select: { id: true } })).map((p) => p.id));
+  } catch (err) {
+    logger.warn({ err, products: ids.length }, 'view counts not recorded, retrying');
+    retry = new Set(ids);
+  }
+  for (const [id, n] of batch) {
+    if (retry.has(id)) pendingViews.set(id, (pendingViews.get(id) ?? 0) + n);
+  }
+  if (pendingViews.size > 0) scheduleViewFlush();
 }
 
 export class ProductService {
@@ -389,11 +487,6 @@ export class ProductService {
       const now = new Date();
       where.seller.promotions = { some: { isActive: true, validFrom: { lte: now }, validUntil: { gte: now } } };
     }
-    if (filters.freeDelivery) {
-      // Coarse "offers free delivery to somewhere" signal — a specific address's
-      // eligibility still needs the real per-address check in deliveryFee.ts.
-      where.seller.freeDeliveryRadiusKm = { not: null };
-    }
     if (filters.open247) {
       where.seller.scheduleMode = '24_7';
     }
@@ -428,11 +521,22 @@ export class ProductService {
         })
       : null;
 
-    // "Open now", "within X km" and "fast delivery" depend on opening hours, distance and
-    // the delivery-time estimate, which are worked out in code. They are worked out over the
+    // "Open now", "within X km", "fast delivery" and free delivery to the customer depend on opening hours, distance,
+    // the delivery-time estimate and the delivery fee, which are worked out in code. They are worked out over the
     // matching sellers (far fewer than their products), and the product query keeps only
     // the sellers that pass, so filtering, counting and paging all stay in the database.
-    if (filters.openNow || filters.fastDelivery || (filters.maxDistanceKm != null && hasCustomerLocation)) {
+    const freeDeliveryHere = !!filters.freeDelivery && (!!targetCommunity || hasCustomerLocation);
+    if (filters.freeDelivery && !freeDeliveryHere) {
+      // Without the customer's area or address: kitchens whose delivery costs the customer nothing somewhere. A Nuray
+      // rider's fee is always the kitchen's (splitDeliveryFees); a kitchen delivering itself has to waive its own fee.
+      where.seller.OR = [
+        { deliveryProvider: { not: 'self' } },
+        { freeDeliveryRadiusKm: { not: null } },
+        { deliveryFeeType: 'fixed', deliveryFeeFixed: 0 },
+        { AND: [{ freeDeliveryAreas: { not: Prisma.AnyNull } }, { NOT: { freeDeliveryAreas: { equals: [] } } }] },
+      ];
+    }
+    if (filters.openNow || filters.fastDelivery || freeDeliveryHere || (filters.maxDistanceKm != null && hasCustomerLocation)) {
       where.sellerId = {
         in: await sellersPassingComputedFilters(
           { ...where.seller, ...(filters.sellerId ? { id: filters.sellerId } : {}) },
@@ -442,6 +546,8 @@ export class ProductService {
             maxDistanceKm: hasCustomerLocation ? filters.maxDistanceKm : undefined,
             customerLat: filters.customerLat,
             customerLng: filters.customerLng,
+            freeDelivery: freeDeliveryHere,
+            customerCommunityId: targetCommunity?.id,
           }
         ),
       };
@@ -694,12 +800,6 @@ export class ProductService {
           where: { isActive: true },
           orderBy: { sortOrder: 'asc' },
         },
-        _count: {
-          select: {
-            reviews: { where: { isApproved: true } },
-            orderItems: true,
-          },
-        },
       },
     });
 
@@ -712,15 +812,16 @@ export class ProductService {
 
     // Count the view without holding the response or rewriting the row (updated_at stays
     // what the kitchen last changed); a kitchen looking at its own dish is not a view.
-    if (!isOwner) {
-      void prisma
-        .$executeRaw`UPDATE products SET views_count = views_count + 1 WHERE id = ${product.id}`
-        .catch((err: unknown) => logger.warn({ err, productId: product.id }, 'view count not recorded'));
-    }
+    if (!isOwner) recordProductView(product.id);
 
     // Format images with full URLs
     const baseUrl = process.env.BASE_URL || 'http://localhost:3001';
-    const sellerInfo = await computeCustomerFacingSellerInfo(product.seller, customerLat, customerLng, customerCommunityId);
+    // Scoped by product: Prisma's relation _count aggregates the whole child table before joining.
+    const [sellerInfo, reviewCount, orderItemCount] = await Promise.all([
+      computeCustomerFacingSellerInfo(product.seller, customerLat, customerLng, customerCommunityId),
+      prisma.review.count({ where: { productId: product.id, isApproved: true } }),
+      prisma.orderItem.count({ where: { productId: product.id } }),
+    ]);
 
     // This endpoint is public. `product.seller` is the full Seller row (bank and
     // wallet numbers, commission rate, home coordinates, the seller's phone), so
@@ -761,6 +862,7 @@ export class ProductService {
 
     return {
       ...productFields,
+      _count: { reviews: reviewCount, orderItems: orderItemCount },
       // Whether the dish can be ordered today, and when it is on the menu (for the page to say so).
       availableToday,
       menuLabel,
@@ -1070,21 +1172,17 @@ export class ProductService {
         include: {
           category: true,
           images: true,
-          _count: {
-            select: {
-              reviews: { where: { isApproved: true } },
-              orderItems: true,
-            },
-          },
         },
       }),
       prisma.product.count({ where }),
     ]);
+    const counts = await productCounts(products.map((p) => p.id));
 
     // Format products with full image URLs
     const baseUrl = process.env.BASE_URL || 'http://localhost:3001';
     const formattedProducts = products.map((product) => ({
       ...product,
+      _count: counts.get(product.id) ?? { reviews: 0, orderItems: 0 },
       price: Number(product.price),
       originalPrice: product.originalPrice ? Number(product.originalPrice) : null,
       images: product.images.map((img) => ({

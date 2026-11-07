@@ -2,11 +2,19 @@
 
 import { useRef, useState, useEffect } from 'react';
 import { apiClient, apiErrorMessage } from '@/lib/api-client';
-import { useT } from '@/lib/i18n';
+import { defineMessages, useT } from '@/lib/i18n';
 import { commonMessages } from '@/lib/i18n/messages/common';
 import { joinMessages } from '@/lib/i18n/messages/join';
+import { nativePlatform, type NativeWindow } from '@/lib/native-shell';
+import { Camera, FileCheck2, FileText, Loader2, Upload } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 
 type Kind = 'document' | 'cover';
+
+const cameraMessages = defineMessages({
+  en: { takePhoto: 'Take photo' },
+  ur: { takePhoto: 'تصویر کھینچیں' },
+});
 
 const ENDPOINT: Record<Kind, { url: string; field: string }> = {
   // Private: only admins (and the uploader) can open it, through short-lived links.
@@ -35,7 +43,15 @@ interface Props {
 export default function FileUploadField({ kind, label, hint, value, onChange, required, onFileText, testId }: Props) {
   const t = useT(joinMessages);
   const tc = useT(commonMessages);
+  const tcam = useT(cameraMessages);
   const inputRef = useRef<HTMLInputElement>(null);
+  const cameraRef = useRef<HTMLInputElement>(null);
+  // Android's web view only opens the camera for an input with a capture attribute, so the app gets a
+  // second button for it. Browsers and the iPhone app already offer the camera in the normal picker.
+  const [canCapture, setCanCapture] = useState(false);
+  useEffect(() => {
+    setCanCapture(nativePlatform(window as unknown as NativeWindow) === 'android');
+  }, []);
   const [preview, setPreview] = useState<string | null>(null);
   // A preview is a blob: URL the browser keeps in memory until it is released.
   useEffect(
@@ -82,40 +98,53 @@ export default function FileUploadField({ kind, label, hint, value, onChange, re
     setUploading(false);
     onChange(null);
     if (inputRef.current) inputRef.current.value = '';
+    if (cameraRef.current) cameraRef.current.value = '';
   };
+
+  const hasFile = !!(value || onFileText);
+  const Icon = uploading ? Loader2 : value ? FileCheck2 : onFileText ? FileText : Upload;
 
   return (
     <div data-testid={testId}>
-      <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+      <label className="mb-1.5 block text-sm font-medium text-ink">
         {label}
-        {required && <span className="text-rose-500"> *</span>}
+        {required && <span className="text-red-700"> *</span>}
       </label>
-      <div className={`rounded-xl border-2 border-dashed p-3 flex items-center gap-3 ${error ? 'border-rose-300 bg-rose-50' : value ? 'border-emerald-300 bg-emerald-50/50' : 'border-slate-200 bg-slate-50'}`}>
+      <div
+        className={`flex items-center gap-3 rounded-xl border p-3 ${
+          error ? 'border-red-700 bg-red-50' : value ? 'border-brand-600 bg-brand-soft' : 'border-dashed border-line-strong bg-surface'
+        }`}
+      >
         {preview ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={preview} alt="" className="w-14 h-14 rounded-lg object-cover border border-slate-200" />
+          <img src={preview} alt="" className="h-14 w-14 shrink-0 rounded-lg border border-line object-cover" />
         ) : (
-          <div className="w-14 h-14 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-xl">{value || onFileText ? '📄' : '⬆️'}</div>
+          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg bg-raised text-muted">
+            <Icon className={`h-5 w-5 ${uploading ? 'animate-spin' : ''} ${value ? 'text-brand-ink' : ''}`} aria-hidden />
+          </div>
         )}
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-slate-800 truncate">
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-medium text-ink">
             {uploading ? t('upload.uploading') : value ? fileName ?? t('upload.uploaded') : onFileText ?? t('upload.noFile')}
           </p>
-          <p className="text-xs text-slate-500">{error ?? hint ?? (kind === 'document' ? t('upload.docHint') : t('upload.coverHint'))}</p>
+          <p className={`text-sm ${error ? 'text-red-700' : 'text-muted'}`}>
+            {error ?? hint ?? (kind === 'document' ? t('upload.docHint') : t('upload.coverHint'))}
+          </p>
         </div>
-        <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={() => inputRef.current?.click()}
-            disabled={uploading}
-            className="px-3 py-1.5 rounded-lg bg-white border border-slate-300 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-          >
-            {value || onFileText ? t('upload.replace') : t('upload.choose')}
-          </button>
+        <div className="flex shrink-0 flex-wrap justify-end gap-2">
+          {canCapture && (
+            <Button type="button" variant="outline" size="sm" onClick={() => cameraRef.current?.click()} disabled={uploading}>
+              <Camera className="h-4 w-4" aria-hidden />
+              {tcam('takePhoto')}
+            </Button>
+          )}
+          <Button type="button" variant="outline" size="sm" onClick={() => inputRef.current?.click()} disabled={uploading}>
+            {hasFile ? t('upload.replace') : t('upload.choose')}
+          </Button>
           {value && (
-            <button type="button" onClick={clear} className="px-2 py-1.5 rounded-lg text-xs text-slate-500 hover:text-slate-800">
+            <Button type="button" variant="ghost" size="sm" onClick={clear} className="px-2 text-muted hover:bg-raised hover:text-ink">
               {tc('remove')}
-            </button>
+            </Button>
           )}
         </div>
         <input
@@ -125,6 +154,16 @@ export default function FileUploadField({ kind, label, hint, value, onChange, re
           className="hidden"
           onChange={(e) => pick(e.target.files?.[0])}
         />
+        {canCapture && (
+          <input
+            ref={cameraRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+            onChange={(e) => pick(e.target.files?.[0])}
+          />
+        )}
       </div>
     </div>
   );

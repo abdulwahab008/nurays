@@ -7,17 +7,17 @@ test('Rider Mission Control Cockpit & Strict RBAC Verification', async ({ page }
   // 1. Login as rider
   await page.goto('/login');
   await page.getByRole('button', { name: 'Email', exact: true }).click();
-  await page.getByLabel(/Email Address/).fill('rider@nuray.test');
+  await page.getByLabel('Email', { exact: true }).fill('rider@nuray.test');
   await page.getByLabel('Password').fill('Password123!');
-  await page.getByRole('button', { name: 'Login', exact: true }).click();
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
 
   // 2. Expect redirection to rider dashboard
   await expect(page).toHaveURL(/\/riders\/dashboard/, { timeout: 15_000 });
   await page.waitForTimeout(2000);
 
   // 3. Verify Navbar RBAC
-  // - Eyebrow should say "Rider fleet"
-  await expect(page.locator('p.eyebrow').filter({ hasText: 'Rider fleet' })).toBeVisible({ timeout: 5000 });
+  // - Eyebrow should say "Rider"
+  await expect(page.locator('p.eyebrow').filter({ hasText: 'Rider' })).toBeVisible({ timeout: 5000 });
 
   // - Assigned zone should be visible and NOT be a link to customer addresses
   await expect(page.locator('div').filter({ hasText: 'Assigned Zone' }).first()).toBeVisible();

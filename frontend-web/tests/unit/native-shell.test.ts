@@ -170,6 +170,17 @@ test('the push token comes from the registration event, and a failure or silence
   await assert.rejects(nativePushToken(phone(() => undefined).plugin, 20), /no push token/);
 });
 
+test("a listener is removed whether addListener returned its handle (the app's bridge) or a promise of it", async () => {
+  const { removeListener } = await import('../../lib/native-shell.ts');
+  let removed = 0;
+  const handle = { remove: async () => void removed++ };
+  removeListener(handle);
+  removeListener(Promise.resolve(handle));
+  removeListener({ remove: async () => Promise.reject(new Error('already gone')) });
+  await new Promise((r) => setTimeout(r, 0));
+  assert.equal(removed, 2);
+});
+
 test('a tapped notification opens only a path on this site', async () => {
   const { notificationPath } = await import('../../lib/native-shell.ts');
   assert.equal(notificationPath({ url: '/seller/orders/12' }), '/seller/orders/12');

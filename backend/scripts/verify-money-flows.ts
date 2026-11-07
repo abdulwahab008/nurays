@@ -49,7 +49,10 @@ async function mkUser(type = 'customer') {
 }
 async function mkSeller(opts: any = {}) {
   const user = await mkUser('seller');
-  return prisma.seller.create({ data: { userId: user.id, businessName: 'K' + uniq(), deliveryModes: ['delivery', 'pickup'], status: 'active', ...opts } });
+  // A bank account by default: a kitchen without one is refused bank transfers at checkout (PAYMENT_METHOD_UNAVAILABLE).
+  return prisma.seller.create({
+    data: { userId: user.id, businessName: 'K' + uniq(), deliveryModes: ['delivery', 'pickup'], status: 'active', bankAccountNumber: 'PK36SCBL0000001123456702', ...opts },
+  });
 }
 async function mkProduct(sellerId: string, stock: number, price = 100) {
   return prisma.product.create({ data: { sellerId, name: 'P' + uniq(), slug: 'p-' + uniq(), price, unit: 'pc', stockQuantity: stock, stockType: 'direct', approvalStatus: 'approved', isActive: true } as any });
@@ -176,11 +179,13 @@ async function main() {
   ok('dismissing a refund on an order that was really paid leaves it paid (the kitchen keeps its earning)', (await prisma.order.findUnique({ where: { id: m.id } }))!.paymentStatus === 'paid');
 
   // ---- 12. payment details: real accounts only ----
+  await prisma.seller.update({ where: { id: seller.id }, data: { bankAccountNumber: null } });
   const bare: any = await orderService.getSellerPaymentDetails(m.id, cust.id);
   ok('no fake payment accounts for an unconfigured seller', Array.isArray(bare.accounts) && bare.accounts.length === 0, JSON.stringify(bare.accounts));
   await prisma.seller.update({ where: { id: seller.id }, data: { jazzcashNumber: '0300-7654321' } });
   const cfg: any = await orderService.getSellerPaymentDetails(m.id, cust.id);
   ok('configured account is returned', cfg.accounts.length === 1 && cfg.accounts[0].accountNumber === '0300-7654321');
+  await prisma.seller.update({ where: { id: seller.id }, data: { bankAccountNumber: 'PK36SCBL0000001123456702' } });
 
   // ---- 13. chat role cannot be spoofed ----
   const msg: any = await orderService.sendOrderMessage(m.id, cust.id, 'hi', { role: 'seller' });
@@ -1802,7 +1807,7 @@ async function main() {
     const approved = { verificationStatus: 'approved' };
     const wk = await mkSeller({ ...approved, bankAccountNumber: '1234 5678 9012', bankAccountName: 'Weekly Kitchen', bankName: 'HBL' });
     const wkEarn = await earn(wk.id, 2000);
-    const noAcct = await mkSeller(approved); await earn(noAcct.id, 2000);
+    const noAcct = await mkSeller({ ...approved, bankAccountNumber: null }); await earn(noAcct.id, 2000);
     const small = await mkSeller({ ...approved, bankAccountNumber: '123456789' }); await earn(small.id, 500);
     const optedOut = await mkSeller({ ...approved, bankAccountNumber: '123456789' }); await earn(optedOut.id, 2000);
     await prisma.sellerPayoutSchedule.create({ data: { sellerId: optedOut.id, payoutMethod: 'bank_transfer', autoPayout: false } as any });

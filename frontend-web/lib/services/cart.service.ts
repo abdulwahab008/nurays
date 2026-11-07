@@ -49,6 +49,12 @@ export interface CartResponse {
     jazzcashAccountTitle?: string | null;
     easypaisaNumber?: string | null;
     easypaisaAccountTitle?: string | null;
+    deliveryModes?: string[] | null;
+    pickupAddress?: string | null;
+    pickupLandmark?: string | null;
+    preOrderOnly?: boolean | null;
+    advanceBookingMinDays?: number | null;
+    advanceBookingMaxDays?: number | null;
     community?: { id?: string; name: string; slug?: string } | null;
   } | null;
 }

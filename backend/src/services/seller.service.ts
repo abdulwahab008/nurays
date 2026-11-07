@@ -1,7 +1,7 @@
 import { recordAudit } from '../middleware/audit';
 import prisma from '../config/database';
 import { getPlatformDeliveryPricing } from './delivery-pricing.service';
-import { platformDeliveryFee } from '../utils/deliveryFee';
+import { haversineKm, platformDeliveryFee } from '../utils/deliveryFee';
 import { roundMoney } from '../utils/pricing';
 import { AppError } from '../middleware/errorHandler';
 import adminService from './admin.service';
@@ -14,7 +14,7 @@ import { notifyApprovers } from './approvals.service';
 import { kitchenApplicationGaps } from '../utils/kitchenApplication';
 import { changedPayoutDetails } from '../utils/payoutAccount';
 import { pktDate } from '../utils/payoutWeek';
-import { nextPeriodStart } from './weekly-payout.service';
+import { nextPeriodStart, payoutDestination } from './weekly-payout.service';
 import { confirmPasswordIfSet } from './reauth.service';
 
 /** Shared shape for the business-operations fields — read by getSellerProfile, written by updateSellerProfile. */
@@ -79,6 +79,38 @@ async function replaceSellerDocuments(sellerId: string, docs: Record<string, str
   }
 }
 
+/** The door riders collect from, as typed on the application ("House 12, Street 4, Askari 11"), or null when none was. */
+function pickupAddressFrom(data: { houseOrUnitNumber?: string; address?: string }): string | null {
+  return [data.houseOrUnitNumber, data.address].map((p) => p?.trim()).filter(Boolean).join(', ') || null;
+}
+
+/** How far a kitchen's map pin may be from the centre of its home area: one city, never another one. */
+export const MAX_PIN_DISTANCE_FROM_AREA_KM = 50;
+
+/**
+ * A pin dropped in the wrong city (a kitchen in Gulshan-e-Iqbal, Karachi pinned in Lahore) prices every delivery
+ * by a thousand-kilometre trip and sends riders after it, so a new pin must be near the kitchen's own area.
+ */
+async function assertPinNearArea(communityId: string | null | undefined, latitude: number | null | undefined, longitude: number | null | undefined) {
+  if (!communityId || latitude == null || longitude == null) return;
+  const area = await prisma.community.findUnique({ where: { id: communityId }, select: { name: true, city: true, centerLatitude: true, centerLongitude: true } });
+  if (!area) return;
+  const km = haversineKm(latitude, longitude, Number(area.centerLatitude), Number(area.centerLongitude));
+  if (km > MAX_PIN_DISTANCE_FROM_AREA_KM) {
+    throw new AppError(
+      `The map pin is ${Math.round(km)} km from ${area.name}, ${area.city}. Drop the pin on your kitchen.`,
+      400,
+      'PIN_FAR_FROM_AREA',
+      [{ field: 'latitude', message: `The pin must be within ${MAX_PIN_DISTANCE_FROM_AREA_KM} km of ${area.name}` }],
+    );
+  }
+}
+
+/** Midnight at the start of `at`'s day in Pakistan. */
+function pktMidnight(at: Date): Date {
+  return new Date(`${pktDate(at)}T00:00:00+05:00`);
+}
+
 export class SellerService {
   /**
    * Register as seller
@@ -100,6 +132,7 @@ export class SellerService {
       latitude?: number;
       longitude?: number;
       address?: string;
+      houseOrUnitNumber?: string;
       mealCategories?: string[];
       deliveryModes?: string[];
       bankAccountName?: string;
@@ -142,6 +175,8 @@ export class SellerService {
     const saveDocuments = (sellerId: string) =>
       replaceSellerDocuments(sellerId, { cnic_front: cnicFront ? [cnicFront] : null, cnic_back: cnicBack ? [cnicBack] : null, kitchen_photo: kitchenPhotos.length ? kitchenPhotos : null });
 
+    await assertPinNearArea(data.communityId ?? existingSeller?.communityId, data.latitude, data.longitude);
+
     if (existingSeller) {
       // Previously rejected, or still waiting but incomplete: the application is sent again with the details fixed or added.
       const updated = await prisma.seller.update({
@@ -157,6 +192,7 @@ export class SellerService {
           primaryCommunityName: data.primaryCommunityName,
           latitude: data.latitude !== undefined ? data.latitude : existingSeller.latitude,
           longitude: data.longitude !== undefined ? data.longitude : existingSeller.longitude,
+          pickupAddress: pickupAddressFrom(data) ?? existingSeller.pickupAddress,
           mealCategories: data.mealCategories || existingSeller.mealCategories,
           deliveryModes: data.deliveryModes || existingSeller.deliveryModes,
           bankAccountName: data.bankAccountName,
@@ -208,6 +244,7 @@ export class SellerService {
         primaryCommunityName: data.primaryCommunityName,
         latitude: data.latitude,
         longitude: data.longitude,
+        pickupAddress: pickupAddressFrom(data),
         mealCategories: data.mealCategories || [],
         deliveryModes: data.deliveryModes || ['delivery', 'pickup'],
         bankAccountName: data.bankAccountName,
@@ -270,6 +307,9 @@ export class SellerService {
       freeDeliveryRadiusKm: seller.freeDeliveryRadiusKm != null ? Number(seller.freeDeliveryRadiusKm) : null,
       latitude: seller.latitude != null ? Number(seller.latitude) : null,
       longitude: seller.longitude != null ? Number(seller.longitude) : null,
+      pickupAddress: seller.pickupAddress,
+      pickupLandmark: seller.pickupLandmark,
+      pickupPhone: seller.pickupPhone,
       deliveryFeeType: seller.deliveryFeeType,
       deliveryFeeFixed: seller.deliveryFeeFixed,
       deliveryFeeBase: seller.deliveryFeeBase,
@@ -312,6 +352,9 @@ export class SellerService {
       freeDeliveryRadiusKm?: number | null;
       latitude?: number | null;
       longitude?: number | null;
+      pickupAddress?: string | null;
+      pickupLandmark?: string | null;
+      pickupPhone?: string | null;
       deliveryFeeType?: string | null;
       deliveryFeeFixed?: number | null;
       deliveryFeeBase?: number | null;
@@ -361,6 +404,13 @@ export class SellerService {
       await confirmPasswordIfSet(owner, data.currentPassword, 'Enter your password to change your payout accounts', ctx);
     }
 
+    // Only a pin that moves is checked, so a kitchen whose old pin is off can still save its other settings.
+    const storedLat = seller.latitude == null ? null : Number(seller.latitude);
+    const storedLng = seller.longitude == null ? null : Number(seller.longitude);
+    const newLat = data.latitude !== undefined ? data.latitude : storedLat;
+    const newLng = data.longitude !== undefined ? data.longitude : storedLng;
+    if (newLat !== storedLat || newLng !== storedLng) await assertPinNearArea(seller.communityId, newLat, newLng);
+
     const updateData: Record<string, unknown> = { ...payout.changes };
     if (data.businessName !== undefined) updateData.businessName = data.businessName;
     if (data.businessNameUrdu !== undefined) updateData.businessNameUrdu = data.businessNameUrdu;
@@ -378,6 +428,10 @@ export class SellerService {
     if (data.freeDeliveryRadiusKm !== undefined) updateData.freeDeliveryRadiusKm = data.freeDeliveryRadiusKm;
     if (data.latitude !== undefined) updateData.latitude = data.latitude;
     if (data.longitude !== undefined) updateData.longitude = data.longitude;
+    // Where a rider collects the food; blank clears it.
+    if (data.pickupAddress !== undefined) updateData.pickupAddress = data.pickupAddress?.trim() || null;
+    if (data.pickupLandmark !== undefined) updateData.pickupLandmark = data.pickupLandmark?.trim() || null;
+    if (data.pickupPhone !== undefined) updateData.pickupPhone = data.pickupPhone?.trim() || null;
     if (data.deliveryFeeType !== undefined) updateData.deliveryFeeType = data.deliveryFeeType === '' ? null : data.deliveryFeeType;
     if (data.deliveryFeeFixed !== undefined) updateData.deliveryFeeFixed = data.deliveryFeeFixed;
     if (data.deliveryFeeBase !== undefined) updateData.deliveryFeeBase = data.deliveryFeeBase;
@@ -431,6 +485,9 @@ export class SellerService {
       freeDeliveryRadiusKm: updated.freeDeliveryRadiusKm != null ? Number(updated.freeDeliveryRadiusKm) : null,
       latitude: updated.latitude != null ? Number(updated.latitude) : null,
       longitude: updated.longitude != null ? Number(updated.longitude) : null,
+      pickupAddress: updated.pickupAddress,
+      pickupLandmark: updated.pickupLandmark,
+      pickupPhone: updated.pickupPhone,
       deliveryFeeType: updated.deliveryFeeType,
       deliveryFeeFixed: updated.deliveryFeeFixed,
       deliveryFeeBase: updated.deliveryFeeBase,
@@ -597,8 +654,8 @@ export class SellerService {
     }
 
     // Today's stats
-    const startOfToday = new Date();
-    startOfToday.setHours(0, 0, 0, 0);
+    // Today is the Pakistan day, whatever time zone the server runs in.
+    const startOfToday = pktMidnight(new Date());
 
     // Order statistics in one aggregate over the kitchen's lines (not the whole history in memory).
     // Orders are counted once each, however many of the kitchen's dishes they hold.
@@ -650,27 +707,28 @@ export class SellerService {
     // What it owes Nuray, if anything, and when its cash orders pause.
     const owing = await refreshOwing(prisma, sellerId, new Date(), balance.available);
 
-    // Get recent orders
-    const recentOrderItems = await prisma.orderItem.findMany({
-      where: { sellerId },
-      include: {
-        order: {
-          select: {
-            id: true,
-            orderNumber: true,
-            totalAmount: true,
-            orderStatus: true,
-            createdAt: true,
-          },
-        },
-        product: {
-          select: {
-            name: true,
-          },
+    // The latest orders, one row each with this kitchen's dishes in it (an order with two dishes is one order, not two rows).
+    // Found from the kitchen's own dishes and MATERIALIZED: as a semi-join the planner walks every order on the platform
+    // newest-first looking for this kitchen's (the same trap as the kitchen orders list, seller-order.service.ts).
+    const recentIds = await prisma.$queryRaw<Array<{ id: string }>>`
+      WITH mine AS MATERIALIZED (SELECT DISTINCT order_id FROM order_items WHERE seller_id = ${sellerId})
+      SELECT o.id FROM mine JOIN orders o ON o.id = mine.order_id
+      ORDER BY o.created_at DESC, o.id DESC
+      LIMIT 8
+    `;
+    const recentOrders = await prisma.order.findMany({
+      where: { id: { in: recentIds.map((r) => r.id) } },
+      select: {
+        id: true,
+        orderNumber: true,
+        orderStatus: true,
+        createdAt: true,
+        items: {
+          where: { sellerId },
+          select: { quantity: true, totalPrice: true, productName: true, productImage: true, product: { select: { name: true } } },
         },
       },
-      orderBy: { createdAt: 'desc' },
-      take: 10,
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     });
 
     // Get low stock products
@@ -718,6 +776,8 @@ export class SellerService {
       latitude: seller.latitude != null ? Number(seller.latitude) : null,
       longitude: seller.longitude != null ? Number(seller.longitude) : null,
       applicationMissing,
+      // Whether Nuray has an account to send the weekly payout to (weekly-payout.service skips a kitchen without one).
+      hasPayoutAccount: payoutDestination(seller) !== null,
       description: seller.description,
       kitchenVideoUrl: seller.kitchenVideoUrl,
       coverImageUrl: seller.coverImageUrl,
@@ -769,16 +829,22 @@ export class SellerService {
         pendingSettlement: pendingPayout,
         paidSettlement,
       },
-      recentOrders: recentOrderItems.map((item) => ({
-        orderId: item.order.id,
-        orderNumber: item.order.orderNumber,
-        productName: item.product?.name || item.productName,
-        productImage: item.productImage,
-        quantity: item.quantity,
-        totalPrice: Number(item.totalPrice),
-        orderStatus: item.order.orderStatus,
-        createdAt: item.order.createdAt,
-      })),
+      recentOrders: recentOrders.map((order) => {
+        const dishes = order.items.map((i) => ({ name: i.product?.name || i.productName, quantity: i.quantity }));
+        return {
+          orderId: order.id,
+          orderNumber: order.orderNumber,
+          // "1 × Biryani, 2 × Samosa": the kitchen's dishes in the order.
+          productName: dishes.map((d) => `${d.quantity} × ${d.name}`).join(', '),
+          productImage: order.items[0]?.productImage ?? null,
+          dishes,
+          quantity: order.items.reduce((sum, i) => sum + i.quantity, 0),
+          // The kitchen's dishes, not the whole order (other kitchens, tax and delivery are not its own).
+          totalPrice: roundMoney(order.items.reduce((sum, i) => sum + Number(i.totalPrice), 0)),
+          orderStatus: order.orderStatus,
+          createdAt: order.createdAt,
+        };
+      }),
       lowStockProducts: lowStockProducts.map((product) => ({
         id: product.id,
         name: product.name,
@@ -822,12 +888,19 @@ export class SellerService {
     }
 
     // Get order items in period
+    // Only the columns the figures below read: a year of a busy kitchen's lines is tens of thousands of rows.
     const orderItems = await prisma.orderItem.findMany({
       where: {
         sellerId,
         createdAt: { gte: startDate },
       },
-      include: {
+      select: {
+        status: true,
+        quantity: true,
+        sellerPayout: true,
+        totalPrice: true,
+        productId: true,
+        productName: true,
         order: {
           select: {
             id: true,
@@ -837,12 +910,7 @@ export class SellerService {
             deliveryFeeBreakdown: true,
           },
         },
-        product: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
+        product: { select: { name: true } },
       },
     });
 
@@ -858,8 +926,7 @@ export class SellerService {
     const dishRevenue = roundMoney(earned.reduce((sum, e) => sum + e.dishes, 0));
 
     // Period breakdowns for the Today / This Week / This Month cards
-    const dayStart = new Date(now);
-    dayStart.setHours(0, 0, 0, 0);
+    const dayStart = pktMidnight(now);
     const weekStart = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
     const monthStart = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
 
@@ -867,10 +934,11 @@ export class SellerService {
     const week = periodTotals(orderItems, weekStart, sellerId);
     const month = periodTotals(orderItems, monthStart, sellerId);
 
-    // Calculate daily revenue: the same earnings, by the day the order was placed
+    // Calculate daily revenue: the same earnings, by the Pakistan day the order was placed (a UTC day would put an order
+    // placed before 5 am on the day before, unlike the totals above).
     const dailyRevenue: Record<string, number> = {};
     earned.forEach((e) => {
-      const date = e.createdAt.toISOString().split('T')[0];
+      const date = pktDate(e.createdAt);
       dailyRevenue[date] = (dailyRevenue[date] || 0) + earningsOf(e);
     });
 
@@ -884,16 +952,18 @@ export class SellerService {
     const counts = orderCounts(orderItems);
 
     // Get top products
-    const productSales: Record<string, { name: string; quantity: number; revenue: number }> = {};
+    // `revenue` is what the kitchen earned on the dish (after Nuray's fee); `sales` is what customers paid for it.
+    const productSales: Record<string, { name: string; quantity: number; revenue: number; sales: number }> = {};
     completedItems.forEach((item) => {
       const productId = item.productId || 'unknown';
       const productName = item.product?.name || item.productName;
       if (productId && productId !== 'unknown') {
         if (!productSales[productId]) {
-          productSales[productId] = { name: productName, quantity: 0, revenue: 0 };
+          productSales[productId] = { name: productName, quantity: 0, revenue: 0, sales: 0 };
         }
         productSales[productId].quantity += item.quantity;
         productSales[productId].revenue += Number(item.sellerPayout);
+        productSales[productId].sales += Number(item.totalPrice);
       }
     });
 

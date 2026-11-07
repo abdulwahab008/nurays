@@ -20,52 +20,52 @@ export interface SidebarItem {
   subItems?: SubItem[];
   /** Staff permission needed to see this item (admin menu only). */
   needs?: string;
+  /** Also a tab in the phone tab bar, so the phone menu leaves it out. */
+  phoneTab?: boolean;
 }
 
+// The tray is not here: the top bar has it from md and the phone tab bar below that.
 export const CUSTOMER_SIDEBAR_ITEMS: SidebarItem[] = [
   { name: 'Dashboard', href: '/dashboard', icon: 'dashboard' },
   {
-    name: 'Kitchens & Menus',
+    name: 'Kitchens & menus',
     href: '/products',
     icon: 'kitchens',
     subItems: [
-      { name: 'Dishes & Menus', href: '/products', icon: 'products' },
-      { name: 'Verified Kitchens', href: '/kitchens', icon: 'kitchens' },
+      { name: 'Dishes & menus', href: '/products', icon: 'products' },
+      { name: 'Verified kitchens', href: '/kitchens', icon: 'kitchens' },
     ],
   },
-  { name: 'Favorite Kitchens', href: '/favorites', icon: 'favorites' },
-  { name: 'My Orders', href: '/orders', icon: 'orders' },
-  { name: 'Nuray Wallet', href: '/wallet', icon: 'earnings' },
-  { name: 'My Cart', href: '/cart', icon: 'cart' },
-  { name: 'My Profile', href: '/profile', icon: 'profile' },
-  { name: 'Saved Addresses', href: '/profile/addresses', icon: 'addresses' },
-  { name: 'Help & Support', href: '/support', icon: 'support' },
+  { name: 'Saved kitchens', href: '/favorites', icon: 'favorites' },
+  { name: 'My orders', href: '/orders', icon: 'orders', phoneTab: true },
+  { name: 'Nuray wallet', href: '/wallet', icon: 'earnings' },
+  { name: 'My profile', href: '/profile', icon: 'profile', phoneTab: true },
+  { name: 'Saved addresses', href: '/profile/addresses', icon: 'addresses' },
+  { name: 'Help and support', href: '/support', icon: 'support' },
 ];
 
 export const RIDER_SIDEBAR_ITEMS: SidebarItem[] = [
-  { name: 'Fleet Dashboard', href: '/riders/dashboard', icon: 'dashboard' },
-  { name: 'Active Runs', href: '/riders/dashboard#active', icon: 'orders' },
-  { name: 'Available Pool', href: '/riders/dashboard#available', icon: 'addresses' },
-  { name: 'Earnings & Cash', href: '/riders/earnings', icon: 'earnings' },
-  { name: 'Help & Support', href: '/support', icon: 'support' },
+  { name: 'Deliveries', href: '/riders/dashboard', icon: 'dashboard' },
+  { name: 'Earnings and cash', href: '/riders/earnings', icon: 'earnings' },
+  { name: 'Settings', href: '/profile', icon: 'settings' },
+  { name: 'Help and support', href: '/support', icon: 'support' },
 ];
 
 export const SELLER_SIDEBAR_ITEMS: SidebarItem[] = [
-  { name: 'Dashboard', href: '/sellers/dashboard', icon: 'dashboard' },
+  { name: 'Your kitchen', href: '/sellers/dashboard', icon: 'dashboard' },
   { name: 'Orders', href: '/sellers/orders', icon: 'orders' },
   {
-    name: 'Products',
+    name: 'Menu',
     href: '/sellers/products',
     icon: 'products',
     subItems: [
-      { name: 'All Products', href: '/sellers/products', icon: 'products' },
-      { name: 'Inventory', href: '/sellers/products?view=inventory', icon: 'inventory' },
+      { name: 'Dishes', href: '/sellers/products', icon: 'products' },
       { name: 'Discounts', href: '/sellers/promotions', icon: 'promotions' },
     ],
   },
   { name: 'Delivery', href: '/sellers/delivery', icon: 'delivery' },
   { name: 'Earnings', href: '/sellers/earnings', icon: 'earnings' },
-  { name: 'Analytics', href: '/sellers/analytics', icon: 'analytics' },
+  { name: 'Reports', href: '/sellers/analytics', icon: 'analytics' },
   { name: 'Notifications', href: '/sellers/notifications', icon: 'notifications' },
   { name: 'Settings', href: '/sellers/settings', icon: 'settings' },
 ];
@@ -134,7 +134,7 @@ export function adminSidebarFor(permissions: string[] | undefined): SidebarItem[
 
 export const HUB_MANAGER_SIDEBAR_ITEMS: SidebarItem[] = [
   { name: 'My hubs', href: '/hub', icon: 'coldchain' },
-  { name: 'Help & Support', href: '/support', icon: 'support' },
+  { name: 'Help and support', href: '/support', icon: 'support' },
 ];
 
 interface DashboardShellProps {
@@ -166,22 +166,18 @@ export function DashboardShell({
   return (
     <div className="min-h-screen bg-page text-ink">
       <DashboardNavbar
-        title={title}
-        subtitle={subtitle}
         userType={userType}
         onMenuToggle={() => setOpen((v) => !v)}
         drawerOpen={open}
       />
-      <div className="pt-(--header-offset)">
+      <div className="relative pt-(--header-offset)">
+        {/* The fixed menu is one screen tall; this column behind it runs the page's full length, so a long page printed
+            or captured whole keeps the menu's background down to its end. */}
+        <div aria-hidden className="absolute inset-y-0 start-0 hidden w-64 border-e border-line bg-surface lg:block" />
         <div
           onClick={() => setOpen(false)}
           aria-hidden={!open}
-          className="lg:hidden fixed inset-0 z-40 transition-opacity duration-200"
-          style={{
-            background: 'rgba(6,20,18,0.55)',
-            opacity: open ? 1 : 0,
-            pointerEvents: open ? 'auto' : 'none',
-          }}
+          className={`lg:hidden fixed inset-0 z-40 bg-ink/40 transition-opacity duration-200 ${open ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
         />
         <div
           className="nuray-drawer fixed top-(--header-offset) bottom-0 start-0 z-50 w-64"
@@ -194,16 +190,21 @@ export function DashboardShell({
         <StackedTables />
 
         <main
-          className="lg:ms-64 px-4 sm:px-6 lg:px-10 py-6 lg:py-10 min-h-[calc(100vh-var(--header-offset))] bg-page"
+          className="lg:ms-64 px-4 sm:px-6 lg:px-10 py-5 lg:py-8 min-h-[calc(100vh-var(--header-offset))] bg-page"
         >
-          {/* Customers read one column; the staff screens use the whole width for their tables. */}
-          <div className={userType === 'customer' ? 'max-w-[1120px] mx-auto' : undefined}>
+          {/* Customers read one column; the staff screens use the whole width for their tables. The admin pages are English
+              only (see AdminShell): left to right in either language. */}
+          <div
+            className={userType === 'customer' ? 'max-w-[1120px] mx-auto' : undefined}
+            dir={userType === 'admin' ? 'ltr' : undefined}
+            lang={userType === 'admin' ? 'en' : undefined}
+          >
             {title && (
-              <div className="mb-6 sm:mb-8">
-                <h1 className="text-[28px] sm:text-[32px] lg:text-[36px] leading-tight font-extrabold text-ink tracking-tight">
+              <div className="mb-5 sm:mb-6">
+                <h1 className="text-2xl lg:text-[28px] leading-tight font-extrabold text-ink tracking-tight">
                   {title}
                 </h1>
-                {subtitle && <p className="mt-1.5 text-sm sm:text-[15px] text-muted">{subtitle}</p>}
+                {subtitle && <p className="mt-1 text-sm text-muted">{subtitle}</p>}
               </div>
             )}
             {children}

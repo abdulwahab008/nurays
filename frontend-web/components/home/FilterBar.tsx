@@ -59,8 +59,8 @@ export default function FilterBar({
                   key={chip.id}
                   onClick={() => onSelectFilter(chip.id)}
                   aria-pressed={isActive}
-                  className={`flex items-center gap-1.5 h-10 px-4 rounded-full text-sm font-semibold whitespace-nowrap transition-colors ${
-                    isActive ? 'bg-ink text-page' : 'bg-surface hover:bg-raised text-ink border border-line'
+                  className={`flex items-center gap-1.5 h-11 px-4 rounded-full text-sm font-semibold whitespace-nowrap transition-colors ${
+                    isActive ? 'bg-brand-soft text-brand-soft-ink border border-brand' : 'bg-surface hover:bg-raised text-ink border border-line'
                   }`}
                 >
                   <Icon className="w-4 h-4" aria-hidden />

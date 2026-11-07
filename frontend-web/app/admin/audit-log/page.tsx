@@ -1,12 +1,18 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { ChevronDown } from 'lucide-react';
+import { FilterChips, LoadingLine, PageHeader, Pager, StatusPill } from '@/components/admin/AdminListParts';
 import { AdminShell } from '@/components/layout/AdminShell';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { LoadError } from '@/components/ui/LoadError';
 import { apiClient, apiErrorMessage } from '@/lib/api-client';
-import { formatDateTime } from '@/lib/utils';
+import { formatDateTime } from '@/components/admin/admin-dates';
+import { useAuthStore } from '@/lib/store/auth-store';
+import { describeAction, recordHref } from './describe';
 
 interface AuditEntry {
   id: string;
@@ -38,34 +44,75 @@ const AREAS = [
   ['user', 'Sign-ins'],
 ] as const;
 
-/** "admin:POST /riders/:id/payouts" -> "POST riders/:id/payouts" */
-const describe = (action: string) => action.replace(/^(admin|hub|admin-as-seller):/, (m) => (m === 'admin:' ? '' : m)).replace(' /', ' ');
+/** The message of a failed export: the answer was asked for as a file, so a refusal arrives as a Blob holding the JSON. */
+async function exportFailure(error: unknown): Promise<string> {
+  const res = (error as { response?: { status?: number; data?: unknown } })?.response;
+  if (res?.status === 403) return 'Only the super admin can export the audit log.';
+  if (res?.data instanceof Blob) {
+    try {
+      const body = JSON.parse(await res.data.text()) as { error?: { message?: string }; message?: string };
+      const message = body.error?.message ?? body.message;
+      if (message) return message;
+    } catch {
+      // Not JSON: fall through to the general message.
+    }
+  }
+  return apiErrorMessage(error, 'Could not export the audit log');
+}
 
 /** Every change an admin made: who, what, on which record, with what, and whether it worked. */
 export default function AdminAuditLogPage() {
+  return (
+    <Suspense fallback={null}>
+      <AdminAuditLog />
+    </Suspense>
+  );
+}
+
+function AdminAuditLog() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const { showToast } = useToast();
+  const canExport = useAuthStore((st) => !!st.user?.permissions?.includes('audit.export'));
   const [entries, setEntries] = useState<AuditEntry[]>([]);
   const [loading, setLoading] = useState(true);
   // Why the log could not be read; shown instead of "Nothing recorded yet", which would be untrue.
   const [loadError, setLoadError] = useState<unknown>(null);
-  const [area, setArea] = useState('');
+  const areaParam = searchParams.get('area') ?? '';
+  const area = AREAS.some(([id]) => id === areaParam) ? areaParam : '';
   const [entityId, setEntityId] = useState('');
   const [query, setQuery] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [result, setResult] = useState('');
-  const [page, setPage] = useState(1);
+  const page = Math.max(1, Number(searchParams.get('page')) || 1);
   const [totalPages, setTotalPages] = useState(1);
+  const [total, setTotal] = useState(0);
   const [open, setOpen] = useState<string | null>(null);
+  const showSignIns = searchParams.get('signins') === '1';
+  const hideSignIns = !showSignIns && area !== 'user';
+
+  const filterParams = useMemo(
+    () => ({
+      entityType: area || undefined,
+      entityId: query || undefined,
+      dateFrom: dateFrom || undefined,
+      dateTo: dateTo ? `${dateTo}T23:59:59` : undefined,
+      result: result || undefined,
+      hideSignIns: hideSignIns ? '1' : undefined,
+    }),
+    [area, query, dateFrom, dateTo, result, hideSignIns]
+  );
 
   const load = useCallback(async () => {
     try {
       setLoading(true);
       const res = await apiClient.get('/admin/audit-logs', {
-        params: { entityType: area || undefined, entityId: query || undefined, dateFrom: dateFrom || undefined, dateTo: dateTo ? `${dateTo}T23:59:59` : undefined, result: result || undefined, page, limit: 50 },
+        params: { ...filterParams, page, limit: 50 },
       });
       setEntries(res.data.data.logs);
       setTotalPages(res.data.data.pagination.totalPages || 1);
+      setTotal(res.data.data.pagination.total ?? 0);
       setLoadError(null);
     } catch (error) {
       // The rows still on the screen belong to the filters before this change, so they go with the failure.
@@ -74,11 +121,28 @@ export default function AdminAuditLogPage() {
     } finally {
       setLoading(false);
     }
-  }, [area, query, dateFrom, dateTo, result, page]);
+  }, [filterParams, page]);
+
+  const setView = (changes: { area?: string; signIns?: boolean; page: number }) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (changes.area !== undefined) {
+      if (changes.area) params.set('area', changes.area);
+      else params.delete('area');
+    }
+    if (changes.signIns !== undefined) {
+      if (changes.signIns) params.set('signins', '1');
+      else params.delete('signins');
+    }
+    if (changes.page > 1) params.set('page', String(changes.page));
+    else params.delete('page');
+    const qs = params.toString();
+    router.replace(qs ? `/admin/audit-log?${qs}` : '/admin/audit-log', { scroll: false });
+  };
+  const setPage = (next: number) => setView({ page: next });
 
   const exportCsv = async () => {
     try {
-      const res = await apiClient.get('/admin/audit-logs/export', { params: { entityType: area || undefined, entityId: query || undefined, dateFrom: dateFrom || undefined, dateTo: dateTo ? `${dateTo}T23:59:59` : undefined, result: result || undefined }, responseType: 'blob' });
+      const res = await apiClient.get('/admin/audit-logs/export', { params: filterParams, responseType: 'blob' });
       const url = URL.createObjectURL(res.data);
       const a = document.createElement('a');
       a.href = url;
@@ -86,7 +150,7 @@ export default function AdminAuditLogPage() {
       a.click();
       URL.revokeObjectURL(url);
     } catch (error) {
-      showToast(apiErrorMessage(error, 'Could not export the audit log'), 'error');
+      showToast(await exportFailure(error), 'error');
     }
   };
 
@@ -94,127 +158,180 @@ export default function AdminAuditLogPage() {
     load();
   }, [load]);
 
+  const filtersOn = [query, dateFrom, dateTo, result].filter(Boolean).length;
+  const done = (e: AuditEntry) => e.responseStatus != null && e.responseStatus < 400;
+  const resultPill = (e: AuditEntry) => <StatusPill tone={done(e) ? 'good' : 'problem'}>{done(e) ? 'Done' : 'Refused'}</StatusPill>;
+  const who = (e: AuditEntry) => e.admin?.name || e.admin?.email || 'Unknown';
+  const recordLink = (e: AuditEntry) => {
+    const href = recordHref(e.entityType, e.entityId);
+    return (
+      href && (
+        <Link href={href} aria-label="Open the record" className="inline-flex min-h-11 shrink-0 items-center text-xs font-medium text-brand-ink hover:underline">
+          Open
+        </Link>
+      )
+    );
+  };
+  const detailsToggle = (e: AuditEntry) => (
+    <button type="button" onClick={() => setOpen(open === e.id ? null : e.id)} aria-expanded={open === e.id} className="min-h-11 shrink-0 text-xs font-medium text-brand-ink hover:underline">
+      {open === e.id ? 'Hide details' : 'Details'}
+    </button>
+  );
+  const details = (e: AuditEntry) =>
+    open === e.id && (
+      <dl className="mt-1 max-w-xl space-y-1 rounded-lg bg-raised p-2 text-xs text-muted" data-ltr>
+        <div>
+          <dt className="inline font-medium text-ink">Action: </dt>
+          <dd className="inline break-all">{e.action} ({e.responseStatus ?? 'no answer'})</dd>
+        </div>
+        {e.entityId && (
+          <div>
+            <dt className="inline font-medium text-ink">Record: </dt>
+            <dd className="inline break-all">{e.entityType ? `${e.entityType} ` : ''}{e.entityId}</dd>
+          </div>
+        )}
+        {e.ipAddress && (
+          <div>
+            <dt className="inline font-medium text-ink">IP address: </dt>
+            <dd className="inline">{e.ipAddress}</dd>
+          </div>
+        )}
+        {e.requestData != null && <pre className="overflow-x-auto whitespace-pre-wrap">{JSON.stringify(e.requestData, null, 2)}</pre>}
+      </dl>
+    );
+
   return (
     <AdminShell>
-      <div className="max-w-6xl mx-auto space-y-5">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Audit log</h1>
-          <p className="text-gray-600 mt-1">Every change made in the admin console, including attempts that were refused.</p>
-        </div>
+      <div className="max-w-6xl space-y-4">
+        <PageHeader
+          title="Audit log"
+          subtitle="Every change made in the admin console, including attempts that were refused."
+          actions={
+            canExport && (
+              <Button type="button" variant="outline" onClick={exportCsv} data-testid="audit-export">
+                Export CSV
+              </Button>
+            )
+          }
+        />
 
-        <div className="flex flex-wrap items-center gap-2">
-          {AREAS.map(([id, label]) => (
-            <button
-              key={id || 'all'}
-              type="button"
-              onClick={() => {
-                setArea(id);
+        <FilterChips label="Area" value={area} onChange={(id) => setView({ area: id, page: 1 })} options={AREAS.map(([id, label]) => ({ id, label }))} />
+        {area !== 'user' && (
+          <button
+            type="button"
+            aria-pressed={showSignIns}
+            onClick={() => setView({ signIns: !showSignIns, page: 1 })}
+            className={`min-h-11 rounded-full border px-4 text-sm font-medium transition-colors ${showSignIns ? 'border-brand bg-brand-soft text-brand-soft-ink' : 'border-line bg-surface text-ink hover:bg-raised'}`}
+            data-testid="audit-signins"
+          >
+            Include sign-ins and sign-outs
+          </button>
+        )}
+
+        <details className="group rounded-2xl border border-line bg-surface" open={filtersOn > 0 || undefined}>
+          <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 px-4 text-sm font-medium text-ink [&::-webkit-details-marker]:hidden">
+            <span>
+              More filters
+              {filtersOn > 0 && <span className="ms-2 text-muted">{filtersOn} on</span>}
+            </span>
+            <ChevronDown aria-hidden="true" className="h-4 w-4 text-muted transition-transform group-open:rotate-180" />
+          </summary>
+          <div className="grid gap-3 border-t border-line p-4 sm:grid-cols-2 lg:grid-cols-4">
+            <form
+              className="flex items-end gap-2 sm:col-span-2 lg:col-span-1"
+              onSubmit={(e) => {
+                e.preventDefault();
+                setQuery(entityId.trim());
                 setPage(1);
               }}
-              className={`px-3 py-1.5 rounded-lg text-sm border ${area === id ? 'border-gray-900 bg-gray-900 text-white' : 'border-gray-200 bg-white text-gray-700'}`}
             >
-              {label}
-            </button>
-          ))}
-          <form
-            className="ms-auto flex gap-2 w-full sm:w-auto [&>input]:min-w-0 [&>input]:flex-1"
-            onSubmit={(e) => {
-              e.preventDefault();
-              setQuery(entityId.trim());
-              setPage(1);
-            }}
-          >
-            <input value={entityId} onChange={(e) => setEntityId(e.target.value)} placeholder="Record id (order, rider…)" className="px-3 py-1.5 rounded-lg border border-gray-200 text-sm w-64" aria-label="Record id" />
-            <Button type="submit" variant="outline" size="sm">
-              Filter
-            </Button>
-          </form>
-        </div>
+              <label className="flex min-w-0 flex-1 flex-col gap-1 text-xs text-muted">
+                Record id
+                <input value={entityId} onChange={(e) => setEntityId(e.target.value)} placeholder="Order, rider, kitchen…" className="nuray-input text-sm" />
+              </label>
+              <Button type="submit" variant="outline">
+                Filter
+              </Button>
+            </form>
+            <label className="flex flex-col gap-1 text-xs text-muted">
+              From
+              <input type="date" value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); setPage(1); }} className="nuray-input text-sm" data-testid="audit-from" />
+            </label>
+            <label className="flex flex-col gap-1 text-xs text-muted">
+              To
+              <input type="date" value={dateTo} onChange={(e) => { setDateTo(e.target.value); setPage(1); }} className="nuray-input text-sm" data-testid="audit-to" />
+            </label>
+            <label className="flex flex-col gap-1 text-xs text-muted">
+              Result
+              <select value={result} onChange={(e) => { setResult(e.target.value); setPage(1); }} className="nuray-input text-sm" data-testid="audit-result">
+                <option value="">All</option>
+                <option value="ok">Done</option>
+                <option value="refused">Refused</option>
+              </select>
+            </label>
+          </div>
+        </details>
 
-        <div className="flex flex-wrap items-end gap-3 text-sm">
-          <label className="flex flex-col text-xs text-gray-500">From
-            <input type="date" value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); setPage(1); }} className="px-2 py-1.5 rounded-lg border border-gray-200 text-sm text-gray-900" data-testid="audit-from" />
-          </label>
-          <label className="flex flex-col text-xs text-gray-500">To
-            <input type="date" value={dateTo} onChange={(e) => { setDateTo(e.target.value); setPage(1); }} className="px-2 py-1.5 rounded-lg border border-gray-200 text-sm text-gray-900" data-testid="audit-to" />
-          </label>
-          <label className="flex flex-col text-xs text-gray-500">Result
-            <select value={result} onChange={(e) => { setResult(e.target.value); setPage(1); }} className="px-2 py-1.5 rounded-lg border border-gray-200 text-sm text-gray-900" data-testid="audit-result">
-              <option value="">All</option>
-              <option value="ok">Done</option>
-              <option value="refused">Refused</option>
-            </select>
-          </label>
-          <Button type="button" variant="outline" size="sm" onClick={exportCsv} data-testid="audit-export">Export CSV</Button>
-        </div>
-
-        <div className="bg-white border border-gray-200 rounded-lg overflow-x-auto">
-          {loading && entries.length === 0 ? (
-            <p className="p-10 text-center text-gray-500">Loading…</p>
-          ) : loadError ? (
-            <LoadError error={loadError} onRetry={load} title="We couldn't load the audit log" className="m-4" />
-          ) : entries.length === 0 ? (
-            <p className="p-10 text-center text-gray-500">Nothing recorded yet.</p>
-          ) : (
-            <table className="w-full text-sm" data-testid="audit-table">
-              <thead className="bg-gray-50 text-start text-xs uppercase tracking-wide text-gray-500">
-                <tr>
-                  <th className="px-4 py-3">When</th>
-                  <th className="px-4 py-3">Who</th>
-                  <th className="px-4 py-3">What</th>
-                  <th className="px-4 py-3">Result</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {entries.map((e) => (
-                  <tr key={e.id} className="align-top">
-                    <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">{formatDateTime(e.createdAt)}</td>
-                    <td className="px-4 py-3">
-                      <p className="text-gray-900">{e.admin?.name || e.admin?.email || 'Unknown'}</p>
-                      {e.ipAddress && <p className="text-xs text-gray-500">{e.ipAddress}</p>}
-                    </td>
-                    <td className="px-4 py-3">
-                      <p className="font-mono text-xs text-gray-800">{describe(e.action)}</p>
-                      {e.entityId && <p className="text-xs text-gray-500">Record {e.entityId}</p>}
-                      {e.requestData != null && (
-                        <button type="button" onClick={() => setOpen(open === e.id ? null : e.id)} className="text-xs text-green-700 underline mt-1">
-                          {open === e.id ? 'Hide details' : 'Details'}
-                        </button>
-                      )}
-                      {open === e.id && (
-                        <pre className="mt-2 text-xs bg-gray-50 rounded p-2 overflow-x-auto max-w-xl whitespace-pre-wrap">{JSON.stringify(e.requestData, null, 2)}</pre>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span
-                        className={`inline-block px-2 py-0.5 rounded text-xs font-semibold ${
-                          e.responseStatus != null && e.responseStatus < 400 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                        }`}
-                      >
-                        {e.responseStatus != null && e.responseStatus < 400 ? 'Done' : `Refused (${e.responseStatus ?? '?'})`}
-                      </span>
-                    </td>
+        {loading && entries.length === 0 ? (
+          <LoadingLine text="Loading the audit log" />
+        ) : loadError ? (
+          <LoadError error={loadError} onRetry={load} title="We couldn't load the audit log" />
+        ) : entries.length === 0 ? (
+          <p className="py-10 text-center text-sm text-muted">Nothing recorded for these filters.</p>
+        ) : (
+          <>
+            <ul className={`md:hidden divide-y divide-line border-y border-line ${loading ? 'opacity-60' : ''}`} data-testid="audit-list">
+              {entries.map((e) => (
+                <li key={e.id} className="py-2">
+                  <div className="flex items-start justify-between gap-3">
+                    <p className="min-w-0 text-sm font-medium text-ink break-words">{describeAction(e.action, { refused: !done(e) })}</p>
+                    {resultPill(e)}
+                  </div>
+                  <div className="flex items-center gap-3 text-xs text-muted">
+                    <span className="min-w-0 flex-1 truncate">
+                      <bdi>{who(e)}</bdi> · <bdi>{formatDateTime(e.createdAt)}</bdi>
+                    </span>
+                    {recordLink(e)}
+                    {detailsToggle(e)}
+                  </div>
+                  {details(e)}
+                </li>
+              ))}
+            </ul>
+            <div className={`hidden md:block overflow-x-auto rounded-2xl border border-line bg-surface ${loading ? 'opacity-60' : ''}`}>
+              <table className="w-full text-sm" data-testid="audit-table">
+                <thead className="bg-raised text-start text-xs font-medium text-muted">
+                  <tr>
+                    <th className="px-4 py-3 text-start">When</th>
+                    <th className="px-4 py-3 text-start">Who</th>
+                    <th className="px-4 py-3 text-start">What</th>
+                    <th className="px-4 py-3 text-start">Result</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100 text-sm">
-              <span className="text-gray-500">
-                Page {page} of {totalPages}
-              </span>
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage(page - 1)}>
-                  Previous
-                </Button>
-                <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage(page + 1)}>
-                  Next
-                </Button>
-              </div>
+                </thead>
+                <tbody className="divide-y divide-line">
+                  {entries.map((e) => (
+                    <tr key={e.id} className="align-top">
+                      <td className="px-4 py-3 text-xs text-muted whitespace-nowrap">{formatDateTime(e.createdAt)}</td>
+                      <td className="px-4 py-3">
+                        <p className="text-ink break-words">{who(e)}</p>
+                      </td>
+                      <td className="px-4 py-3">
+                        <p className="text-ink break-words">{describeAction(e.action, { refused: !done(e) })}</p>
+                        <div className="flex flex-wrap items-center gap-x-4">
+                          {recordLink(e)}
+                          {detailsToggle(e)}
+                        </div>
+                        {details(e)}
+                      </td>
+                      <td className="px-4 py-3">{resultPill(e)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-          )}
-        </div>
+            <Pager page={page} totalPages={totalPages} total={total} noun="entries" one="entry" onChange={setPage} />
+          </>
+        )}
       </div>
     </AdminShell>
   );

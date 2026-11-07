@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { LoadingLine, PageHeader } from '@/components/admin/AdminListParts';
 import { AdminShell } from '@/components/layout/AdminShell';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
@@ -45,20 +46,12 @@ export default function AdminSettingsPage() {
     }
   };
 
+  // Only the super admin may change these (settings.write); everyone else with access reads them.
+  const canEdit = !!user?.permissions?.includes('settings.write');
+
   useEffect(() => {
-    if (!isAuthenticated) {
-      router.push('/admin/login');
-      return;
-    }
-
-    if (user?.user_type !== 'admin' && user?.userType !== 'admin') {
-      router.push('/products');
-      showToast('Access denied. Admin privileges required.', 'error');
-      return;
-    }
-
-    loadSettings();
-  }, [isAuthenticated, user, router]);
+    if (isAuthenticated) loadSettings();
+  }, [isAuthenticated]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -80,22 +73,15 @@ export default function AdminSettingsPage() {
     }
   };
 
-  if (!isAuthenticated || (user?.user_type !== 'admin' && user?.userType !== 'admin')) {
-    return null;
-  }
-
   if (!formData) {
     return (
       <AdminShell>
-        <div className="max-w-4xl mx-auto">
-          <div className="mb-6">
-            <h1 className="text-3xl font-bold text-gray-900">Admin Settings</h1>
-            <p className="text-gray-600 mt-1">Manage platform settings and configuration</p>
-          </div>
+        <div className="max-w-4xl">
+          <PageHeader title="Settings" subtitle="Platform details, commission and Nuray delivery prices." />
           {loadError ? (
             <LoadError error={loadError} onRetry={loadSettings} title="We couldn't load the settings" />
           ) : (
-            <p className="text-gray-500">Loading…</p>
+            <LoadingLine text="Loading the settings" />
           )}
         </div>
       </AdminShell>
@@ -104,48 +90,54 @@ export default function AdminSettingsPage() {
 
   return (
     <AdminShell>
-      <div className="max-w-4xl mx-auto">
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold text-gray-900">Admin Settings</h1>
-          <p className="text-gray-600 mt-1">Manage platform settings and configuration</p>
-        </div>
+      <div className="max-w-4xl">
+        <PageHeader title="Settings" subtitle="Platform details, commission and Nuray delivery prices." />
 
-        <form onSubmit={handleSubmit} onChange={() => problem && setProblem(null)} noValidate className="bg-white rounded-lg shadow-sm p-6 space-y-6">
+        {!canEdit && (
+          <p className="mb-4 rounded-xl bg-accent-soft px-4 py-3 text-sm text-accent-soft-ink" data-testid="settings-read-only">
+            Only the super admin can change these settings.
+          </p>
+        )}
+        <form onSubmit={handleSubmit} onChange={() => problem && setProblem(null)} noValidate className="bg-surface border border-line rounded-2xl p-4 sm:p-6 space-y-6">
+          <fieldset disabled={!canEdit} className="space-y-6 min-w-0">
           {/* Platform Settings */}
           <div>
-            <h2 className="text-xl font-bold text-gray-900 mb-4">Platform Settings</h2>
+            <h2 className="text-base font-semibold text-ink mb-4">Platform</h2>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Platform Name
+                <label htmlFor="platformName" className="block text-sm font-medium text-ink mb-2">
+                  Platform name
                 </label>
                 <input
+                  id="platformName"
                   type="text"
                   value={formData.platformName}
                   onChange={(e) => setFormData({ ...formData, platformName: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                  className="nuray-input w-full"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Support Email
+                <label htmlFor="supportEmail" className="block text-sm font-medium text-ink mb-2">
+                  Support email
                 </label>
                 <input
+                  id="supportEmail"
                   type="email"
                   value={formData.supportEmail}
                   onChange={(e) => setFormData({ ...formData, supportEmail: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                  className="nuray-input w-full"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Support Phone
+                <label htmlFor="supportPhone" className="block text-sm font-medium text-ink mb-2">
+                  Support phone
                 </label>
                 <input
+                  id="supportPhone"
                   type="text"
                   value={formData.supportPhone}
                   onChange={(e) => setFormData({ ...formData, supportPhone: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                  className="nuray-input w-full"
                 />
               </div>
             </div>
@@ -153,34 +145,36 @@ export default function AdminSettingsPage() {
 
           {/* Commission Settings */}
           <div>
-            <h2 className="text-xl font-bold text-gray-900 mb-4">Commission Settings</h2>
+            <h2 className="text-base font-semibold text-ink mb-4">Commission and payouts</h2>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Commission Rate (%)
+                <label htmlFor="commissionRate" className="block text-sm font-medium text-ink mb-2">
+                  Commission rate (%)
                 </label>
                 <input
+                  id="commissionRate"
                   type="number"
                   min="0"
                   max="100"
                   value={formData.commissionRate}
                   onChange={(e) => setFormData({ ...formData, commissionRate: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                  className="nuray-input w-full"
                 />
-                <p className="mt-1 text-xs text-gray-500">
+                <p className="mt-1 text-xs text-muted">
                   Applies to kitchens that join after you save. A kitchen already on Nuray keeps the rate it started with.
                 </p>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Minimum Payout Amount (PKR)
+                <label htmlFor="minPayoutAmount" className="block text-sm font-medium text-ink mb-2">
+                  Minimum payout (Rs)
                 </label>
                 <input
+                  id="minPayoutAmount"
                   type="number"
                   min="0"
                   value={formData.minPayoutAmount}
                   onChange={(e) => setFormData({ ...formData, minPayoutAmount: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                  className="nuray-input w-full"
                 />
               </div>
             </div>
@@ -188,13 +182,15 @@ export default function AdminSettingsPage() {
 
           {/* Nuray delivery prices */}
           <div data-testid="delivery-pricing">
-            <h2 className="text-xl font-bold text-gray-900 mb-1">Nuray delivery prices</h2>
-            <p className="text-sm text-gray-500 mb-4">
-              Charged when a Nuray rider delivers. Within a community the fee is fixed: set it for each community on the{' '}
-              <Link href="/admin/communities" className="underline">Communities</Link> page. To another community it&apos;s
-              that community&apos;s &quot;to other communities&quot; base fee plus the rate below for every km beyond the included
-              distance, rounded up to Rs 10. Kitchens that deliver themselves charge their own fees.
+            <h2 className="text-base font-semibold text-ink mb-1">Nuray delivery prices</h2>
+            <p className="text-sm text-muted">
+              Charged when a Nuray rider delivers. Within a community the fee is fixed and set for each community. To another
+              community it&apos;s that community&apos;s &quot;to other communities&quot; base fee plus the rate below for every km beyond
+              the included distance, rounded up to Rs 10. Kitchens that deliver themselves charge their own fees.
             </p>
+            <Link href="/admin/communities" className="mb-2 inline-flex min-h-11 items-center text-sm font-medium text-brand-ink hover:underline">
+              Set the fee inside each community
+            </Link>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {(
                 [
@@ -205,7 +201,7 @@ export default function AdminSettingsPage() {
                 ] as const
               ).map(([key, label, step]) => (
                 <div key={key}>
-                  <label htmlFor={key} className="block text-sm font-medium text-gray-700 mb-2">{label}</label>
+                  <label htmlFor={key} className="block text-sm font-medium text-ink mb-2">{label}</label>
                   <input
                     id={key}
                     type="number"
@@ -213,30 +209,33 @@ export default function AdminSettingsPage() {
                     step={step}
                     value={formData[key]}
                     onChange={(e) => setFormData({ ...formData, [key]: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                    className="nuray-input w-full"
                   />
                 </div>
               ))}
             </div>
-            <p className="text-xs text-gray-500 mt-3">
+            <p className="text-xs text-muted mt-3">
               Example: base Rs 150, Rs {formData.deliveryPerKm || 0}/km after {formData.deliveryIncludedKm || 0} km, a 6 km trip ={' '}
               Rs {Math.ceil((150 + Math.max(0, 6 - (parseFloat(formData.deliveryIncludedKm) || 0)) * (parseFloat(formData.deliveryPerKm) || 0)) / 10) * 10}.
             </p>
           </div>
 
+          </fieldset>
           {problem && (
-            <p role="alert" className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-800">
+            <p role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
               {problem}
             </p>
           )}
-          <div className="flex justify-end gap-4 pt-4 border-t">
-            <Button type="button" variant="outline" onClick={() => router.back()}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={loading} className="bg-green-600 hover:bg-green-700">
-              {loading ? 'Saving...' : 'Save Changes'}
-            </Button>
-          </div>
+          {canEdit && (
+            <div className="flex justify-end gap-3 pt-4 border-t border-line">
+              <Button type="button" variant="outline" onClick={() => router.back()}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={loading}>
+                {loading ? 'Saving…' : 'Save changes'}
+              </Button>
+            </div>
+          )}
         </form>
       </div>
     </AdminShell>

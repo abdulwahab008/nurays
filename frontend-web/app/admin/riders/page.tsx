@@ -4,13 +4,20 @@ import { Suspense, useCallback, useEffect, useState } from 'react';
 import { RejectReasonModal } from '@/components/admin/RejectReasonModal';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { AdminShell } from '@/components/layout/AdminShell';
+import { ChevronRight } from 'lucide-react';
+import { DashboardLayout, adminSidebarFor } from '@/components/layout/DashboardShell';
 import { Button } from '@/components/ui/button';
 import { LoadError } from '@/components/ui/LoadError';
 import { useToast } from '@/components/ui/toast';
+import { useDialogs } from '@/components/ui/Dialogs';
 import { apiClient, apiErrorMessage } from '@/lib/api-client';
-import { formatPrice, formatDateTime } from '@/lib/utils';
+import { formatPrice } from '@/lib/utils';
+import { formatDate, formatDateTime } from '@/components/admin/admin-dates';
+import { useAuthStore } from '@/lib/store/auth-store';
+import { useShallow } from 'zustand/react/shallow';
 import DocumentList from '@/components/admin/DocumentList';
+import { AdminFilterTabs } from '@/components/admin/AdminFilterTabs';
+import { Figure, LoadingLine, Pager, PhoneText, SearchForm, StatusPill } from '@/components/admin/AdminListParts';
 
 interface PendingRider {
   id: string;
@@ -22,7 +29,7 @@ interface PendingRider {
   applicationComplete: boolean;
   user: {
     id: string;
-    phone: string;
+    phone: string | null;
     email: string | null;
     profile: { fullName: string; city: string | null } | null;
   } | null;
@@ -32,7 +39,7 @@ interface PendingRider {
 interface RiderWithMoney {
   id: string;
   name: string | null;
-  phone: string;
+  phone: string | null;
   city: string;
   vehicleType: string | null;
   vehicleNumber: string | null;
@@ -66,35 +73,29 @@ function AdminRidersContent() {
   const searchParams = useSearchParams();
   const tab: Tab = searchParams.get('tab') === 'applications' ? 'applications' : 'riders';
 
+  const { user } = useAuthStore(useShallow((st) => ({ user: st.user })));
+
   return (
-    <AdminShell>
-      <div className="max-w-6xl mx-auto">
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold text-gray-900">Riders</h1>
-          <p className="text-gray-600 mt-1">Cash riders carry for cash orders, what they&apos;re owed, and new applications.</p>
-        </div>
-
-        <div className="mb-5 inline-flex rounded-xl border border-gray-200 bg-white p-1">
-          {(
-            [
-              ['riders', 'Riders & cash'],
-              ['applications', 'Applications'],
-            ] as const
-          ).map(([id, label]) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => router.replace(id === 'riders' ? '/admin/riders' : '/admin/riders?tab=applications')}
-              className={`px-4 py-2 rounded-lg text-sm font-semibold ${tab === id ? 'bg-gray-900 text-white' : 'text-gray-600 hover:bg-gray-100'}`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-
+    <DashboardLayout
+      title="Riders"
+      subtitle="Cash riders carry for cash orders, what they're owed, and new applications."
+      sidebarItems={adminSidebarFor(user?.permissions)}
+      userType="admin"
+    >
+      <div className="max-w-6xl">
+        <AdminFilterTabs
+          label="Riders"
+          value={tab}
+          onChange={(id) => router.replace(id === 'riders' ? '/admin/riders' : '/admin/riders?tab=applications')}
+          tabs={[
+            { id: 'riders', label: 'Riders and cash' },
+            { id: 'applications', label: 'Applications' },
+          ]}
+          className="mb-5"
+        />
         {tab === 'riders' ? <RidersMoney /> : <Applications />}
       </div>
-    </AdminShell>
+    </DashboardLayout>
   );
 }
 
@@ -105,13 +106,11 @@ const FILTERS = [
 ] as const;
 
 function RidersMoney() {
-  const { showToast } = useToast();
   const [data, setData] = useState<RidersMoneyResponse | null>(null);
   const [loading, setLoading] = useState(true);
   // Why the riders could not be read; shown instead of "No riders here", which would be untrue.
   const [loadError, setLoadError] = useState<unknown>(null);
   const [filter, setFilter] = useState<(typeof FILTERS)[number][0]>('all');
-  const [search, setSearch] = useState('');
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(1);
 
@@ -128,137 +127,127 @@ function RidersMoney() {
     } finally {
       setLoading(false);
     }
-  }, [filter, query, page, showToast]);
+  }, [filter, query, page]);
 
   useEffect(() => {
     load();
   }, [load]);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       {data && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="bg-white border border-gray-200 rounded-lg p-5">
-            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Cash held by riders</p>
-            <p className="text-2xl font-bold text-gray-900 mt-1" data-testid="riders-total-cash">{formatPrice(data.totals.cashHeld)}</p>
-            <p className="text-xs text-gray-500 mt-1">Collected at the door and not yet handed in.</p>
-          </div>
-          <div className="bg-white border border-gray-200 rounded-lg p-5">
-            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Owed to riders</p>
-            <p className="text-2xl font-bold text-gray-900 mt-1">{formatPrice(data.totals.owedToRiders)}</p>
-            <p className="text-xs text-gray-500 mt-1">Pay due to riders who hold less cash than they&apos;ve earned.</p>
-          </div>
+        <div className="grid grid-cols-2 gap-x-6 gap-y-4">
+          <Figure label="Cash held by riders" value={<span data-testid="riders-total-cash">{formatPrice(data.totals.cashHeld)}</span>} sub="Collected at the door, not handed in yet" />
+          <Figure label="Owed to riders" value={formatPrice(data.totals.owedToRiders)} sub="Pay due beyond the cash they hold" />
         </div>
       )}
 
-      <div className="flex flex-wrap items-center gap-2">
-        {FILTERS.map(([id, label]) => (
-          <button
-            key={id}
-            type="button"
-            onClick={() => {
-              setFilter(id);
-              setPage(1);
-            }}
-            className={`px-3 py-1.5 rounded-lg text-sm border ${filter === id ? 'border-gray-900 bg-gray-900 text-white' : 'border-gray-200 bg-white text-gray-700'}`}
-          >
-            {label}
-          </button>
-        ))}
-        <form
-          className="ms-auto flex gap-2 w-full sm:w-auto [&>input]:min-w-0 [&>input]:flex-1"
-          onSubmit={(e) => {
-            e.preventDefault();
-            setQuery(search.trim());
+      <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+        <AdminFilterTabs
+          label="Which riders"
+          value={filter}
+          onChange={(id) => {
+            setFilter(id);
             setPage(1);
           }}
-        >
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Name, phone or bike number"
-            className="px-3 py-1.5 rounded-lg border border-gray-200 text-sm w-56"
-            aria-label="Search riders"
-          />
-          <Button type="submit" variant="outline" size="sm">
-            Search
-          </Button>
-        </form>
+          tabs={FILTERS.map(([id, label]) => ({ id, label }))}
+          className="md:flex-1"
+        />
+        <SearchForm
+          placeholder="Name, phone or bike number"
+          label="Search riders"
+          onSearch={(q) => {
+            setQuery(q);
+            setPage(1);
+          }}
+        />
       </div>
 
       {loading && !data ? (
-        <div className="bg-white rounded-lg border border-gray-200 p-12 text-center text-gray-500">Loading riders…</div>
+        <LoadingLine text="Loading riders" />
       ) : loadError && !data ? (
         <LoadError error={loadError} onRetry={load} title="We couldn't load the riders" />
       ) : !data || data.riders.length === 0 ? (
-        <div className="bg-white rounded-lg border border-gray-200 p-12 text-center">
-          <h3 className="text-lg font-semibold text-gray-900 mb-1">No riders here</h3>
-          <p className="text-gray-600 text-sm">{query || filter !== 'all' ? 'Try another search or filter.' : 'Approved riders will show up here.'}</p>
-        </div>
+        <p className="py-6 text-sm text-muted">{query || filter !== 'all' ? 'No rider matches this search or filter.' : 'Approved riders will show up here.'}</p>
       ) : (
-        <div className="bg-white rounded-lg border border-gray-200 overflow-x-auto">
-          <table className="w-full text-sm" data-testid="riders-money-table">
-            <thead className="bg-gray-50 text-start text-xs uppercase tracking-wide text-gray-500">
-              <tr>
-                <th className="px-4 py-3">Rider</th>
-                <th className="px-4 py-3">Cash in hand</th>
-                <th className="px-4 py-3">Balance</th>
-                <th className="px-4 py-3">Deliveries</th>
-                <th className="px-4 py-3">Last activity</th>
-                <th className="px-4 py-3" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {data.riders.map((r) => {
-                const overLimit = r.cashHeld >= r.cashLimit && r.cashHeld > 0;
-                return (
-                  <tr key={r.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3">
-                      <p className="font-semibold text-gray-900">{r.name || 'Name not set'}</p>
-                      <p className="text-xs text-gray-500">
-                        {r.phone} · {r.city}
-                        {r.vehicleNumber ? ` · ${r.vehicleNumber}` : ''}
-                        {r.status !== 'active' ? ` · ${r.status}` : ''}
-                      </p>
-                    </td>
-                    <td className="px-4 py-3">
-                      <p className={`font-semibold ${overLimit ? 'text-red-700' : 'text-gray-900'}`}>{formatPrice(r.cashHeld)}</p>
-                      <p className="text-xs text-gray-500">of {formatPrice(r.cashLimit)}{overLimit ? ' · at limit' : ''}</p>
-                    </td>
-                    <td className="px-4 py-3">
-                      <p className={`font-semibold ${r.balance > 0 ? 'text-emerald-700' : r.balance < 0 ? 'text-amber-700' : 'text-gray-900'}`}>
-                        {formatPrice(Math.abs(r.balance))}
-                      </p>
-                      <p className="text-xs text-gray-500">{r.balance > 0 ? 'owed to rider' : r.balance < 0 ? 'rider owes' : 'settled'}</p>
-                    </td>
-                    <td className="px-4 py-3 text-gray-700">{r.totalDeliveries}</td>
-                    <td className="px-4 py-3 text-xs text-gray-500">{r.lastEntryAt ? formatDateTime(r.lastEntryAt) : '—'}</td>
-                    <td className="px-4 py-3 text-end">
-                      <Link href={`/admin/riders/${r.id}`} className="text-sm font-semibold text-green-700 hover:underline">
-                        Settle up →
-                      </Link>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-          {data.pagination.totalPages > 1 && (
-            <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100 text-sm">
-              <span className="text-gray-500">
-                Page {data.pagination.page} of {data.pagination.totalPages}
-              </span>
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage(page - 1)}>
-                  Previous
-                </Button>
-                <Button variant="outline" size="sm" disabled={page >= data.pagination.totalPages} onClick={() => setPage(page + 1)}>
-                  Next
-                </Button>
-              </div>
-            </div>
-          )}
-        </div>
+        <>
+          <ul className="divide-y divide-line border-y border-line md:hidden" data-testid="riders-money-list">
+            {data.riders.map((r) => {
+              const overLimit = r.cashHeld >= r.cashLimit && r.cashHeld > 0;
+              return (
+                <li key={r.id}>
+                  <Link href={`/admin/riders/${r.id}`} className="flex min-h-[72px] items-center gap-3 py-3 hover:bg-page">
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-start justify-between gap-2">
+                        <span className="text-sm font-semibold text-ink">{r.name || 'Name not set'}</span>
+                        <span className={`text-end text-sm font-semibold tabular-nums ${overLimit ? 'text-red-700' : 'text-ink'}`}>
+                          {formatPrice(r.cashHeld)}
+                          <span className="block text-xs font-normal text-muted">{overLimit ? 'at cash limit' : 'cash in hand'}</span>
+                        </span>
+                      </span>
+                      <span className="block truncate text-xs text-muted">
+                        {[r.phone, r.city, r.vehicleNumber].filter(Boolean).join(' · ')}
+                        {r.status !== 'active' ? ` · ${r.status === 'suspended' ? 'Suspended' : 'Inactive'}` : ''}
+                      </span>
+                      <span className="block text-xs text-muted">
+                        {r.balance > 0 ? `Owed ${formatPrice(r.balance)}` : r.balance < 0 ? `Owes ${formatPrice(Math.abs(r.balance))}` : 'Settled'} · {r.totalDeliveries} {r.totalDeliveries === 1 ? 'delivery' : 'deliveries'}
+                      </span>
+                    </span>
+                    <ChevronRight aria-hidden="true" className="h-4 w-4 shrink-0 text-muted rtl:rotate-180" />
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+          <div className="hidden overflow-x-auto rounded-2xl border border-line bg-surface md:block">
+            <table className="w-full text-sm [&_th]:text-start" data-testid="riders-money-table">
+              <thead className="border-b border-line text-xs text-muted">
+                <tr>
+                  <th className="px-4 py-3 font-medium">Rider</th>
+                  <th className="px-4 py-3 font-medium">Cash in hand</th>
+                  <th className="px-4 py-3 font-medium">Balance</th>
+                  <th className="px-4 py-3 font-medium">Deliveries</th>
+                  <th className="px-4 py-3 font-medium">Last activity</th>
+                  <th className="px-4 py-3 font-medium">
+                    <span className="sr-only">Settle up</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-line">
+                {data.riders.map((r) => {
+                  const overLimit = r.cashHeld >= r.cashLimit && r.cashHeld > 0;
+                  return (
+                    <tr key={r.id} className="hover:bg-page">
+                      <td className="px-4 py-3">
+                        <p className="font-semibold text-ink">{r.name || 'Name not set'}</p>
+                        <p className="text-xs text-muted">
+                          {[r.phone, r.city, r.vehicleNumber].filter(Boolean).join(' · ')}
+                          {r.status !== 'active' ? ` · ${r.status === 'suspended' ? 'Suspended' : 'Inactive'}` : ''}
+                        </p>
+                      </td>
+                      <td className="px-4 py-3">
+                        <p className={`font-semibold tabular-nums ${overLimit ? 'text-red-700' : 'text-ink'}`}>{formatPrice(r.cashHeld)}</p>
+                        <p className="text-xs text-muted">of {formatPrice(r.cashLimit)}{overLimit ? ', at limit' : ''}</p>
+                      </td>
+                      <td className="px-4 py-3">
+                        <p className="font-semibold tabular-nums text-ink">{formatPrice(Math.abs(r.balance))}</p>
+                        <p className="text-xs text-muted">{r.balance > 0 ? 'Owed to rider' : r.balance < 0 ? 'Rider owes' : 'Settled'}</p>
+                      </td>
+                      <td className="px-4 py-3 tabular-nums text-ink">{r.totalDeliveries}</td>
+                      <td className="px-4 py-3 text-xs text-muted">{r.lastEntryAt ? formatDateTime(r.lastEntryAt) : 'None yet'}</td>
+                      <td className="px-4 py-3 text-end">
+                        <Link href={`/admin/riders/${r.id}`} className="inline-flex min-h-11 items-center text-sm font-semibold text-brand-ink hover:underline">
+                          Settle up
+                        </Link>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <Pager page={data.pagination.page} totalPages={data.pagination.totalPages} total={data.pagination.total} noun="riders" one="rider" onChange={setPage} />
+        </>
       )}
     </div>
   );
@@ -266,6 +255,7 @@ function RidersMoney() {
 
 function Applications() {
   const { showToast } = useToast();
+  const { confirm: confirmDialog } = useDialogs();
   const [loading, setLoading] = useState(true);
   // Why the applications could not be read; shown instead of "No riders awaiting approval", which would be untrue.
   const [loadError, setLoadError] = useState<unknown>(null);
@@ -286,13 +276,21 @@ function Applications() {
     } finally {
       setLoading(false);
     }
-  }, [showToast]);
+  }, []);
 
   useEffect(() => {
     loadRiders();
   }, [loadRiders]);
 
-  const handleApprove = async (riderId: string) => {
+  const handleApprove = async (rider: PendingRider) => {
+    const riderId = rider.id;
+    const ok = await confirmDialog({
+      title: `Approve ${rider.user?.profile?.fullName || 'this rider'}?`,
+      message: 'They can start seeing and claiming deliveries.',
+      confirmText: 'Approve',
+      variant: 'warning',
+    });
+    if (!ok) return;
     try {
       setBusyId(riderId);
       await apiClient.post(`/admin/riders/${riderId}/approve`, { approved: true });
@@ -321,82 +319,64 @@ function Applications() {
 
   return (
     <div>
-      <div className="mb-4 flex items-center justify-between">
-        <p className="text-gray-600 text-sm">A rider can&apos;t see or claim any delivery until approved here.</p>
-        <Button variant="outline" onClick={loadRiders} disabled={loading}>
-          {loading ? 'Loading...' : 'Refresh'}
-        </Button>
-      </div>
+      <p className="mb-4 text-sm text-muted">A rider can&apos;t see or claim any delivery until approved here.</p>
 
-      {loading ? (
-        <div className="text-center py-12">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading pending riders...</p>
-        </div>
+      {loading && riders.length === 0 ? (
+        <LoadingLine text="Loading applications" />
       ) : loadError && riders.length === 0 ? (
         <LoadError error={loadError} onRetry={loadRiders} title="We couldn't load the applications" />
       ) : riders.length === 0 ? (
-        <div className="bg-white rounded-lg shadow-sm p-12 text-center">
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">No riders awaiting approval</h3>
-          <p className="text-gray-600">New rider applications will show up here.</p>
-        </div>
+        <p className="text-sm text-muted">No rider is waiting. New applications show up here.</p>
       ) : (
-        <div className="space-y-4">
-          {riders.map((rider) => (
-            <div key={rider.id} className="bg-white border border-gray-200 rounded-lg p-6">
-              <div className="flex items-start justify-between flex-wrap gap-4">
-                <div className="flex-1 min-w-[240px]">
-                  <div className="flex items-center gap-3 mb-2">
-                    <h3 className="text-lg font-semibold text-gray-900">{rider.user?.profile?.fullName || 'Unknown applicant'}</h3>
-                    <span className="px-2 py-1 text-xs font-medium rounded bg-yellow-100 text-yellow-800">Pending</span>
+        <ul className="space-y-4">
+          {riders.map((rider) => {
+            const busy = busyId === rider.id;
+            return (
+              <li key={rider.id} className="rounded-2xl border border-line bg-surface p-4 shadow-[var(--shadow-card)] sm:p-5">
+                <div className="flex flex-col gap-4 md:flex-row md:items-start">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="text-[17px] font-semibold text-ink">{rider.user?.profile?.fullName || 'Name not given'}</h3>
+                      {rider.applicationComplete ? <StatusPill tone="waiting">Ready to approve</StatusPill> : <StatusPill tone="problem">Incomplete</StatusPill>}
+                    </div>
+                    <dl className="mt-3 grid grid-cols-[auto_1fr] items-baseline gap-x-4 gap-y-1.5 text-sm">
+                      <dt className="text-muted">Phone</dt>
+                      <dd className="min-w-0">
+                        <PhoneText phone={rider.user?.phone} />
+                      </dd>
+                      <dt className="text-muted">Email</dt>
+                      <dd className="min-w-0 break-all text-ink">{rider.user?.email || <span className="text-muted">Not given</span>}</dd>
+                      <dt className="text-muted">City</dt>
+                      <dd className="min-w-0 text-ink">{rider.city}</dd>
+                      <dt className="text-muted">Vehicle</dt>
+                      <dd className="min-w-0 text-ink">
+                        {[rider.vehicleType, rider.vehicleNumber].filter(Boolean).join(' ') || <span className="text-muted">Not given</span>}
+                      </dd>
+                      <dt className="text-muted">Licence no.</dt>
+                      <dd className="min-w-0 text-ink">{rider.licenseNumber || <span className="text-muted">Not given</span>}</dd>
+                      <dt className="text-muted">Applied</dt>
+                      <dd className="min-w-0 text-ink">{formatDate(rider.createdAt)}</dd>
+                    </dl>
+                    <DocumentList documents={rider.documents} />
+                    {!rider.applicationComplete && (
+                      <p className="mt-3 text-xs text-red-700">
+                        Missing: vehicle details or CNIC and licence photos. The rider adds them from the rider app.
+                      </p>
+                    )}
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
-                    <div>
-                      <span className="text-gray-500">Phone:</span> <span className="font-medium">{rider.user?.phone || '—'}</span>
-                    </div>
-                    <div>
-                      <span className="text-gray-500">Email:</span> <span className="font-medium">{rider.user?.email || '—'}</span>
-                    </div>
-                    <div>
-                      <span className="text-gray-500">City:</span> <span className="font-medium">{rider.city}</span>
-                    </div>
-                    <div>
-                      <span className="text-gray-500">Vehicle:</span>{' '}
-                      <span className="font-medium">
-                        {rider.vehicleType || 'Not provided'} {rider.vehicleNumber || ''}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-gray-500">Licence no.:</span> <span className="font-medium">{rider.licenseNumber || 'Not provided'}</span>
-                    </div>
-                    <div>
-                      <span className="text-gray-500">Applied:</span> <span className="font-medium">{new Date(rider.createdAt).toLocaleDateString()}</span>
-                    </div>
+                  <div className="grid grid-cols-2 gap-2 md:w-56 md:shrink-0">
+                    <Button variant="outline" className="min-h-11 border-red-200 text-red-700 hover:bg-red-50" onClick={() => setRejecting(rider)} disabled={busy}>
+                      Reject
+                    </Button>
+                    <Button className="min-h-11" onClick={() => handleApprove(rider)} disabled={busy || !rider.applicationComplete}>
+                      {busy ? 'Working…' : 'Approve'}
+                    </Button>
                   </div>
-                  <DocumentList documents={rider.documents} />
-                  {!rider.applicationComplete && (
-                    <p className="mt-3 text-xs font-medium text-amber-700">
-                      Waiting for the rider to send their vehicle details and CNIC / licence photos (they do this from their rider app).
-                    </p>
-                  )}
                 </div>
-                <div className="flex gap-2">
-                  <Button
-                    onClick={() => handleApprove(rider.id)}
-                    disabled={busyId === rider.id || !rider.applicationComplete}
-                    title={rider.applicationComplete ? undefined : 'The application is not complete yet'}
-                    className="bg-green-600 hover:bg-green-700 text-white"
-                  >
-                    {busyId === rider.id ? 'Working...' : 'Approve'}
-                  </Button>
-                  <Button variant="outline" onClick={() => setRejecting(rider)} disabled={busyId === rider.id}>
-                    Reject
-                  </Button>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
+              </li>
+            );
+          })}
+        </ul>
       )}
       <RejectReasonModal
         isOpen={!!rejecting}

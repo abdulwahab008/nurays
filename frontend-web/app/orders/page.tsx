@@ -4,26 +4,9 @@ import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { loginUrlHere } from '@/lib/auth-redirect';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import {
-  ShoppingBag,
-  Clock,
-  CheckCircle2,
-  XCircle,
-  ChefHat,
-  Truck,
-  Package,
-  Calendar,
-  ArrowRight,
-  RotateCcw,
-  Receipt,
-  Search,
-  Sparkles,
-  ExternalLink,
-  CreditCard,
-  Flame,
-} from 'lucide-react';
+import { ShoppingBag, Package, RotateCcw, Search, X } from 'lucide-react';
 import { orderService, Order, OrderItem } from '@/lib/services/order.service';
-import { formatPrice, formatDate } from '@/lib/utils';
+import { formatPrice, formatDateTime } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { LoadError } from '@/components/ui/LoadError';
 import { useAuthStore } from '@/lib/store/auth-store';
@@ -36,6 +19,19 @@ import { useT } from '@/lib/i18n';
 import { commonMessages, statusKey } from '@/lib/i18n/messages/common';
 import { ordersMessages } from '@/lib/i18n/messages/orders';
 import { useShallow } from 'zustand/react/shallow';
+import { OrderStatusPill } from '@/components/ui/StatusPill';
+import { awaitingPayment, orderProgress, paymentNote, type PaymentNote } from '@/components/orders/order-progress';
+
+/** A listed order, with what newer servers add to the list (how it is paid and fulfilled, and its kitchen). */
+type ListedOrder = Order & {
+  paymentMethod?: string | null;
+  deliveryType?: string | null;
+  items: Array<Order['items'][number] & { seller?: { businessName?: string | null } | null }>;
+};
+
+const ACTIVE_STATUSES = ['pending', 'confirmed', 'preparing', 'ready', 'dispatched', 'in_transit'];
+/** Payment words worth a line on the card; "paid", "pay on delivery" and "not charged" add nothing to the status. */
+const SHOWN_PAYMENT_NOTES: PaymentNote[] = ['awaitingPayment', 'submitted', 'failed', 'refunded', 'refundPending'];
 
 export default function OrdersPage() {
   return (
@@ -174,7 +170,7 @@ function OrdersContent() {
   useEffect(() => {
     const token = apiClient.getAccessToken();
     if (!token && !isAuthenticated) {
-      router.push(loginUrlHere());
+      router.replace(loginUrlHere());
       return;
     }
     loadOrders();
@@ -185,16 +181,8 @@ function OrdersContent() {
     e.stopPropagation();
     setReorderingId(order.id);
     try {
-      showToast(t('list.toastAddingToTray'), 'info');
-      let items: OrderItem[] = order.items || [];
-      if (!items.length || !items[0]?.productId) {
-        try {
-          const fullRes = await orderService.getOrder(order.id);
-          items = fullRes.data?.items || items;
-        } catch {
-          // ignore fallback error
-        }
-      }
+      // The list carries only the first dishes and not how each was stocked; the order itself has all of them.
+      const items: OrderItem[] = (await orderService.getOrder(order.id)).data?.items ?? order.items ?? [];
       for (const item of items) {
         const pId = item.productId || item.product?.id;
         if (pId) {
@@ -202,15 +190,16 @@ function OrdersContent() {
             productId: pId,
             variantId: item.variantId || undefined,
             quantity: item.quantity || 1,
-            stockType: 'direct',
+            stockType: item.fulfillmentType === 'hub' ? 'hub' : 'direct',
+            hubId: item.fulfillmentType === 'hub' ? item.hubId ?? undefined : undefined,
             clearAndAdd: true,
           });
         }
       }
       showToast(t('list.toastAddedToTray'), 'success');
       router.push('/cart');
-    } catch {
-      router.push(`/orders/${order.id}`);
+    } catch (error) {
+      showToast(apiErrorMessage(error, t('list.reorderFailed')), 'error');
     } finally {
       setReorderingId(null);
     }
@@ -279,91 +268,16 @@ function OrdersContent() {
       }
 
       return true;
-    });
+    }).sort((a, b) => Number(ACTIVE_STATUSES.includes(getOrderStatus(b))) - Number(ACTIVE_STATUSES.includes(getOrderStatus(a))));
   }, [orders, filter, searchQuery]);
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'pending':
-        return {
-          label: t('list.badge.pending'),
-          color: 'bg-accent-soft text-accent-soft-ink border-transparent',
-          dotColor: 'bg-accent-soft-ink',
-          icon: <Clock className="w-3.5 h-3.5" />,
-        };
-      case 'confirmed':
-        return {
-          label: t('list.badge.confirmed'),
-          color: 'bg-frozen-soft text-frozen-ink border-transparent',
-          dotColor: 'bg-frozen-ink',
-          icon: <Sparkles className="w-3.5 h-3.5" />,
-        };
-      case 'preparing':
-        return {
-          label: t('list.badge.preparing'),
-          color: 'bg-accent text-on-accent border-transparent',
-          dotColor: 'bg-on-accent',
-          icon: <ChefHat className="w-3.5 h-3.5" />,
-        };
-      case 'ready':
-        return {
-          label: t('list.badge.ready'),
-          color: 'bg-brand-soft text-brand-soft-ink border-transparent',
-          dotColor: 'bg-brand-soft-ink',
-          icon: <Package className="w-3.5 h-3.5" />,
-        };
-      case 'dispatched':
-      case 'in_transit':
-        return {
-          label: t('list.badge.onTheWay'),
-          color: 'bg-brand text-on-brand border-transparent',
-          dotColor: 'bg-on-brand',
-          icon: <Truck className="w-3.5 h-3.5" />,
-        };
-      case 'delivered':
-      case 'completed':
-        return {
-          label: t('list.badge.delivered'),
-          color: 'bg-raised text-ink border-line',
-          dotColor: 'bg-brand',
-          icon: <CheckCircle2 className="w-3.5 h-3.5" />,
-        };
-      case 'cancelled':
-        return {
-          label: t('list.badge.cancelled'),
-          color: 'bg-red-50 text-red-800 border-red-200',
-          dotColor: 'bg-red-600',
-          icon: <XCircle className="w-3.5 h-3.5" />,
-        };
-      default:
-        return {
-          label: statusKey(status) in commonMessages.en ? tc(statusKey(status)) : status.replace(/_/g, ' '),
-          color: 'bg-raised text-ink border-line',
-          dotColor: 'bg-muted',
-          icon: <Clock className="w-3.5 h-3.5" />,
-        };
-    }
-  };
-
-  const getStepProgress = (status: string) => {
-    switch (status) {
-      case 'pending':
-        return 1;
-      case 'confirmed':
-        return 2;
-      case 'preparing':
-      case 'ready':
-        return 3;
-      case 'dispatched':
-      case 'in_transit':
-        return 4;
-      case 'delivered':
-      case 'completed':
-        return 5;
-      default:
-        return 1;
-    }
-  };
+  const getStatusBadge = (status: string) => ({
+    label: `list.badge.${status}` in ordersMessages.en
+      ? t(`list.badge.${status}` as keyof typeof ordersMessages.en)
+      : statusKey(status) in commonMessages.en
+        ? tc(statusKey(status))
+        : status.replace(/_/g, ' '),
+  });
 
   return (
     <DashboardLayout
@@ -377,385 +291,183 @@ function OrdersContent() {
           <LoadError error={loadError} onRetry={() => loadOrders()} title={t('list.loadFailed')} />
         ) : (
         <>
-        {/* ============================================================ */}
-        {/* STATS SUMMARY METRICS (Rich Modern Bento Cards) */}
-        {/* ============================================================ */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4">
-          {/* 1. Total Orders */}
-          <div className="rounded-[20px] bg-surface border border-line p-4 sm:p-5">
-            <div className="flex items-center justify-between mb-3">
-              <div className="w-10 h-10 rounded-xl bg-raised flex items-center justify-center text-ink">
-                <Receipt className="w-5 h-5" />
-              </div>
-              <span className="text-[11px] font-bold text-muted uppercase tracking-wider">
-                {t('list.lifetime')}
-              </span>
+        {!loading && totalOrdersCount === 0 && orders.length === 0 ? (
+          <div className="bg-surface rounded-[24px] p-8 sm:p-12 text-center border border-line" data-testid="orders-empty">
+            <div className="w-16 h-16 rounded-2xl bg-brand-soft flex items-center justify-center mx-auto mb-4 text-brand-soft-ink">
+              <Package className="w-8 h-8" />
             </div>
-            <div className="text-2xl sm:text-3xl font-extrabold text-ink tracking-tight">
-              {totalOrdersCount}
-            </div>
-            <div className="text-xs sm:text-sm font-semibold text-muted mt-0.5">
-              {t('list.totalPlaced')}
-            </div>
+            <h3 className="text-xl font-bold text-ink mb-2">{t('list.emptyAllTitle')}</h3>
+            <p className="text-sm text-muted max-w-md mx-auto mb-6">{t('list.emptyAllBody')}</p>
+            <Link href="/kitchens">
+              <Button className="min-h-11 px-6 rounded-xl">
+                <ShoppingBag className="w-4 h-4" /> {t('list.exploreKitchens')}
+              </Button>
+            </Link>
           </div>
-
-          {/* 2. In Progress */}
-          <div className="rounded-[20px] bg-surface border border-line p-4 sm:p-5">
-            <div className="flex items-center justify-between mb-3">
-              <div className="w-10 h-10 rounded-xl bg-accent-soft flex items-center justify-center text-accent-soft-ink">
-                <ChefHat className="w-5 h-5" />
-              </div>
-              {inProgressCount > 0 ? (
-                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-accent-soft text-accent-soft-ink text-[11px] font-bold">
-                  <span className="w-1.5 h-1.5 rounded-full bg-accent-soft-ink animate-pulse" />
-                  {t('list.liveCooking')}
-                </span>
-              ) : (
-                <span className="text-[11px] font-bold text-muted uppercase tracking-wider">
-                  {t('list.active')}
-                </span>
-              )}
-            </div>
-            <div className="text-2xl sm:text-3xl font-extrabold text-ink tracking-tight">
-              {inProgressCount}
-            </div>
-            <div className="text-xs sm:text-sm font-semibold text-muted mt-0.5">
-              {t('list.kitchenPrep')}
-            </div>
-          </div>
-
-          {/* 3. On the Way */}
-          <div className="rounded-[20px] bg-surface border border-line p-4 sm:p-5">
-            <div className="flex items-center justify-between mb-3">
-              <div className="w-10 h-10 rounded-xl bg-brand-soft flex items-center justify-center text-brand-soft-ink">
-                <Truck className="w-5 h-5" />
-              </div>
-              {onTheWayCount > 0 ? (
-                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-brand-soft text-brand-soft-ink text-[11px] font-bold">
-                  <span className="w-1.5 h-1.5 rounded-full bg-brand animate-pulse" />
-                  {t('list.riderDispatched')}
-                </span>
-              ) : (
-                <span className="text-[11px] font-bold text-muted uppercase tracking-wider">
-                  {t('list.transit')}
-                </span>
-              )}
-            </div>
-            <div className="text-2xl sm:text-3xl font-extrabold text-ink tracking-tight">
-              {onTheWayCount}
-            </div>
-            <div className="text-xs sm:text-sm font-semibold text-muted mt-0.5">
-              {t('list.onTheWay')}
-            </div>
-          </div>
-
-          {/* 4. Delivered */}
-          <div className="rounded-[20px] bg-surface border border-line p-4 sm:p-5">
-            <div className="flex items-center justify-between mb-3">
-              <div className="w-10 h-10 rounded-xl bg-brand-soft flex items-center justify-center text-brand-soft-ink">
-                <CheckCircle2 className="w-5 h-5" />
-              </div>
-              <span className="text-[11px] font-bold text-muted uppercase tracking-wider">
-                {t('list.fulfilled')}
-              </span>
-            </div>
-            <div className="text-2xl sm:text-3xl font-extrabold text-ink tracking-tight">
-              {deliveredCount}
-            </div>
-            <div className="text-xs sm:text-sm font-semibold text-muted mt-0.5">
-              {t('list.deliveredMeals')}
-            </div>
-          </div>
-        </div>
-
-        {/* ============================================================ */}
-        {/* FILTER BAR & SEARCH (Modern Segmented Pills) */}
-        {/* ============================================================ */}
+        ) : (
+        <>
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-          {/* Segmented Filter Pills */}
-          <div className="flex items-center gap-1.5 overflow-x-auto p-1 scrollbar-none">
+          <div className="flex items-center gap-1.5 overflow-x-auto -mx-1 px-1 py-1 scrollbar-none" role="tablist">
             {[
               { id: 'all', label: t('list.tab.all'), count: totalOrdersCount },
-              {
-                id: 'active',
-                label: t('list.tab.active'),
-                count: inProgressCount + onTheWayCount,
-                hasDot: inProgressCount + onTheWayCount > 0,
-              },
+              { id: 'active', label: t('list.tab.active'), count: inProgressCount + onTheWayCount },
               { id: 'past', label: t('list.tab.past'), count: deliveredCount },
               { id: 'cancelled', label: t('list.tab.cancelled'), count: cancelledCount },
             ].map((tab) => {
-              const active = filter === tab.id;
+              const selected = filter === tab.id;
               return (
                 <button
                   key={tab.id}
-                  aria-pressed={active}
+                  role="tab"
+                  aria-selected={selected}
                   onClick={() => setFilter(tab.id)}
-                  className={`flex-shrink-0 inline-flex items-center gap-2 h-10 px-4 rounded-full text-sm font-bold whitespace-nowrap transition-colors cursor-pointer ${
-                    active ? 'bg-ink text-page' : 'bg-surface text-ink border border-line hover:bg-raised'
+                  className={`flex-shrink-0 inline-flex items-center gap-2 min-h-11 px-4 rounded-full text-sm font-semibold whitespace-nowrap transition-colors cursor-pointer ${
+                    selected ? 'bg-brand-soft text-brand-soft-ink border border-brand' : 'bg-surface text-ink border border-line hover:bg-raised'
                   }`}
                 >
-                  {tab.hasDot && (
-                    <span
-                      className={`w-2 h-2 rounded-full ${
-                        active ? 'bg-brand' : 'bg-brand animate-pulse'
-                      }`}
-                    />
-                  )}
                   <span>{tab.label}</span>
-                  <span
-                    className={`px-1.5 rounded-full text-[11px] font-extrabold ${
-                      active ? 'bg-page/20 text-page' : 'bg-raised text-muted'
-                    }`}
-                  >
-                    {tab.count}
-                  </span>
+                  {!loading && (
+                    <span className={`px-1.5 rounded-full text-xs font-semibold tabular-nums ${selected ? 'bg-surface text-brand-soft-ink' : 'bg-raised text-muted'}`}>
+                      {tab.count}
+                    </span>
+                  )}
                 </button>
               );
             })}
           </div>
 
-          {/* Quick Search */}
-          <div className="relative min-w-[220px] sm:min-w-[260px] px-1 sm:px-0">
-            <Search className="absolute start-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted" />
+          <div className="relative sm:min-w-[260px]">
+            <Search className="absolute start-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted" aria-hidden />
             <input
-              type="text"
+              type="search"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder={t('list.searchPlaceholder')}
               aria-label={t('list.searchPlaceholder')}
-              className="w-full h-11 ps-9 pe-9 rounded-[14px] text-sm font-semibold bg-raised border border-transparent text-ink placeholder:text-muted placeholder:font-medium focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand focus:bg-surface transition-all"
+              className="w-full h-11 ps-9 pe-11 rounded-xl text-sm bg-raised border border-transparent text-ink placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand focus:bg-surface transition-all"
             />
             {searchQuery && (
               <button
+                type="button"
                 onClick={() => setSearchQuery('')}
                 aria-label={t('list.clearSearch')}
-                className="absolute end-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full text-sm text-muted hover:text-ink hover:bg-line"
+                className="absolute end-0 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full text-muted hover:text-ink flex items-center justify-center"
               >
-                ✕
+                <X className="w-4 h-4" aria-hidden />
               </button>
             )}
           </div>
         </div>
 
-        {/* ============================================================ */}
-        {/* ORDERS LIST */}
-        {/* ============================================================ */}
         {loading ? (
-          <div className="bg-surface rounded-[20px] p-12 text-center border border-line">
-            <div className="w-10 h-10 border-3 border-brand border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-            <p className="text-sm font-bold text-ink">{t('list.loadingTitle')}</p>
-            <p className="text-xs text-muted mt-1">{t('list.loadingSub')}</p>
+          <div className="py-12 flex flex-col items-center gap-3">
+            <div className="w-8 h-8 border-3 border-brand border-t-transparent rounded-full animate-spin" />
+            <p className="text-sm text-muted">{t('list.loadingTitle')}</p>
           </div>
         ) : filteredOrders.length === 0 ? (
-          /* Empty State */
-          <div className="bg-surface rounded-[24px] p-8 sm:p-14 text-center border border-dashed border-line-strong">
-            <div className="w-20 h-20 rounded-3xl bg-brand-soft flex items-center justify-center mx-auto mb-4 text-brand-soft-ink">
-              <Package className="w-10 h-10" />
-            </div>
-            <h3 className="text-xl sm:text-2xl font-extrabold text-ink tracking-tight mb-2">
-              {searchQuery
-                ? t('list.emptySearchTitle')
-                : filter === 'all'
-                ? t('list.emptyAllTitle')
-                : t(`list.emptyTitle.${filter as 'active' | 'past' | 'cancelled'}`)}
+          <div className="bg-surface rounded-[20px] p-8 text-center border border-line">
+            <h3 className="text-lg font-semibold text-ink mb-1">
+              {searchQuery ? t('list.emptySearchTitle') : filter === 'all' ? t('list.emptyAllTitle') : t(`list.emptyTitle.${filter as 'active' | 'past' | 'cancelled'}`)}
             </h3>
-            <p className="text-xs sm:text-sm text-muted max-w-md mx-auto mb-6 leading-relaxed">
-              {searchQuery
-                ? t('list.emptySearchBody', { query: searchQuery })
-                : filter === 'all'
-                ? t('list.emptyAllBody')
-                : t(`list.emptyBody.${filter as 'active' | 'past' | 'cancelled'}`)}
+            <p className="text-sm text-muted max-w-md mx-auto">
+              {searchQuery ? t('list.emptySearchBody', { query: searchQuery }) : filter === 'all' ? t('list.emptyAllBody') : t(`list.emptyBody.${filter as 'active' | 'past' | 'cancelled'}`)}
             </p>
-            <div className="flex items-center justify-center gap-3">
-              <Link href="/dashboard">
-                <Button className="bg-brand hover:bg-brand-500 text-on-brand font-extrabold h-12 px-6 rounded-xl">
-                  <ShoppingBag className="w-4 h-4 me-2" /> {t('list.exploreKitchens')}
-                </Button>
-              </Link>
-            </div>
           </div>
         ) : (
-          <div className="space-y-4">
-            {filteredOrders.map((order) => {
+          <ul className="space-y-3" data-testid="orders-list">
+            {(filteredOrders as ListedOrder[]).map((order) => {
               const status = getOrderStatus(order);
-              const badge = getStatusBadge(status);
-              const isActive = [
-                'pending',
-                'confirmed',
-                'preparing',
-                'ready',
-                'dispatched',
-                'in_transit',
-              ].includes(status);
+              const unpaid = awaitingPayment(status, order.paymentMethod, order.paymentStatus);
+              const badge = getStatusBadge(unpaid ? 'pending_payment' : status);
+              const isActive = ACTIVE_STATUSES.includes(status);
               const items = order.items ?? [];
               const itemCount = items.length || order.itemsCount || 1;
-              const step = getStepProgress(status);
+              const note = paymentNote(status, order.paymentMethod, order.paymentStatus);
+              const showNote = SHOWN_PAYMENT_NOTES.includes(note) && !(unpaid && note === 'awaitingPayment');
+              const kitchen = items[0]?.seller?.businessName;
+              const progress = isActive && !unpaid ? orderProgress(status, order.deliveryType) : null;
 
               return (
-                <div
+                <li
                   key={order.id}
-                  className="group relative bg-surface rounded-[20px] border border-line hover:border-line-strong transition-colors overflow-hidden"
+                  className={`relative bg-surface rounded-[20px] border transition-colors ${
+                    isActive ? 'border-brand/50 shadow-[var(--shadow-card)]' : 'border-line hover:border-line-strong'
+                  }`}
+                  data-testid="order-card"
                 >
-                  {/* Subtle top accent bar for active orders */}
-                  {isActive && (
-                    <div className="h-1 w-full bg-brand" />
-                  )}
-
-                  <div className="p-4 sm:p-6 space-y-4">
-                    {/* Top Row: Order ID, Badges, Date */}
-                    <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-line">
-                      <div className="flex flex-wrap items-center gap-2.5">
+                  <div className="p-4 sm:p-5 space-y-2.5">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
                         <Link
                           href={`/orders/${order.id}`}
-                          className="text-base sm:text-lg font-extrabold text-ink hover:underline flex items-center gap-1.5"
+                          className="block truncate font-semibold text-ink hover:underline after:absolute after:inset-0 after:rounded-[20px]"
                         >
-                          <span>{t('list.orderNumber', { number: order.orderNumber })}</span>
-                          <ExternalLink className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity text-muted" />
+                          {kitchen || t('list.orderNumber', { number: order.orderNumber })}
                         </Link>
-
-                        {/* Status Badge */}
-                        <span
-                          className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border ${badge.color}`}
-                        >
-                          <span className={`w-2 h-2 rounded-full ${badge.dotColor}`} />
-                          {badge.label}
-                        </span>
-
-                        {/* Payment Status Badge */}
-                        <span
-                          className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${
-                            order.paymentStatus === 'paid'
-                              ? 'bg-brand-soft text-brand-soft-ink border-brand/40'
-                              : 'bg-accent-soft text-accent-soft-ink border-accent/50'
-                          }`}
-                        >
-                          <CreditCard className="w-3 h-3" />
-                          {order.paymentStatus === 'paid' ? t('list.paid') : t('list.paymentPending')}
-                        </span>
+                        {kitchen && (
+                          <p className="text-xs text-muted tabular-nums">
+                            <bdi>#{order.orderNumber}</bdi>
+                          </p>
+                        )}
                       </div>
-
-                      {/* Date & Time */}
-                      <div className="flex items-center gap-1.5 text-xs font-semibold text-muted">
-                        <Calendar className="w-3.5 h-3.5 text-muted" />
-                        <span>{formatDate(order.createdAt)}</span>
-                      </div>
+                      <OrderStatusPill status={unpaid ? 'pending_payment' : status} label={badge.label} className="shrink-0" />
                     </div>
 
-                    {/* Active Order Stepper Progress Tracker */}
-                    {isActive && (
-                      <div className="bg-raised rounded-2xl p-3.5">
-                        <div className="text-[11px] font-bold text-muted uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                          <Flame className="w-3.5 h-3.5 text-brand-ink" />
-                          {t('list.liveTracking')}
-                        </div>
-                        <div className="grid grid-cols-4 gap-2 relative">
-                          {[
-                            { stepNum: 1, name: t('list.step.received'), icon: Clock },
-                            { stepNum: 2, name: t('list.step.confirmed'), icon: Sparkles },
-                            { stepNum: 3, name: t('list.step.cooking'), icon: ChefHat },
-                            { stepNum: 4, name: t('list.step.onWay'), icon: Truck },
-                          ].map((st) => {
-                            const isDone = step >= st.stepNum;
-                            const isCurrent = step === st.stepNum;
-                            const IconComponent = st.icon;
-                            return (
-                              <div key={st.stepNum} className="flex flex-col items-center text-center">
-                                <div
-                                  className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
-                                    isCurrent
-                                      ? 'bg-brand text-on-brand ring-4 ring-brand/25'
-                                      : isDone
-                                      ? 'bg-brand-soft text-brand-soft-ink'
-                                      : 'bg-line text-muted'
-                                  }`}
-                                >
-                                  <IconComponent className="w-3.5 h-3.5" />
-                                </div>
-                                <span
-                                  className={`text-[11px] font-bold mt-1.5 ${
-                                    isCurrent
-                                      ? 'text-brand-ink'
-                                      : isDone
-                                      ? 'text-ink'
-                                      : 'text-muted'
-                                  }`}
-                                >
-                                  {st.name}
-                                </span>
-                              </div>
-                            );
-                          })}
+                    {progress && (
+                      <div data-testid="order-progress">
+                        <p className="text-xs text-muted">
+                          {t('list.step', { step: progress.reached + 1, total: progress.steps.length })}
+                        </p>
+                        <div
+                          role="progressbar"
+                          aria-valuemin={1}
+                          aria-valuemax={progress.steps.length}
+                          aria-valuenow={progress.reached + 1}
+                          aria-valuetext={t('list.step', { step: progress.reached + 1, total: progress.steps.length })}
+                          className="mt-1 h-1.5 rounded-full bg-raised overflow-hidden"
+                        >
+                          <div className="h-full rounded-full bg-brand" style={{ width: `${((progress.reached + 1) / progress.steps.length) * 100}%` }} />
                         </div>
                       </div>
                     )}
 
-                    {/* Middle Section: Dishes preview */}
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                      <div className="flex-1 min-w-0">
-                        {items.length > 0 ? (
-                          <div className="flex flex-wrap items-center gap-2">
-                            {items.map((it, iIdx) => (
-                              <div
-                                key={it.id ?? iIdx}
-                                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-raised text-sm font-semibold text-ink"
-                              >
-                                <span className="text-xs font-extrabold text-brand-ink">
-                                  {it.quantity || 1}×
-                                </span>
-                                <span className="truncate max-w-[180px] sm:max-w-[240px]">
-                                  {it.productName || it.product?.name || t('list.dishFallback')}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        ) : (
-                          <div className="text-xs text-muted font-medium">
-                            {itemCount !== 1 ? t('list.itemsInOrder', { count: itemCount }) : t('list.oneItemInOrder')}
-                          </div>
-                        )}
-                      </div>
+                    <p className={`text-sm truncate ${isActive ? 'text-ink' : 'text-muted'}`}>
+                      {items.length > 0
+                        ? items.map((it) => `${it.quantity || 1}× ${it.productName || it.product?.name || t('list.dishFallback')}`).join(', ')
+                        : itemCount !== 1
+                          ? t('list.itemsInOrder', { count: itemCount })
+                          : t('list.oneItemInOrder')}
+                    </p>
 
-                      {/* Amount and CTAs */}
-                      <div className="flex items-center justify-between sm:justify-end gap-3 sm:gap-4 pt-2 sm:pt-0 border-t sm:border-t-0 border-line">
-                        <div className="text-start sm:text-end">
-                          <span className="block text-[11px] font-bold text-muted uppercase tracking-wider">
-                            {t('list.orderTotal')}
-                          </span>
-                          <span className="text-lg sm:text-2xl font-extrabold text-ink tracking-tight">
-                            {formatPrice(order.totalAmount)}
-                          </span>
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                          {['delivered', 'completed'].includes(status) && (
-                            <button
-                              type="button"
-                              onClick={(e) => handleReorder(e, order)}
-                              disabled={reorderingId === order.id}
-                              className="inline-flex items-center gap-1.5 h-10 px-3.5 rounded-xl text-sm font-bold text-ink border border-line-strong hover:bg-raised transition-colors cursor-pointer"
-                              title={t('list.reorderTitle')}
-                            >
-                              <RotateCcw className={`w-3.5 h-3.5 ${reorderingId === order.id ? 'animate-spin' : ''}`} />
-                              <span>{t('list.reorder')}</span>
-                            </button>
-                          )}
-
-                          <Link
-                            href={`/orders/${order.id}`}
-                            className="inline-flex items-center gap-1.5 h-10 px-4 rounded-xl text-sm font-extrabold bg-brand hover:bg-brand-500 text-on-brand transition-colors"
-                          >
-                            <span>{t('list.details')}</span>
-                            <ArrowRight className="rtl:-scale-x-100 w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
-                          </Link>
-                        </div>
-                      </div>
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="min-w-0 flex-1 text-sm text-muted">
+                        <bdi dir="ltr" className={`font-semibold tabular-nums ${status === 'cancelled' ? 'text-muted' : 'text-ink'}`}>
+                          {formatPrice(order.totalAmount)}
+                        </bdi>
+                        {' · '}
+                        <bdi>{formatDateTime(order.createdAt)}</bdi>
+                        {showNote && <span data-testid="payment-note"> · {t(`list.pay.${note}`)}</span>}
+                      </p>
+                      {['delivered', 'completed', 'cancelled'].includes(status) && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={(e) => handleReorder(e, order)}
+                          disabled={reorderingId === order.id}
+                          className="relative z-10 min-h-11 shrink-0"
+                          title={t('list.reorderTitle')}
+                        >
+                          <RotateCcw className={`w-3.5 h-3.5 ${reorderingId === order.id ? 'animate-spin' : ''}`} />
+                          {t('list.reorder')}
+                        </Button>
+                      )}
                     </div>
                   </div>
-                </div>
+                </li>
               );
             })}
-          </div>
+          </ul>
         )}
 
         {hasMore && !loading && (
@@ -773,6 +485,8 @@ function OrdersContent() {
               </p>
             )}
           </div>
+        )}
+        </>
         )}
         </>
         )}

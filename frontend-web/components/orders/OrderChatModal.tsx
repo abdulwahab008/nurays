@@ -1,13 +1,14 @@
 'use client';
 
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { Send, X, ShieldCheck, Mic, Square, Trash2, Play, Pause, Check, CheckCheck, Sparkles } from 'lucide-react';
+import { Send, X, ShieldCheck, Mic, Square, Trash2, Play, Pause, Check, CheckCheck, Sparkles, MessageCircle } from 'lucide-react';
 import { apiClient, apiErrorMessage } from '@/lib/api-client';
 import { orderService, OrderMessage } from '@/lib/services/order.service';
 import { useToast } from '@/components/ui/toast';
 import { useLiveRefresh } from '@/lib/hooks/use-live-refresh';
 import { LoadError } from '@/components/ui/LoadError';
 import { useT } from '@/lib/i18n';
+import { formatTime } from '@/lib/utils';
 import { ordersMessages } from '@/lib/i18n/messages/orders';
 
 interface OrderChatModalProps {
@@ -262,7 +263,9 @@ export default function OrderChatModal({
     events: ['order:message', 'order:messages:read'],
     match: (data) => data?.orderId === orderId,
     intervalMs: 30_000,
-    offlineMs: 5_000,
+    // Without the socket: 15 s, then 30 s, never more often than that (it used to be every 5 s, 6x the live rate).
+    offlineMs: 15_000,
+    offlineMaxMs: 30_000,
     enabled: isOpen,
   });
 
@@ -395,31 +398,42 @@ export default function OrderChatModal({
     setRecordingSeconds(0);
   };
 
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-3 md:p-4 animate-in fade-in duration-200">
-      <div className="relative w-full max-w-lg bg-surface rounded-3xl shadow-2xl border border-line overflow-hidden flex flex-col h-[640px] max-h-[92vh]">
-        {/* Header */}
-        <div className="px-5 py-3.5 bg-[#0C1016] text-white flex items-center justify-between border-b border-slate-800">
-          <div className="flex items-center gap-3">
-            <div
-              className={`w-10 h-10 rounded-2xl ${
-                isSellerRole ? 'bg-brand-700' : 'bg-brand-700'
-              } text-white flex items-center justify-center font-black text-sm shadow-md shrink-0`}
-            >
-              💬
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-3 md:p-4 animate-in fade-in duration-200"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="order-chat-title"
+        className="relative w-full max-w-lg bg-surface rounded-3xl shadow-2xl border border-line overflow-hidden flex flex-col h-[640px] max-h-[92vh]"
+      >
+        <div className="px-4 py-3 bg-surface flex items-center justify-between gap-3 border-b border-line">
+          <div className="flex items-center gap-3 min-w-0 flex-1">
+            <div className="w-10 h-10 rounded-2xl bg-brand-soft text-brand-soft-ink flex items-center justify-center shrink-0">
+              <MessageCircle className="w-5 h-5" aria-hidden />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="font-black text-sm text-white truncate max-w-[200px] md:max-w-[260px]">
-                  {t('chat.chatWith', { name: targetName })}
-                </h3>
-                <span className="px-2 py-0.5 rounded-full text-[11px] font-black bg-white/10 text-[#A3BCB7]" data-ltr>
-                  #{orderNumber}
-                </span>
-              </div>
-              <p className="text-[11px] text-muted font-medium">
+            <div className="min-w-0">
+              <h3 id="order-chat-title" className="font-semibold text-sm text-ink truncate">
+                {t('chat.chatWith', { name: targetName })}
+              </h3>
+              <p className="text-xs text-muted truncate">
+                <span data-ltr>#{orderNumber}</span>
+                {' · '}
                 {isSellerRole
                   ? t('chat.subtitleSeller')
                   : t('chat.subtitleCustomer')}
@@ -427,11 +441,12 @@ export default function OrderChatModal({
             </div>
           </div>
           <button
+            type="button"
             onClick={onClose}
             aria-label={t('chat.close')}
-            className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors"
+            className="shrink-0 w-11 h-11 rounded-full bg-raised hover:bg-line text-ink flex items-center justify-center transition-colors"
           >
-            <X className="w-4 h-4" />
+            <X className="w-5 h-5" />
           </button>
         </div>
 
@@ -455,7 +470,7 @@ export default function OrderChatModal({
 
         {/* Quick Suggestion Chips */}
         <div className="px-3 py-2 bg-raised/70 border-b border-line overflow-x-auto flex items-center gap-1.5 scrollbar-none">
-          <span className="text-[11px] font-black text-muted uppercase tracking-wider shrink-0 flex items-center gap-1 ps-1">
+          <span className="text-xs font-medium text-muted shrink-0 flex items-center gap-1 ps-1">
             <Sparkles className="w-3 h-3 text-accent" />
             {t('chat.quick')}
           </span>
@@ -488,10 +503,10 @@ export default function OrderChatModal({
             </div>
           ) : messages.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-center p-6 text-muted">
-              <div className="w-12 h-12 rounded-2xl bg-surface border border-line flex items-center justify-center text-xl mb-2 shadow-xs">
-                {isSellerRole ? '👤' : '👩‍🍳'}
+              <div className="w-12 h-12 rounded-2xl bg-surface border border-line flex items-center justify-center mb-2 text-brand-ink">
+                <MessageCircle className="w-6 h-6" aria-hidden />
               </div>
-              <p className="text-xs font-extrabold text-ink">{t('chat.empty')}</p>
+              <p className="text-sm font-semibold text-ink">{t('chat.empty')}</p>
               <p className="text-[11px] text-muted mt-1 max-w-xs">
                 {isSellerRole
                   ? t('chat.emptySeller', { name: targetName })
@@ -508,9 +523,9 @@ export default function OrderChatModal({
               if (isMe) {
                 senderLabel = isSellerRole ? t('chat.youKitchen') : t('chat.youCustomer');
               } else if (msg.senderRole === 'customer') {
-                senderLabel = `👤 ${customerName || t('chat.customer')}`;
+                senderLabel = customerName || t('chat.customer');
               } else if (msg.senderRole === 'seller') {
-                senderLabel = `👩‍🍳 ${sellerName || t('chat.kitchen')}`;
+                senderLabel = sellerName || t('chat.kitchen');
               } else {
                 senderLabel = t('chat.deliveryRider');
               }
@@ -523,7 +538,7 @@ export default function OrderChatModal({
                   <div className="flex items-center gap-1.5 mb-1 px-1">
                     <span className="text-[11px] font-extrabold text-muted">{senderLabel}</span>
                     <span className="text-[11px] text-muted">
-                      {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      {formatTime(msg.createdAt)}
                     </span>
                   </div>
 

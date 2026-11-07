@@ -2,13 +2,13 @@ import type { Metadata } from 'next';
 import { LegalPage, ContactUs } from '@/components/legal/LegalPage';
 
 export const metadata: Metadata = {
-  title: 'Refund & Cancellation Policy | Nuray',
+  title: 'Refund and cancellation policy | Nuray',
   description: 'When orders can be cancelled and how refunds are paid on Nuray.',
 };
 
 export default function RefundPolicyPage() {
   return (
-    <LegalPage title="Refund & Cancellation Policy" updated="24 October 2026">
+    <LegalPage title="Refund and cancellation policy" updated="24 October 2026">
       <h2>Cancelling an order</h2>
       <ul>
         <li><strong>You</strong> can cancel an order yourself until the kitchen accepts it, from the order page.</li>

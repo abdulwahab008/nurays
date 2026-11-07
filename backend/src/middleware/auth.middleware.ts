@@ -204,11 +204,7 @@ export const requireSeller = async (
 
     next();
   } catch (error) {
-    if (error instanceof AppError) {
-      next(error);
-    } else {
-      next(new AppError('Seller verification failed', 403, 'SELLER_VERIFICATION_FAILED'));
-    }
+    next(error);
   }
 };
 
@@ -239,11 +235,8 @@ export const blockSuspendedSeller = async (
 
     next();
   } catch (error) {
-    if (error instanceof AppError) {
-      next(error);
-    } else {
-      next(new AppError('Seller status check failed', 403, 'SELLER_STATUS_CHECK_FAILED'));
-    }
+    // As in authenticate: a database that does not answer is the error handler's 503 to name, never a 403 that reads as a suspension.
+    next(error);
   }
 };
 

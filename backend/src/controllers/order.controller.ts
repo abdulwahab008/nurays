@@ -9,9 +9,13 @@ export const createOrder = async (req: Request, res: Response) => {
     throw new AppError('Authentication required', 401, 'AUTH_REQUIRED');
   }
 
-  // One key per checkout attempt (the client reuses it when it retries).
-  const rawKey = req.get('Idempotency-Key') ?? req.body?.idempotencyKey;
-  if (rawKey !== undefined && (typeof rawKey !== 'string' || !/^[A-Za-z0-9_-]{8,100}$/.test(rawKey))) {
+  // One key per checkout attempt (the client reuses it when it retries). Required:
+  // without it a double submit or a retry over a bad network places two orders.
+  const rawKey = req.get('Idempotency-Key');
+  if (rawKey === undefined || rawKey === '') {
+    throw new AppError('An Idempotency-Key header is required to place an order', 400, 'IDEMPOTENCY_KEY_REQUIRED');
+  }
+  if (!/^[A-Za-z0-9_-]{8,100}$/.test(rawKey)) {
     throw new AppError('Invalid Idempotency-Key', 400, 'INVALID_IDEMPOTENCY_KEY');
   }
   const order = await orderService.createOrder(req.user.userId, req.body, { idempotencyKey: rawKey });

@@ -3,129 +3,60 @@
 import { useState, useEffect } from 'react';
 import { loginUrlHere } from '@/lib/auth-redirect';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
-import {
-  Package,
-  CreditCard,
-  Truck,
-  Snowflake,
-  MessageCircle,
-  HelpCircle,
-  Ticket,
-  ChevronDown,
-  Send,
-  ShieldCheck,
-  CheckCircle,
-} from 'lucide-react';
+import { Send } from 'lucide-react';
 import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient, apiErrorMessage } from '@/lib/api-client';
+import { orderService, type Order } from '@/lib/services/order.service';
+import { formatDate } from '@/lib/utils';
 import MyTickets from '@/components/support/MyTickets';
+import { HelpFaq } from '@/app/help/HelpFaq';
 import { useT } from '@/lib/i18n';
 import { accountMessages } from '@/lib/i18n/messages/account';
 import { useShallow } from 'zustand/react/shallow';
 
+const CATEGORIES = ['general', 'order', 'payment', 'delivery', 'quality', 'refund'] as const;
+type Category = (typeof CATEGORIES)[number];
+/** A problem with one order needs to say which order, so support can look at it. */
+const NEEDS_ORDER: Category[] = ['order', 'payment', 'delivery', 'quality', 'refund'];
+const EMPTY_FORM = { subject: '', message: '', category: 'general' as Category, orderId: '' };
+type FieldErrors = Partial<Record<'orderId' | 'subject' | 'message', string>>;
+
 export default function SupportPage() {
   const router = useRouter();
-  const { isAuthenticated, user } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated, user: s.user })));
+  const { isAuthenticated, userType } = useAuthStore(
+    useShallow((s) => ({ isAuthenticated: s.isAuthenticated, userType: s.user?.userType ?? s.user?.user_type }))
+  );
   const { showToast } = useToast();
   const t = useT(accountMessages);
   const [activeTab, setActiveTab] = useState<'faq' | 'contact' | 'tickets'>('faq');
   const [submitting, setSubmitting] = useState(false);
-  const [expandedFaq, setExpandedFaq] = useState<number | null>(null);
-  const [formData, setFormData] = useState({
-    subject: '',
-    message: '',
-    category: 'general',
-  });
+  const [formData, setFormData] = useState(EMPTY_FORM);
+  const [errors, setErrors] = useState<FieldErrors>({});
+  const [recentOrders, setRecentOrders] = useState<Order[]>([]);
+  // Only customer orders can be picked here, so other accounts may raise these without one.
+  const isCustomer = !userType || userType === 'customer';
+  const needsOrder = (category: Category) => isCustomer && NEEDS_ORDER.includes(category);
+  const orderNeeded = needsOrder(formData.category);
 
   const sidebarItems = CUSTOMER_SIDEBAR_ITEMS;
 
-  const faqs = [
-    {
-      category: t('faq.catOrders'),
-      icon: Package,
-      questions: [
-        {
-          q: t('faq.q1'),
-          a: t('faq.a1'),
-        },
-        {
-          q: t('faq.q2'),
-          a: t('faq.a2'),
-        },
-        {
-          q: t('faq.q3'),
-          a: t('faq.a3'),
-        },
-      ],
-    },
-    {
-      category: t('faq.catPayment'),
-      icon: CreditCard,
-      questions: [
-        {
-          q: t('faq.q4'),
-          a: t('faq.a4'),
-        },
-        {
-          q: t('faq.q5'),
-          a: t('faq.a5'),
-        },
-        {
-          q: t('faq.q6'),
-          a: t('faq.a6'),
-        },
-      ],
-    },
-    {
-      category: t('faq.catDelivery'),
-      icon: Truck,
-      questions: [
-        {
-          q: t('faq.q7'),
-          a: t('faq.a7'),
-        },
-        {
-          q: t('faq.q8'),
-          a: t('faq.a8'),
-        },
-        {
-          q: t('faq.q9'),
-          a: t('faq.a9'),
-        },
-      ],
-    },
-    {
-      category: t('faq.catQuality'),
-      icon: Snowflake,
-      questions: [
-        {
-          q: t('faq.q10'),
-          a: t('faq.a10'),
-        },
-        {
-          q: t('faq.q11'),
-          a: t('faq.a11'),
-        },
-        {
-          q: t('faq.q12'),
-          a: t('faq.a12'),
-        },
-      ],
-    },
-  ];
+  const validate = (data: typeof formData): FieldErrors => {
+    const next: FieldErrors = {};
+    if (needsOrder(data.category) && !data.orderId) next.orderId = t('orderRequired');
+    if (data.subject.trim().length < 5) next.subject = t('subjectMin5');
+    if (data.message.trim().length < 10) next.message = t('messageMin10');
+    return next;
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (formData.subject.trim().length < 5) {
-      showToast(t('subjectMin5'), 'warning');
-      return;
-    }
-    if (formData.message.trim().length < 10) {
-      showToast(t('messageMin10'), 'warning');
+    const found = validate(formData);
+    setErrors(found);
+    if (Object.keys(found).length) {
+      document.getElementById(`support-${Object.keys(found)[0]}`)?.focus();
       return;
     }
     try {
@@ -134,9 +65,11 @@ export default function SupportPage() {
         category: formData.category,
         subject: formData.subject.trim(),
         description: formData.message.trim(),
+        ...(formData.orderId ? { orderId: formData.orderId } : {}),
       });
       showToast(t('messageSent'), 'success');
-      setFormData({ subject: '', message: '', category: 'general' });
+      setFormData(EMPTY_FORM);
+      setErrors({});
       setActiveTab('tickets');
     } catch (error) {
       showToast(apiErrorMessage(error, t('messageSendFailed')), 'error');
@@ -145,18 +78,45 @@ export default function SupportPage() {
     }
   };
 
-  // There is no public support phone or email to show: support runs through tickets.
-  const openContactForm = () => {
-    setActiveTab('contact');
-    document.getElementById('support-tabs')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  // Fixing a field clears its message; the others stay until the next try.
+  const update = (patch: Partial<typeof formData>) => {
+    setFormData((prev) => ({ ...prev, ...patch }));
+    setErrors((prev) => {
+      const next = { ...prev };
+      for (const key of Object.keys(patch)) delete next[key as keyof FieldErrors];
+      if ('category' in patch) delete next.orderId;
+      return next;
+    });
   };
 
   useEffect(() => {
     const token = apiClient.getAccessToken();
     if (!token && !isAuthenticated) {
-      router.push(loginUrlHere());
+      router.replace(loginUrlHere());
+      return;
     }
+    orderService
+      .getMyOrders({ page: 1, limit: 20 })
+      .then((res) => setRecentOrders(res.data?.orders ?? []))
+      .catch(() => setRecentOrders([]));
   }, [isAuthenticated, router]);
+
+  // Opened from an order ("Get help with this order"): the form starts on that order.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const orderId = params.get('orderId');
+    const category = params.get('category') as Category | null;
+    if (!orderId && !category) return;
+    setFormData((prev) => ({
+      ...prev,
+      orderId: orderId ?? prev.orderId,
+      category: category && CATEGORIES.includes(category) ? category : orderId ? 'order' : prev.category,
+    }));
+    setActiveTab('contact');
+  }, []);
+
+  const fieldClass = (bad?: string) =>
+    `w-full min-h-11 px-4 py-2.5 border rounded-xl bg-surface text-ink text-sm focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand ${bad ? 'border-red-700' : 'border-line-strong'}`;
 
   return (
     <DashboardLayout
@@ -165,195 +125,118 @@ export default function SupportPage() {
       sidebarItems={sidebarItems}
       userType="customer"
     >
-      {/* Quick Contact Cards: the in-app support channels */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-        <div className="bg-surface rounded-[20px] p-5 sm:p-6 border border-line">
-          <div className="w-12 h-12 bg-brand-soft rounded-xl flex items-center justify-center mb-4 text-brand-soft-ink">
-            <Send className="w-6 h-6" />
-          </div>
-          <h3 className="font-semibold text-ink mb-1">{t('messageSupport')}</h3>
-          <p className="text-sm text-muted mb-3">{t('openTicket')}</p>
-          <button type="button" onClick={openContactForm} className="text-brand-ink font-bold hover:underline cursor-pointer">
-            {t('sendUsMessage')}
+      <div id="support-tabs" role="tablist" className="flex gap-1 mb-6 border-b border-line overflow-x-auto scrollbar-none">
+        {(['faq', 'contact', 'tickets'] as const).map((tab) => (
+          <button
+            key={tab}
+            role="tab"
+            aria-selected={activeTab === tab}
+            onClick={() => setActiveTab(tab)}
+            className={`min-h-11 px-4 -mb-px border-b-2 text-sm font-semibold whitespace-nowrap transition-colors ${
+              activeTab === tab ? 'border-brand text-ink' : 'border-transparent text-muted hover:text-ink'
+            }`}
+          >
+            {t(tab === 'faq' ? 'faqs' : tab === 'contact' ? 'contactUs' : 'myTickets')}
           </button>
-        </div>
-
-        <div className="bg-surface rounded-[20px] p-5 sm:p-6 border border-line">
-          <div className="w-12 h-12 bg-accent-soft rounded-xl flex items-center justify-center mb-4 text-accent-soft-ink">
-            <MessageCircle className="w-6 h-6" />
-          </div>
-          <h3 className="font-semibold text-ink mb-1">{t('chatKitchen')}</h3>
-          <p className="text-sm text-muted mb-3">{t('chatKitchenDesc')}</p>
-          <Link href="/orders" className="text-brand-ink font-bold hover:underline">
-            {t('openMyOrders')}
-          </Link>
-        </div>
-
-        <div className="bg-surface rounded-[20px] p-5 sm:p-6 border border-line">
-          <div className="w-12 h-12 bg-frozen-soft rounded-xl flex items-center justify-center mb-4 text-frozen-ink">
-            <Ticket className="w-6 h-6" />
-          </div>
-          <h3 className="font-semibold text-ink mb-1">{t('myTickets')}</h3>
-          <p className="text-sm text-muted mb-3">{t('myTicketsDesc')}</p>
-          <button type="button" onClick={() => setActiveTab('tickets')} className="text-brand-ink font-bold hover:underline cursor-pointer">
-            {t('viewMyTickets')}
-          </button>
-        </div>
-      </div>
-
-      {/* Tab Navigation */}
-      <div id="support-tabs" className="flex gap-2 mb-6 scroll-mt-24">
-        <button
-          onClick={() => setActiveTab('faq')}
-          className={`px-3 sm:px-6 py-2.5 rounded-xl font-bold text-xs transition-all cursor-pointer flex items-center gap-2 ${
-            activeTab === 'faq'
-              ? 'bg-brand text-on-brand shadow-sm'
-              : 'bg-raised text-ink hover:bg-line'
-          }`}
-        >
-          <HelpCircle className="w-4 h-4" /> {t('faqs')}
-        </button>
-        <button
-          onClick={() => setActiveTab('contact')}
-          className={`px-3 sm:px-6 py-2.5 rounded-xl font-bold text-xs transition-all cursor-pointer flex items-center gap-2 ${
-            activeTab === 'contact'
-              ? 'bg-brand text-on-brand shadow-sm'
-              : 'bg-raised text-ink hover:bg-line'
-          }`}
-        >
-          <Send className="w-4 h-4" /> {t('contactUs')}
-        </button>
-        <button
-          onClick={() => setActiveTab('tickets')}
-          className={`px-3 sm:px-6 py-2.5 rounded-xl font-bold text-xs transition-all cursor-pointer flex items-center gap-2 ${
-            activeTab === 'tickets'
-              ? 'bg-brand text-on-brand shadow-sm'
-              : 'bg-raised text-ink hover:bg-line'
-          }`}
-        >
-          <Ticket className="w-4 h-4" /> {t('myTickets')}
-        </button>
+        ))}
       </div>
 
       {/* My Tickets */}
       {activeTab === 'tickets' && <MyTickets />}
 
       {/* FAQ Section */}
-      {activeTab === 'faq' && (
-        <div className="space-y-6">
-          {faqs.map((category, catIndex) => {
-            const CategoryIcon = category.icon;
-            return (
-              <div key={catIndex} className="bg-surface rounded-2xl border border-line overflow-hidden">
-                <div className="bg-raised px-6 py-4 border-b border-line">
-                  <h3 className="font-semibold text-ink flex items-center gap-2.5">
-                    <CategoryIcon className="w-5 h-5 text-brand-ink" />
-                    {category.category}
-                  </h3>
-                </div>
-                <div className="divide-y divide-line">
-                  {category.questions.map((faq, faqIndex) => {
-                    const index = catIndex * 10 + faqIndex;
-                    const isExpanded = expandedFaq === index;
-                    return (
-                      <div key={faqIndex}>
-                        <button
-                          onClick={() => setExpandedFaq(isExpanded ? null : index)}
-                          className="w-full px-6 py-4 flex items-center justify-between text-start hover:bg-raised transition-colors"
-                        >
-                          <span className="font-medium text-ink">{faq.q}</span>
-                          <ChevronDown
-                            className={`w-4 h-4 text-muted transition-transform ${
-                              isExpanded ? 'rotate-180 text-brand-ink' : ''
-                            }`}
-                          />
-                        </button>
-                        {isExpanded && (
-                          <div className="px-6 pb-4 text-muted bg-brand-50/30 text-sm leading-relaxed">
-                            {faq.a}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
+      {activeTab === 'faq' && <HelpFaq />}
 
       {/* Contact Form */}
       {activeTab === 'contact' && (
-        <div className="bg-surface rounded-2xl border border-line p-6">
-          <h3 className="text-lg font-semibold text-ink mb-6">{t('sendUsMessage')}</h3>
-          <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="bg-surface rounded-2xl border border-line p-4 sm:p-6">
+          <h3 className="text-lg font-semibold text-ink mb-1">{t('sendUsMessage')}</h3>
+          <p className="text-sm text-muted mb-5">{t('requiredNote')}</p>
+          <form onSubmit={handleSubmit} noValidate className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-ink mb-1.5">{t('category')}</label>
+              <label htmlFor="support-category" className="block text-sm font-medium text-ink mb-1.5">{t('category')}</label>
               <select
+                id="support-category"
                 value={formData.category}
-                onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                className="w-full px-4 py-2.5 border border-line rounded-xl focus:ring-2 focus:ring-brand focus:border-transparent text-sm"
+                onChange={(e) => update({ category: e.target.value as Category })}
+                className={fieldClass()}
               >
-                <option value="general">{t('ticketCat.general')}</option>
-                <option value="order">{t('ticketCat.order')}</option>
-                <option value="payment">{t('ticketCat.payment')}</option>
-                <option value="delivery">{t('ticketCat.delivery')}</option>
-                <option value="quality">{t('ticketCat.quality')}</option>
-                <option value="refund">{t('ticketCat.refund')}</option>
+                {CATEGORIES.map((c) => (
+                  <option key={c} value={c}>{t(`ticketCat.${c}`)}</option>
+                ))}
               </select>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-ink mb-1.5">{t('subject')}</label>
-              <input
-                type="text"
-                value={formData.subject}
-                onChange={(e) => setFormData({ ...formData, subject: e.target.value })}
-                placeholder={t('subjectPlaceholder')}
-                className="w-full px-4 py-2.5 border border-line rounded-xl focus:ring-2 focus:ring-brand focus:border-transparent text-sm"
-              />
+              <label htmlFor="support-orderId" className="block text-sm font-medium text-ink mb-1.5">
+                {t('whichOrder')} {orderNeeded ? <span className="text-red-700" aria-hidden>*</span> : <span className="text-muted font-normal">{t('optional')}</span>}
+              </label>
+              <select
+                id="support-orderId"
+                value={formData.orderId}
+                onChange={(e) => update({ orderId: e.target.value })}
+                aria-invalid={!!errors.orderId}
+                aria-describedby={errors.orderId ? 'support-orderId-error' : undefined}
+                className={fieldClass(errors.orderId)}
+              >
+                <option value="">{t('chooseOrder')}</option>
+                {formData.orderId && !recentOrders.some((o) => o.id === formData.orderId) && (
+                  <option value={formData.orderId}>{t('thisOrder')}</option>
+                )}
+                {recentOrders.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    #{o.orderNumber} · {formatDate(o.createdAt)}
+                  </option>
+                ))}
+              </select>
+              {errors.orderId && <p id="support-orderId-error" className="text-xs text-red-700 mt-1">{errors.orderId}</p>}
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-ink mb-1.5">{t('message')}</label>
+              <label htmlFor="support-subject" className="block text-sm font-medium text-ink mb-1.5">
+                {t('subject')} <span className="text-red-700" aria-hidden>*</span>
+              </label>
+              <input
+                id="support-subject"
+                type="text"
+                value={formData.subject}
+                onChange={(e) => update({ subject: e.target.value })}
+                placeholder={t('subjectPlaceholder')}
+                aria-invalid={!!errors.subject}
+                aria-describedby={errors.subject ? 'support-subject-error' : undefined}
+                className={fieldClass(errors.subject)}
+              />
+              {errors.subject && <p id="support-subject-error" className="text-xs text-red-700 mt-1">{errors.subject}</p>}
+            </div>
+
+            <div>
+              <label htmlFor="support-message" className="block text-sm font-medium text-ink mb-1.5">
+                {t('message')} <span className="text-red-700" aria-hidden>*</span>
+              </label>
               <textarea
+                id="support-message"
                 value={formData.message}
-                onChange={(e) => setFormData({ ...formData, message: e.target.value })}
+                onChange={(e) => update({ message: e.target.value })}
                 placeholder={t('messagePlaceholder')}
                 rows={5}
-                className="w-full px-4 py-2.5 border border-line rounded-xl focus:ring-2 focus:ring-brand focus:border-transparent resize-none text-sm"
+                aria-invalid={!!errors.message}
+                aria-describedby={errors.message ? 'support-message-error' : undefined}
+                className={`${fieldClass(errors.message)} resize-none`}
               />
+              {errors.message && <p id="support-message-error" className="text-xs text-red-700 mt-1">{errors.message}</p>}
             </div>
 
             <div className="flex gap-3 pt-2">
-              <Button type="submit" className="bg-brand hover:bg-brand-500 text-on-brand font-bold" disabled={submitting}>
-                <Send className="w-4 h-4 me-2" /> {submitting ? t('sendingDots') : t('sendMessage')}
+              <Button type="submit" disabled={submitting} data-testid="support-send">
+                <Send className="w-4 h-4" /> {submitting ? t('sendingDots') : t('sendMessage')}
               </Button>
-              <Button type="button" variant="outline" onClick={() => setFormData({ subject: '', message: '', category: 'general' })}>
+              <Button type="button" variant="outline" onClick={() => { setFormData(EMPTY_FORM); setErrors({}); }}>
                 {t('clear')}
               </Button>
             </div>
           </form>
         </div>
       )}
-
-      {/* Additional Help */}
-      <div className="mt-8 rounded-[24px] p-6 sm:p-8 bg-[#0D2624] text-white relative overflow-hidden">
-        <div className="flex items-center justify-between flex-wrap gap-4 relative z-10">
-          <div>
-            <h3 className="text-xl font-extrabold tracking-tight mb-1">{t('stillNeedHelp')}</h3>
-            <p className="text-[#A3BCB7] text-sm">{t('stillNeedHelpDesc')}</p>
-          </div>
-          <Button
-            type="button"
-            onClick={openContactForm}
-            className="bg-brand hover:bg-brand-500 text-on-brand h-12 px-6 text-sm font-extrabold rounded-xl flex items-center gap-2"
-          >
-            <Send className="w-4 h-4" /> {t('sendUsMessage')}
-          </Button>
-        </div>
-      </div>
     </DashboardLayout>
   );
 }

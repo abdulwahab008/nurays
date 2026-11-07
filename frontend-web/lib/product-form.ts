@@ -68,23 +68,23 @@ export interface VariantDraft {
 export const MAX_VARIANTS = 20;
 export const MAX_IMAGES = 4;
 
-export const PRODUCT_TYPE_OPTIONS: Array<{ value: ProductType; label: string; icon: string; description: string; selected: string }> = [
-  { value: 'frozen', label: 'Frozen', icon: '❄️', description: 'Stored frozen, long shelf life', selected: 'bg-blue-50 border-blue-500' },
-  { value: 'fresh', label: 'Fresh', icon: '🥬', description: 'Made fresh daily, same-day delivery', selected: 'bg-green-50 border-green-500' },
-  { value: 'ready_to_eat', label: 'Ready to Eat', icon: '🍽️', description: 'Ready to eat immediately', selected: 'bg-brand-50 border-brand' },
-  { value: 'ready_to_cook', label: 'Ready to Cook', icon: '🍳', description: 'Prepared, needs cooking', selected: 'bg-purple-50 border-purple-500' },
+export const PRODUCT_TYPE_OPTIONS: Array<{ value: ProductType; label: string; description: string }> = [
+  { value: 'frozen', label: 'Frozen', description: 'Stored frozen, long shelf life' },
+  { value: 'fresh', label: 'Fresh', description: 'Made fresh daily, same-day delivery' },
+  { value: 'ready_to_eat', label: 'Ready to eat', description: 'Ready to eat immediately' },
+  { value: 'ready_to_cook', label: 'Ready to cook', description: 'Prepared, needs cooking' },
 ];
 
 export const UNIT_OPTIONS = [
-  { value: 'piece', label: 'Per Piece', example: '1 samosa' },
-  { value: 'pack', label: 'Per Pack', example: '6 samosas' },
-  { value: 'dozen', label: 'Per Dozen', example: '12 pieces' },
+  { value: 'piece', label: 'Per piece', example: '1 samosa' },
+  { value: 'pack', label: 'Per pack', example: '6 samosas' },
+  { value: 'dozen', label: 'Per dozen', example: '12 pieces' },
   { value: '100g', label: 'Per 100g', example: '100 grams' },
   { value: '250g', label: 'Per 250g', example: '250 grams' },
   { value: '500g', label: 'Per 500g', example: '500 grams' },
-  { value: '1kg', label: 'Per 1 KG', example: '1000 grams' },
-  { value: 'kg', label: 'Per KG', example: 'per kilogram' },
-  { value: 'other', label: 'Other (Custom)', example: 'Custom unit' },
+  { value: '1kg', label: 'Per 1 kg', example: '1000 grams' },
+  { value: 'kg', label: 'Per kg', example: 'per kilogram' },
+  { value: 'other', label: 'Other (custom)', example: 'Custom unit' },
 ];
 
 /** A saved dish as GET /products/:id returns it (the fields the form reads). */
@@ -127,7 +127,8 @@ export function formFromProduct(p: SavedProduct): { form: ProductFormData; custo
       shelfLifeHours: text(p.shelfLifeHours),
       preparationTime: text(p.preparationTime),
       unit: custom ? 'other' : unit,
-      stockQuantity: String(p.stockQuantity || 50),
+      // 0 is a real count (sold out): only a dish with no count at all starts at 50.
+      stockQuantity: p.stockQuantity == null ? '50' : String(p.stockQuantity),
       stockType: (p.stockType === 'hub' || p.stockType === 'both' ? p.stockType : 'direct') as StockType,
       ingredients: p.ingredients || '',
       isHalal: p.dietaryInfo ? p.dietaryInfo.includes('Halal') : true,
@@ -136,16 +137,61 @@ export function formFromProduct(p: SavedProduct): { form: ProductFormData; custo
   };
 }
 
+/** The ids the form's problems are keyed by: each is the element to mark and move to. */
+export const PRODUCT_FIELD = {
+  name: 'product-name-input',
+  category: 'product-category',
+  price: 'product-price-input',
+  originalPrice: 'product-original-price-input',
+  customUnit: 'product-custom-unit-input',
+  stock: 'product-stock-input',
+  variantName: (index: number) => `variant-${index}-name`,
+} as const;
+
+/** What can stop the form from being saved: keys of the dish form's messages (kitchen-product-form.ts). */
+export type ProductProblem =
+  | 'problem.name'
+  | 'problem.category'
+  | 'problem.price'
+  | 'problem.originalPrice'
+  | 'problem.customUnit'
+  | 'problem.stock'
+  | 'problem.variantName';
+
 /**
- * Why the form cannot be saved yet, or null. A new dish must have a category; an old dish saved
- * before categories were required can still be edited without one.
+ * What stops the form from being saved, by field (see PRODUCT_FIELD), in the order the fields appear; empty when it can be
+ * saved. A new dish must have a category; an old dish saved before categories were required can still be edited without one.
+ * Sizes are checked here too, so a dish is never saved without the sizes the kitchen added to it.
  */
-export function productProblem(f: ProductFormData, customUnit: string, opts: { requireCategory: boolean }): string | null {
-  if (!f.name.trim()) return 'Please enter product name';
-  if (opts.requireCategory && !f.categoryId) return 'Please select a category';
-  if (!f.price || !(parseFloat(f.price) > 0)) return 'Please enter a valid price';
-  if (f.unit === 'other' && !customUnit.trim()) return 'Please enter a custom unit type';
-  return null;
+export function productProblems(
+  f: ProductFormData,
+  customUnit: string,
+  opts: { requireCategory: boolean; variants?: Array<Pick<VariantDraft, 'name'>> },
+): Record<string, ProductProblem> {
+  const problems: Record<string, ProductProblem> = {};
+  if (!f.name.trim()) problems[PRODUCT_FIELD.name] = 'problem.name';
+  if (opts.requireCategory && !f.categoryId) problems[PRODUCT_FIELD.category] = 'problem.category';
+  const price = parseFloat(f.price);
+  if (!f.price || !(price > 0)) problems[PRODUCT_FIELD.price] = 'problem.price';
+  if (f.originalPrice.trim() && price > 0 && !(parseFloat(f.originalPrice) > price)) {
+    problems[PRODUCT_FIELD.originalPrice] = 'problem.originalPrice';
+  }
+  if (f.unit === 'other' && !customUnit.trim()) problems[PRODUCT_FIELD.customUnit] = 'problem.customUnit';
+  const stock = f.stockQuantity.trim();
+  if (stock && !(Number.isInteger(Number(stock)) && Number(stock) >= 0)) problems[PRODUCT_FIELD.stock] = 'problem.stock';
+  (opts.variants ?? []).forEach((v, i) => {
+    if (!v.name.trim()) problems[PRODUCT_FIELD.variantName(i)] = 'problem.variantName';
+  });
+  return problems;
+}
+
+/** The first thing stopping the form from being saved, or null. */
+export function productProblem(
+  f: ProductFormData,
+  customUnit: string,
+  opts: { requireCategory: boolean; variants?: Array<Pick<VariantDraft, 'name'>> },
+): ProductProblem | null {
+  return Object.values(productProblems(f, customUnit, opts))[0] ?? null;
 }
 
 /** The body for POST /products (create) or PATCH /products/:id (edit), without the menu fields. */
@@ -164,7 +210,8 @@ export function productPayload(f: ProductFormData, customUnit: string, images: s
     shelfLifeHours: int(f.shelfLifeHours),
     preparationTime: int(f.preparationTime),
     unit: f.unit === 'other' ? customUnit.trim() : f.unit,
-    stockQuantity: parseInt(f.stockQuantity, 10) || 50,
+    // 0 means sold out; only an empty box falls back to 50.
+    stockQuantity: f.stockQuantity.trim() === '' ? 50 : Math.max(0, parseInt(f.stockQuantity, 10) || 0),
     stockType: f.stockType,
     ingredients: f.ingredients.trim() || undefined,
     dietaryInfo: f.isHalal ? ['Halal'] : [],

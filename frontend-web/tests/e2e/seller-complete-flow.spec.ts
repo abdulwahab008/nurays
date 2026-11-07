@@ -26,10 +26,11 @@ async function postJson(
   endpoint: string,
   body: unknown,
   jwt?: string,
+  extraHeaders: Record<string, string> = {},
 ) {
   const url = `${API_BASE}/${endpoint.replace(/^\//, '')}`;
   return ctx.post(url, {
-    headers: jwt ? { Authorization: `Bearer ${jwt}` } : {},
+    headers: { ...(jwt ? { Authorization: `Bearer ${jwt}` } : {}), ...extraHeaders },
     data: body,
   });
 }
@@ -316,7 +317,7 @@ test.describe.serial('Complete Seller End-to-End Workflow (Sections 1-14)', () =
 
     // Verify Active status badge and Store Live button
     await expect(page.locator('#store-live-toggle-btn')).toBeVisible();
-    await expect(page.locator('#store-live-toggle-btn')).toContainText('Store: OPEN');
+    await expect(page.locator('#store-live-toggle-btn')).toHaveAttribute('aria-checked', 'true');
 
     await page.screenshot({
       path: path.join(ARTIFACT_SCREENSHOT_DIR, '04_seller_dashboard_active.png'),
@@ -336,7 +337,7 @@ test.describe.serial('Complete Seller End-to-End Workflow (Sections 1-14)', () =
     // Toggle store to CLOSED
     await toggleBtn.click();
     await page.waitForTimeout(800);
-    await expect(toggleBtn).toContainText('Store: CLOSED');
+    await expect(toggleBtn).toHaveAttribute('aria-checked', 'false');
 
     await page.screenshot({
       path: path.join(ARTIFACT_SCREENSHOT_DIR, '05_seller_store_closed.png'),
@@ -346,7 +347,7 @@ test.describe.serial('Complete Seller End-to-End Workflow (Sections 1-14)', () =
     // Toggle store back to OPEN
     await toggleBtn.click();
     await page.waitForTimeout(800);
-    await expect(toggleBtn).toContainText('Store: OPEN');
+    await expect(toggleBtn).toHaveAttribute('aria-checked', 'true');
   });
 
   // 5. SECTION 4: Seller Adds Food Item with Kitchen Preparation Time Presets
@@ -435,6 +436,7 @@ test.describe.serial('Complete Seller End-to-End Workflow (Sections 1-14)', () =
         deliveryInstructions: 'Askari 11 Sector C Villa 14, please ring doorbell.',
       },
       buyerSession.jwt,
+      { 'Idempotency-Key': crypto.randomUUID() },
     );
 
     const orderBody = await orderResp.json();
@@ -477,6 +479,7 @@ test.describe.serial('Complete Seller End-to-End Workflow (Sections 1-14)', () =
         paymentMethod: 'cod',
       },
       buyerSession.jwt,
+      { 'Idempotency-Key': crypto.randomUUID() },
     );
     const tempOrderBody = await tempOrderResp.json();
     const tempOrderId = tempOrderBody.data?.order?.id;
@@ -592,21 +595,22 @@ test.describe.serial('Complete Seller End-to-End Workflow (Sections 1-14)', () =
     });
   });
 
-  // 11. SECTION 13: Operational Earnings Breakdown & Settlement (7 Metrics)
-  test('11. Section 13: Earnings Dashboard with 7 Metrics & History', async ({ page }) => {
+  // 11. SECTION 13: Earnings (balance, today, all time, payouts)
+  test('11. Section 13: Earnings balance, today, all time and payouts', async ({ page }) => {
     await setSession(page, sellerSession);
     await page.goto('/sellers/earnings');
     await page.waitForLoadState('networkidle');
 
-    // Verify 7 Section 13 metrics
-    await expect(page.getByText('Performance & Settlement Breakdown')).toBeVisible();
-    await expect(page.getByText("Today's Sales", { exact: true })).toBeVisible();
-    await expect(page.getByText("Today's Orders", { exact: true })).toBeVisible();
-    await expect(page.getByText('Gross Sales', { exact: true })).toBeVisible();
-    await expect(page.getByText('Platform Fees', { exact: true })).toBeVisible();
-    await expect(page.getByText('Net Earnings', { exact: true })).toBeVisible();
-    await expect(page.getByText('Pending Settlement', { exact: true })).toBeVisible();
-    await expect(page.getByText('Paid Settlement', { exact: true })).toBeVisible();
+    const main = page.getByRole('main');
+    await expect(main.getByText('Ready to send to you', { exact: true })).toBeVisible();
+    await expect(main.getByRole('heading', { name: 'Today' })).toBeVisible();
+    await expect(main.getByText('Earned', { exact: true })).toBeVisible();
+    await expect(main.getByText('Orders', { exact: true })).toBeVisible();
+    await expect(main.getByRole('heading', { name: 'All time' })).toBeVisible();
+    await expect(main.getByText('Sales', { exact: true })).toBeVisible();
+    await expect(main.getByText('Nuray fee', { exact: true })).toBeVisible();
+    await expect(main.getByText('Your earnings', { exact: true })).toBeVisible();
+    await expect(main.getByRole('heading', { name: 'Payouts' })).toBeVisible();
 
     await page.screenshot({
       path: path.join(ARTIFACT_SCREENSHOT_DIR, '12_seller_earnings_7_metrics.png'),

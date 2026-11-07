@@ -1,12 +1,14 @@
 import { createHash } from 'crypto';
-import type { Request } from 'express';
+import type { Request, Response } from 'express';
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { RedisStore, type RedisReply } from 'rate-limit-redis';
 import { isProduction } from '../config/env';
 import { getRedis } from '../config/redis';
-import { verifyToken } from '../utils/jwt';
+import { concurrencyLimit, QueueFullError } from '../utils/concurrencyLimit';
+import { verifyRefreshToken, verifyToken } from '../utils/jwt';
 import { logger } from '../utils/logger';
 import { formatPhoneNumber } from '../utils/otp';
+import { AppError } from './errorHandler';
 
 /**
  * Counters live in Redis when it is configured, so every app instance enforces the same
@@ -84,6 +86,32 @@ export const byEmailTarget = (req: Request) => {
   return raw ? `e:${digest(raw)}` : ipKeyGenerator(req.ip ?? '');
 };
 
+/**
+ * The account a sign-in names, whoever asks and from wherever: an e-mail in any case, a phone number in any form.
+ * Hashed, and the same for an account that does not exist, so the limit's answer says nothing about which ones do.
+ */
+export const byLoginAccount = (req: Request) => {
+  const raw = typeof req.body?.phoneOrEmail === 'string' ? req.body.phoneOrEmail.trim() : '';
+  if (!raw) return '';
+  // Keyed the way authService.login reads the account (the method decides, as there, with e-mail the default), so a stray
+  // '@' in a phone number cannot buy a fresh bucket for the same number.
+  const isEmail = (req.body?.loginMethod ?? 'email') === 'email';
+  return `a:${digest(isEmail ? raw.toLowerCase() : formatPhoneNumber(raw))}`;
+};
+
+/** A refresh by the account its (validly signed) refresh token names; anything else by address. */
+export const byRefreshTokenOrIp = (req: Request) => {
+  const token = req.body?.refreshToken;
+  if (typeof token === 'string') {
+    try {
+      return `u:${verifyRefreshToken(token).userId}`;
+    } catch {
+      /* expired or forged: counted with the address it came from */
+    }
+  }
+  return ipKeyGenerator(req.ip ?? '');
+};
+
 /** One address, whatever it asks for. */
 export const byAddress = (req: Request) => ipKeyGenerator(req.ip ?? '');
 
@@ -119,7 +147,16 @@ const rateLimitLogger = {
 
 function limiter(
   name: string,
-  opts: { windowMs: number; limit: number | (() => number); message: string; perUser?: boolean; keyGenerator?: (req: Request) => string; skipSuccessfulRequests?: boolean }
+  opts: {
+    windowMs: number;
+    limit: number | (() => number);
+    message: string;
+    perUser?: boolean;
+    keyGenerator?: (req: Request) => string;
+    skip?: (req: Request) => boolean;
+    skipSuccessfulRequests?: boolean;
+    requestWasSuccessful?: (req: Request, res: Response) => boolean;
+  }
 ) {
   return rateLimit({
     windowMs: opts.windowMs,
@@ -130,7 +167,9 @@ function limiter(
     logger: rateLimitLogger,
     store: store(name),
     ...(opts.keyGenerator ? { keyGenerator: opts.keyGenerator } : opts.perUser ? { keyGenerator: byUserOrIp } : {}),
+    ...(opts.skip ? { skip: opts.skip } : {}),
     ...(opts.skipSuccessfulRequests ? { skipSuccessfulRequests: true } : {}),
+    ...(opts.requestWasSuccessful ? { requestWasSuccessful: opts.requestWasSuccessful } : {}),
     message: { success: false, error: { message: opts.message, code: 'RATE_LIMITED' } },
   });
 }
@@ -217,6 +256,38 @@ export const loginAddressLimiter = limiter('login-ip', {
   message: 'Too many login attempts. Please try again later.',
 });
 
+// Guessing one account's password from many addresses (credential stuffing from a botnet): failed sign-ins per account,
+// across every address. Counted when the request arrives, so a burst of simultaneous guesses cannot slip past it, and
+// handed back when the sign-in succeeds. A stranger can use this up for 15 minutes, but that only blocks password and
+// code sign-ins: Google, Apple and "forgot password" still let the owner in.
+export const loginAccountLimiter = limiter('login-account', {
+  windowMs: 15 * MINUTE,
+  limit: live(30),
+  keyGenerator: byLoginAccount,
+  skip: (req) => byLoginAccount(req) === '',
+  skipSuccessfulRequests: true,
+  // A 503 (admission control turned it away, or the database was busy) checked no password, so it is no failed guess:
+  // otherwise an owner retrying through a sign-in storm would lock their own account.
+  requestWasSuccessful: (_req, res) => res.statusCode < 400 || res.statusCode === 503,
+  message: 'Too many failed sign-ins for this account. Please try again in 15 minutes, or reset your password.',
+});
+
+// Generous: every device of an account refreshes about once an hour, and a refresh token is checked before it is counted.
+export const refreshLimiter = limiter('refresh', {
+  windowMs: 15 * MINUTE,
+  limit: live(100),
+  keyGenerator: byRefreshTokenOrIp,
+  message: 'Too many requests. Please try again later.',
+});
+
+// Guessing e-mail-verification links.
+export const verifyEmailLimiter = limiter('verify-email', {
+  windowMs: 15 * MINUTE,
+  limit: live(30),
+  keyGenerator: byAddress,
+  message: 'Too many requests. Please try again later.',
+});
+
 // Prevent scripted mass account creation from one IP.
 export const registerLimiter = limiter('register', {
   windowMs: 60 * MINUTE,
@@ -270,3 +341,29 @@ export const locationLimiter = limiter('location', {
   perUser: true,
   message: 'Location updates are coming in too fast.',
 });
+
+/**
+ * Admission control for the routes that hash a password (bcrypt, cost 10: about 100 ms of a libuv thread each). At most
+ * PASSWORD_HASH_CONCURRENCY run at once per instance, kept below UV_THREADPOOL_SIZE (Dockerfile) so file, DNS and gzip
+ * work still find a free thread during a sign-in storm. Up to PASSWORD_HASH_QUEUE more wait, about a second's worth;
+ * beyond that the answer is an immediate 503 with Retry-After, which clients and load balancers retry, instead of a
+ * queue that grows until every caller has given up.
+ */
+const passwordWorkSlot = concurrencyLimit(Math.max(1, Number(process.env.PASSWORD_HASH_CONCURRENCY) || 4), {
+  maxWaiting: Math.max(1, Number(process.env.PASSWORD_HASH_QUEUE) || 50),
+});
+
+export const admitPasswordWork =
+  (handler: (req: Request, res: Response) => Promise<void>) =>
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      await passwordWorkSlot(async () => {
+        // The caller hung up while it waited: nobody would read the answer, so the hash is not worth its thread.
+        if (req.socket.destroyed) return;
+        await handler(req, res);
+      });
+    } catch (err) {
+      if (err instanceof QueueFullError) throw AppError.expected('The service is busy. Please try again in a moment.', 503, 'SERVICE_BUSY');
+      throw err;
+    }
+  };

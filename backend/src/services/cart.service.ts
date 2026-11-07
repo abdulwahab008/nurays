@@ -2,6 +2,7 @@ import prisma from '../config/database';
 import { getPlatformDeliveryPricing } from './delivery-pricing.service';
 import { AppError } from '../middleware/errorHandler';
 import { OUTSIDE_AREAS_MESSAGE, getDeliveryFeeForSeller } from '../utils/deliveryFee';
+import { splitDeliveryFees } from '../utils/orderPricing';
 import { isOnMenu } from '../utils/menu';
 import { SELLER_COMMUNITY_DELIVERY_SELECT } from '../utils/sellerDeliverySelect';
 import { communityService } from './community.service';
@@ -78,6 +79,12 @@ export class CartService {
             jazzcashAccountTitle: true,
             easypaisaNumber: true,
             easypaisaAccountTitle: true,
+            deliveryModes: true,
+            pickupAddress: true,
+            pickupLandmark: true,
+            preOrderOnly: true,
+            advanceBookingMinDays: true,
+            advanceBookingMaxDays: true,
             community: {
               select: {
                 id: true,
@@ -178,6 +185,12 @@ export class CartService {
             jazzcashAccountTitle: items[0].seller.jazzcashAccountTitle,
             easypaisaNumber: items[0].seller.easypaisaNumber,
             easypaisaAccountTitle: items[0].seller.easypaisaAccountTitle,
+            deliveryModes: items[0].seller.deliveryModes,
+            pickupAddress: items[0].seller.pickupAddress,
+            pickupLandmark: items[0].seller.pickupLandmark,
+            preOrderOnly: items[0].seller.preOrderOnly,
+            advanceBookingMinDays: items[0].seller.advanceBookingMinDays,
+            advanceBookingMaxDays: items[0].seller.advanceBookingMaxDays,
             community: items[0].seller.community || (items[0].seller.primaryCommunityName ? { name: items[0].seller.primaryCommunityName } : null),
           }
         : null,
@@ -280,8 +293,9 @@ export class CartService {
     }
     // A fee priced by Nuray is for a Nuray rider and is paid by the kitchen, not the customer.
     const all = [...sellerResults.values()];
-    const deliveryFee = all.filter((r) => r.pricing == null).reduce((a, b) => a + b.fee, 0);
-    const paidByKitchen = all.filter((r) => r.pricing != null).reduce((a, b) => a + b.fee, 0);
+    const { deliveryFee, sellerDeliveryCharge: paidByKitchen } = splitDeliveryFees(
+      [...sellerResults].map(([sellerId, r]) => ({ sellerId, fee: r.fee, pricedByPlatform: r.pricing != null }))
+    );
     const isFree = deliveryFee === 0;
     let reason: string | null = null;
     if (isFree && sellerResults.size > 0) {

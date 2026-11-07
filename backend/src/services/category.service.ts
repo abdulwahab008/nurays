@@ -14,6 +14,13 @@ export interface CategoryTreeNode {
   productCount: number;
 }
 
+// Relation _count aggregates the whole products table before joining; this counts only the categories asked about.
+async function productCounts(categoryIds: string[]) {
+  if (categoryIds.length === 0) return new Map<string, number>();
+  const rows = await prisma.product.groupBy({ by: ['categoryId'], where: { categoryId: { in: categoryIds } }, _count: { _all: true } });
+  return new Map(rows.map((r) => [r.categoryId as string, r._count._all]));
+}
+
 export class CategoryService {
   /**
    * Get all categories
@@ -25,26 +32,22 @@ export class CategoryService {
         { sortOrder: 'asc' },
         { name: 'asc' },
       ],
-      include: {
-        _count: {
-          select: {
-            products: true,
-          },
-        },
-      },
     });
+    const counts = await productCounts(categories.map((c) => c.id));
 
     // Build category tree
-    type TreeNode = (typeof categories)[number] & { children: TreeNode[]; productCount: number };
+    type TreeNode = (typeof categories)[number] & { _count: { products: number }; children: TreeNode[]; productCount: number };
     const categoryMap = new Map<string, TreeNode>();
     const rootCategories: TreeNode[] = [];
 
     // First pass: create map
     categories.forEach((category) => {
+      const products = counts.get(category.id) ?? 0;
       categoryMap.set(category.id, {
         ...category,
+        _count: { products },
         children: [],
-        productCount: category._count.products,
+        productCount: products,
       });
     });
 
@@ -78,14 +81,8 @@ export class CategoryService {
         { sortOrder: 'asc' },
         { name: 'asc' },
       ],
-      include: {
-        _count: {
-          select: {
-            products: true,
-          },
-        },
-      },
     });
+    const counts = await productCounts(categories.map((c) => c.id));
 
     // Build category tree first
     const categoryMap = new Map<string, CategoryTreeNode>();
@@ -102,7 +99,7 @@ export class CategoryService {
         productType: category.productType,
         parentId: category.parentId,
         children: [],
-        productCount: category._count.products,
+        productCount: counts.get(category.id) ?? 0,
       });
     });
 
@@ -146,11 +143,6 @@ export class CategoryService {
         children: {
           where: { isActive: true },
         },
-        _count: {
-          select: {
-            products: true,
-          },
-        },
       },
     });
 
@@ -158,9 +150,11 @@ export class CategoryService {
       throw new AppError('Category not found', 404, 'CATEGORY_NOT_FOUND');
     }
 
+    const products = await prisma.product.count({ where: { categoryId: category.id } });
     return {
       ...category,
-      productCount: category._count.products,
+      _count: { products },
+      productCount: products,
     };
   }
 
@@ -275,25 +269,23 @@ export class CategoryService {
   async deleteCategory(categoryId: string) {
     const category = await prisma.category.findUnique({
       where: { id: categoryId },
-      include: {
-        _count: {
-          select: {
-            products: true,
-            children: true,
-          },
-        },
-      },
+      select: { id: true },
     });
 
     if (!category) {
       throw new AppError('Category not found', 404, 'CATEGORY_NOT_FOUND');
     }
 
-    if (category._count.products > 0) {
+    const [products, children] = await Promise.all([
+      prisma.product.count({ where: { categoryId } }),
+      prisma.category.count({ where: { parentId: categoryId } }),
+    ]);
+
+    if (products > 0) {
       throw new AppError('Cannot delete category with products', 400, 'CATEGORY_HAS_PRODUCTS');
     }
 
-    if (category._count.children > 0) {
+    if (children > 0) {
       throw new AppError('Cannot delete category with subcategories', 400, 'CATEGORY_HAS_CHILDREN');
     }
 

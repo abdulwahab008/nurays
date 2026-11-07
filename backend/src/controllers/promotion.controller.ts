@@ -31,14 +31,14 @@ export const getAvailablePromotions = async (req: Request, res: Response) => {
   });
 };
 
-/** Get promotions per product for catalog (public, for customer product listing) */
+/** Get promotions per product for catalog (public; a signed-in customer's used-up deals are left out) */
 export const getCatalogPromotions = async (req: Request, res: Response) => {
   const productIds = (qstr(req.query.productIds) || '')
     .split(',')
     .slice(0, 100)
     .map((id) => id.trim())
     .filter(Boolean);
-  const data = await promotionService.getPromotionsForCatalog(productIds);
+  const data = await promotionService.getPromotionsForCatalog(productIds, req.user?.userId);
   res.status(200).json({ success: true, data });
 };
 

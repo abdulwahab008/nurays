@@ -12,14 +12,14 @@ test.use({ viewport, userAgent, deviceScaleFactor, isMobile, hasTouch, geolocati
 
 declare global {
   interface Window {
-    __bg: { watchers: Array<{ options: Record<string, unknown> }>; removed: string[]; http: Array<{ url: string; headers: Record<string, string>; data: unknown; status: number }> };
+    __bg: { watchers: Array<{ options: Record<string, unknown> }>; removed: string[]; permissionAsks: number; http: Array<{ url: string; headers: Record<string, string>; data: unknown; status: number }> };
     __bgFire: (latitude: number, longitude: number) => void;
   }
 }
 
 async function asTheRiderApp(page: import('@playwright/test').Page) {
   await page.addInitScript(() => {
-    window.__bg = { watchers: [], removed: [], http: [] };
+    window.__bg = { watchers: [], removed: [], permissionAsks: 0, http: [] };
     let callback: ((location?: unknown, error?: unknown) => void) | null = null;
     window.__bgFire = (latitude, longitude) => callback?.({ latitude, longitude, accuracy: 5, time: Date.now() });
     (window as unknown as Record<string, unknown>).Capacitor = {
@@ -27,13 +27,18 @@ async function asTheRiderApp(page: import('@playwright/test').Page) {
       getPlatform: () => 'android',
       Plugins: {
         BackgroundGeolocation: {
-          addWatcher: async (options: Record<string, unknown>, cb: (location?: unknown, error?: unknown) => void) => {
+          // Not async: the app's bridge returns the watcher id itself, not a promise of it.
+          addWatcher: (options: Record<string, unknown>, cb: (location?: unknown, error?: unknown) => void) => {
             window.__bg.watchers.push({ options });
             callback = cb;
             return `watcher-${window.__bg.watchers.length}`;
           },
           removeWatcher: async ({ id }: { id: string }) => void window.__bg.removed.push(id),
           openSettings: async () => undefined,
+          requestPermissions: async () => {
+            window.__bg.permissionAsks += 1;
+            return { location: 'granted' };
+          },
         },
         // The phone's own HTTP: here, a plain fetch from the page.
         CapacitorHttp: {
@@ -52,9 +57,9 @@ async function asTheRiderApp(page: import('@playwright/test').Page) {
 async function signInAsRider(page: import('@playwright/test').Page) {
   await page.goto('/login');
   await page.getByRole('button', { name: 'Email', exact: true }).click();
-  await page.getByLabel(/Email Address/).fill(process.env.E2E_RIDER_EMAIL ?? 'e2e-rider@nuray.test');
+  await page.getByLabel('Email', { exact: true }).fill(process.env.E2E_RIDER_EMAIL ?? 'e2e-rider@nuray.test');
   await page.getByLabel('Password').fill(process.env.E2E_RIDER_PASSWORD ?? 'RiderPass123!');
-  await page.getByRole('button', { name: 'Login', exact: true }).click();
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page).toHaveURL(/\/riders\/dashboard/, { timeout: 15_000 });
 }
 
@@ -74,6 +79,8 @@ test('"Allow": the phone watches in the background and sends the positions itsel
   await notice.getByRole('button', { name: 'Allow' }).click();
   await expect(notice).toHaveCount(0);
   await expect.poll(async () => (await bg(page)).watchers.length).toBe(1);
+  // Android: the location permission is asked for before the watch starts, so the watch can keep running in the background.
+  expect((await bg(page)).permissionAsks).toBe(1);
   expect((await bg(page)).watchers[0].options).toMatchObject({
     backgroundTitle: 'Nuray: delivery in progress',
     backgroundMessage: 'Sharing your location with the customer until the job is done.',

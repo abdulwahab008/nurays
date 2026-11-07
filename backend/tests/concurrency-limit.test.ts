@@ -1,4 +1,4 @@
-import { concurrencyLimit } from '../src/utils/concurrencyLimit';
+import { concurrencyLimit, QueueFullError } from '../src/utils/concurrencyLimit';
 
 const tick = () => new Promise<void>((r) => setImmediate(r));
 
@@ -36,5 +36,18 @@ describe('concurrencyLimit', () => {
   it('lets a job through at once when nothing is running', async () => {
     const run = concurrencyLimit(3);
     await expect(run(async () => 'now')).resolves.toBe('now');
+  });
+
+  it('refuses at once, without running it, a job that would wait behind maxWaiting others', async () => {
+    const run = concurrencyLimit(1, { maxWaiting: 1 });
+    let release = () => {};
+    const first = run(() => new Promise<void>((r) => { release = r; }));
+    const second = run(async () => 'queued');
+    const third = jest.fn(async () => 'never');
+    await expect(run(third)).rejects.toBeInstanceOf(QueueFullError);
+    expect(third).not.toHaveBeenCalled();
+    release();
+    await first;
+    await expect(second).resolves.toBe('queued');
   });
 });

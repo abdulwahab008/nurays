@@ -5,16 +5,21 @@ const app = resolveAppUrl(process.env);
 if (app.placeholder) {
   console.warn(`NURAY_APP_URL is not set: the app will open ${app.url}. Set it to the production website before a store build.`);
 }
+if (!app.api) {
+  console.warn("NURAY_API_URL is not set: a customer back from Safepay would land in the phone's browser. Set it to the API's address.");
+}
 
 const config: CapacitorConfig = {
   appId: 'pk.nuray.app',
   appName: 'Nuray',
   // Only the page shown when the website cannot be reached lives in the app (server.errorPath).
   webDir: 'www',
+  // How "Signed-in devices" tells the app from a browser (frontend-web/lib/sessions.ts reads the saved user agent).
+  appendUserAgent: 'NurayApp',
   server: {
     url: app.url,
-    cleartext: app.url.startsWith('http://'),
-    allowNavigation: [app.hostname, ...IN_APP_HOSTS],
+    cleartext: [app.url, app.api?.url].some((url) => url?.startsWith('http://')),
+    allowNavigation: [app.hostname, ...(app.api ? [app.api.hostname] : []), ...IN_APP_HOSTS],
     errorPath: 'offline.html',
   },
   android: {
@@ -25,8 +30,9 @@ const config: CapacitorConfig = {
     useLegacyBridge: true,
   },
   ios: {
-    // Keeps the page clear of the notch and the home indicator.
-    contentInset: 'automatic',
+    // The page runs edge to edge and keeps clear of the notch and home indicator itself (viewport-fit=cover and the
+    // --safe-* padding); an inset would show the web view's white background below the page.
+    contentInset: 'never',
   },
   plugins: {
     // Native sign-in: Google and Apple only (no other provider SDK is bundled).

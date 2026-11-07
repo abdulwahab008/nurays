@@ -49,9 +49,9 @@ test('coming back to the dashboard sends the rider\'s position at once and asks 
 
   await page.goto('/login');
   await page.getByRole('button', { name: 'Email', exact: true }).click();
-  await page.getByLabel(/Email Address/).fill(process.env.E2E_RIDER_EMAIL ?? 'e2e-rider@nuray.test');
+  await page.getByLabel('Email', { exact: true }).fill(process.env.E2E_RIDER_EMAIL ?? 'e2e-rider@nuray.test');
   await page.getByLabel('Password').fill(process.env.E2E_RIDER_PASSWORD ?? 'RiderPass123!');
-  await page.getByRole('button', { name: 'Login', exact: true }).click();
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page).toHaveURL(/\/riders\/dashboard/, { timeout: 15_000 });
 
   // The job on the move starts sharing: one position, and the screen lock.

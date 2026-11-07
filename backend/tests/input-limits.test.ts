@@ -73,6 +73,13 @@ describe('a dish', () => {
     expect(updateProductSchema.safeParse({ menuType: 'fixed', menuDate: null }).success).toBe(true);
   });
 
+  it('refuses a price before discount that is not above the price', () => {
+    expect(createProductSchema.safeParse({ ...dish, originalPrice: 250 }).success).toBe(false);
+    expect(createProductSchema.safeParse({ ...dish, originalPrice: 300 }).success).toBe(false);
+    expect(updateProductSchema.safeParse({ price: 450, originalPrice: 400 }).success).toBe(false);
+    expect(updateProductSchema.safeParse({ originalPrice: 400 }).success).toBe(true);
+  });
+
   it.each([
     { price: 1e12 }, { price: 1_000_001 }, { originalPrice: 1e12 }, { costPrice: 1e12 }, { stockQuantity: 3_000_000_000 }, { shelfLifeHours: 3_000_000_000 },
     { preparationTime: 3_000_000_000 }, { weightGrams: 3_000_000_000 }, { storageDays: 3_000_000_000 }, { minOrderQuantity: 3_000_000_000 }, { maxOrderQuantity: 3_000_000_000 },

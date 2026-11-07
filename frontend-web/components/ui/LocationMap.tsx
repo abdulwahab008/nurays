@@ -9,7 +9,8 @@ import markerShadow from 'leaflet/dist/images/marker-shadow.png';
 import { useEffect, useRef, useState, useCallback } from 'react';
 import type * as Leaflet from 'leaflet';
 import dynamic from 'next/dynamic';
-import { Search, Navigation, MapPin, Loader2, Check } from 'lucide-react';
+import { Search, Navigation, MapPin, Loader2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { useT } from '@/lib/i18n';
 import { commonMessages } from '@/lib/i18n/messages/common';
 import { accountMessages } from '@/lib/i18n/messages/account';
@@ -22,6 +23,8 @@ export interface LocationMapProps {
   radiusKm?: number | null;
   height?: string;
   draggable?: boolean;
+  /** No pin or radius until a place is picked (markerPosition null): a pin at the default centre would look like a choice. */
+  hidePinUntilPicked?: boolean;
 }
 
 const PAKISTAN_CITIES = [
@@ -40,6 +43,7 @@ function LocationMapInner({
   radiusKm = null,
   height = '320px',
   draggable = true,
+  hidePinUntilPicked = false,
 }: LocationMapProps) {
   const t = useT(accountMessages);
   const tc = useT(commonMessages);
@@ -110,7 +114,8 @@ L.tileLayer(MAP_TILE_URL, { attribution: MAP_ATTRIBUTION, maxZoom: MAP_MAX_ZOOM 
           const marker = L.marker([initialPos.lat, initialPos.lng], {
             icon: pinIcon,
             draggable,
-          }).addTo(map);
+          });
+          if (!hidePinUntilPicked || markerPosition) marker.addTo(map);
 
           marker.on('dragend', () => {
             const pos = marker.getLatLng();
@@ -121,6 +126,7 @@ L.tileLayer(MAP_TILE_URL, { attribution: MAP_ATTRIBUTION, maxZoom: MAP_MAX_ZOOM 
 
           map.on('click', (e: Leaflet.LeafletMouseEvent) => {
             marker.setLatLng(e.latlng);
+            if (!map.hasLayer(marker)) marker.addTo(map);
             setCurrentCoords({ lat: e.latlng.lat, lng: e.latlng.lng });
             setLocateFailed(false);
             onLocationSelect?.({ lat: e.latlng.lat, lng: e.latlng.lng });
@@ -175,6 +181,7 @@ L.tileLayer(MAP_TILE_URL, { attribution: MAP_ATTRIBUTION, maxZoom: MAP_MAX_ZOOM 
   useEffect(() => {
     if (markerRef.current && markerPosition) {
       markerRef.current.setLatLng([markerPosition.lat, markerPosition.lng]);
+      if (mapInstanceRef.current && !mapInstanceRef.current.hasLayer(markerRef.current)) markerRef.current.addTo(mapInstanceRef.current);
       mapInstanceRef.current?.panTo([markerPosition.lat, markerPosition.lng]);
       setCurrentCoords(markerPosition);
     }
@@ -185,7 +192,7 @@ L.tileLayer(MAP_TILE_URL, { attribution: MAP_ATTRIBUTION, maxZoom: MAP_MAX_ZOOM 
     if (!isLoaded || !mapInstanceRef.current || !LRef.current) return;
     const map = mapInstanceRef.current;
     const L = LRef.current;
-    const pos = markerPosition ?? currentCoords ?? center;
+    const pos = markerPosition ?? currentCoords ?? (hidePinUntilPicked ? null : center);
 
     if (circleRef.current) {
       map.removeLayer(circleRef.current);
@@ -195,20 +202,21 @@ L.tileLayer(MAP_TILE_URL, { attribution: MAP_ATTRIBUTION, maxZoom: MAP_MAX_ZOOM 
     if (radiusKm != null && radiusKm > 0 && pos) {
       const circle = L.circle([pos.lat, pos.lng], {
         radius: radiusKm * 1000,
-        color: '#10b981',
-        fillColor: '#10b981',
+        color: '#12998B',
+        fillColor: '#12998B',
         fillOpacity: 0.15,
         weight: 2,
       }).addTo(map);
       circleRef.current = circle;
     }
-  }, [isLoaded, markerPosition, currentCoords, center, radiusKm]);
+  }, [isLoaded, markerPosition, currentCoords, center, radiusKm, hidePinUntilPicked]);
 
   // Jump to specific coordinates
   const jumpTo = useCallback((lat: number, lng: number, zoomLevel = 15, address?: string) => {
     if (!mapInstanceRef.current || !markerRef.current) return;
     mapInstanceRef.current.flyTo([lat, lng], zoomLevel, { duration: 1.2 });
     markerRef.current.setLatLng([lat, lng]);
+    if (!mapInstanceRef.current.hasLayer(markerRef.current)) markerRef.current.addTo(mapInstanceRef.current);
     setCurrentCoords({ lat, lng });
     setLocateFailed(false);
     onLocationSelect?.({ lat, lng, address });
@@ -294,84 +302,81 @@ L.tileLayer(MAP_TILE_URL, { attribution: MAP_ATTRIBUTION, maxZoom: MAP_MAX_ZOOM 
   };
 
   return (
-    <div className="relative rounded-2xl overflow-hidden border border-slate-200 shadow-xs bg-slate-50">
-      {/* Top Search & City Bar */}
-      <div className="p-2.5 bg-white border-b border-slate-100 flex flex-wrap items-center gap-2">
-        <div className="flex-1 min-w-[200px] relative">
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                handleSearch();
-              }
-            }}
-            placeholder={t('mapSearchPlaceholder')}
-            className="w-full ps-8 pe-16 py-1.5 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-brand outline-none transition-all"
-          />
-          <Search className="w-3.5 h-3.5 text-slate-500 absolute start-2.5 top-2.5 pointer-events-none" />
-          <button
+    <div className="relative rounded-2xl overflow-hidden border border-line bg-surface pointer-coarse:[&_.leaflet-bar_a]:size-11! pointer-coarse:[&_.leaflet-bar_a]:leading-11!">
+      <div className="p-3 bg-surface border-b border-line space-y-2.5">
+        <div className="flex items-center gap-2">
+          <div className="flex-1 min-w-0 relative">
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  handleSearch();
+                }
+              }}
+              placeholder={t('mapSearchPlaceholder')}
+              aria-label={t('mapSearchPlaceholder')}
+              className="w-full min-h-11 ps-9 pe-3 rounded-xl border border-line-strong bg-surface text-sm text-ink placeholder:text-muted/70 focus:outline-none focus:ring-3 focus:ring-brand/30 focus:border-brand-600"
+            />
+            <Search className="w-4 h-4 text-muted absolute start-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+          </div>
+          <Button
             type="button"
             onClick={() => handleSearch()}
             disabled={isSearching || !searchQuery.trim()}
-            className="absolute end-1 top-1 px-2.5 py-1 bg-slate-900 hover:bg-slate-800 disabled:opacity-40 text-white text-[11px] font-bold rounded-lg transition-colors cursor-pointer"
+            className="px-4 shrink-0"
           >
-            {isSearching ? <Loader2 className="w-3 h-3 animate-spin" /> : tc('search')}
-          </button>
+            {isSearching ? <Loader2 className="w-4 h-4 animate-spin" /> : tc('search')}
+          </Button>
         </div>
 
-        {/* Quick City Presets */}
-        <div className="flex items-center gap-1 overflow-x-auto py-0.5">
-          {PAKISTAN_CITIES.map((c) => (
-            <button
-              key={c.name}
-              type="button"
-              onClick={() => jumpTo(c.lat, c.lng, c.name === 'Askari 11' ? 16 : 13)}
-              className="px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-medium transition-colors shrink-0 cursor-pointer"
-            >
-              {c.name}
-            </button>
-          ))}
-          <button
+        <div className="flex items-center gap-2">
+          <div className="flex-1 min-w-0 flex items-center gap-1.5 overflow-x-auto [scrollbar-width:none]">
+            {PAKISTAN_CITIES.map((c) => (
+              <button
+                key={c.name}
+                type="button"
+                onClick={() => jumpTo(c.lat, c.lng, c.name === 'Askari 11' ? 16 : 13)}
+                className="min-h-9 pointer-coarse:min-h-11 px-3 rounded-full bg-raised hover:bg-line text-ink text-xs font-medium transition-colors shrink-0 cursor-pointer focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-brand/40"
+              >
+                {c.name}
+              </button>
+            ))}
+          </div>
+          <Button
             type="button"
+            variant="ghost"
+            size="sm"
             onClick={handleLocateMe}
             disabled={locating}
-            title={t('detectMyLocation')}
-            className="p-1.5 rounded-lg bg-brand-50 hover:bg-brand-100 text-brand-ink text-xs font-bold transition-colors shrink-0 cursor-pointer ms-auto flex items-center gap-1"
+            className="shrink-0 px-3 font-medium"
           >
-            {locating ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            ) : (
-              <Navigation className="w-3.5 h-3.5" />
-            )}
-            <span className="text-[11px] font-semibold hidden sm:inline">{t('myLocation')}</span>
-          </button>
+            {locating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Navigation className="w-4 h-4" />}
+            {t('detectMyLocation')}
+          </Button>
         </div>
       </div>
 
-      {/* Map DOM Element */}
       <div ref={mapRef} style={{ height, width: '100%' }} className="z-0" />
 
-      {/* Loading State */}
       {!isLoaded && (
-        <div className="absolute inset-0 bg-slate-50 flex items-center justify-center z-10">
-          <div className="flex items-center gap-2 text-xs font-semibold text-slate-500">
+        <div className="absolute inset-0 bg-raised flex items-center justify-center z-10">
+          <div className="flex items-center gap-2 text-sm text-muted">
             <Loader2 className="w-4 h-4 animate-spin text-brand-ink" />
             <span>{t('loadingMap')}</span>
           </div>
         </div>
       )}
 
-      {/* Bottom Coordinates & Hint */}
-      <div className="px-3 py-1.5 bg-white/95 backdrop-blur-xs border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
-        <span className="flex items-center gap-1 text-slate-600">
-          <MapPin className="w-3 h-3 text-brand-ink" />
+      <div className="px-3 py-2 bg-surface border-t border-line flex items-center justify-between gap-3 text-xs text-muted">
+        <span className="flex items-center gap-1.5 min-w-0">
+          <MapPin className="w-3.5 h-3.5 text-brand-ink shrink-0" />
           <span role={locateFailed ? 'status' : undefined}>{locateFailed ? t('locateFailed') : t('mapHint')}</span>
         </span>
         {currentCoords && (
-          <span className="font-mono font-medium text-slate-700 bg-slate-100 px-2 py-0.5 rounded text-[11px]" data-ltr>
+          <span className="font-mono text-ink bg-raised px-2 py-0.5 rounded-full shrink-0 tabular-nums" data-ltr>
             {currentCoords.lat.toFixed(4)}, {currentCoords.lng.toFixed(4)}
           </span>
         )}
@@ -388,8 +393,8 @@ function MapLoadingText() {
 const LocationMap = dynamic(() => Promise.resolve(LocationMapInner), {
   ssr: false,
   loading: () => (
-    <div className="bg-slate-100 rounded-2xl flex items-center justify-center border border-slate-200" style={{ height: '300px' }}>
-      <div className="flex items-center gap-2 text-xs font-semibold text-slate-500">
+    <div className="bg-raised rounded-2xl flex items-center justify-center border border-line" style={{ height: '300px' }}>
+      <div className="flex items-center gap-2 text-sm text-muted">
         <Loader2 className="w-4 h-4 animate-spin" />
         <MapLoadingText />
       </div>

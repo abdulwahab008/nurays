@@ -4,6 +4,7 @@ import { AppError } from '../middleware/errorHandler';
 import { notify } from './notify.service';
 import { pageArgs } from '../utils/pagination';
 import { roundMoney } from '../utils/pricing';
+import { realPhoneOrNull } from '../utils/otp';
 
 /**
  * A rider's money with the platform (see RiderLedgerEntry in schema.prisma). Entries are
@@ -281,7 +282,7 @@ export async function listRidersWithMoney(opts: { search?: string; filter?: stri
     riders: rows.map((r) => ({
       id: r.id,
       name: r.full_name,
-      phone: r.phone,
+      phone: realPhoneOrNull(r.phone),
       email: r.email,
       city: r.city,
       vehicleType: r.vehicle_type,
@@ -313,7 +314,7 @@ export async function riderMoneyForAdmin(riderId: string, page = 1) {
     rider: {
       id: rider.id,
       name: user?.profile?.fullName ?? null,
-      phone: user?.phone ?? null,
+      phone: realPhoneOrNull(user?.phone),
       email: user?.email ?? null,
       city: rider.city,
       vehicleType: rider.vehicleType,
@@ -339,6 +340,7 @@ export async function listRiderEntries(riderId: string, page = 1, limit = 30) {
       orderBy: { createdAt: 'desc' },
       skip,
       take: safeLimit,
+      include: { delivery: { select: { order: { select: { orderNumber: true } } } } },
     }),
     prisma.riderLedgerEntry.count({ where: { riderId } }),
   ]);
@@ -348,6 +350,7 @@ export async function listRiderEntries(riderId: string, page = 1, limit = 30) {
       type: e.type,
       amount: Number(e.amount),
       orderId: e.orderId,
+      orderNumber: e.delivery?.order?.orderNumber ?? null,
       reference: e.reference,
       note: e.note,
       createdAt: e.createdAt,

@@ -32,12 +32,23 @@ export function withStatementTimeout(url: string, ms: number): string {
   return `${url}${url.includes('?') ? '&' : '?'}options=${encodeURIComponent(`-c statement_timeout=${Math.floor(ms)}`)}`;
 }
 
+/**
+ * Without connection_limit Prisma opens 2 x CPU cores + 1 connections per instance (17 on an
+ * 8-core host), so a handful of instances exceeds PostgreSQL's max_connections (100 by default).
+ * An explicit limit in DATABASE_URL wins; see docs/DEPLOYMENT_GUIDE.md for the sizing.
+ */
+const DEFAULT_CONNECTION_LIMIT = 10;
+export function withConnectionLimit(url: string): string {
+  if (new URLSearchParams(url.split('?')[1] ?? '').has('connection_limit')) return url;
+  return `${url}${url.includes('?') ? '&' : '?'}connection_limit=${DEFAULT_CONNECTION_LIMIT}`;
+}
+
 const databaseUrl = process.env.DATABASE_URL;
 
 const prisma = new PrismaClient<{ log: Prisma.LogLevel[]; omit: typeof globalOmit }>({
   log,
   omit: globalOmit,
-  ...(databaseUrl ? { datasourceUrl: withStatementTimeout(databaseUrl, statementTimeoutMs()) } : {}),
+  ...(databaseUrl ? { datasourceUrl: withStatementTimeout(withConnectionLimit(databaseUrl), statementTimeoutMs()) } : {}),
 });
 
 // Handle graceful shutdown

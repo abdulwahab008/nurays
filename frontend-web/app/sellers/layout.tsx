@@ -17,7 +17,6 @@ export default function SellersLayout({ children }: { children: ReactNode }) {
     <RoleGuard
       allowedRoles={['seller']}
       redirectUnauthenticated="/login"
-      redirectWrongRole="/dashboard"
     >
       {children}
     </RoleGuard>

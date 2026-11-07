@@ -3,6 +3,8 @@ import { persist } from 'zustand/middleware';
 import { Community, communityService } from '../services/community.service';
 import { resolveLocationSmart, SmartMatchResult } from '../utils/location-resolver';
 import { errorMessage } from '../api-client';
+import { addressService, type Address } from '../services/address.service';
+import { findSavedArea, type AreaHint } from '../../components/community/saved-area';
 
 /** What the device's position gave: the area it is in, or why none was chosen (no position shared, or outside every area). */
 export interface GpsDetection {
@@ -24,7 +26,15 @@ interface CommunityState {
   loadCommunities: (force?: boolean) => Promise<void>;
   detectCommunityFromGPS: () => Promise<GpsDetection>;
   resolveCommunityFromText: (text: string) => SmartMatchResult | null;
+  /**
+   * For a signed-in customer with no area chosen on this device: the area they chose before (kept on their profile) or
+   * the one their saved address is in. Tried once per account per session.
+   */
+  restoreSavedArea: (userId: string, profile?: { area?: string | null; city?: string | null }) => Promise<void>;
 }
+
+/** Accounts whose saved area was already looked up in this session (not persisted). */
+const restoredFor = new Set<string>();
 
 export const useCommunityStore = create<CommunityState>()(
   persist(
@@ -46,6 +56,31 @@ export const useCommunityStore = create<CommunityState>()(
       resolveCommunityFromText: (text: string) => {
         const list = get().communities;
         return resolveLocationSmart({ text }, list);
+      },
+
+      restoreSavedArea: async (userId, profile) => {
+        if (get().selectedCommunity || restoredFor.has(userId)) return;
+        restoredFor.add(userId);
+        await get().loadCommunities();
+        const list = get().communities;
+        if (list.length === 0) return;
+        const hints: AreaHint[] = [{ area: profile?.area, city: profile?.city }];
+        let found = findSavedArea(list, hints);
+        if (!found) {
+          try {
+            // The API also says which area an address is in (not yet in the shared Address type).
+            const saved = ((await addressService.getAddresses()).data ?? []) as Array<Address & { communityId?: string | null }>;
+            const ordered = [...saved].sort((a, b) => Number(b.isDefault) - Number(a.isDefault));
+            found = findSavedArea(
+              list,
+              ordered.flatMap((a) => [{ communityId: a.communityId }, { area: a.area, city: a.city }]),
+            );
+          } catch {
+            // No addresses to go by: the customer chooses.
+          }
+        }
+        // The customer may have chosen an area while this was being worked out; their choice stands.
+        if (found && !get().selectedCommunity) set({ selectedCommunity: found });
       },
 
       loadCommunities: async (force = false) => {

@@ -3,12 +3,17 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
+import { ChevronRight } from 'lucide-react';
 import { AdminShell } from '@/components/layout/AdminShell';
+import { Figure, LoadingLine, PageHeader, PhoneText, StatusPill } from '@/components/admin/AdminListParts';
+import { AdminFilterTabs } from '@/components/admin/AdminFilterTabs';
+import { LoadError } from '@/components/ui/LoadError';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { useDialogs } from '@/components/ui/Dialogs';
 import { apiClient, apiErrorMessage } from '@/lib/api-client';
-import { formatPrice, formatDateTime } from '@/lib/utils';
+import { formatPrice } from '@/lib/utils';
+import { formatDateTime } from '@/components/admin/admin-dates';
 import { LEDGER_LABELS, RiderLedgerEntry, RiderMoneySummary } from '@/lib/services/rider.service';
 
 interface RiderMoneyDetail extends RiderMoneySummary {
@@ -32,6 +37,10 @@ interface RiderMoneyDetail extends RiderMoneySummary {
   pagination: { page: number; totalPages: number; total: number };
 }
 
+type MoneyForm = 'settle' | 'payout' | 'adjust';
+
+const STANDING_LABEL: Record<string, string> = { active: 'Active', suspended: 'Suspended', inactive: 'Inactive' };
+
 const toAmount = (v: string) => (v.trim() === '' ? 0 : Number(v));
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -45,6 +54,8 @@ export default function AdminRiderMoneyPage() {
   const [entries, setEntries] = useState<RiderLedgerEntry[]>([]);
   const [page, setPage] = useState(1);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadErrorRaw, setLoadErrorRaw] = useState<unknown>(null);
+  const [form, setForm] = useState<MoneyForm | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
   const [handedIn, setHandedIn] = useState('');
@@ -70,7 +81,8 @@ export default function AdminRiderMoneyPage() {
       setLimit(d.rider.cashLimitIsDefault ? '' : String(d.cashLimit));
       setCommunityId(d.rider.communityId ?? '');
     } catch (error) {
-      setLoadError(apiErrorMessage(error, 'Failed to load this rider'));
+      setLoadErrorRaw(error);
+      setLoadError(apiErrorMessage(error, "We couldn't load this rider"));
     }
   }, [riderId]);
 
@@ -112,11 +124,9 @@ export default function AdminRiderMoneyPage() {
   if (loadError) {
     return (
       <AdminShell>
-        <div className="max-w-3xl mx-auto bg-white border border-red-200 rounded-lg p-8 text-center">
-          <p className="text-red-700 font-semibold">{loadError}</p>
-          <Link href="/admin/riders" className="text-sm text-gray-600 underline mt-3 inline-block">
-            Back to riders
-          </Link>
+        <div className="max-w-5xl">
+          <PageHeader title="Rider" back={{ href: '/admin/riders', label: 'All riders' }} />
+          <LoadError error={loadErrorRaw} onRetry={load} title={loadError} />
         </div>
       </AdminShell>
     );
@@ -125,7 +135,7 @@ export default function AdminRiderMoneyPage() {
   if (!data) {
     return (
       <AdminShell>
-        <div className="max-w-5xl mx-auto py-16 text-center text-gray-500">Loading rider…</div>
+        <LoadingLine text="Loading the rider" />
       </AdminShell>
     );
   }
@@ -160,132 +170,183 @@ export default function AdminRiderMoneyPage() {
   const payValid = toAmount(payAmount) > 0 && toAmount(payAmount) <= data.balance + 0.009;
   const adjValid = Number.isFinite(toAmount(adjAmount)) && toAmount(adjAmount) !== 0 && adjNote.trim().length > 0;
 
+  const shownForm: MoneyForm = form ?? (data.cashHeld > 0 ? 'settle' : data.balance > 0 ? 'payout' : 'settle');
+  const cashOverLimit = data.cashHeld >= data.cashLimit && data.cashHeld > 0;
+  const field = 'nuray-input mt-1 w-full text-sm';
+  const fieldLabel = 'block text-sm font-medium text-ink';
+
   return (
     <AdminShell>
-      <div className="max-w-5xl mx-auto space-y-5 pb-16">
-        <div>
-          <Link href="/admin/riders" className="text-sm text-gray-500 hover:underline">
-            ← Riders
-          </Link>
-          <div className="mt-2 flex flex-wrap items-center gap-3">
-            <h1 className="text-3xl font-bold text-gray-900">{rider.name || 'Name not set'}</h1>
-            <span className={`px-2 py-1 rounded text-xs font-semibold ${rider.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-              {rider.status}
-            </span>
-            {rider.isAvailable && rider.status === 'active' && <span className="px-2 py-1 rounded text-xs font-semibold bg-blue-100 text-blue-800">On duty</span>}
-            {rider.verificationStatus === 'approved' && (
+      <div className="max-w-5xl pb-16">
+        <PageHeader
+          back={{ href: '/admin/riders', label: 'All riders' }}
+          title={rider.name || 'Name not set'}
+          badges={
+            <>
+              <StatusPill tone={rider.status === 'active' ? 'good' : 'problem'}>{STANDING_LABEL[rider.status] ?? rider.status}</StatusPill>
+              {rider.isAvailable && rider.status === 'active' && <StatusPill tone="good">On duty</StatusPill>}
+            </>
+          }
+          subtitle={
+            <>
+              {[
+                rider.city,
+                [rider.vehicleType ? rider.vehicleType.charAt(0).toUpperCase() + rider.vehicleType.slice(1) : null, rider.vehicleNumber].filter(Boolean).join(' '),
+                `${rider.totalDeliveries} ${rider.totalDeliveries === 1 ? 'delivery' : 'deliveries'}`,
+                rider.ratingAverage > 0 ? `${rider.ratingAverage.toFixed(1)} stars` : null,
+              ]
+                .filter(Boolean)
+                .join(' · ')}
+              <span className="block">
+                <PhoneText phone={rider.phone} />
+              </span>
+            </>
+          }
+          actions={
+            rider.verificationStatus === 'approved' && (
               <Button
                 variant="outline"
-                size="sm"
                 disabled={busy !== null}
                 onClick={() => changeStanding(rider.status === 'active' ? 'suspended' : 'active')}
-                className={rider.status === 'active' ? 'border-red-200 text-red-700' : ''}
+                className={rider.status === 'active' ? 'text-red-700' : ''}
               >
                 {rider.status === 'active' ? 'Suspend rider' : 'Reactivate rider'}
               </Button>
-            )}
-          </div>
-          <p className="text-sm text-gray-600 mt-1">
-            {rider.phone || '—'} · {rider.city}
-            {rider.vehicleType ? ` · ${rider.vehicleType}` : ''}
-            {rider.vehicleNumber ? ` ${rider.vehicleNumber}` : ''} · {rider.totalDeliveries} {rider.totalDeliveries === 1 ? 'delivery' : 'deliveries'}
-            {rider.ratingAverage > 0 ? ` · ★ ${rider.ratingAverage.toFixed(1)}` : ''}
-          </p>
-        </div>
+            )
+          }
+        />
 
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <Stat label="Cash in hand" value={formatPrice(data.cashHeld)} hint={`Limit ${formatPrice(data.cashLimit)}`} tone={data.cashHeld >= data.cashLimit && data.cashHeld > 0 ? 'red' : undefined} testId="admin-rider-cash" />
-          <Stat
-            label={data.balance >= 0 ? 'Nuray owes rider' : 'Rider owes Nuray'}
-            value={formatPrice(Math.abs(data.balance))}
-            hint="Pay earned, less cash held and payouts"
-            testId="admin-rider-balance"
-          />
-          <Stat label="Unpaid pay" value={formatPrice(Math.max(0, data.unpaid))} hint="Earned and not yet paid" />
-          <Stat label="Earned this week" value={formatPrice(data.earnedThisWeek)} hint={`Today ${formatPrice(data.earnedToday)} · ${data.deliveriesThisWeek} ${data.deliveriesThisWeek === 1 ? 'delivery' : 'deliveries'}`} />
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-          <section className="bg-white border border-gray-200 rounded-lg p-5 space-y-3">
-            <h2 className="font-bold text-gray-900">Settle up (cash handed in at a hub)</h2>
-            <p className="text-xs text-gray-500">
-              Count the cash the rider hands over. They can keep up to their unpaid pay from the cash they hold; that is recorded
-              as a payout.
+        <div className="grid grid-cols-2 gap-x-6 gap-y-5 lg:grid-cols-4">
+          <div>
+            <p className="text-sm text-muted">Cash in hand</p>
+            <p className={`mt-0.5 text-2xl font-semibold tabular-nums ${cashOverLimit ? 'text-red-700' : 'text-ink'}`} data-testid="admin-rider-cash">
+              {formatPrice(data.cashHeld)}
             </p>
-            {data.cashHeld > 0 && (
-              <button
-                type="button"
-                className="text-xs font-semibold text-green-700 hover:underline"
-                onClick={() => {
-                  setKept(suggestedKeep ? String(suggestedKeep) : '');
-                  setHandedIn(String(round2(data.cashHeld - suggestedKeep)));
-                }}
-              >
-                Fill in a full settle-up (keeps {formatPrice(suggestedKeep)}, hands in {formatPrice(round2(data.cashHeld - suggestedKeep))})
-              </button>
-            )}
-            <div className="grid grid-cols-2 gap-3">
-              <label className="text-xs font-semibold text-gray-700">
-                Cash handed in (Rs)
-                <input type="number" min={0} step="0.01" value={handedIn} onChange={(e) => setHandedIn(e.target.value)} className="mt-1 w-full px-3 py-2 rounded-lg border border-gray-200 text-sm" data-testid="settle-handed-in" />
-              </label>
-              <label className="text-xs font-semibold text-gray-700">
-                Pay kept from cash (Rs)
-                <input type="number" min={0} step="0.01" value={kept} onChange={(e) => setKept(e.target.value)} className="mt-1 w-full px-3 py-2 rounded-lg border border-gray-200 text-sm" data-testid="settle-kept" />
-              </label>
-            </div>
-            <input value={settleRef} onChange={(e) => setSettleRef(e.target.value)} placeholder="Receipt / reference (optional)" className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm" />
-            <input value={settleNote} onChange={(e) => setSettleNote(e.target.value)} placeholder="Note (optional), e.g. which hub" className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm" />
-            {settleTotal > 0 && (
-              <p className={`text-xs ${settleValid ? 'text-gray-600' : 'text-red-700'}`}>
-                {settleValid
-                  ? `After this: cash in hand ${formatPrice(cashAfter)}, ${balanceAfter >= 0 ? 'Nuray owes rider' : 'rider owes Nuray'} ${formatPrice(Math.abs(balanceAfter))}.`
-                  : settleTotal > data.cashHeld
-                    ? `The rider only holds ${formatPrice(data.cashHeld)}.`
-                    : `The rider can keep at most ${formatPrice(Math.max(0, data.unpaid))} of pay.`}
-              </p>
-            )}
-            <Button
-              disabled={!settleValid || busy !== null}
-              onClick={() =>
-                submit(
-                  'settle',
-                  () =>
-                    apiClient.post(`/admin/riders/${riderId}/settlements`, {
-                      cashHandedIn: toAmount(handedIn),
-                      keptAsPay: toAmount(kept),
-                      reference: settleRef || undefined,
-                      note: settleNote || undefined,
-                    }),
-                  'Settlement recorded',
-                  () => {
-                    setHandedIn('');
-                    setKept('');
-                    setSettleRef('');
-                    setSettleNote('');
-                  }
-                )
-              }
-              className="bg-green-600 hover:bg-green-700 text-white"
-              data-testid="settle-submit"
-            >
-              {busy === 'settle' ? 'Recording…' : 'Record settlement'}
-            </Button>
-          </section>
+            <p className={`mt-0.5 text-xs ${cashOverLimit ? 'text-red-700' : 'text-muted'}`}>{cashOverLimit ? 'At the limit: no cash orders' : `Limit ${formatPrice(data.cashLimit)}`}</p>
+          </div>
+          <div>
+            <p className="text-sm text-muted">{data.balance >= 0 ? 'Nuray owes the rider' : 'Rider owes Nuray'}</p>
+            <p className="mt-0.5 text-2xl font-semibold text-ink tabular-nums" data-testid="admin-rider-balance">
+              {formatPrice(Math.abs(data.balance))}
+            </p>
+            <p className="mt-0.5 text-xs text-muted">Pay earned, less cash held and payouts</p>
+          </div>
+          <Figure label="Unpaid pay" value={formatPrice(Math.max(0, data.unpaid))} sub="Earned and not yet paid" />
+          <Figure
+            label="Earned this week"
+            value={formatPrice(data.earnedThisWeek)}
+            sub={`Today ${formatPrice(data.earnedToday)} · ${data.deliveriesThisWeek} ${data.deliveriesThisWeek === 1 ? 'delivery' : 'deliveries'}`}
+          />
+        </div>
 
-          <div className="space-y-5">
-            <section className="bg-white border border-gray-200 rounded-lg p-5 space-y-3">
-              <h2 className="font-bold text-gray-900">Pay the rider by transfer</h2>
-              <p className="text-xs text-gray-500">
-                {data.balance > 0 ? `Nuray owes this rider ${formatPrice(data.balance)}.` : 'Nuray owes this rider nothing right now.'} Record a bank,
-                JazzCash or EasyPaisa transfer after sending it.
+        <section aria-label="Record money" className="mt-8 rounded-2xl border border-line bg-surface p-4 shadow-[var(--shadow-card)] sm:p-5">
+          <AdminFilterTabs
+            label="What to record"
+            value={shownForm}
+            onChange={setForm}
+            tabs={[
+              { id: 'settle', label: 'Settle up' },
+              { id: 'payout', label: 'Pay by transfer' },
+              { id: 'adjust', label: 'Correction' },
+            ]}
+            className="mb-4"
+          />
+
+          {shownForm === 'settle' && (
+            <div className="space-y-3">
+              <p className="text-sm text-muted">
+                Count the cash the rider hands in at a hub. They can keep up to their unpaid pay from it; that part is recorded as a payout.
               </p>
-              <div className="grid grid-cols-2 gap-3">
-                <input type="number" min={0} step="0.01" value={payAmount} onChange={(e) => setPayAmount(e.target.value)} placeholder="Amount (Rs)" className="px-3 py-2 rounded-lg border border-gray-200 text-sm" />
-                <input value={payRef} onChange={(e) => setPayRef(e.target.value)} placeholder="Transaction ID" className="px-3 py-2 rounded-lg border border-gray-200 text-sm" />
+              {data.cashHeld > 0 && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="px-0"
+                  onClick={() => {
+                    setKept(suggestedKeep ? String(suggestedKeep) : '');
+                    setHandedIn(String(round2(data.cashHeld - suggestedKeep)));
+                  }}
+                >
+                  Fill in a full settle-up: keeps {formatPrice(suggestedKeep)}, hands in {formatPrice(round2(data.cashHeld - suggestedKeep))}
+                </Button>
+              )}
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className={fieldLabel}>
+                  Cash handed in (Rs)
+                  <input type="number" inputMode="decimal" min={0} step="0.01" value={handedIn} onChange={(e) => setHandedIn(e.target.value)} className={field} data-testid="settle-handed-in" />
+                </label>
+                <label className={fieldLabel}>
+                  Pay kept from the cash (Rs)
+                  <input type="number" inputMode="decimal" min={0} step="0.01" value={kept} onChange={(e) => setKept(e.target.value)} className={field} data-testid="settle-kept" />
+                </label>
+                <label className={fieldLabel}>
+                  Receipt or reference <span className="font-normal text-muted">(optional)</span>
+                  <input value={settleRef} onChange={(e) => setSettleRef(e.target.value)} className={field} />
+                </label>
+                <label className={fieldLabel}>
+                  Note <span className="font-normal text-muted">(optional)</span>
+                  <input value={settleNote} onChange={(e) => setSettleNote(e.target.value)} placeholder="Which hub, for example" className={field} />
+                </label>
               </div>
+              {settleTotal > 0 && (
+                <p className={`text-sm ${settleValid ? 'text-muted' : 'text-red-700'}`} role="status">
+                  {settleValid
+                    ? `After this: cash in hand ${formatPrice(cashAfter)}, ${balanceAfter >= 0 ? 'Nuray owes the rider' : 'the rider owes Nuray'} ${formatPrice(Math.abs(balanceAfter))}.`
+                    : settleTotal > data.cashHeld
+                      ? `The rider only holds ${formatPrice(data.cashHeld)}.`
+                      : `The rider can keep at most ${formatPrice(Math.max(0, data.unpaid))} of pay.`}
+                </p>
+              )}
               <Button
-                variant="outline"
+                disabled={!settleValid || busy !== null}
+                onClick={() =>
+                  submit(
+                    'settle',
+                    () =>
+                      apiClient.post(`/admin/riders/${riderId}/settlements`, {
+                        cashHandedIn: toAmount(handedIn),
+                        keptAsPay: toAmount(kept),
+                        reference: settleRef || undefined,
+                        note: settleNote || undefined,
+                      }),
+                    'Settlement recorded',
+                    () => {
+                      setHandedIn('');
+                      setKept('');
+                      setSettleRef('');
+                      setSettleNote('');
+                    }
+                  )
+                }
+                data-testid="settle-submit"
+              >
+                {busy === 'settle' ? 'Recording…' : 'Record settlement'}
+              </Button>
+            </div>
+          )}
+
+          {shownForm === 'payout' && (
+            <div className="space-y-3">
+              <p className="text-sm text-muted">
+                {data.balance > 0 ? `Nuray owes this rider ${formatPrice(data.balance)}.` : 'Nuray owes this rider nothing right now.'} Record a bank, JazzCash or
+                EasyPaisa transfer after sending it.
+              </p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className={fieldLabel}>
+                  Amount sent (Rs)
+                  <input type="number" inputMode="decimal" min={0} step="0.01" value={payAmount} onChange={(e) => setPayAmount(e.target.value)} className={field} />
+                </label>
+                <label className={fieldLabel}>
+                  Transaction id <span className="font-normal text-muted">(optional)</span>
+                  <input value={payRef} onChange={(e) => setPayRef(e.target.value)} className={field} />
+                </label>
+              </div>
+              {toAmount(payAmount) > data.balance + 0.009 && (
+                <p className="text-sm text-red-700" role="status">
+                  That is more than Nuray owes the rider ({formatPrice(Math.max(0, data.balance))}).
+                </p>
+              )}
+              <Button
                 disabled={!payValid || busy !== null}
                 onClick={() =>
                   submit(
@@ -301,17 +362,25 @@ export default function AdminRiderMoneyPage() {
               >
                 {busy === 'payout' ? 'Recording…' : 'Record payout'}
               </Button>
-            </section>
+            </div>
+          )}
 
-            <section className="bg-white border border-gray-200 rounded-lg p-5 space-y-3">
-              <h2 className="font-bold text-gray-900">Correction</h2>
-              <p className="text-xs text-gray-500">Positive adds to what Nuray owes the rider (e.g. pay for a failed delivery that wasn&apos;t their fault); negative takes away.</p>
-              <div className="grid grid-cols-3 gap-3">
-                <input type="number" step="0.01" value={adjAmount} onChange={(e) => setAdjAmount(e.target.value)} placeholder="± Rs" className="px-3 py-2 rounded-lg border border-gray-200 text-sm" />
-                <input value={adjNote} onChange={(e) => setAdjNote(e.target.value)} placeholder="What it's for (required)" className="col-span-2 px-3 py-2 rounded-lg border border-gray-200 text-sm" />
+          {shownForm === 'adjust' && (
+            <div className="space-y-3">
+              <p className="text-sm text-muted">
+                A positive amount adds to what Nuray owes the rider, for example pay for a failed delivery that wasn&apos;t their fault. A negative one takes it away.
+              </p>
+              <div className="grid gap-3 sm:grid-cols-[10rem_1fr]">
+                <label className={fieldLabel}>
+                  Amount (Rs, + or −)
+                  <input type="number" inputMode="decimal" step="0.01" value={adjAmount} onChange={(e) => setAdjAmount(e.target.value)} className={field} />
+                </label>
+                <label className={fieldLabel}>
+                  What it&apos;s for
+                  <input value={adjNote} onChange={(e) => setAdjNote(e.target.value)} className={field} />
+                </label>
               </div>
               <Button
-                variant="outline"
                 disabled={!adjValid || busy !== null}
                 onClick={() =>
                   submit(
@@ -327,15 +396,22 @@ export default function AdminRiderMoneyPage() {
               >
                 {busy === 'adjust' ? 'Recording…' : 'Record correction'}
               </Button>
-            </section>
+            </div>
+          )}
+        </section>
 
-            <section className="bg-white border border-gray-200 rounded-lg p-5 space-y-3">
-              <h2 className="font-bold text-gray-900">Community served</h2>
-              <p className="text-xs text-gray-500">
-                New delivery jobs in or from this community are assigned to this rider first (a rider with room, nearest to a trip they already carry first).
-              </p>
-              <div className="flex gap-2">
-                <select value={communityId} onChange={(e) => setCommunityId(e.target.value)} className="flex-1 px-3 py-2 rounded-lg border border-gray-200 text-sm" data-testid="admin-rider-community">
+        <section aria-labelledby="assignment-heading" className="mt-8 border-t border-line pt-6">
+          <h2 id="assignment-heading" className="mb-4 text-sm font-semibold text-ink">
+            Jobs and cash
+          </h2>
+          <div className="grid gap-6 lg:grid-cols-2">
+            <div>
+              <label htmlFor="rider-community" className={fieldLabel}>
+                Community served
+              </label>
+              <p className="text-xs text-muted">New jobs in or from this community go to this rider first.</p>
+              <div className="mt-1 flex gap-2">
+                <select id="rider-community" value={communityId} onChange={(e) => setCommunityId(e.target.value)} className="nuray-input min-w-0 flex-1 text-sm" data-testid="admin-rider-community">
                   <option value="">No community (any job)</option>
                   {communities.map((c) => (
                     <option key={c.id} value={c.id}>{c.name}</option>
@@ -343,103 +419,83 @@ export default function AdminRiderMoneyPage() {
                 </select>
                 <Button
                   variant="outline"
-                  disabled={busy !== null}
-                  onClick={() =>
-                    submit('community', () => apiClient.patch(`/admin/riders/${riderId}/community`, { communityId: communityId || null }), 'Community updated', () => {})
-                  }
+                  disabled={busy !== null || communityId === (rider.communityId ?? '')}
+                  onClick={() => submit('community', () => apiClient.patch(`/admin/riders/${riderId}/community`, { communityId: communityId || null }), 'Community updated', () => {})}
                 >
                   {busy === 'community' ? 'Saving…' : 'Save'}
                 </Button>
               </div>
-            </section>
-
-            <section className="bg-white border border-gray-200 rounded-lg p-5 space-y-3">
-              <h2 className="font-bold text-gray-900">Cash limit</h2>
-              <p className="text-xs text-gray-500">
-                Cash orders stop being offered once the rider holds this much. {rider.cashLimitIsDefault ? 'Using the default.' : 'Custom for this rider.'}
+            </div>
+            <div>
+              <label htmlFor="rider-cash-limit" className={fieldLabel}>
+                Cash limit (Rs)
+              </label>
+              <p className="text-xs text-muted">
+                Cash orders stop being offered at this much. {rider.cashLimitIsDefault ? 'Using the default.' : 'Set for this rider.'}
               </p>
-              <div className="flex gap-2">
-                <input type="number" min={0} step="100" value={limit} onChange={(e) => setLimit(e.target.value)} placeholder={`Default (${formatPrice(data.cashLimit)})`} className="flex-1 px-3 py-2 rounded-lg border border-gray-200 text-sm" />
+              <div className="mt-1 flex gap-2">
+                <input id="rider-cash-limit" type="number" inputMode="numeric" min={0} step="100" value={limit} onChange={(e) => setLimit(e.target.value)} placeholder={`Default (${formatPrice(data.cashLimit)})`} className="nuray-input min-w-0 flex-1 text-sm" />
                 <Button
                   variant="outline"
                   disabled={busy !== null}
                   onClick={() =>
-                    submit(
-                      'limit',
-                      () => apiClient.patch(`/admin/riders/${riderId}/cash-limit`, { cashLimit: limit.trim() === '' ? null : Number(limit) }),
-                      'Cash limit updated',
-                      () => {}
-                    )
+                    submit('limit', () => apiClient.patch(`/admin/riders/${riderId}/cash-limit`, { cashLimit: limit.trim() === '' ? null : Number(limit) }), 'Cash limit updated', () => {})
                   }
                 >
                   {busy === 'limit' ? 'Saving…' : limit.trim() === '' ? 'Use default' : 'Save'}
                 </Button>
               </div>
-            </section>
+            </div>
           </div>
-        </div>
+        </section>
 
-        <section className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-          <h2 className="px-5 pt-5 font-bold text-gray-900">History</h2>
+        <section aria-labelledby="history-heading" className="mt-8 border-t border-line pt-6">
+          <h2 id="history-heading" className="mb-2 text-sm font-semibold text-ink">
+            History
+          </h2>
           {entries.length === 0 ? (
-            <p className="px-5 py-8 text-sm text-gray-500">No entries yet.</p>
+            <p className="text-sm text-muted">Nothing yet. Cash collected, pay earned and settlements show up here.</p>
           ) : (
-            <table className="w-full text-sm mt-3" data-testid="admin-rider-ledger">
-              <thead className="bg-gray-50 text-start text-xs uppercase tracking-wide text-gray-500">
-                <tr>
-                  <th className="px-5 py-2">When</th>
-                  <th className="px-5 py-2">What</th>
-                  <th className="px-5 py-2">Details</th>
-                  <th className="px-5 py-2 text-end">Amount</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {entries.map((e) => (
-                  <tr key={e.id}>
-                    <td className="px-5 py-2.5 text-xs text-gray-500 whitespace-nowrap">{formatDateTime(e.createdAt)}</td>
-                    <td className="px-5 py-2.5 font-medium text-gray-900">{LEDGER_LABELS[e.type] ?? e.type}</td>
-                    <td className="px-5 py-2.5 text-xs text-gray-600">
-                      {e.note}
-                      {e.reference ? ` · Ref ${e.reference}` : ''}
-                      {e.orderId && (
-                        <>
-                          {' · '}
-                          <Link href={`/admin/orders/${e.orderId}`} className="underline">
-                            order
-                          </Link>
-                        </>
-                      )}
-                    </td>
-                    <td className={`px-5 py-2.5 text-end font-semibold ${e.amount > 0 ? 'text-emerald-700' : 'text-gray-900'}`}>
+            <ul className="divide-y divide-line border-y border-line" data-testid="admin-rider-ledger">
+              {entries.map((e) => {
+                const body = (
+                  <>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-ink">{LEDGER_LABELS[e.type] ?? e.type}</p>
+                      <p className="text-xs text-muted break-words">
+                        {formatDateTime(e.createdAt)}
+                        {e.note ? ` · ${e.note}` : ''}
+                        {e.reference ? ` · Ref ${e.reference}` : ''}
+                      </p>
+                    </div>
+                    <span className={`shrink-0 text-sm font-semibold tabular-nums ${e.amount > 0 ? 'text-brand-ink' : 'text-ink'}`}>
                       {e.amount > 0 ? '+' : '−'}
                       {formatPrice(Math.abs(e.amount))}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                    </span>
+                  </>
+                );
+                return (
+                  <li key={e.id}>
+                    {e.orderId ? (
+                      <Link href={`/admin/orders/${e.orderId}`} className="flex min-h-14 items-center gap-3 py-2.5 hover:bg-page">
+                        {body}
+                        <ChevronRight aria-hidden="true" className="h-4 w-4 shrink-0 text-muted rtl:rotate-180" />
+                      </Link>
+                    ) : (
+                      <div className="flex min-h-14 items-center gap-3 py-2.5">{body}</div>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
           )}
           {page < data.pagination.totalPages && (
-            <div className="p-4 text-center border-t border-gray-100">
-              <button type="button" onClick={loadMore} className="text-sm font-semibold text-green-700 hover:underline">
-                Show older
-              </button>
-            </div>
+            <Button variant="outline" onClick={loadMore} className="mt-4">
+              Show older
+            </Button>
           )}
         </section>
       </div>
     </AdminShell>
-  );
-}
-
-function Stat({ label, value, hint, tone, testId }: { label: string; value: string; hint?: string; tone?: 'red'; testId?: string }) {
-  return (
-    <div className="bg-white border border-gray-200 rounded-lg p-4">
-      <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">{label}</p>
-      <p className={`text-2xl font-bold mt-1 ${tone === 'red' ? 'text-red-700' : 'text-gray-900'}`} data-testid={testId}>
-        {value}
-      </p>
-      {hint && <p className="text-xs text-gray-500 mt-1">{hint}</p>}
-    </div>
   );
 }

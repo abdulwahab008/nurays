@@ -1,10 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { loginUrlHere } from '@/lib/auth-redirect';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Bike, Store, ArrowRight, MapPin, Plus, X } from 'lucide-react';
+import { X } from 'lucide-react';
 import { DashboardLayout, SELLER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { Button } from '@/components/ui/button';
 import { LoadError } from '@/components/ui/LoadError';
@@ -13,46 +13,111 @@ import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient, apiErrorDetails, apiErrorMessage } from '@/lib/api-client';
 import { DatePicker } from '@/components/ui/DatePicker';
+import LocationMap from '@/components/ui/LocationMap';
 import { bankAccountIsWrong, walletNumberIsWrong } from '@/lib/payout-account';
 import { sendAskingForPassword } from '@/lib/send-asking-for-password';
 import { useShallow } from 'zustand/react/shallow';
+import { useT } from '@/lib/i18n';
+import { kitchenSettingsMessages } from '@/lib/i18n/messages/kitchen-settings';
 
 const MEAL_CATEGORIES = [
-  { value: 'breakfast', label: 'Breakfast' },
-  { value: 'brunch', label: 'Brunch' },
-  { value: 'lunch', label: 'Lunch' },
-  { value: 'evening_snacks', label: 'Evening Snacks' },
-  { value: 'dinner', label: 'Dinner' },
-  { value: 'late_night', label: 'Late Night' },
-  { value: 'desserts', label: 'Desserts' },
-  { value: 'beverages', label: 'Beverages' },
-];
+  { value: 'breakfast', label: 'meal.breakfast' },
+  { value: 'brunch', label: 'meal.brunch' },
+  { value: 'lunch', label: 'meal.lunch' },
+  { value: 'evening_snacks', label: 'meal.evening_snacks' },
+  { value: 'dinner', label: 'meal.dinner' },
+  { value: 'late_night', label: 'meal.late_night' },
+  { value: 'desserts', label: 'meal.desserts' },
+  { value: 'beverages', label: 'meal.beverages' },
+] as const;
 
 const BUSINESS_TYPES = [
-  { value: 'home_kitchen', label: 'Home Kitchen' },
-  { value: 'restaurant', label: 'Restaurant' },
-  { value: 'bakery', label: 'Bakery' },
-  { value: 'cafe', label: 'Café' },
-  { value: 'cloud_kitchen', label: 'Cloud Kitchen' },
-];
+  { value: 'home_kitchen', label: 'type.home_kitchen' },
+  { value: 'restaurant', label: 'type.restaurant' },
+  { value: 'bakery', label: 'type.bakery' },
+  { value: 'cafe', label: 'type.cafe' },
+  { value: 'cloud_kitchen', label: 'type.cloud_kitchen' },
+] as const;
 
-const WALLET_NUMBER_PROBLEM = 'Enter a Pakistani mobile number such as 03001234567.';
-const BANK_ACCOUNT_PROBLEM = 'Enter an IBAN such as PK36SCBL0000001123456702, or an account number of 8 to 20 digits.';
+
+type ScheduleMode = '24_7' | 'fixed_daily' | 'per_day';
+
+const SCHEDULE_MODES = [
+  { value: '24_7', label: 'mode.24_7', hint: 'mode.24_7.hint' },
+  { value: 'fixed_daily', label: 'mode.fixed_daily', hint: 'mode.fixed_daily.hint' },
+  { value: 'per_day', label: 'mode.per_day', hint: 'mode.per_day.hint' },
+] as const;
+
+const WEEK_DAYS = [
+  { key: 'monday', label: 'day.monday' },
+  { key: 'tuesday', label: 'day.tuesday' },
+  { key: 'wednesday', label: 'day.wednesday' },
+  { key: 'thursday', label: 'day.thursday' },
+  { key: 'friday', label: 'day.friday' },
+  { key: 'saturday', label: 'day.saturday' },
+  { key: 'sunday', label: 'day.sunday' },
+] as const;
+type WeekDay = (typeof WEEK_DAYS)[number]['key'];
+type Session = { name: string; open: string; close: string };
+// One row per day on the form. A day saved earlier with more than one session keeps the others as they were (`more`).
+type DayHours = { closed: boolean; open: string; close: string; more: Session[] };
+type WeekHours = Record<WeekDay, DayHours>;
+
+const toMinutes = (hhmm: string) => {
+  const [h, m] = hhmm.split(':').map(Number);
+  return h * 60 + m;
+};
+
+/** Is `time` inside the open hours `open`–`close`? Closing at or before opening means the kitchen stays open past midnight. */
+const insideHours = (time: string, open: string, close: string) => {
+  const t = toMinutes(time);
+  const o = toMinutes(open);
+  const c = toMinutes(close);
+  return c > o ? t >= o && t <= c : t >= o || t <= c;
+};
+
+function weekFromSaved(weekly: unknown, fallbackOpen: string, fallbackClose: string): WeekHours {
+  const saved = (weekly && typeof weekly === 'object' ? weekly : {}) as Partial<Record<WeekDay, { closed?: boolean; sessions?: Session[] }>>;
+  const week = {} as WeekHours;
+  for (const { key } of WEEK_DAYS) {
+    const day = saved[key];
+    const sessions = Array.isArray(day?.sessions) ? day.sessions : [];
+    week[key] = day
+      ? { closed: Boolean(day.closed) || sessions.length === 0, open: sessions[0]?.open ?? '', close: sessions[0]?.close ?? '', more: sessions.slice(1) }
+      : { closed: false, open: fallbackOpen, close: fallbackClose, more: [] };
+  }
+  return week;
+}
 
 const AVAILABILITY_OVERRIDES = [
-  { value: '', label: 'Normal Schedule' },
-  { value: 'open', label: 'Force Open' },
-  { value: 'closed', label: 'Temporarily Closed' },
-  { value: 'busy', label: 'Kitchen Busy' },
-  { value: 'vacation', label: 'On Vacation' },
-];
+  { value: '', label: 'override.none' },
+  { value: 'open', label: 'override.open' },
+  { value: 'closed', label: 'override.closed' },
+  { value: 'busy', label: 'override.busy' },
+  { value: 'vacation', label: 'override.vacation' },
+] as const;
+
+const TABS = [
+  { id: 'hours', label: 'hours' },
+  { id: 'kitchen', label: 'kitchen' },
+  { id: 'location', label: 'location' },
+  { id: 'delivery', label: 'delivery' },
+  { id: 'payout', label: 'accounts' },
+  { id: 'stock', label: 'runningLow' },
+] as const;
+type SettingsTab = (typeof TABS)[number]['id'];
+
+/** Moves focus once the tab just chosen has rendered. */
+const focusSoon = (id: string) => requestAnimationFrame(() => document.getElementById(id)?.focus());
 
 export default function SellerSettingsPage() {
   const router = useRouter();
   const { isAuthenticated, user } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated, user: s.user })));
   const { showToast } = useToast();
   const { ask: askDialog } = useDialogs();
+  const t = useT(kitchenSettingsMessages);
   const [loading, setLoading] = useState(false);
+  const [tab, setTab] = useState<SettingsTab>('hours');
   // Why the kitchen's settings could not be read. Until they were read there is no form: it would hold blanks and made-up defaults,
   // and saving them would replace the kitchen's real profile, payout accounts, delivery terms and hours.
   const [loadError, setLoadError] = useState<unknown>(null);
@@ -62,6 +127,11 @@ export default function SellerSettingsPage() {
   // The numbers the server holds (as loaded, or as last saved). One the kitchen has not touched is not checked again: it may have been
   // saved before the numbers were checked, and it must not stop the rest of the settings from being saved.
   const [heldNumbers, setHeldNumbers] = useState({ jazzcashNumber: '', easypaisaNumber: '', bankAccountNumber: '' });
+
+  // What is wrong with the hours typed in the form, by field (open-time, close-time, cutoff-time, or a day's key).
+  const [hoursErrors, setHoursErrors] = useState<Record<string, string>>({});
+  // Where the map opens when the kitchen has no pin yet: the middle of its community.
+  const [communityCentre, setCommunityCentre] = useState<{ lat: number; lng: number } | null>(null);
 
   const [deliveryModel, setDeliveryModel] = useState<'model_a' | 'model_b'>('model_b');
   const [newAreaInput, setNewAreaInput] = useState('');
@@ -85,8 +155,11 @@ export default function SellerSettingsPage() {
     // Delivery fields
     freeDeliveryAreas: [] as string[],
     freeDeliveryRadiusKm: null as number | null,
-    latitude: 31.4720 as number | null,
-    longitude: 74.4530 as number | null,
+    latitude: null as number | null,
+    longitude: null as number | null,
+    pickupAddress: '',
+    pickupLandmark: '',
+    pickupPhone: '',
     deliveryFeeType: 'fixed' as '' | 'fixed' | 'distance',
     deliveryFeeFixed: 50 as number | null,
     deliveryFeeBase: 40 as number | null,
@@ -100,9 +173,10 @@ export default function SellerSettingsPage() {
     mealCategories: [] as string[],
     storeNotice: '',
 
-    scheduleMode: 'fixed_daily' as '24_7' | 'fixed_daily' | 'per_day',
-    fixedDailyOpen: '09:00',
-    fixedDailyClose: '22:00',
+    scheduleMode: '24_7' as ScheduleMode,
+    fixedDailyOpen: '',
+    fixedDailyClose: '',
+    weekly: weekFromSaved(null, '', ''),
 
     availabilityOverride: '' as string,
     availabilityOverrideUntil: '' as string,
@@ -115,6 +189,9 @@ export default function SellerSettingsPage() {
     advanceBookingMinDays: null as number | null,
     advanceBookingMaxDays: null as number | null,
   });
+  // The form as the server holds it (as loaded, or as last saved): Save changes stays quiet until the form differs from it.
+  const [savedForm, setSavedForm] = useState(formData);
+  const changed = JSON.stringify(formData) !== JSON.stringify(savedForm);
 
   const loadSettings = async () => {
     try {
@@ -123,7 +200,6 @@ export default function SellerSettingsPage() {
       const response = await apiClient.get('/sellers/me');
       if (response.data.success) {
         const seller = response.data.data;
-        const feeType = seller.deliveryFeeType || '';
 
         // deliveryProvider is the source of truth for who delivers; fee fields no longer imply it.
         setDeliveryModel(seller.deliveryProvider === 'self' ? 'model_b' : 'model_a');
@@ -133,7 +209,7 @@ export default function SellerSettingsPage() {
           easypaisaNumber: seller.easypaisaNumber || '',
           bankAccountNumber: seller.bankAccountNumber || '',
         });
-        setFormData({
+        const loaded: typeof formData = {
           businessName: seller.businessName || '',
           businessNameUrdu: seller.businessNameUrdu || '',
           description: seller.description || '',
@@ -151,8 +227,12 @@ export default function SellerSettingsPage() {
 
           freeDeliveryAreas: Array.isArray(seller.freeDeliveryAreas) ? seller.freeDeliveryAreas : [],
           freeDeliveryRadiusKm: seller.freeDeliveryRadiusKm ?? 2.5,
-          latitude: seller.latitude != null ? parseFloat(String(seller.latitude)) : 31.4720,
-          longitude: seller.longitude != null ? parseFloat(String(seller.longitude)) : 74.4530,
+          // No pin is no pin: a made-up one would send riders to the wrong street.
+          latitude: seller.latitude != null ? parseFloat(String(seller.latitude)) : null,
+          longitude: seller.longitude != null ? parseFloat(String(seller.longitude)) : null,
+          pickupAddress: seller.pickupAddress || '',
+          pickupLandmark: seller.pickupLandmark || '',
+          pickupPhone: seller.pickupPhone || '',
           deliveryFeeType: (seller.deliveryFeeType as '' | 'fixed' | 'distance') || 'fixed',
           deliveryFeeFixed: seller.deliveryFeeFixed ?? 50,
           deliveryFeeBase: seller.deliveryFeeBase ?? 40,
@@ -167,9 +247,15 @@ export default function SellerSettingsPage() {
           mealCategories: Array.isArray(seller.mealCategories) ? seller.mealCategories : [],
           storeNotice: seller.storeNotice || '',
 
-          scheduleMode: (seller.scheduleMode as '24_7' | 'fixed_daily' | 'per_day') || 'fixed_daily',
-          fixedDailyOpen: seller.operatingHours?.fixedDaily?.open || '09:00',
-          fixedDailyClose: seller.operatingHours?.fixedDaily?.close || '22:00',
+          // The server's default is always open; times are only shown when the kitchen saved some.
+          scheduleMode: SCHEDULE_MODES.some((m) => m.value === seller.scheduleMode) ? seller.scheduleMode : '24_7',
+          fixedDailyOpen: seller.operatingHours?.fixedDaily?.open || '',
+          fixedDailyClose: seller.operatingHours?.fixedDaily?.close || '',
+          weekly: weekFromSaved(
+            seller.operatingHours?.weekly,
+            seller.operatingHours?.fixedDaily?.open || '',
+            seller.operatingHours?.fixedDaily?.close || ''
+          ),
 
           availabilityOverride: seller.availabilityOverride || '',
           availabilityOverrideUntil: seller.availabilityOverrideUntil
@@ -183,8 +269,19 @@ export default function SellerSettingsPage() {
           preOrderOnly: seller.preOrderOnly ?? false,
           advanceBookingMinDays: seller.advanceBookingMinDays ?? null,
           advanceBookingMaxDays: seller.advanceBookingMaxDays ?? null,
-        });
+        };
+        setFormData(loaded);
+        setSavedForm(loaded);
         setSettingsRead(true);
+        if (loaded.latitude == null && seller.communityId) {
+          apiClient
+            .get('/communities')
+            .then((res) => {
+              const c = (res.data.data || []).find((x: { id: string }) => x.id === seller.communityId);
+              if (c?.centerLatitude != null && c?.centerLongitude != null) setCommunityCentre({ lat: Number(c.centerLatitude), lng: Number(c.centerLongitude) });
+            })
+            .catch(() => undefined);
+        }
       } else {
         throw new Error('The settings were not in the answer');
       }
@@ -196,15 +293,27 @@ export default function SellerSettingsPage() {
     }
   };
 
+  // Other pages link to a section, e.g. #payout-heading.
+  useEffect(() => {
+    const fromHash = () => {
+      const id = window.location.hash.replace('#', '').replace(/-heading$/, '');
+      const match = TABS.find((x) => x.id === id);
+      if (match) setTab(match.id);
+    };
+    fromHash();
+    window.addEventListener('hashchange', fromHash);
+    return () => window.removeEventListener('hashchange', fromHash);
+  }, []);
+
   useEffect(() => {
     if (!isAuthenticated) {
-      router.push(loginUrlHere());
+      router.replace(loginUrlHere());
       return;
     }
 
     if (user?.userType !== 'seller' && user?.user_type !== 'seller') {
       router.push('/dashboard');
-      showToast('Seller access required.', 'error');
+      showToast(t('accessDenied'), 'error');
       return;
     }
 
@@ -250,18 +359,95 @@ export default function SellerSettingsPage() {
     }));
   };
 
+  /** What is wrong with the hours, keyed by the field to mark: the times must make sense before customers are shown them. */
+  const hoursProblems = () => {
+    const problems: Record<string, string> = {};
+    const { scheduleMode, fixedDailyOpen, fixedDailyClose, orderCutoffTime, weekly } = formData;
+    if (scheduleMode === 'fixed_daily') {
+      if (!fixedDailyOpen) problems['open-time'] = t('err.openTime');
+      if (!fixedDailyClose) problems['close-time'] = t('err.closeTime');
+      else if (fixedDailyOpen && fixedDailyOpen === fixedDailyClose) problems['close-time'] = t('err.sameTimes');
+      if (!problems['open-time'] && !problems['close-time'] && orderCutoffTime && !insideHours(orderCutoffTime, fixedDailyOpen, fixedDailyClose)) {
+        problems['cutoff-time'] = t('err.cutoffOutside');
+      }
+    }
+    if (scheduleMode === 'per_day') {
+      for (const { key } of WEEK_DAYS) {
+        const day = weekly[key];
+        if (day.closed) continue;
+        if (!day.open || !day.close) problems[key] = t('err.dayTimes');
+        else if (toMinutes(day.close) <= toMinutes(day.open)) problems[key] = t('err.dayOrder');
+      }
+      if (WEEK_DAYS.every(({ key }) => weekly[key].closed)) problems[WEEK_DAYS[0].key] = t('err.noDays');
+      const openDays = WEEK_DAYS.map(({ key }) => weekly[key]).filter((d) => !d.closed && d.open && d.close);
+      if (orderCutoffTime && openDays.length > 0 && !openDays.some((d) => insideHours(orderCutoffTime, d.open, d.close))) {
+        problems['cutoff-time'] = t('err.cutoffOutside');
+      }
+    }
+    return problems;
+  };
+
+  const clearHoursError = (field: string) =>
+    setHoursErrors((prev) => {
+      if (!(field in prev)) return prev;
+      const next = { ...prev };
+      delete next[field];
+      return next;
+    });
+
+  const setDay = (key: WeekDay, change: Partial<DayHours>) => {
+    setFormData((prev) => ({ ...prev, weekly: { ...prev.weekly, [key]: { ...prev.weekly[key], ...change } } }));
+    clearHoursError(key);
+  };
+
+  const chooseScheduleMode = (mode: ScheduleMode) => {
+    setFormData((prev) => {
+      // Moving to per-day hours from the same-every-day ones starts each unset day from those times.
+      if (mode !== 'per_day' || !prev.fixedDailyOpen || !prev.fixedDailyClose) return { ...prev, scheduleMode: mode };
+      const weekly = { ...prev.weekly };
+      for (const { key } of WEEK_DAYS) {
+        if (!weekly[key].closed && !weekly[key].open && !weekly[key].close) weekly[key] = { ...weekly[key], open: prev.fixedDailyOpen, close: prev.fixedDailyClose };
+      }
+      return { ...prev, scheduleMode: mode, weekly };
+    });
+    setHoursErrors({});
+  };
+
+  const pin = useMemo(
+    () => (formData.latitude != null && formData.longitude != null ? { lat: formData.latitude, lng: formData.longitude } : null),
+    [formData.latitude, formData.longitude]
+  );
+  const mapCentre = useMemo(() => pin ?? communityCentre ?? { lat: 31.5204, lng: 74.3587 }, [pin, communityCentre]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!settingsRead) return;
 
     const problems: Record<string, string> = {};
-    const changed = (field: keyof typeof heldNumbers) => formData[field].trim() !== heldNumbers[field];
-    if (changed('jazzcashNumber') && walletNumberIsWrong(formData.jazzcashNumber)) problems.jazzcashNumber = WALLET_NUMBER_PROBLEM;
-    if (changed('easypaisaNumber') && walletNumberIsWrong(formData.easypaisaNumber)) problems.easypaisaNumber = WALLET_NUMBER_PROBLEM;
-    if (changed('bankAccountNumber') && bankAccountIsWrong(formData.bankAccountNumber)) problems.bankAccountNumber = BANK_ACCOUNT_PROBLEM;
+    const numberChanged = (field: keyof typeof heldNumbers) => formData[field].trim() !== heldNumbers[field];
+    if (numberChanged('jazzcashNumber') && walletNumberIsWrong(formData.jazzcashNumber)) problems.jazzcashNumber = t('walletProblem');
+    if (numberChanged('easypaisaNumber') && walletNumberIsWrong(formData.easypaisaNumber)) problems.easypaisaNumber = t('walletProblem');
+    if (numberChanged('bankAccountNumber') && bankAccountIsWrong(formData.bankAccountNumber)) problems.bankAccountNumber = t('bankProblem');
     setPayoutErrors(problems);
+
+    const hourProblems = hoursProblems();
+    setHoursErrors(hourProblems);
+    const firstHourProblem = Object.keys(hourProblems)[0];
+    if (firstHourProblem) {
+      showToast(t('err.hoursToast'), 'error');
+      setTab('hours');
+      focusSoon(firstHourProblem.endsWith('-time') ? firstHourProblem : `day-${firstHourProblem}-open`);
+      return;
+    }
     if (Object.keys(problems).length > 0) {
-      showToast('Check the payout account numbers marked in red.', 'error');
+      showToast(t('err.accountsToast'), 'error');
+      setTab('payout');
+      return;
+    }
+    // Nuray's riders collect from the pin, so a kitchen they deliver for cannot be saved without one.
+    if (deliveryModel === 'model_a' && !pin) {
+      showToast(t('needPin'), 'error');
+      setTab('location');
       return;
     }
 
@@ -273,6 +459,9 @@ export default function SellerSettingsPage() {
         freeDeliveryRadiusKm,
         latitude,
         longitude,
+        pickupAddress,
+        pickupLandmark,
+        pickupPhone,
         deliveryFeeType,
         deliveryFeeFixed,
         deliveryFeeBase,
@@ -287,6 +476,7 @@ export default function SellerSettingsPage() {
         scheduleMode,
         fixedDailyOpen,
         fixedDailyClose,
+        weekly,
         availabilityOverride,
         availabilityOverrideUntil,
         availabilityNote,
@@ -299,16 +489,35 @@ export default function SellerSettingsPage() {
         ...rest
       } = formData;
 
+      // Always open leaves the saved hours alone, so switching back to them later finds them again.
       const operatingHours =
         scheduleMode === 'fixed_daily'
           ? { fixedDaily: { open: fixedDailyOpen, close: fixedDailyClose } }
-          : null;
+          : scheduleMode === 'per_day'
+            ? {
+                ...(fixedDailyOpen && fixedDailyClose ? { fixedDaily: { open: fixedDailyOpen, close: fixedDailyClose } } : {}),
+                weekly: Object.fromEntries(
+                  WEEK_DAYS.map(({ key }) => {
+                    const day = weekly[key];
+                    return [
+                      key,
+                      day.closed
+                        ? { closed: true, sessions: [] }
+                        : { closed: false, sessions: [{ name: 'Open', open: day.open, close: day.close }, ...day.more] },
+                    ];
+                  })
+                ),
+              }
+            : undefined;
 
       let deliveryPayload: Record<string, unknown> = {
         deliveryModes: deliveryModes && deliveryModes.length ? deliveryModes : ['delivery'],
         deliveryProvider: deliveryModel === 'model_b' ? 'self' : 'platform',
         latitude: latitude ?? undefined,
         longitude: longitude ?? undefined,
+        pickupAddress: pickupAddress.trim() || null,
+        pickupLandmark: pickupLandmark.trim() || null,
+        pickupPhone: pickupPhone.trim() || null,
       };
 
       // Platform fleet: the rider pool delivers, so there is no self-delivery
@@ -354,7 +563,9 @@ export default function SellerSettingsPage() {
       }
 
       if (!rest.businessName || !rest.businessName.trim()) {
-        showToast('Business name is required.', 'error');
+        showToast(t('err.name'), 'error');
+        setTab('kitchen');
+        focusSoon('business-name');
         setLoading(false);
         return;
       }
@@ -401,16 +612,18 @@ export default function SellerSettingsPage() {
             advanceBookingMaxDays: advanceBookingMaxDays ?? undefined,
             ...(currentPassword ? { currentPassword } : {}),
           }),
-        () =>
+        (wrongBefore) =>
           askDialog({
-            title: 'Confirm with your password',
-            message: 'You are changing the accounts customers pay into. Enter your password to save the settings.',
+            title: t('pw.title'),
+            message: wrongBefore
+              ? t('pw.wrong')
+              : t('pw.message'),
             type: 'password',
-            confirmText: 'Save settings',
+            confirmText: t('pw.confirm'),
           })
       );
       if (!saved) {
-        showToast('Nothing was saved: your password was not entered.', 'info');
+        showToast(t('notSaved'), 'info');
         return;
       }
 
@@ -420,31 +633,47 @@ export default function SellerSettingsPage() {
         const numbers = { jazzcashNumber: kept.jazzcashNumber ?? '', easypaisaNumber: kept.easypaisaNumber ?? '', bankAccountNumber: kept.bankAccountNumber ?? '' };
         setHeldNumbers(numbers);
         setFormData((prev) => ({ ...prev, ...numbers }));
+        setSavedForm({ ...formData, ...numbers });
+      } else {
+        setSavedForm(formData);
       }
-      showToast('Settings saved successfully.', 'success');
+      showToast(t('saved'), 'success');
     } catch (error) {
       const firstIssue = (apiErrorDetails(error) as Array<{ message?: string }> | undefined)?.[0]?.message;
-      showToast(firstIssue || apiErrorMessage(error, 'Failed to save settings'), 'error');
+      showToast(firstIssue || apiErrorMessage(error, t('saveFailed')), 'error');
     } finally {
       setLoading(false);
     }
   };
 
+  const fieldClass =
+    'w-full min-h-11 rounded-xl border border-line-strong bg-surface px-3 text-[15px] text-ink placeholder:text-muted focus:outline-none focus:ring-3 focus:ring-brand/30 focus:border-brand-600';
+  const labelClass = 'block text-sm font-medium text-ink mb-1.5';
+  const payoutFieldClass = (field: string) =>
+    `${fieldClass} ${payoutErrors[field] ? 'border-red-700 focus:border-red-700' : ''}`;
+  const chipClass = (on: boolean) =>
+    `inline-flex items-center gap-1.5 min-h-11 px-4 rounded-full border text-sm transition-colors focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-brand/40 ${
+      on ? 'border-brand-600 bg-brand-soft text-brand-soft-ink font-medium' : 'border-line-strong bg-surface text-ink hover:bg-raised'
+    }`;
+  const sectionClass = 'pt-6';
+  const headingClass = 'sr-only';
+
   // No form until the kitchen's own settings were read: the boxes would hold blanks, and saving them would replace the real ones.
   if (!settingsRead) {
     return (
       <DashboardLayout
-        title="Settings"
-        subtitle="Manage kitchen profile, delivery, and schedule"
+        title={t('title')}
+        subtitle={t('subtitle')}
         sidebarItems={SELLER_SIDEBAR_ITEMS}
         userType="seller"
       >
-        <div className="max-w-3xl mx-auto space-y-6 pb-16">
+        <div className="max-w-3xl pb-16">
           {loadError ? (
-            <LoadError error={loadError} onRetry={loadSettings} title="We couldn't load your kitchen settings" />
+            <LoadError error={loadError} onRetry={loadSettings} title={t('loadFailed')} />
           ) : (
-            <div className="rounded-2xl border border-slate-200 bg-white p-10 text-center text-sm font-medium text-slate-600" role="status">
-              Loading your settings…
+            <div className="flex items-center gap-3 py-10 text-sm text-muted" role="status">
+              <span className="h-5 w-5 rounded-full border-2 border-line-strong border-t-brand-600 motion-safe:animate-spin" aria-hidden="true" />
+              {t('loading')}
             </div>
           )}
         </div>
@@ -454,265 +683,50 @@ export default function SellerSettingsPage() {
 
   return (
     <DashboardLayout
-      title="Settings"
-      subtitle="Manage kitchen profile, delivery, and schedule"
+      title={t('title')}
+      subtitle={t('subtitle')}
       sidebarItems={SELLER_SIDEBAR_ITEMS}
       userType="seller"
     >
-      <div className="max-w-3xl mx-auto space-y-6 pb-16">
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Kitchen Profile */}
-          <div className="bg-white rounded-2xl p-5 sm:p-6 border border-slate-200/90 shadow-xs space-y-4">
-            <h3 className="text-sm font-bold text-slate-900 tracking-tight">Kitchen Profile</h3>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="text-xs font-semibold text-slate-700 block mb-1">
-                  Business Name (English)
-                </label>
-                <input
-                  type="text"
-                  value={formData.businessName}
-                  onChange={(e) => setFormData({ ...formData, businessName: e.target.value })}
-                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-brand"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="text-xs font-semibold text-slate-700 block mb-1">
-                  Business Name (Urdu)
-                </label>
-                <input
-                  type="text"
-                  value={formData.businessNameUrdu}
-                  onChange={(e) => setFormData({ ...formData, businessNameUrdu: e.target.value })}
-                  placeholder="مثلاً: فاطمہ کچن"
-                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-brand"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="text-xs font-semibold text-slate-700 block mb-1">Description</label>
-              <textarea
-                value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                rows={3}
-                placeholder="Tell customers about your kitchen and specialty dishes..."
-                className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-brand"
-              />
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
-              <div>
-                <label className="text-xs font-semibold text-slate-700 block mb-1">Kitchen Type</label>
-                <select
-                  value={formData.businessType}
-                  onChange={(e) => setFormData({ ...formData, businessType: e.target.value })}
-                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-brand bg-white"
-                >
-                  {BUSINESS_TYPES.map((t) => (
-                    <option key={t.value} value={t.value}>
-                      {t.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="text-xs font-semibold text-slate-700 block mb-1">Storefront Notice</label>
-                <input
-                  type="text"
-                  value={formData.storeNotice}
-                  onChange={(e) => setFormData({ ...formData, storeNotice: e.target.value })}
-                  placeholder="e.g. Special weekend Biryani available"
-                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-brand"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="text-xs font-semibold text-slate-700 block mb-1.5">Meal Categories &amp; Timings</label>
-              <div className="flex flex-wrap gap-1.5">
-                {MEAL_CATEGORIES.map((c) => (
-                  <button
-                    key={c.value}
-                    type="button"
-                    onClick={() => toggleMealCategory(c.value)}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${
-                      formData.mealCategories.includes(c.value)
-                        ? 'bg-slate-900 text-white border-slate-900 font-semibold'
-                        : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
-                    }`}
-                  >
-                    {c.label}
-                  </button>
-                ))}
-                {formData.mealCategories
-                  .filter((cat) => !MEAL_CATEGORIES.some((c) => c.value === cat))
-                  .map((cat) => (
-                    <button
-                      key={cat}
-                      type="button"
-                      onClick={() => toggleMealCategory(cat)}
-                      className="px-2.5 py-1 rounded-lg text-xs font-medium border bg-slate-800 text-white border-slate-800 transition-colors flex items-center gap-1.5"
-                    >
-                      <span>{cat}</span>
-                      <span className="text-[11px] text-slate-400">✕</span>
-                    </button>
-                  ))}
-              </div>
-            </div>
-          </div>
-
-          {/* Delivery & Fulfillment */}
-          <div className="bg-white rounded-2xl p-5 sm:p-6 border border-slate-200/90 shadow-xs space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-sm font-bold text-slate-900 tracking-tight">Delivery &amp; Rates</h3>
-                <p className="text-[11px] text-slate-500 mt-0.5">Choose fulfillment model and local pricing</p>
-              </div>
-              <Link
-                href="/sellers/delivery"
-                className="inline-flex items-center gap-1.5 text-xs font-bold text-brand-ink hover:text-brand-800"
-              >
-                <span>Full Delivery Console</span>
-                <ArrowRight className="rtl:-scale-x-100 w-3.5 h-3.5" />
-              </Link>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3 pt-1">
-              <div
-                onClick={() => setDeliveryModel('model_a')}
-                className={`p-3.5 rounded-xl border-2 transition-all cursor-pointer ${
-                  deliveryModel === 'model_a' ? 'border-blue-600 bg-blue-50/20' : 'border-slate-200 bg-white'
+      <form onSubmit={handleSubmit} className="max-w-3xl pb-16">
+        <div role="tablist" aria-label={t('jumpTo')} className="-mx-4 px-4 sm:mx-0 sm:px-0 flex gap-5 overflow-x-auto border-b border-line [scrollbar-width:none]">
+          {TABS.map(({ id, label }) => {
+            const selected = tab === id;
+            return (
+              <button
+                key={id}
+                type="button"
+                role="tab"
+                id={`${id}-tab`}
+                aria-selected={selected}
+                aria-controls={`${id}-panel`}
+                onClick={() => setTab(id)}
+                className={`relative -mb-px min-h-11 pb-1 text-[15px] whitespace-nowrap border-b-2 transition-colors focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-brand/40 ${
+                  selected ? 'border-brand-600 text-ink font-semibold' : 'border-transparent text-muted hover:text-ink'
                 }`}
               >
-                <div className="flex items-center gap-2">
-                  <Bike className="w-4 h-4 text-blue-600 shrink-0" />
-                  <span className="text-xs font-bold text-slate-900">Nuray Rider Fleet</span>
-                </div>
-              </div>
+                {t(label)}
+              </button>
+            );
+          })}
+        </div>
+        <section id="hours-panel" role="tabpanel" aria-labelledby="hours-tab" hidden={tab !== 'hours'} className={sectionClass}>
+          <h2 id="hours-heading" className={headingClass}>{t('hours')}</h2>
+          <p className="text-sm text-muted mt-1">{t('hoursHint')}</p>
 
-              <div
-                onClick={() => setDeliveryModel('model_b')}
-                className={`p-3.5 rounded-xl border-2 transition-all cursor-pointer ${
-                  deliveryModel === 'model_b' ? 'border-emerald-600 bg-emerald-50/20' : 'border-slate-200 bg-white'
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  <Store className="w-4 h-4 text-emerald-600 shrink-0" />
-                  <span className="text-xs font-bold text-slate-900">Self-Delivery</span>
-                </div>
-              </div>
-            </div>
-
-            {deliveryModel === 'model_b' && (
-              <div className="space-y-4 pt-3 border-t border-slate-100">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-[11px] font-semibold text-slate-600 block mb-1">Community Delivery Fee</label>
-                    <div className="relative">
-                      <input
-                        type="number"
-                        min={0}
-                        step={10}
-                        value={formData.deliveryFeeFixed ?? 50}
-                        onChange={(e) =>
-                          setFormData({
-                            ...formData,
-                            deliveryFeeFixed: e.target.value === '' ? null : parseInt(e.target.value, 10),
-                          })
-                        }
-                        className="w-full ps-3 pe-10 py-1.5 text-xs font-bold border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-brand"
-                      />
-                      <span className="absolute end-3 top-2 text-[11px] text-slate-500 font-medium">PKR</span>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="text-[11px] font-semibold text-slate-600 block mb-1">Free Delivery Radius</label>
-                    <div className="relative">
-                      <input
-                        type="number"
-                        min={0}
-                        step={0.5}
-                        value={formData.freeDeliveryRadiusKm ?? 2.5}
-                        onChange={(e) =>
-                          setFormData({
-                            ...formData,
-                            freeDeliveryRadiusKm: e.target.value === '' ? null : parseFloat(e.target.value),
-                          })
-                        }
-                        className="w-full ps-3 pe-8 py-1.5 text-xs font-bold border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-brand"
-                      />
-                      <span className="absolute end-3 top-2 text-[11px] text-slate-500 font-medium">KM</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Free Areas */}
-                <div>
-                  <label className="text-[11px] font-semibold text-slate-600 block mb-1">Free Delivery Societies</label>
-                  <div className="flex gap-2 mb-2">
-                    <input
-                      type="text"
-                      value={newAreaInput}
-                      onChange={(e) => setNewAreaInput(e.target.value)}
-                      placeholder="Add area (e.g. Askari 11)..."
-                      className="flex-1 px-3 py-1.5 text-xs border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-brand"
-                    />
-                    <Button
-                      type="button"
-                      onClick={handleAddArea}
-                      variant="outline"
-                      className="h-8 px-3 text-xs border-slate-300"
-                    >
-                      Add
-                    </Button>
-                  </div>
-
-                  {formData.freeDeliveryAreas.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5">
-                      {formData.freeDeliveryAreas.map((area) => (
-                        <span
-                          key={area}
-                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 border border-emerald-200 text-[11px] font-medium text-emerald-800"
-                        >
-                          <MapPin className="w-2.5 h-2.5 text-emerald-600" />
-                          <span>{area}</span>
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveArea(area)}
-                            className="hover:text-red-500 ms-0.5"
-                          >
-                            <X className="w-2.5 h-2.5" />
-                          </button>
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Operating Hours & Schedule */}
-          <div className="bg-white rounded-2xl p-5 sm:p-6 border border-slate-200/90 shadow-xs space-y-4">
-            <h3 className="text-sm font-bold text-slate-900 tracking-tight">Hours &amp; Availability</h3>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="mt-5 space-y-5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
               <div>
-                <label className="text-xs font-semibold text-slate-700 block mb-1">Availability Override</label>
+                <label htmlFor="availability-override" className={labelClass}>{t('rightNow')}</label>
                 <select
+                  id="availability-override"
                   value={formData.availabilityOverride}
                   onChange={(e) => setFormData({ ...formData, availabilityOverride: e.target.value })}
-                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-brand bg-white"
+                  className={fieldClass}
                 >
                   {AVAILABILITY_OVERRIDES.map((o) => (
                     <option key={o.value} value={o.value}>
-                      {o.label}
+                      {t(o.label)}
                     </option>
                   ))}
                 </select>
@@ -720,56 +734,157 @@ export default function SellerSettingsPage() {
 
               {formData.availabilityOverride && (
                 <div>
-                  <label className="text-xs font-semibold text-slate-700 block mb-1">Reopen Date</label>
+                  <label htmlFor="availability-override-until" className={labelClass}>{t('until')}</label>
                   <DatePicker
+                    id="availability-override-until"
                     value={formData.availabilityOverrideUntil}
                     onChange={(date) => setFormData({ ...formData, availabilityOverrideUntil: date })}
                     min={new Date().toISOString().split('T')[0]}
-                    placeholder="Select date"
+                    placeholder={t('pickDate')}
                   />
                 </div>
               )}
             </div>
 
-            <div className="grid grid-cols-2 gap-4 pt-1">
-              <div>
-                <label className="text-xs font-semibold text-slate-700 block mb-1">Opening Time</label>
-                <input
-                  type="time"
-                  value={formData.fixedDailyOpen}
-                  onChange={(e) => setFormData({ ...formData, fixedDailyOpen: e.target.value })}
-                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-brand"
-                />
+            <fieldset>
+              <legend className={labelClass}>{t('whenOpen')}</legend>
+              <div className="grid gap-2 sm:grid-cols-3">
+                {SCHEDULE_MODES.map((m) => {
+                  const on = formData.scheduleMode === m.value;
+                  return (
+                    <label
+                      key={m.value}
+                      className={`flex min-h-11 cursor-pointer gap-3 rounded-xl border px-3 py-2.5 transition-colors has-[:focus-visible]:ring-3 has-[:focus-visible]:ring-brand/40 ${
+                        on ? 'border-brand-600 bg-brand-soft' : 'border-line-strong bg-surface hover:bg-raised'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="schedule-mode"
+                        value={m.value}
+                        checked={on}
+                        onChange={() => chooseScheduleMode(m.value)}
+                        className="mt-0.5 h-4 w-4 shrink-0 accent-brand-700"
+                      />
+                      <span>
+                        <span className={`block text-sm font-medium ${on ? 'text-brand-soft-ink' : 'text-ink'}`}>{t(m.label)}</span>
+                        <span className="block text-sm text-muted">{t(m.hint)}</span>
+                      </span>
+                    </label>
+                  );
+                })}
               </div>
+            </fieldset>
 
-              <div>
-                <label className="text-xs font-semibold text-slate-700 block mb-1">Closing Time</label>
-                <input
-                  type="time"
-                  value={formData.fixedDailyClose}
-                  onChange={(e) => setFormData({ ...formData, fixedDailyClose: e.target.value })}
-                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-brand"
-                />
+            {formData.scheduleMode === 'fixed_daily' && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                {([
+                  ['open-time', t('opensAt'), 'fixedDailyOpen'],
+                  ['close-time', t('closesAt'), 'fixedDailyClose'],
+                ] as const).map(([id, label, field]) => (
+                  <div key={id}>
+                    <label htmlFor={id} className={labelClass}>{label}</label>
+                    <input
+                      id={id}
+                      type="time"
+                      value={formData[field]}
+                      onChange={(e) => {
+                        setFormData({ ...formData, [field]: e.target.value });
+                        clearHoursError(id);
+                      }}
+                      aria-invalid={Boolean(hoursErrors[id])}
+                      aria-describedby={hoursErrors[id] ? `${id}-error` : undefined}
+                      className={`${fieldClass} ${hoursErrors[id] ? 'border-red-700' : ''}`}
+                    />
+                    {hoursErrors[id] && <p id={`${id}-error`} role="alert" className="text-sm text-red-700 mt-1.5">{hoursErrors[id]}</p>}
+                  </div>
+                ))}
+                {formData.fixedDailyOpen && formData.fixedDailyClose && toMinutes(formData.fixedDailyClose) < toMinutes(formData.fixedDailyOpen) && (
+                  <p className="sm:col-span-2 -mt-2 text-sm text-muted">{t('pastMidnight')}</p>
+                )}
               </div>
-            </div>
+            )}
 
-            <div className="grid grid-cols-2 gap-4 pt-1">
+            {formData.scheduleMode === 'per_day' && (
+              <ul className="divide-y divide-line rounded-xl border border-line bg-surface">
+                {WEEK_DAYS.map(({ key, label }) => {
+                  const day = formData.weekly[key];
+                  const problem = hoursErrors[key];
+                  return (
+                    <li key={key} className="px-3 py-3">
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                        <span id={`day-${key}-label`} className="w-24 text-sm font-medium text-ink">{t(label)}</span>
+                        <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 text-sm text-ink">
+                          <input
+                            type="checkbox"
+                            checked={!day.closed}
+                            onChange={(e) => setDay(key, { closed: !e.target.checked })}
+                            className="h-4 w-4 accent-brand-700"
+                          />
+                          {day.closed ? t('dayClosed') : t('dayOpen')}
+                        </label>
+                        {!day.closed && (
+                          <div className="flex flex-1 items-center gap-2 min-w-[14rem]">
+                            <input
+                              id={`day-${key}-open`}
+                              type="time"
+                              aria-label={t('dayOpensAt', { day: t(label) })}
+                              value={day.open}
+                              onChange={(e) => setDay(key, { open: e.target.value })}
+                              aria-invalid={Boolean(problem)}
+                              aria-describedby={problem ? `day-${key}-error` : undefined}
+                              className={`${fieldClass} flex-1 min-w-0 ${problem ? 'border-red-700' : ''}`}
+                            />
+                            <span className="text-sm text-muted">{t('to')}</span>
+                            <input
+                              id={`day-${key}-close`}
+                              type="time"
+                              aria-label={t('dayClosesAt', { day: t(label) })}
+                              value={day.close}
+                              onChange={(e) => setDay(key, { close: e.target.value })}
+                              aria-invalid={Boolean(problem)}
+                              aria-describedby={problem ? `day-${key}-error` : undefined}
+                              className={`${fieldClass} flex-1 min-w-0 ${problem ? 'border-red-700' : ''}`}
+                            />
+                          </div>
+                        )}
+                      </div>
+                      {problem && <p id={`day-${key}-error`} role="alert" className="text-sm text-red-700 mt-1.5">{problem}</p>}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
               <div>
-                <label className="text-xs font-semibold text-slate-700 block mb-1">Daily Cut-off Time</label>
+                <label htmlFor="cutoff-time" className={labelClass}>{t('lastOrder')}</label>
                 <input
+                  id="cutoff-time"
                   type="time"
                   value={formData.orderCutoffTime}
-                  onChange={(e) => setFormData({ ...formData, orderCutoffTime: e.target.value })}
-                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-brand"
+                  onChange={(e) => {
+                    setFormData({ ...formData, orderCutoffTime: e.target.value });
+                    clearHoursError('cutoff-time');
+                  }}
+                  aria-invalid={Boolean(hoursErrors['cutoff-time'])}
+                  aria-describedby={hoursErrors['cutoff-time'] ? 'cutoff-time-error' : 'cutoff-time-hint'}
+                  className={`${fieldClass} ${hoursErrors['cutoff-time'] ? 'border-red-700' : ''}`}
                 />
+                {hoursErrors['cutoff-time'] ? (
+                  <p id="cutoff-time-error" role="alert" className="text-sm text-red-700 mt-1.5">{hoursErrors['cutoff-time']}</p>
+                ) : (
+                  <p id="cutoff-time-hint" className="text-sm text-muted mt-1.5">{t('lastOrderHint')}</p>
+                )}
               </div>
-
               <div>
-                <label className="text-xs font-semibold text-slate-700 block mb-1">Max Daily Orders</label>
+                <label htmlFor="max-orders" className={labelClass}>{t('maxOrders')}</label>
                 <input
+                  id="max-orders"
                   type="number"
+                  inputMode="numeric"
                   min={1}
-                  placeholder="Unlimited"
+                  placeholder={t('noLimit')}
                   value={formData.maxDailyOrders ?? ''}
                   onChange={(e) =>
                     setFormData({
@@ -777,31 +892,314 @@ export default function SellerSettingsPage() {
                       maxDailyOrders: e.target.value === '' ? null : parseInt(e.target.value, 10),
                     })
                   }
-                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-brand"
+                  className={fieldClass}
                 />
               </div>
             </div>
           </div>
+        </section>
 
-          {/* Payment & Payouts */}
-          <div className="bg-white rounded-2xl p-5 sm:p-6 border border-slate-200/90 shadow-xs space-y-5">
-            <div>
-              <h3 className="text-sm font-bold text-slate-900 tracking-tight">Direct Payout Accounts</h3>
-              <p className="text-[11px] text-slate-500 mt-0.5">
-                Customers transfer funds directly to these accounts when selecting Bank Transfer, JazzCash, or EasyPaisa. Check every digit: a wrong number sends their money to someone else. Changing an account asks for your password.
-              </p>
+        <section id="kitchen-panel" role="tabpanel" aria-labelledby="kitchen-tab" hidden={tab !== 'kitchen'} className={sectionClass}>
+          <h2 id="kitchen-heading" className={headingClass}>{t('kitchen')}</h2>
+          <p className="text-sm text-muted mt-1">{t('kitchenHint')}</p>
+
+          <div className="mt-5 space-y-5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+              <div>
+                <label htmlFor="business-name" className={labelClass}>{t('kitchenName')}</label>
+                <input
+                  id="business-name"
+                  type="text"
+                  value={formData.businessName}
+                  onChange={(e) => setFormData({ ...formData, businessName: e.target.value })}
+                  className={fieldClass}
+                />
+              </div>
+              <div>
+                <label htmlFor="business-name-urdu" className={labelClass}>{t('kitchenNameUrdu')}</label>
+                <input
+                  id="business-name-urdu"
+                  type="text"
+                  dir="rtl"
+                  value={formData.businessNameUrdu}
+                  onChange={(e) => setFormData({ ...formData, businessNameUrdu: e.target.value })}
+                  placeholder="مثلاً: فاطمہ کچن"
+                  className={fieldClass}
+                />
+              </div>
             </div>
 
-            {/* JazzCash Section */}
-            <div className="p-4 bg-slate-50/80 rounded-2xl border border-slate-200/80 space-y-3">
-              <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-red-500" />
-                JazzCash Account
+            <div>
+              <label htmlFor="description" className={labelClass}>{t('about')}</label>
+              <textarea
+                id="description"
+                value={formData.description}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                rows={3}
+                placeholder={t('aboutPh')}
+                className={`${fieldClass} py-2.5`}
+              />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+              <div>
+                <label htmlFor="business-type" className={labelClass}>{t('kind')}</label>
+                <select
+                  id="business-type"
+                  value={formData.businessType}
+                  onChange={(e) => setFormData({ ...formData, businessType: e.target.value })}
+                  className={fieldClass}
+                >
+                  {BUSINESS_TYPES.map((b) => (
+                    <option key={b.value} value={b.value}>
+                      {t(b.label)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label htmlFor="store-notice" className={labelClass}>{t('notice')}</label>
+                <input
+                  id="store-notice"
+                  type="text"
+                  value={formData.storeNotice}
+                  onChange={(e) => setFormData({ ...formData, storeNotice: e.target.value })}
+                  placeholder={t('noticePh')}
+                  className={fieldClass}
+                />
+              </div>
+            </div>
+
+            <fieldset>
+              <legend className={labelClass}>{t('meals')}</legend>
+              <div className="flex flex-wrap gap-2">
+                {MEAL_CATEGORIES.map((c) => {
+                  const on = formData.mealCategories.includes(c.value);
+                  return (
+                    <button
+                      key={c.value}
+                      type="button"
+                      aria-pressed={on}
+                      onClick={() => toggleMealCategory(c.value)}
+                      className={chipClass(on)}
+                    >
+                      {t(c.label)}
+                    </button>
+                  );
+                })}
+                {formData.mealCategories
+                  .filter((cat) => !MEAL_CATEGORIES.some((c) => c.value === cat))
+                  .map((cat) => (
+                    <button
+                      key={cat}
+                      type="button"
+                      aria-pressed={true}
+                      aria-label={t('remove', { name: cat })}
+                      onClick={() => toggleMealCategory(cat)}
+                      className={chipClass(true)}
+                    >
+                      {cat}
+                      <X className="w-3.5 h-3.5" aria-hidden="true" />
+                    </button>
+                  ))}
+              </div>
+            </fieldset>
+          </div>
+        </section>
+
+        <section id="location-panel" role="tabpanel" aria-labelledby="location-tab" hidden={tab !== 'location'} className={sectionClass}>
+          <h2 id="location-heading" className={headingClass}>{t('location')}</h2>
+          <p className="text-sm text-muted mt-1">
+            {t('locationHint')}
+          </p>
+          <div className="mt-5 space-y-5">
+            <div>
+              <label htmlFor="pickup-address" className={labelClass}>{t('pickupAddress')}</label>
+              <input
+                id="pickup-address"
+                type="text"
+                maxLength={300}
+                autoComplete="street-address"
+                value={formData.pickupAddress}
+                onChange={(e) => setFormData({ ...formData, pickupAddress: e.target.value })}
+                placeholder={t('pickupAddressPh')}
+                className={fieldClass}
+              />
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+              <div>
+                <label htmlFor="pickup-landmark" className={labelClass}>{t('pickupLandmark')}</label>
+                <input
+                  id="pickup-landmark"
+                  type="text"
+                  maxLength={200}
+                  value={formData.pickupLandmark}
+                  onChange={(e) => setFormData({ ...formData, pickupLandmark: e.target.value })}
+                  placeholder={t('pickupLandmarkPh')}
+                  className={fieldClass}
+                />
+              </div>
+              <div>
+                <label htmlFor="pickup-phone" className={labelClass}>{t('pickupPhone')}</label>
+                <input
+                  id="pickup-phone"
+                  type="tel"
+                  dir="ltr"
+                  inputMode="tel"
+                  maxLength={20}
+                  value={formData.pickupPhone}
+                  onChange={(e) => setFormData({ ...formData, pickupPhone: e.target.value })}
+                  placeholder={t('pickupPhonePh')}
+                  aria-describedby="pickup-phone-hint"
+                  className={fieldClass}
+                />
+                <p id="pickup-phone-hint" className="text-sm text-muted mt-1.5">{t('pickupPhoneHint')}</p>
+              </div>
+            </div>
+            <div>
+            <div className="flex items-baseline justify-between gap-3 mb-1.5">
+              <span className="text-sm font-medium text-ink">{t('onMap')}</span>
+              <span className="text-sm text-muted tabular-nums" data-ltr>
+                {pin ? `${pin.lat.toFixed(5)}, ${pin.lng.toFixed(5)}` : t('noPin')}
               </span>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            </div>
+            <div className={`rounded-xl overflow-hidden ${pin ? '' : 'ring-2 ring-accent'}`}>
+              {tab === 'location' && <LocationMap
+                center={mapCentre}
+                markerPosition={pin}
+                height="280px"
+                onLocationSelect={(coords) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    latitude: Number(coords.lat.toFixed(6)),
+                    longitude: Number(coords.lng.toFixed(6)),
+                  }))
+                }
+              />}
+            </div>
+            <p className={`text-sm mt-1.5 ${pin ? 'text-muted' : 'text-accent-soft-ink'}`}>
+              {pin ? t('movePin') : t('needPin')}
+            </p>
+            </div>
+          </div>
+        </section>
+
+        <section id="delivery-panel" role="tabpanel" aria-labelledby="delivery-tab" hidden={tab !== 'delivery'} className={sectionClass}>
+          <h2 id="delivery-heading" className={headingClass}>{t('delivery')}</h2>
+          <div className="mt-1 flex flex-wrap items-center justify-between gap-x-4">
+            <p className="text-sm text-muted">
+              {deliveryModel === 'model_a' ? t('nurayDelivers') : t('selfDelivers')}
+            </p>
+            <Link
+              href="/sellers/delivery"
+              className="inline-flex items-center min-h-11 text-sm font-medium text-brand-ink hover:underline underline-offset-4 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-brand/40 rounded"
+            >
+              {t('change')}
+            </Link>
+          </div>
+
+          {deliveryModel === 'model_b' && (
+            <div className="mt-6 space-y-5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                 <div>
-                  <label className="text-[11px] font-semibold text-slate-600 block mb-1">JazzCash Mobile Number</label>
+                  <label htmlFor="delivery-fee" className={labelClass}>{t('deliveryFee')}</label>
+                  <div className="relative">
+                    <input
+                      id="delivery-fee"
+                      type="number"
+                      inputMode="numeric"
+                      min={0}
+                      step={10}
+                      value={formData.deliveryFeeFixed ?? 50}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          deliveryFeeFixed: e.target.value === '' ? null : parseInt(e.target.value, 10),
+                        })
+                      }
+                      className={`${fieldClass} pe-12 tabular-nums`}
+                    />
+                    <span className="pointer-events-none absolute inset-y-0 end-3 flex items-center text-sm text-muted">Rs</span>
+                  </div>
+                </div>
+                <div>
+                  <label htmlFor="free-radius" className={labelClass}>{t('freeWithin')}</label>
+                  <div className="relative">
+                    <input
+                      id="free-radius"
+                      type="number"
+                      inputMode="decimal"
+                      min={0}
+                      step={0.5}
+                      value={formData.freeDeliveryRadiusKm ?? 2.5}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          freeDeliveryRadiusKm: e.target.value === '' ? null : parseFloat(e.target.value),
+                        })
+                      }
+                      className={`${fieldClass} pe-12 tabular-nums`}
+                    />
+                    <span className="pointer-events-none absolute inset-y-0 end-3 flex items-center text-sm text-muted">km</span>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label htmlFor="free-area" className={labelClass}>{t('freeAreas')}</label>
+                <div className="flex gap-2">
                   <input
+                    id="free-area"
+                    type="text"
+                    value={newAreaInput}
+                    onChange={(e) => setNewAreaInput(e.target.value)}
+                    placeholder="Askari 11"
+                    className={`${fieldClass} flex-1 min-w-0`}
+                  />
+                  <Button type="button" onClick={handleAddArea} variant="outline">
+                    {t('add')}
+                  </Button>
+                </div>
+
+                {formData.freeDeliveryAreas.length > 0 && (
+                  <ul className="mt-3 flex flex-wrap gap-2">
+                    {formData.freeDeliveryAreas.map((area) => (
+                      <li
+                        key={area}
+                        className="inline-flex items-center gap-1 min-h-11 ps-4 rounded-full bg-raised text-sm text-ink"
+                      >
+                        {area}
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveArea(area)}
+                          aria-label={t('remove', { name: area })}
+                          className="inline-flex h-11 w-11 items-center justify-center rounded-full text-muted hover:text-ink hover:bg-line focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-brand/40"
+                        >
+                          <X className="w-4 h-4" aria-hidden="true" />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+          )}
+        </section>
+
+        <section id="payout-panel" role="tabpanel" aria-labelledby="payout-tab" hidden={tab !== 'payout'} className={sectionClass}>
+          <h2 id="payout-heading" className={headingClass}>{t('accounts')}</h2>
+          <p className="text-sm text-muted mt-1">
+            {t('accountsHint')}
+          </p>
+
+          <div className="mt-6 space-y-7">
+            <fieldset className="space-y-4">
+              <legend className="text-sm font-medium text-ink mb-3">JazzCash</legend>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                <div>
+                  <label htmlFor="jazzcash-number" className={labelClass}>{t('mobileNumber')}</label>
+                  <input
+                    id="jazzcash-number"
                     type="tel"
                     dir="ltr"
                     placeholder="03XXXXXXXXX"
@@ -811,33 +1209,32 @@ export default function SellerSettingsPage() {
                       clearPayoutError('jazzcashNumber');
                     }}
                     aria-invalid={Boolean(payoutErrors.jazzcashNumber)}
-                    className={`w-full px-3 py-2 text-xs border rounded-lg outline-none focus:ring-2 focus:ring-brand bg-white ${payoutErrors.jazzcashNumber ? 'border-red-500' : 'border-slate-300'}`}
+                    aria-describedby={payoutErrors.jazzcashNumber ? 'jazzcash-number-error' : undefined}
+                    className={payoutFieldClass('jazzcashNumber')}
                   />
-                  {payoutErrors.jazzcashNumber && <p role="alert" className="text-[11px] text-red-700 mt-1">{payoutErrors.jazzcashNumber}</p>}
+                  {payoutErrors.jazzcashNumber && <p id="jazzcash-number-error" role="alert" className="text-sm text-red-700 mt-1.5">{payoutErrors.jazzcashNumber}</p>}
                 </div>
                 <div>
-                  <label className="text-[11px] font-semibold text-slate-600 block mb-1">Account Title (Name on JazzCash)</label>
+                  <label htmlFor="jazzcash-title" className={labelClass}>{t('accountName')}</label>
                   <input
+                    id="jazzcash-title"
                     type="text"
-                    placeholder="e.g. Bareera Zarish"
+                    placeholder={t('accountNamePh')}
                     value={formData.jazzcashAccountTitle}
                     onChange={(e) => setFormData({ ...formData, jazzcashAccountTitle: e.target.value })}
-                    className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-brand bg-white"
+                    className={fieldClass}
                   />
                 </div>
               </div>
-            </div>
+            </fieldset>
 
-            {/* EasyPaisa Section */}
-            <div className="p-4 bg-slate-50/80 rounded-2xl border border-slate-200/80 space-y-3">
-              <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                EasyPaisa Account
-              </span>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <fieldset className="space-y-4">
+              <legend className="text-sm font-medium text-ink mb-3">Easypaisa</legend>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                 <div>
-                  <label className="text-[11px] font-semibold text-slate-600 block mb-1">EasyPaisa Mobile Number</label>
+                  <label htmlFor="easypaisa-number" className={labelClass}>{t('mobileNumber')}</label>
                   <input
+                    id="easypaisa-number"
                     type="tel"
                     dir="ltr"
                     placeholder="03XXXXXXXXX"
@@ -847,100 +1244,95 @@ export default function SellerSettingsPage() {
                       clearPayoutError('easypaisaNumber');
                     }}
                     aria-invalid={Boolean(payoutErrors.easypaisaNumber)}
-                    className={`w-full px-3 py-2 text-xs border rounded-lg outline-none focus:ring-2 focus:ring-brand bg-white ${payoutErrors.easypaisaNumber ? 'border-red-500' : 'border-slate-300'}`}
+                    aria-describedby={payoutErrors.easypaisaNumber ? 'easypaisa-number-error' : undefined}
+                    className={payoutFieldClass('easypaisaNumber')}
                   />
-                  {payoutErrors.easypaisaNumber && <p role="alert" className="text-[11px] text-red-700 mt-1">{payoutErrors.easypaisaNumber}</p>}
+                  {payoutErrors.easypaisaNumber && <p id="easypaisa-number-error" role="alert" className="text-sm text-red-700 mt-1.5">{payoutErrors.easypaisaNumber}</p>}
                 </div>
                 <div>
-                  <label className="text-[11px] font-semibold text-slate-600 block mb-1">Account Title (Name on EasyPaisa)</label>
+                  <label htmlFor="easypaisa-title" className={labelClass}>{t('accountName')}</label>
                   <input
+                    id="easypaisa-title"
                     type="text"
-                    placeholder="e.g. Bareera Zarish"
+                    placeholder={t('accountNamePh')}
                     value={formData.easypaisaAccountTitle}
                     onChange={(e) => setFormData({ ...formData, easypaisaAccountTitle: e.target.value })}
-                    className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-brand bg-white"
+                    className={fieldClass}
                   />
                 </div>
               </div>
-            </div>
+            </fieldset>
 
-            {/* Bank Transfer / IBFT Section */}
-            <div className="p-4 bg-slate-50/80 rounded-2xl border border-slate-200/80 space-y-3">
-              <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-blue-500" />
-                Bank Transfer / Raast (IBFT)
-              </span>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <fieldset className="space-y-4">
+              <legend className="text-sm font-medium text-ink mb-3">{t('bankTransfer')}</legend>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                 <div>
-                  <label className="text-[11px] font-semibold text-slate-600 block mb-1">Bank Name</label>
+                  <label htmlFor="bank-name" className={labelClass}>{t('bank')}</label>
                   <input
+                    id="bank-name"
                     type="text"
-                    placeholder="e.g. Bank Alfalah / Meezan Bank"
+                    placeholder={t('bankPh')}
                     value={formData.bankName}
                     onChange={(e) => setFormData({ ...formData, bankName: e.target.value })}
-                    className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-brand bg-white"
+                    className={fieldClass}
                   />
                 </div>
                 <div>
-                  <label className="text-[11px] font-semibold text-slate-600 block mb-1">Account Title</label>
+                  <label htmlFor="bank-title" className={labelClass}>{t('accountName')}</label>
                   <input
+                    id="bank-title"
                     type="text"
-                    placeholder="Account Holder Name"
+                    placeholder={t('accountNamePh')}
                     value={formData.bankAccountName}
                     onChange={(e) => setFormData({ ...formData, bankAccountName: e.target.value })}
-                    className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-brand bg-white"
+                    className={fieldClass}
                   />
                 </div>
-                <div>
-                  <label className="text-[11px] font-semibold text-slate-600 block mb-1">IBAN / Account Number</label>
+                <div className="sm:col-span-2">
+                  <label htmlFor="bank-number" className={labelClass}>{t('iban')}</label>
                   <input
+                    id="bank-number"
                     type="text"
                     dir="ltr"
-                    placeholder="PK36SCBL0000001123456702"
+                    placeholder={t('ibanPh')}
                     value={formData.bankAccountNumber}
                     onChange={(e) => {
                       setFormData({ ...formData, bankAccountNumber: e.target.value });
                       clearPayoutError('bankAccountNumber');
                     }}
                     aria-invalid={Boolean(payoutErrors.bankAccountNumber)}
-                    className={`w-full px-3 py-2 text-xs border rounded-lg outline-none focus:ring-2 focus:ring-brand bg-white ${payoutErrors.bankAccountNumber ? 'border-red-500' : 'border-slate-300'}`}
+                    aria-describedby={payoutErrors.bankAccountNumber ? 'bank-number-error' : undefined}
+                    className={payoutFieldClass('bankAccountNumber')}
                   />
-                  {payoutErrors.bankAccountNumber && <p role="alert" className="text-[11px] text-red-700 mt-1">{payoutErrors.bankAccountNumber}</p>}
+                  {payoutErrors.bankAccountNumber && <p id="bank-number-error" role="alert" className="text-sm text-red-700 mt-1.5">{payoutErrors.bankAccountNumber}</p>}
                 </div>
               </div>
-            </div>
+            </fieldset>
           </div>
+        </section>
 
-          {/* Stock Alerts */}
-          <div className="bg-white rounded-2xl p-5 sm:p-6 border border-slate-200/90 shadow-xs flex items-center justify-between gap-4">
-            <div>
-              <h3 className="text-sm font-bold text-slate-900 tracking-tight">Stock Alerts</h3>
-              <p className="text-[11px] text-slate-500 mt-0.5">Receive alert when food portion inventory runs low</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-slate-600">Threshold:</span>
-              <input
-                type="number"
-                min={1}
-                value={formData.lowStockThreshold}
-                onChange={(e) => setFormData({ ...formData, lowStockThreshold: parseInt(e.target.value, 10) || 5 })}
-                className="w-16 px-2.5 py-1 text-xs font-bold border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-brand"
-              />
-            </div>
+        <section id="stock-panel" role="tabpanel" aria-labelledby="stock-tab" hidden={tab !== 'stock'} className={sectionClass}>
+          <h2 id="stock-heading" className={headingClass}>{t('runningLow')}</h2>
+          <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2">
+            <label htmlFor="low-stock" className="text-[15px] text-ink">{t('lowStockLabel')}</label>
+            <input
+              id="low-stock"
+              type="number"
+              inputMode="numeric"
+              min={1}
+              value={formData.lowStockThreshold}
+              onChange={(e) => setFormData({ ...formData, lowStockThreshold: parseInt(e.target.value, 10) || 5 })}
+              className={`${fieldClass.replace('w-full', 'w-24')} tabular-nums`}
+            />
           </div>
+        </section>
 
-          {/* Save Action */}
-          <div className="flex items-center justify-end pt-2">
-            <Button
-              type="submit"
-              disabled={loading}
-              className="bg-brand hover:bg-brand-500 text-on-brand px-7 py-2.5 rounded-xl font-bold text-xs shadow-sm transition-all"
-            >
-              {loading ? 'Saving...' : 'Save Settings'}
-            </Button>
-          </div>
-        </form>
-      </div>
+        <div data-bottom-bar className="sticky bottom-0 z-10 mt-8 flex justify-end border-t border-line bg-page/95 py-4 pb-[calc(1rem+var(--safe-bottom,0px))] backdrop-blur">
+          <Button type="submit" disabled={loading || !changed} className="min-h-11 w-full px-6 sm:w-auto disabled:bg-raised disabled:text-muted disabled:opacity-100">
+            {loading ? t('saving') : t('saveChanges')}
+          </Button>
+        </div>
+      </form>
     </DashboardLayout>
   );
 }

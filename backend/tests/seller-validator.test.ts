@@ -75,3 +75,22 @@ describe('meal categories', () => {
     expect(update({ mealCategories: ['Biryani', 'Kebabs & BBQ'] }).success).toBe(true);
   });
 });
+
+describe('pickup details', () => {
+  it('keeps the address, landmark and phone the settings page sends (they used to be stripped)', () => {
+    const parsed = update({ pickupAddress: '  House 4, Street 9 ', pickupLandmark: 'Green gate', pickupPhone: '0300-1234567' });
+    expect(parsed.success && parsed.data).toMatchObject({ pickupAddress: 'House 4, Street 9', pickupLandmark: 'Green gate', pickupPhone: '0300-1234567' });
+  });
+
+  it('takes blank or null to clear them', () => {
+    expect(update({ pickupAddress: null, pickupLandmark: null, pickupPhone: null }).success).toBe(true);
+    expect(update({ pickupAddress: '', pickupLandmark: '', pickupPhone: '' }).success).toBe(true);
+  });
+
+  it('refuses a phone that is not one, and text that is too long', () => {
+    for (const bad of ['call me', '12345', '+92 300 1234567 ext 4', '0300123456789012']) expect(update({ pickupPhone: bad }).success).toBe(false);
+    expect(update({ pickupPhone: '+92 300 1234567' }).success).toBe(true);
+    expect(update({ pickupAddress: 'x'.repeat(301) }).success).toBe(false);
+    expect(update({ pickupLandmark: 'x'.repeat(201) }).success).toBe(false);
+  });
+});

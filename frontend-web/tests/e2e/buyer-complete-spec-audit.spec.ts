@@ -26,10 +26,11 @@ async function postJson(
   endpoint: string,
   body: unknown,
   jwt?: string,
+  extraHeaders: Record<string, string> = {},
 ) {
   const url = `${API_BASE}/${endpoint.replace(/^\//, '')}`;
   return ctx.post(url, {
-    headers: jwt ? { Authorization: `Bearer ${jwt}` } : {},
+    headers: { ...(jwt ? { Authorization: `Bearer ${jwt}` } : {}), ...extraHeaders },
     data: body,
   });
 }
@@ -438,6 +439,7 @@ test.describe.serial('Buyer / Customer Specification Complete 27-Section Audit',
         paymentMethod: 'cod',
       },
       session.jwt,
+      { 'Idempotency-Key': crypto.randomUUID() },
     );
     const orderData = await orderResp.json();
     const orderId = orderData.data?.order?.id || orderData.data?.id;
@@ -483,6 +485,7 @@ test.describe.serial('Buyer / Customer Specification Complete 27-Section Audit',
         paymentMethod: 'cod',
       },
       session.jwt,
+      { 'Idempotency-Key': crypto.randomUUID() },
     );
     const orderData = await orderResp.json();
     const orderId = orderData.data?.order?.id || orderData.data?.id;
@@ -561,6 +564,7 @@ test.describe.serial('Buyer / Customer Specification Complete 27-Section Audit',
         paymentMethod: 'cod',
       },
       session.jwt,
+      { 'Idempotency-Key': crypto.randomUUID() },
     );
     const orderData = await orderResp.json();
     const orderId = orderData.data?.order?.id || orderData.data?.id;

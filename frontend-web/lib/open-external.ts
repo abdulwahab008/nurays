@@ -32,14 +32,45 @@ export function openExternal(url: string, win: ExternalWindow | undefined = defa
   if (isNativeShell(win)) {
     // The shell wants a full address, and picks the in-app browser for web pages and the launcher for the rest.
     const absolute = /^[a-z][a-z0-9+.-]*:/i.test(url) ? url : new URL(url, win.location.origin ?? 'http://localhost').toString();
-    const plugins = win.Capacitor?.Plugins;
-    const plugin = /^https?:/i.test(absolute) ? plugins?.Browser : plugins?.AppLauncher;
-    if (plugin) {
-      void ('open' in plugin ? plugin.open({ url: absolute }) : plugin.openUrl({ url: absolute }));
-      return;
+    const { Browser, AppLauncher } = win.Capacitor?.Plugins ?? {};
+    const web = /^https?:/i.test(absolute);
+    const asBefore = () => {
+      const plugin = web ? Browser : AppLauncher;
+      if (plugin) void ('open' in plugin ? plugin.open({ url: absolute }) : plugin.openUrl({ url: absolute }));
+      else win.open(url, '_blank', 'noopener,noreferrer');
+    };
+    if (web && AppLauncher && isMapsUrl(absolute)) {
+      // In the in-app browser a map is only a web page, with no turn-by-turn: the launcher hands it to the Maps or
+      // Google Maps app instead, and the in-app browser stays the fallback for when no app takes it.
+      Promise.resolve(AppLauncher.openUrl({ url: absolute })).then((result) => {
+        if (launcherDeclined(result)) asBefore();
+      }, asBefore);
+    } else {
+      asBefore();
     }
+    return;
   }
   win.open(url, '_blank', 'noopener,noreferrer');
+}
+
+// The launcher answers { completed: false } when no app on the phone took the link.
+const launcherDeclined = (result: unknown) =>
+  typeof result === 'object' && result !== null && (result as { completed?: unknown }).completed === false;
+
+/** Whether a link is a map or directions, which a phone app should hand to a maps app rather than show as a page. */
+export function isMapsUrl(url: string): boolean {
+  if (/^(geo|comgooglemaps|maps):/i.test(url)) return true;
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return false;
+  }
+  if (!/^https?:$/.test(parsed.protocol)) return false;
+  const host = parsed.hostname.toLowerCase();
+  if (host === 'maps.apple.com' || host === 'maps.google.com' || host === 'maps.app.goo.gl') return true;
+  const onMapsPath = parsed.pathname === '/maps' || parsed.pathname.startsWith('/maps/');
+  return onMapsPath && /^(www\.)?google(\.com?)?\.[a-z]{2,3}$/.test(host);
 }
 
 export interface ReservedExternal {

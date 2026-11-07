@@ -20,20 +20,53 @@ never the same thing as the application log.
 ## 2. What is recorded today
 
 **Application log** (`utils/logger.ts`, `middleware/requestContext.ts`)
-- One line per request: method, path (no query string), status, duration, `requestId`, `userId`. Health checks are
-  skipped. 5xx are `error`, 4xx and **requests slower than 2 s** (`SLOW_REQUEST_MS`) are `warn` with `"slow": true`.
+- One line per request: method, URL, status, duration, `requestId`, `userId`. Health checks are skipped. The URL keeps
+  the query string's keys, but the value of any key whose name contains `sig`, `token`, `secret`, `password`, `otp`,
+  `code`, `tracker`, `key`, `phone` or `email` is written as `[redacted]` (signed file links, the Safepay return,
+  tokens, people). 4xx and **requests slower than 2 s** (`SLOW_REQUEST_MS`) are `warn` with `"slow": true`.
+- A 5xx counts once at `error`. An unexpected failure is logged by the error handler (`Request failed`, with the
+  stack in `err`, and sent to Sentry); its request line is then a `warn` without the error. An expected one (an
+  `AppError` marked expected, such as `503 SERVICE_BUSY`) gets a `warn` from the error handler and its request line is
+  the `error`. Client mistakes (4xx) are a `warn` from the error handler with `errorCode` and `status`.
 - The same `requestId` is returned to the client in `X-Request-Id` and in error responses, so a customer's
-  screenshot leads straight to the log lines.
-- Passwords, tokens, OTPs and handover codes are redacted; email addresses and phone numbers in messages are masked.
+  screenshot leads straight to the log lines. An incoming `X-Request-Id` is kept only when it is 16 to 64 letters,
+  digits, `-` or `_` (a UUID, nginx's `$request_id`); anything else gets a fresh id.
+- Secrets are scrubbed from every line at any depth by key name (`password`, `newPassword`, `currentPassword`,
+  `token`, `accessToken`, `refreshToken`, `access_token`, `refresh_token`, `authorization`, `cookie`, `otp`, `otpCode`,
+  `otpCodeOrPassword`, `deliveryOtp`, `handoverCode`, `code`, `sig`, `signature`, `secret`, `cardNumber`, `cvv`, in any
+  case), and the `Authorization` header of an HTTP client's error is redacted. Email addresses and phone numbers in
+  messages are masked.
+- Work outside a request has an id in the same `requestId` field, so all its lines can be found together: a queued
+  background job (BullMQ) carries the id of the request that queued it (stored in the job's data as `_requestId` and
+  restored in the worker, including on its `Job failed` lines; a job queued outside a request gets
+  `job:<name>:<jobId>`), each scheduled-job run gets `sched:<name>:<uuid>`, and each Socket.IO client event gets
+  `socket:<uuid>`.
 - Everything the server says goes through the logger (the source has no `console` calls, and ESLint warns on one), so
   every line has a level, a time and the request id, and carries the error (`err`) and the ids (`orderId`, `job`,
   `redis`...) as fields. Live-socket traffic (connect, join or leave an order room, disconnect) is `debug`, so it does
   not fill the log: set `LOG_LEVEL=debug` to see it. A denied order-room join is a `warn`.
-- Scheduled jobs: failures are logged as `Job <name> failed` with the error. Dispatch logs every automatic
+- Scheduled jobs: failures are logged as `Job <name> failed` with the error and `durationMs`; every run also writes
+  `Job <name> finished` at `debug` (`ran: false` when another instance held the job's lease or this instance's previous run was still going). Queued jobs log
+  `Job failed; will retry` or `Job failed; giving up` with the attempt count. Dispatch logs every automatic
   assignment (delivery, order, rider, reason, number of candidates).
+- **Domain events** (`logEvent` in `utils/logger.ts`): one `info` line per business event, with `event` set to its
+  name (also the message) and ids as fields (for orders, deliveries and refunds `orderId`, `orderNumber`, `actor`, and
+  where it applies `sellerId`, `riderId`, `deliveryId`, `refundId`, `amountMinor` in paisa; payment events carry
+  `via` and, except `payment.failed`, `attemptId`, `orderId`, `purpose` and `amountMinor`). Chart and alert on `event`:
+  - orders: `order.placed`, `order.accepted`, `order.rejected`, `order.ready`, `order.picked_up`, `order.delivered`,
+    `order.delivery_failed`, `order.cancelled`, `order.item_cancelled`, `order.delivery_retried`, and
+    `order.<status>` for any other status a kitchen's item change or an admin's status change moves the order to;
+  - deliveries: `delivery.claimed`, and `delivery.<status>` for a rider's other steps (`delivery.arrived_at_pickup`,
+    `delivery.in_transit`, `delivery.arrived_at_customer`);
+  - payments: `payment.succeeded`, `payment.duplicate_credited`, `payment.duplicate_ignored`, and `payment.failed`
+    with `via` (`return` or `webhook`) and `reason` (`invalid_signature`, `missing_tracker`, `settle_error`);
+  - refunds: `refund.issued`, `refund.completed`, `refund.dismissed`.
 - **Operations snapshot** every 5 minutes (`metric: "ops_snapshot"`): open deliveries nobody has taken and how long
   the oldest has waited, active deliveries, riders on duty, orders and cancellations in the last hour, expired
-  payments, pending approvals, refunds, payouts and complaints. This is what you chart and alert on.
+  payments, pending approvals, refunds, payouts and complaints, ready orders no rider has taken for 20 minutes
+  (`readyNoRiderStuck`, `oldestReadyNoRiderMinutes`) and the job queue (`jobsWaiting`, `jobsActive`, `jobsDelayed`,
+  `jobsFailed`; `null` without Redis). When `jobsFailed` has grown since the previous snapshot of that instance, a
+  `warn` line with `metric: "jobs_failed"` and `newlyFailed` follows. This is what you chart and alert on.
 
 **Audit trail** (`audit_logs`)
 - Every admin write (done or refused), every refused attempt at the admin area, admin and customer sign-ins, failed
@@ -72,12 +105,14 @@ enforces this for the above; keep it that way in new code (log ids, not people).
 | Slow requests | log `slow:true` | more than 20 in 5 min | database or dependency trouble |
 | Orders waiting for a rider | `ops_snapshot.oldestOpenDeliveryMinutes` | above 15 | customers waiting, food cooling |
 | No riders on duty | `ridersOnDuty` = 0 with `ordersLastHour` > 0 | 10 min | nobody can deliver |
-| Payments failing | `paymentsFailedLastHour`, webhook "invalid signature" lines | any spike or any bad signature | gateway or attack |
+| Payments failing | `paymentsFailedLastHour`, `event: "payment.failed"` (`reason: "invalid_signature"`) | any spike or any bad signature | gateway or attack |
+| Ready orders with no rider | `ops_snapshot.readyNoRiderStuck` | above 0 | food waiting at the kitchen; an admin can cancel it |
 | Sign-in attacks | audit `auth:LOGIN_FAILED` / `LOGIN_LOCKED` | 20 failures in 5 min from one IP | credential stuffing |
 | Staff misuse | audit rows with `responseStatus` 403 on `admin:` actions | any burst | probing |
 | Money backlog | `pendingRefunds`, `pendingPayouts` | above 24 h old | unhappy customers and kitchens |
 | Approvals backlog | `pendingApprovals` | above 24 h | kitchens waiting to sell |
-| Job failures | `Job <name> failed` | any | stuck sweeps (stale orders, dispatch, ranking) |
+| Job failures | `Job <name> failed`, `Job failed; giving up`, `metric: "jobs_failed"` | any | stuck sweeps (stale orders, dispatch, ranking) or lost emails and notifications |
+| Sign-in overload | `errorCode: "SERVICE_BUSY"` on `/auth/` routes | a burst | password hashing is at `PASSWORD_HASH_CONCURRENCY` plus its queue (see `DEPLOYMENT_GUIDE.md`) |
 | Rate limits not counted | warning `Rate limits are not being counted` (at most one a minute, with `requestsSinceLastReport`) | any | Redis is down or not answering: requests are let through unlimited |
 | Disk, CPU, memory, DB connections | host | 80 percent | capacity |
 | Backup missing | host | no success in 25 h | recovery |
@@ -98,14 +133,14 @@ enforces this for the above; keep it that way in new code (log ids, not people).
 
 **In place**: non-root containers, health checks, readiness and liveness endpoints, graceful shutdown with a drain
 period, migrations applied by `migrate deploy`, schema drift check and end-to-end tests in CI, Dependabot,
-structured logs with request ids, optional Sentry, advisory-locked jobs safe for several instances, Redis-backed rate
-limits.
+structured logs with request ids, optional Sentry, scheduled jobs that take a Redis lease so they are safe for several
+instances, Redis-backed rate limits.
 
 **You must add (not part of the code)**
 1. **Backups**: daily PostgreSQL backup plus point-in-time recovery, object storage versioning, **a restore test
    every quarter**. This is the single most important missing item (no backup tooling ships with the app).
 2. **Log shipping**: send container stdout to a collector (Grafana Loki, Datadog, CloudWatch, ELK). Index on
-   `requestId`, `level`, `metric`, `job`, `userId`.
+   `requestId`, `level`, `metric`, `event`, `job`, `userId`.
 3. **Uptime check** on `/api/v1/health/ready` from outside your network, and the alerts in section 4.
 4. **Secrets** in a secrets manager; rotate `JWT_SECRET` and gateway secrets on staff changes.
 5. **TLS and security headers** at the load balancer; set `X-Request-Id` there so traces cross proxies.
@@ -124,5 +159,5 @@ limits.
 | "Did someone break into an account?" | `auth:LOGIN_FAILED`, `LOGIN_LOCKED`, `PASSWORD_RESET` rows for the user, IP and browser |
 | "Which staff member changed this kitchen?" | `audit_logs` by `entityId` |
 | "Why is the site slow?" | `slow:true` lines, `ops_snapshot`, host and database metrics |
-| "Did Safepay tell us this was paid?" | webhook lines by tracker, `payment_attempts` |
+| "Did Safepay tell us this was paid?" | webhook lines by tracker, `payment.*` events by `orderId`, `payment_attempts` |
 | "Is the money right?" | ledger totals against Safepay and the bank, per day |

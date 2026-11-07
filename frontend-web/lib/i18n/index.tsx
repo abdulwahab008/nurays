@@ -1,6 +1,7 @@
 'use client';
 
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
+import { usePathname } from 'next/navigation';
 import { DEFAULT_LOCALE, dirFor, LOCALE_COOKIE, type Locale } from './config';
 
 export * from './config';
@@ -53,6 +54,27 @@ export function LocaleProvider({ initialLocale, children }: { initialLocale: Loc
 }
 
 export const useLocale = () => useContext(LocaleContext);
+
+const isEnglishOnlyPath = (pathname: string | null) => pathname === '/admin' || !!pathname?.startsWith('/admin/');
+
+/**
+ * For what floats above every page (the questions in Dialogs.tsx, the toasts). The admin pages are written in English only
+ * (AdminShell), so over them these read left to right with English buttons in either language; elsewhere they follow the
+ * language chosen.
+ */
+export function PageLocale({ children }: { children: ReactNode }) {
+  const parent = useLocale();
+  const englishOnly = isEnglishOnlyPath(usePathname());
+  const value = useMemo<LocaleContextValue>(() => ({ ...parent, locale: 'en', dir: 'ltr' }), [parent]);
+  if (!englishOnly) return <>{children}</>;
+  return (
+    <LocaleContext.Provider value={value}>
+      <div dir="ltr" lang="en" className="contents">
+        {children}
+      </div>
+    </LocaleContext.Provider>
+  );
+}
 
 /** The translate function for one messages module, in the current language. */
 export function useT<T extends Strings>(messages: Messages<T>) {

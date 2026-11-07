@@ -22,10 +22,11 @@ async function postJson(
   endpoint: string,
   body: unknown,
   jwt?: string,
+  extraHeaders: Record<string, string> = {},
 ) {
   const url = `${API_BASE}/${endpoint.replace(/^\//, '')}`;
   return ctx.post(url, {
-    headers: jwt ? { Authorization: `Bearer ${jwt}` } : {},
+    headers: { ...(jwt ? { Authorization: `Bearer ${jwt}` } : {}), ...extraHeaders },
     data: body,
   });
 }
@@ -110,6 +111,7 @@ async function createVerifiedCustomerWithData() {
       paymentMethod: 'cod',
     },
     jwt,
+    { 'Idempotency-Key': crypto.randomUUID() },
   );
   expect(orderResp.status()).toBe(201);
   const orderBody = await orderResp.json();
@@ -152,9 +154,9 @@ test.describe('Customer Module E2E - All Tabs & Visual Polish', () => {
     await expect(page.getByRole('heading', { name: /Welcome back/i })).toBeVisible();
 
     await page.getByRole('button', { name: 'Email', exact: true }).click();
-    await page.getByLabel(/Email Address/).fill(data.email);
+    await page.getByLabel('Email', { exact: true }).fill(data.email);
     await page.getByLabel('Password').fill(data.password);
-    await page.getByRole('button', { name: 'Login', exact: true }).click();
+    await page.getByRole('button', { name: 'Sign in', exact: true }).click();
 
     // Wait until logged in
     await expect(page).not.toHaveURL(/\/login(\?|$)/, { timeout: 15_000 });
@@ -167,12 +169,12 @@ test.describe('Customer Module E2E - All Tabs & Visual Polish', () => {
       // Check all 7 standard items exist
       const standardItems = [
         'Dashboard',
-        'Kitchens & Menus',
-        'My Orders',
+        'Kitchens & menus',
+        'My orders',
         'My Cart',
-        'My Profile',
-        'Saved Addresses',
-        'Help & Support',
+        'My profile',
+        'Saved addresses',
+        'Help & support',
       ];
 
       for (const itemName of standardItems) {
@@ -223,10 +225,10 @@ test.describe('Customer Module E2E - All Tabs & Visual Polish', () => {
     });
 
     // --- TAB 2: KITCHENS & MENUS (/products) ---
-    await page.getByRole('link', { name: 'Kitchens & Menus', exact: true }).click();
+    await page.getByRole('link', { name: 'Kitchens & menus', exact: true }).click();
     await expect(page).toHaveURL(/\/products/);
     await page.waitForLoadState('load');
-    await verifySidebarActive('Kitchens & Menus');
+    await verifySidebarActive('Kitchens & menus');
     await verifyNoHorizontalOverflow();
 
     await expect(page.getByPlaceholder(/Search for biryani/i).first()).toBeVisible();
@@ -241,7 +243,7 @@ test.describe('Customer Module E2E - All Tabs & Visual Polish', () => {
     await page.goto(`/products/${data.productId}`, { waitUntil: 'load' });
     await expect(page).toHaveURL(new RegExp(`/products/${data.productId}`));
     // On product detail, "Kitchens & Menus" must remain active
-    await verifySidebarActive('Kitchens & Menus');
+    await verifySidebarActive('Kitchens & menus');
     await verifyNoHorizontalOverflow();
 
     await expect(page.getByRole('button', { name: /Add to (bag|cart)/i })).toBeVisible();
@@ -251,10 +253,10 @@ test.describe('Customer Module E2E - All Tabs & Visual Polish', () => {
     });
 
     // --- TAB 4: MY ORDERS (/orders) ---
-    await page.getByRole('link', { name: 'My Orders', exact: true }).click();
+    await page.getByRole('link', { name: 'My orders', exact: true }).click();
     await expect(page).toHaveURL(/\/orders/);
     await page.waitForLoadState('load');
-    await verifySidebarActive('My Orders');
+    await verifySidebarActive('My orders');
     await verifyNoHorizontalOverflow();
 
     // Check order card is visible with our created order
@@ -269,7 +271,7 @@ test.describe('Customer Module E2E - All Tabs & Visual Polish', () => {
     await expect(page).toHaveURL(new RegExp(`/orders/${data.order.id}`));
     await page.waitForLoadState('load');
     // On order detail, "My Orders" must remain active
-    await verifySidebarActive('My Orders');
+    await verifySidebarActive('My orders');
     await verifyNoHorizontalOverflow();
 
     await expect(page.getByText(`Order ${data.order.orderNumber}`)).toBeVisible();
@@ -305,11 +307,11 @@ test.describe('Customer Module E2E - All Tabs & Visual Polish', () => {
     });
 
     // --- TAB 8: MY PROFILE (/profile) ---
-    await page.getByRole('link', { name: 'My Profile', exact: true }).click();
+    await page.getByRole('link', { name: 'My profile', exact: true }).click();
     await expect(page).toHaveURL(/\/profile/);
     await page.waitForLoadState('load');
     // Crucial: "My Profile" is active, "Saved Addresses" is NOT active
-    await verifySidebarActive('My Profile');
+    await verifySidebarActive('My profile');
     await verifyNoHorizontalOverflow();
 
     await expect(page.getByText('Personal Information')).toBeVisible();
@@ -322,11 +324,11 @@ test.describe('Customer Module E2E - All Tabs & Visual Polish', () => {
     });
 
     // --- TAB 9: SAVED ADDRESSES (/profile/addresses) ---
-    await page.getByRole('link', { name: 'Saved Addresses', exact: true }).click();
+    await page.getByRole('link', { name: 'Saved addresses', exact: true }).click();
     await expect(page).toHaveURL(/\/profile\/addresses/);
     await page.waitForLoadState('load');
     // Crucial: "Saved Addresses" is active, "My Profile" is NOT active!
-    await verifySidebarActive('Saved Addresses');
+    await verifySidebarActive('Saved addresses');
     await verifyNoHorizontalOverflow();
 
     await expect(page.getByText('Apartment 4B, Ocean View Towers')).toBeVisible();
@@ -337,10 +339,10 @@ test.describe('Customer Module E2E - All Tabs & Visual Polish', () => {
     });
 
     // --- TAB 10: HELP & SUPPORT (/support) ---
-    await page.getByRole('link', { name: 'Help & Support', exact: true }).click();
+    await page.getByRole('link', { name: 'Help & support', exact: true }).click();
     await expect(page).toHaveURL(/\/support/);
     await page.waitForLoadState('load');
-    await verifySidebarActive('Help & Support');
+    await verifySidebarActive('Help & support');
     await verifyNoHorizontalOverflow();
 
     // Check FAQs, Contact Us, and My Tickets tabs

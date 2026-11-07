@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { apiClient, apiErrorMessage } from '@/lib/api-client';
 import { useToast } from '@/components/ui/toast';
+import { Button } from '@/components/ui/button';
 import { useT } from '@/lib/i18n';
 import { commonMessages } from '@/lib/i18n/messages/common';
 import { kitchenOrderMessages } from '@/lib/i18n/messages/kitchen-orders';
@@ -49,41 +50,29 @@ export default function SelfHandoverActions({ orderId, orderStatus, deliveryType
 
   if (!['ready', 'dispatched', 'in_transit'].includes(orderStatus)) return null;
 
+  const field =
+    'h-11 rounded-lg border border-line-strong bg-surface px-3 text-ink focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-brand/40';
+  // Out for delivery comes first while the food is still in the kitchen; after that, handing it over is the next step.
+  const dispatchFirst = orderStatus === 'ready' && !isPickup;
+
   return (
-    <div className="p-4 bg-indigo-50 rounded-2xl border border-indigo-200 space-y-3">
-      <p className="text-sm font-bold text-indigo-900">
-        {isPickup ? t('handover.pickupTitle') : t('handover.deliverTitle')}
-      </p>
+    <div className="space-y-3">
+      <p className="text-sm font-semibold text-ink">{isPickup ? t('handover.pickupTitle') : t('handover.deliverTitle')}</p>
 
       {mode === 'idle' && (
         <div className="flex flex-wrap gap-2">
-          {orderStatus === 'ready' && !isPickup && (
-            <button
-              type="button"
-              disabled={!!busy}
-              onClick={() => call('dispatch', {}, t('handover.dispatched'))}
-              className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50"
-            >
+          {dispatchFirst && (
+            <Button disabled={!!busy} onClick={() => call('dispatch', {}, t('handover.dispatched'))} className="flex-1">
               {busy === 'dispatch' ? t('handover.updating') : t('handover.outForDelivery')}
-            </button>
+            </Button>
           )}
-          <button
-            type="button"
-            disabled={!!busy}
-            onClick={() => setMode('deliver')}
-            className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 disabled:opacity-50"
-          >
+          <Button variant={dispatchFirst ? 'outline' : 'default'} disabled={!!busy} onClick={() => setMode('deliver')} className="flex-1">
             {isPickup ? t('handover.collected') : t('handover.delivered')}
-          </button>
+          </Button>
           {!isPickup && (
-            <button
-              type="button"
-              disabled={!!busy}
-              onClick={() => setMode('fail')}
-              className="px-4 py-2 rounded-lg border border-red-300 text-red-700 text-sm font-semibold hover:bg-red-50 disabled:opacity-50"
-            >
+            <Button variant="outline" disabled={!!busy} onClick={() => setMode('fail')} className="text-red-700 hover:bg-red-50">
               {t('handover.deliveryFailed')}
-            </button>
+            </Button>
           )}
         </div>
       )}
@@ -96,10 +85,10 @@ export default function SelfHandoverActions({ orderId, orderStatus, deliveryType
             call('deliver', { handoverCode: code.trim() }, t('handover.completed'));
           }}
         >
-          <label className="block text-xs font-semibold text-indigo-900" htmlFor={`code-${orderId}`}>
+          <label className="block text-sm text-muted" htmlFor={`code-${orderId}`}>
             {t('handover.askCode')}
           </label>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <input
               id={`code-${orderId}`}
               inputMode="numeric"
@@ -109,20 +98,16 @@ export default function SelfHandoverActions({ orderId, orderStatus, deliveryType
               dir="ltr"
               value={code}
               onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 4))}
-              className="w-28 h-10 rounded-lg border border-indigo-300 px-3 text-center font-mono text-lg tracking-widest"
+              className={`${field} w-28 text-center font-mono text-lg tracking-widest`}
               placeholder="0000"
               required
             />
-            <button
-              type="submit"
-              disabled={!!busy || code.length !== 4}
-              className="px-4 rounded-lg bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 disabled:opacity-50"
-            >
+            <Button type="submit" disabled={!!busy || code.length !== 4}>
               {busy === 'deliver' ? t('handover.checking') : tc('confirm')}
-            </button>
-            <button type="button" onClick={() => setMode('idle')} className="px-3 text-sm text-gray-600 underline">
+            </Button>
+            <Button type="button" variant="ghost" onClick={() => setMode('idle')}>
               {tc('cancel')}
-            </button>
+            </Button>
           </div>
         </form>
       )}
@@ -135,29 +120,25 @@ export default function SelfHandoverActions({ orderId, orderStatus, deliveryType
             call('delivery-failed', { reason: reason.trim() }, t('handover.reported'));
           }}
         >
-          <label className="block text-xs font-semibold text-red-800" htmlFor={`reason-${orderId}`}>
+          <label className="block text-sm text-muted" htmlFor={`reason-${orderId}`}>
             {t('handover.whatHappened')}
           </label>
-          <div className="flex gap-2">
-            <input
-              id={`reason-${orderId}`}
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              className="flex-1 h-10 rounded-lg border border-red-300 px-3 text-sm"
-              minLength={3}
-              maxLength={500}
-              required
-            />
-            <button
-              type="submit"
-              disabled={!!busy || reason.trim().length < 3}
-              className="px-4 rounded-lg bg-red-600 text-white text-sm font-semibold hover:bg-red-700 disabled:opacity-50"
-            >
+          <input
+            id={`reason-${orderId}`}
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            className={`${field} w-full text-[15px]`}
+            minLength={3}
+            maxLength={500}
+            required
+          />
+          <div className="flex flex-wrap gap-2">
+            <Button type="submit" variant="outline" disabled={!!busy || reason.trim().length < 3} className="text-red-700 hover:bg-red-50">
               {busy === 'delivery-failed' ? t('handover.sending') : t('handover.report')}
-            </button>
-            <button type="button" onClick={() => setMode('idle')} className="px-3 text-sm text-gray-600 underline">
+            </Button>
+            <Button type="button" variant="ghost" onClick={() => setMode('idle')}>
               {tc('cancel')}
-            </button>
+            </Button>
           </div>
         </form>
       )}

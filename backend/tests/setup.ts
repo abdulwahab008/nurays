@@ -3,3 +3,7 @@
 process.env.JWT_SECRET =
   process.env.JWT_SECRET || 'test-secret-key-for-jest-at-least-32-characters-long';
 process.env.NODE_ENV = 'test';
+// Prisma's client reads .env when it loads, which would point tests at the developer's Redis: attempt
+// counters would then persist between runs and fail the next one. Defined-but-empty is never overwritten
+// by .env and reads as "no Redis"; a test that needs Redis sets its own address.
+process.env.REDIS_URL = '';

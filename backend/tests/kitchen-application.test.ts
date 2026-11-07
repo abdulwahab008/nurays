@@ -41,6 +41,7 @@ function givenSeller(over: Record<string, unknown>, documentTypes: string[]) {
   db.seller = { findUnique: jest.fn(async () => seller), update: jest.fn(async ({ data }: any) => ({ ...seller, ...data })) };
   db.sellerDocument = { findMany: jest.fn(async () => documentTypes.map((documentType) => ({ documentType }))), count: jest.fn(), deleteMany: jest.fn(), createMany: jest.fn() };
   db.$transaction = jest.fn(async (ops: unknown[]) => ops);
+  db.community = { findUnique: jest.fn(async () => ({ name: 'Gulshan-e-Iqbal', city: 'Karachi', centerLatitude: '24.92', centerLongitude: '67.09' })) };
   return seller;
 }
 
@@ -71,6 +72,12 @@ describe('a kitchen that is still waiting', () => {
       givenSeller({ verificationStatus }, []);
       await expect(sellerService.registerAsSeller('u1', details)).rejects.toMatchObject({ code: 'SELLER_ALREADY_EXISTS' });
     }
+  });
+
+  it('is refused a map pin in another city than its area, and saves nothing', async () => {
+    givenSeller({}, ['cnic_front', 'cnic_back']);
+    await expect(sellerService.registerAsSeller('u1', { ...details, latitude: 31.472, longitude: 74.453 })).rejects.toMatchObject({ statusCode: 400, code: 'PIN_FAR_FROM_AREA' });
+    expect(db.seller.update).not.toHaveBeenCalled();
   });
 
   it('can still send a rejected application again', async () => {

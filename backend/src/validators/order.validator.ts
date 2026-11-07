@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { calendarDay } from './primitives';
 
 export const createOrderSchema = z.object({
   items: z.array(
@@ -13,11 +14,12 @@ export const createOrderSchema = z.object({
   deliveryType: z.enum(['home_delivery', 'hub_pickup', 'self_pickup']),
   deliveryAddressId: z.string().uuid().optional(),
   hubId: z.string().uuid().optional(),
-  deliverySlotDate: z.string().optional(),
-  deliverySlotTime: z.string().optional(),
+  deliverySlotDate: calendarDay.optional(),
+  deliverySlotTime: z.enum(['morning', 'afternoon', 'evening']).optional(),
   paymentMethod: z.enum(['jazzcash', 'easypaisa', 'bank', 'cod', 'wallet', 'card', 'safepay']),
   promotionCode: z.string().trim().max(50).optional(),
   deliveryInstructions: z.string().max(500).optional(),
+  expectedTotal: z.number().nonnegative().optional(),
 });
 
 export const cancelOrderSchema = z.object({
