@@ -188,7 +188,7 @@ test.describe('Nuray customer purchase', () => {
     );
 
     await page.goto(`/products/${SAMPLE_PRODUCT_ID}`);
-    await page.getByRole('button', { name: /Add to (cart|bag)/i }).click();
+    await page.getByRole('button', { name: /Add to (cart|bag|tray)/i }).click();
     const resp = await cartAdded;
     expect(resp.ok()).toBe(true);
 
