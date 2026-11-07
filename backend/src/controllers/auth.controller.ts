@@ -11,7 +11,7 @@ import { logger } from '../utils/logger';
 import { guardAccountProbe } from '../middleware/accountProbe';
 import * as twoFactor from '../services/staff-two-factor.service';
 import { verifyChallenge, verifyRefreshToken, type ChallengePurpose } from '../utils/jwt';
-import { clearRefreshCookie, fromWebsite, readRefreshCookie } from '../utils/refresh-cookie';
+import { clearRefreshCookie, fromWebsite, readRefreshCookie, usesCookie } from '../utils/refresh-cookie';
 import prisma from '../config/database';
 
 export const requestOTP = async (req: Request, res: Response) => {
@@ -201,7 +201,7 @@ function refreshTokenFromCookie(req: Request): string | null {
 
 function sessionFromCookie(req: Request): { userId: string; sid: string } | null {
   const token = readRefreshCookie(req);
-  if (!token || !fromWebsite(req)) return null;
+  if (!token || !usesCookie(req)) return null;
   try {
     const { userId, sid } = verifyRefreshToken(token);
     return sid ? { userId, sid } : null;
@@ -278,7 +278,7 @@ export const changePassword = async (req: Request, res: Response) => {
 export const logout = async (req: Request, res: Response) => {
   // Signed out with no access token in hand (the page was reloaded, or it expired): the cookie names the session.
   const cookieSession = req.user ? null : sessionFromCookie(req);
-  clearRefreshCookie(res);
+  if (usesCookie(req)) clearRefreshCookie(res);
   if (cookieSession) {
     await endSession(cookieSession.userId, cookieSession.sid);
     socketManager.disconnectSession(cookieSession.sid);
@@ -317,7 +317,7 @@ async function endEverywhere(userId: string) {
 export const logoutAll = async (req: Request, res: Response) => {
   if (!req.user) throw new AppError('Authentication required', 401, 'AUTH_REQUIRED');
   await endEverywhere(req.user.userId);
-  clearRefreshCookie(res);
+  if (usesCookie(req)) clearRefreshCookie(res);
   void recordAudit({ userId: req.user.userId, action: 'auth:LOGOUT_ALL', entityType: 'user', entityId: req.user.userId, ipAddress: req.ip, responseStatus: 200 });
   res.status(200).json({ success: true, message: 'Signed out on every device' });
 };

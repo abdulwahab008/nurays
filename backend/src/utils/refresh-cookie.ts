@@ -50,15 +50,35 @@ export function fromWebsite(req: Request): boolean {
   return req.headers.origin === allowed;
 }
 
+/** Sent by a developer-login tab that keeps its own session: it must neither take nor replace the browser's cookie. */
+export const ISOLATED_TAB_HEADER = 'x-nuray-isolated-tab';
+
+/**
+ * May this request set, clear or act on the cookie? Only the website's own pages, in a normal tab. Another site's form
+ * posting a sign-in would otherwise plant its own account in the person's browser, or wipe their cookie.
+ */
+export function usesCookie(req: Request): boolean {
+  return fromWebsite(req) && req.headers[ISOLATED_TAB_HEADER] !== '1';
+}
+
 type TokenBody = { data?: { tokens?: { refresh_token?: unknown }; refreshToken?: unknown } };
 
-/** Any auth response that hands out a refresh token also puts it in the cookie. */
-export function refreshCookieOnSignIn(_req: Request, res: Response, next: NextFunction): void {
+/**
+ * Any auth answer to the website that hands out a refresh token puts it in the cookie instead. In production it is
+ * also taken out of every answer, where a script could read it; elsewhere it stays, for the API check scripts and the
+ * developer login page's tabs that keep a session apart from the cookie.
+ */
+export function refreshCookieOnSignIn(req: Request, res: Response, next: NextFunction): void {
   const json = res.json.bind(res);
   res.json = (body: TokenBody) => {
-    const token = body?.data?.tokens?.refresh_token ?? body?.data?.refreshToken;
-    if (typeof token === 'string' && res.statusCode < 400) setRefreshCookie(res, token);
-    return json(body);
+    const data = body?.data;
+    const token = data?.tokens?.refresh_token ?? data?.refreshToken;
+    if (typeof token !== 'string' || res.statusCode >= 400) return json(body);
+    if (usesCookie(req)) setRefreshCookie(res, token);
+    if (!isProduction()) return json(body);
+    const { refreshToken: _dropped, tokens, ...rest } = data as NonNullable<TokenBody['data']>;
+    const { refresh_token: _alsoDropped, ...keptTokens } = tokens ?? {};
+    return json({ ...body, data: { ...rest, ...(tokens ? { tokens: keptTokens } : {}) } });
   };
   next();
 }

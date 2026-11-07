@@ -57,13 +57,47 @@ const cookieFor = (sid = 's1') => `${REFRESH_COOKIE}=${generateRefreshToken({ us
 
 describe('signing in', () => {
   it('puts the refresh token in an httpOnly cookie scoped to the auth routes', async () => {
-    const res = await post('/login');
+    const res = await post('/login', { Origin: SITE });
     const set = res.headers.get('set-cookie') ?? '';
     expect(set).toMatch(new RegExp(`^${REFRESH_COOKIE}=`));
     expect(set).toMatch(/HttpOnly/i);
     expect(set).toMatch(/SameSite=Lax/i);
     expect(set).toMatch(/Path=\/api\/v1\/auth/);
     expect(set).toMatch(/Expires=/);
+  });
+
+  it('sets no cookie for a sign-in posted by another site, so it cannot plant its own account', async () => {
+    expect((await post('/login', { Origin: 'https://evil.example' })).headers.get('set-cookie')).toBeNull();
+    expect((await post('/login')).headers.get('set-cookie')).toBeNull();
+  });
+
+  it('sets no cookie for a developer-login tab that keeps its own session', async () => {
+    expect((await post('/login', { Origin: SITE, 'X-Nuray-Isolated-Tab': '1' })).headers.get('set-cookie')).toBeNull();
+  });
+});
+
+describe('what the answer carries', () => {
+  const env = process.env.NODE_ENV;
+  afterEach(() => {
+    process.env.NODE_ENV = env;
+  });
+
+  it('keeps the refresh token in the answer outside production', async () => {
+    const body = (await (await post('/login')).json()) as { data: { tokens: Record<string, unknown> } };
+    expect(typeof body.data.tokens.refresh_token).toBe('string');
+  });
+
+  it('takes it out of every answer in production, leaving only the cookie (marked Secure)', async () => {
+    process.env.NODE_ENV = 'production';
+    const login = await post('/login', { Origin: SITE });
+    const loginBody = (await login.json()) as { data: { tokens: Record<string, unknown> } };
+    expect(loginBody.data.tokens).toEqual({ access_token: 'a' });
+    expect(login.headers.get('set-cookie')).toMatch(/Secure/);
+
+    const refresh = await post('/refresh', { Origin: SITE, Cookie: cookieFor() });
+    const refreshBody = (await refresh.json()) as { data: Record<string, unknown> };
+    expect(refreshBody.data).toEqual({ accessToken: 'new-access' });
+    expect(refresh.headers.get('set-cookie')).toMatch(new RegExp(`^${REFRESH_COOKIE}=new-refresh`));
   });
 });
 
@@ -110,11 +144,17 @@ describe('signing out', () => {
     expect(res.headers.get('set-cookie')).toMatch(new RegExp(`^${REFRESH_COOKIE}=;.*Expires=Thu, 01 Jan 1970`));
   });
 
-  it('does not end a session for another site, but still clears the cookie', async () => {
+  it('neither ends a session nor clears the cookie for another site', async () => {
     const res = await post('/logout', { Origin: 'https://evil.example', Cookie: cookieFor('s7') });
     expect(res.status).toBe(200);
     expect(endSession).not.toHaveBeenCalled();
-    expect(res.headers.get('set-cookie')).toMatch(new RegExp(`^${REFRESH_COOKIE}=;`));
+    expect(res.headers.get('set-cookie')).toBeNull();
+  });
+
+  it('leaves the browser\'s cookie alone when a developer-login tab signs out', async () => {
+    const res = await post('/logout', { Origin: SITE, Cookie: cookieFor('s7'), 'X-Nuray-Isolated-Tab': '1' });
+    expect(endSession).not.toHaveBeenCalled();
+    expect(res.headers.get('set-cookie')).toBeNull();
   });
 });
 
