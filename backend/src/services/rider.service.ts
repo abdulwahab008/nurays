@@ -20,6 +20,7 @@ import { notifyApprovers } from './approvals.service';
 import { ACTIVE_DELIVERY_STATUSES, BEFORE_PICKUP_STATUSES, ON_THE_WAY_STATUSES, canMoveDelivery, ORDER_STATUS_FOR_DELIVERY_STATUS, refuseDeliveryMove } from '../utils/deliveryStatus';
 import { doorField } from '../utils/addressSnapshot';
 import { logEvent, logger } from '../utils/logger';
+import { recordAudit } from '../middleware/audit';
 
 // The delivery status machine (which status follows which, and what the order must look like) is in utils/deliveryStatus.ts.
 
@@ -697,6 +698,7 @@ export class RiderService {
       phone: realPhoneOrNull(user?.phone),
       vehicleType: rider.vehicleType || null,
       vehicleNumber: rider.vehicleNumber || null,
+      licenseNumber: rider.licenseNumber || null,
       city: rider.city || null,
       ratingAverage: Number(rider.ratingAverage) || 0,
       totalDeliveries: rider.totalDeliveries,
@@ -738,7 +740,7 @@ export class RiderService {
   /**
    * A rider sends (or, after a rejection, sends again) their application: vehicle and photos
    * of both sides of their CNIC and their driving licence, uploaded here. It goes back to the
-   * admins for review. An approved rider changes details through support instead.
+   * admins for review. An approved rider changes their vehicle with updateVehicle, anything else through support.
    */
   async submitApplication(
     userId: string,
@@ -779,6 +781,27 @@ export class RiderService {
     });
     notifyApprovers({ title: 'New rider application', message: `A rider (${data.city.trim()}) sent their application and documents.`, actionUrl: '/admin/riders?tab=applications', dedupeKey: `rider-application:${rider.id}:${Date.now()}` });
     return this.getMyApplication(userId);
+  }
+
+  /**
+   * An approved rider's new vehicle type or number plate. It doesn't send them back to review: the
+   * vetting was of the person and their licence, which stay as they were. Each change is in the audit trail.
+   */
+  async updateVehicle(userId: string, data: { vehicleType: string; vehicleNumber: string }) {
+    const rider = await this.requireRider(userId);
+    const next = { vehicleType: data.vehicleType, vehicleNumber: data.vehicleNumber.trim().toUpperCase() };
+    if (next.vehicleType !== rider.vehicleType || next.vehicleNumber !== rider.vehicleNumber) {
+      await prisma.rider.update({ where: { id: rider.id }, data: next });
+      void recordAudit({
+        userId,
+        action: 'rider:VEHICLE_UPDATED',
+        entityType: 'rider',
+        entityId: rider.id,
+        data: { from: { vehicleType: rider.vehicleType, vehicleNumber: rider.vehicleNumber }, to: next },
+        responseStatus: 200,
+      });
+    }
+    return next;
   }
 
   async toggleDutyStatus(userId: string, isAvailable?: boolean) {

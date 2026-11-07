@@ -20,15 +20,21 @@ export const updateDeliveryStatusSchema = z.object({
 
 export const RIDER_VEHICLE_TYPES = ['motorcycle', 'bicycle', 'scooter', 'car', 'rickshaw'] as const;
 
+const vehicleType = z.enum(RIDER_VEHICLE_TYPES);
+const vehicleNumber = z.string().trim().min(2, 'Enter your vehicle registration number').max(20);
+
 export const riderApplicationSchema = z.object({
   city: z.string().trim().min(2, 'Enter your city').max(60),
-  vehicleType: z.enum(RIDER_VEHICLE_TYPES),
-  vehicleNumber: z.string().trim().min(2, 'Enter your vehicle registration number').max(20),
+  vehicleType,
+  vehicleNumber,
   licenseNumber: z.string().trim().max(30).optional(),
   cnicFrontUrl: z.string().max(400).optional(),
   cnicBackUrl: z.string().max(400).optional(),
   licenseUrl: z.string().max(400).optional(),
 });
+
+// The licence number is not here on purpose: it was checked against the licence photo at approval, so it changes only through support.
+export const riderVehicleSchema = z.object({ vehicleType, vehicleNumber }).strict();
 
 export const dutyStatusSchema = z.object({ isAvailable: z.boolean().optional() });
 
