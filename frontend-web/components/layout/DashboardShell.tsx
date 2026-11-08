@@ -47,7 +47,7 @@ export const CUSTOMER_SIDEBAR_ITEMS: SidebarItem[] = [
 export const RIDER_SIDEBAR_ITEMS: SidebarItem[] = [
   { name: 'Deliveries', href: '/riders/dashboard', icon: 'dashboard', phoneTab: true },
   { name: 'Earnings and cash', href: '/riders/earnings', icon: 'earnings', phoneTab: true },
-  { name: 'Settings', href: '/profile', icon: 'settings', phoneTab: true },
+  { name: 'Settings', href: '/riders/settings', icon: 'settings', phoneTab: true },
   { name: 'Help and support', href: '/support', icon: 'support' },
 ];
 

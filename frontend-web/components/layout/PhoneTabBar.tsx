@@ -72,7 +72,7 @@ export function PhoneTabBar() {
     tabs = [
       { id: 'deliveries', href: '/riders/dashboard', label: t('tabDeliveries'), Icon: Bike },
       { id: 'earnings', href: '/riders/earnings', label: t('tabEarnings'), Icon: Wallet },
-      { id: 'settings', href: '/profile', label: t('tabSettings'), Icon: Settings },
+      { id: 'settings', href: '/riders/settings', label: t('tabSettings'), Icon: Settings },
     ];
     active = activeRiderTab(pathname);
     navLabel = t('riderNav');

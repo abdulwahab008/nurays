@@ -14,6 +14,7 @@ import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient, apiErrorDetails, apiErrorMessage } from '@/lib/api-client';
 import { DatePicker } from '@/components/ui/DatePicker';
 import LocationMap from '@/components/ui/LocationMap';
+import { KitchenAccountTab } from '@/components/sellers/KitchenAccountTab';
 import { bankAccountIsWrong, walletNumberIsWrong } from '@/lib/payout-account';
 import { sendAskingForPassword } from '@/lib/send-asking-for-password';
 import { useShallow } from 'zustand/react/shallow';
@@ -104,6 +105,7 @@ const TABS = [
   { id: 'delivery', label: 'delivery' },
   { id: 'payout', label: 'accounts' },
   { id: 'stock', label: 'runningLow' },
+  { id: 'account', label: 'account' },
 ] as const;
 type SettingsTab = (typeof TABS)[number]['id'];
 
@@ -688,7 +690,7 @@ export default function SellerSettingsPage() {
       sidebarItems={SELLER_SIDEBAR_ITEMS}
       userType="seller"
     >
-      <form onSubmit={handleSubmit} className="max-w-3xl pb-16">
+      <div className="max-w-3xl pb-16">
         <div role="tablist" aria-label={t('jumpTo')} className="-mx-4 px-4 sm:mx-0 sm:px-0 flex gap-5 overflow-x-auto border-b border-line [scrollbar-width:none]">
           {TABS.map(({ id, label }) => {
             const selected = tab === id;
@@ -710,6 +712,8 @@ export default function SellerSettingsPage() {
             );
           })}
         </div>
+        {/* The account tab has forms of its own, which cannot sit inside this one, and nothing for its Save button. */}
+        <form onSubmit={handleSubmit} hidden={tab === 'account'}>
         <section id="hours-panel" role="tabpanel" aria-labelledby="hours-tab" hidden={tab !== 'hours'} className={sectionClass}>
           <h2 id="hours-heading" className={headingClass}>{t('hours')}</h2>
           <p className="text-sm text-muted mt-1">{t('hoursHint')}</p>
@@ -1332,7 +1336,13 @@ export default function SellerSettingsPage() {
             {loading ? t('saving') : t('saveChanges')}
           </Button>
         </div>
-      </form>
+        </form>
+
+        <section id="account-panel" role="tabpanel" aria-labelledby="account-tab" hidden={tab !== 'account'} className={sectionClass}>
+          <h2 id="account-heading" className={headingClass}>{t('account')}</h2>
+          {tab === 'account' && <KitchenAccountTab />}
+        </section>
+      </div>
     </DashboardLayout>
   );
 }

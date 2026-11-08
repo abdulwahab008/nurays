@@ -33,6 +33,7 @@ import {
   Bell,
   LifeBuoy,
   ChevronRight,
+  Settings,
 } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
@@ -219,6 +220,7 @@ export default function ProfilePage() {
             <h3 id="quick-links" className="sr-only">{t('quickLinks')}</h3>
             <ul className="divide-y divide-line">
               {(isRider ? [
+                { href: '/riders/settings', icon: Settings, label: t('riderSettings') },
                 { href: '/riders/dashboard', icon: Bike, label: t('riderDeliveries') },
                 { href: '/notifications/settings', icon: Bell, label: t('notifications') },
                 { href: '/support', icon: LifeBuoy, label: t('helpSupport') },

@@ -41,7 +41,8 @@ const NOTIFICATION_SETTINGS = '/notifications/settings';
 const showsSellerTabBar = (pathname: string) =>
   (under(pathname, '/sellers') && !under(pathname, '/sellers/register')) || pathname === NOTIFICATION_SETTINGS;
 
-// Only /profile itself: the rider's settings live there, while its sub-pages (saved addresses) are the customer's.
+// The rider's settings are /riders/settings; /profile itself (an older link to them) still works for a rider, while its
+// sub-pages (saved addresses) are the customer's.
 const showsRiderTabBar = (pathname: string) =>
   under(pathname, '/riders') || pathname === '/profile' || pathname === NOTIFICATION_SETTINGS;
 
@@ -73,6 +74,6 @@ export function activeSellerTab(pathname: string): SellerTab | null {
 export function activeRiderTab(pathname: string): RiderTab | null {
   if (under(pathname, '/riders/dashboard')) return 'deliveries';
   if (under(pathname, '/riders/earnings')) return 'earnings';
-  if (pathname === '/profile' || pathname === NOTIFICATION_SETTINGS) return 'settings';
+  if (under(pathname, '/riders/settings') || pathname === '/profile' || pathname === NOTIFICATION_SETTINGS) return 'settings';
   return null;
 }

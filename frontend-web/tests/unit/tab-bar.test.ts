@@ -50,7 +50,7 @@ test('a signed-in kitchen gets its bar on its own pages only', () => {
 });
 
 test('a signed-in rider gets its bar on the rider pages and its settings', () => {
-  for (const path of ['/riders/dashboard', '/riders/earnings', '/profile', '/notifications/settings']) assert.equal(tabBarFor(path, 'rider'), 'rider', path);
+  for (const path of ['/riders/dashboard', '/riders/earnings', '/riders/settings', '/profile', '/notifications/settings']) assert.equal(tabBarFor(path, 'rider'), 'rider', path);
   for (const path of ['/', '/profile/addresses', '/notifications', '/sellers/dashboard', '/checkout', '/login', '/support']) {
     assert.equal(tabBarFor(path, 'rider'), null, path);
   }
@@ -72,7 +72,15 @@ test('the kitchen tab for the page you are on is marked', () => {
 test('the rider tab for the page you are on is marked', () => {
   assert.equal(activeRiderTab('/riders/dashboard'), 'deliveries');
   assert.equal(activeRiderTab('/riders/earnings'), 'earnings');
+  assert.equal(activeRiderTab('/riders/settings'), 'settings');
   assert.equal(activeRiderTab('/profile'), 'settings');
   assert.equal(activeRiderTab('/notifications/settings'), 'settings');
   assert.equal(activeRiderTab('/support'), null);
+  assert.equal(activeRiderTab('/riders/settingsx'), null);
+});
+
+test('only a signed-in rider gets the rider bar on the rider settings page', () => {
+  assert.equal(tabBarFor('/riders/settings', 'seller'), null);
+  assert.equal(tabBarFor('/riders/settings', null), null);
+  assert.equal(tabBarFor('/riders/settings', 'customer'), null);
 });
