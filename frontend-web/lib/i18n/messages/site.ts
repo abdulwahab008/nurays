@@ -1,6 +1,6 @@
 import { defineMessages } from '..';
 
-/** The customer-facing header, the phone tab bar and the appearance switch. */
+/** The customer-facing header, the phone tab bars and the appearance switch. */
 export const siteMessages = defineMessages({
   en: {
     mainNav: 'Main',
@@ -30,6 +30,12 @@ export const siteMessages = defineMessages({
     tabOrders: 'Orders',
     tabTray: 'Tray',
     tabProfile: 'Profile',
+    tabMenu: 'Menu',
+    tabEarnings: 'Earnings',
+    tabSettings: 'Settings',
+    tabDeliveries: 'Deliveries',
+    kitchenNav: 'Kitchen',
+    riderNav: 'Rider',
   },
   ur: {
     mainNav: 'مرکزی',
@@ -59,5 +65,11 @@ export const siteMessages = defineMessages({
     tabOrders: 'آرڈرز',
     tabTray: 'ٹرے',
     tabProfile: 'پروفائل',
+    tabMenu: 'مینو',
+    tabEarnings: 'کمائی',
+    tabSettings: 'سیٹنگز',
+    tabDeliveries: 'ڈیلیوریز',
+    kitchenNav: 'کچن',
+    riderNav: 'رائیڈر',
   },
 });

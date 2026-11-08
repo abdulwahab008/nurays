@@ -5,7 +5,7 @@ import { GoogleOAuthProvider } from "@react-oauth/google";
 import { ToastProvider } from "@/components/ui/toast";
 import { DialogProvider } from "@/components/ui/Dialogs";
 import { NativeBridge } from "@/components/NativeBridge";
-import { CustomerTabBar } from "@/components/layout/CustomerTabBar";
+import { PhoneTabBar } from "@/components/layout/PhoneTabBar";
 import { ThemeSync } from "@/components/ThemeSync";
 import { AuthProvider } from "@/components/AuthProvider";
 import { RoleNotifications } from "@/components/RoleNotifications";
@@ -82,7 +82,7 @@ export default async function RootLayout({
               ) : (
                 children
               )}
-              <CustomerTabBar />
+              <PhoneTabBar />
             </DialogProvider>
           </AuthProvider>
         </ToastProvider>

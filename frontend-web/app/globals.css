@@ -272,7 +272,7 @@
   --safe-end: var(--safe-right);
   /* Where a page starts under the fixed top bar: the bar's 4rem and the status bar above it */
   --header-offset: calc(4rem + var(--safe-top));
-  /* How far a bar floating at the bottom of a page must sit up to clear the phone tab bar (components/layout/CustomerTabBar.tsx) */
+  /* How far a bar floating at the bottom of a page must sit up to clear the phone tab bar (components/layout/PhoneTabBar.tsx) */
   --tabbar-offset: 0px;
 }
 @media (max-width: 767.98px) {

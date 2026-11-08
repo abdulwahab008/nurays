@@ -881,7 +881,7 @@ export default function SellerDeliveryPage() {
             </>
           )}
 
-          <div data-bottom-bar className="sticky bottom-0 z-10 mt-8 flex justify-end border-t border-line bg-page/95 py-4 pb-[calc(1rem+var(--safe-bottom,0px))] backdrop-blur">
+          <div data-bottom-bar className="sticky bottom-[var(--tabbar-offset)] z-10 mt-8 flex justify-end border-t border-line bg-page/95 py-4 pb-[calc(1rem+var(--safe-bottom,0px))] backdrop-blur">
             <Button
               type="submit"
               disabled={saving || !changed}
