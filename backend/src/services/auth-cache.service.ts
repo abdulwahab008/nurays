@@ -56,6 +56,8 @@ async function overwrite(keys: string[], value: string): Promise<void> {
   try {
     await Promise.all(keys.map((key) => redis.set(key, value, 'EX', TTL_SECONDS)));
   } catch (err) {
+    // A revocation the cache did not hear of stays accepted until the entry expires: worth an error, not just a warning.
+    logger.error({ err, keys: keys.length }, 'Auth cache could not record a revocation: it applies once the cached entry expires (30 s)');
     unavailable(err);
   }
 }

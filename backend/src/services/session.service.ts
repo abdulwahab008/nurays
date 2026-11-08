@@ -58,7 +58,9 @@ export async function endSession(userId: string, familyId: string): Promise<bool
     where: { userId, familyId, revokedAt: null },
     data: { revokedAt: new Date() },
   });
-  await forgetSessions([familyId]);
+  // Only a session this account really ended: the id can come from the client (DELETE /sessions/:id), and marking someone
+  // else's session as ended in the cache would sign them out.
+  if (count > 0) await forgetSessions([familyId]);
   return count > 0;
 }
 

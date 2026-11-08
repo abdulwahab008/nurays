@@ -128,6 +128,14 @@ describe('forgetting', () => {
     expect((await run(access())).error).toMatchObject({ statusCode: 401, code: 'SESSION_REVOKED' });
   });
 
+  it('signing out a session the account does not own leaves that session\'s cache entry alone', async () => {
+    await run(access());
+    db.refreshToken.updateMany = jest.fn(async () => ({ count: 0 }));
+    await expect(endSession('someone-else', 's1')).resolves.toBe(false);
+    expect((await run(access())).error).toBeUndefined();
+    expect(db.refreshToken.findFirst).toHaveBeenCalledTimes(1);
+  });
+
   it('an answer read before the change cannot be put back after it', async () => {
     let release!: () => void;
     const stale = { ...ACTIVE };
