@@ -39,7 +39,7 @@ function givenAccount(over: Record<string, unknown> = {}) {
     findUnique: jest.fn(async () => account(over)),
     update: jest.fn(async (args: any) => args),
   };
-  db.refreshToken = { create: jest.fn(async () => ({})), updateMany: jest.fn(async () => ({ count: 1 })) };
+  db.refreshToken = { create: jest.fn(async () => ({})), updateManyAndReturn: jest.fn(async () => [{ familyId: 'f1' }]) };
   db.$transaction = jest.fn(async (ops: Promise<unknown>[]) => Promise.all(ops));
 }
 
@@ -63,7 +63,7 @@ describe('changePassword', () => {
     expect(update.where).toEqual({ id: 'u1' });
     expect(await bcrypt.compare(NEXT, update.data.passwordHash)).toBe(true);
     // every recorded session ends, and the cut-off voids any token from before sessions were recorded
-    expect(db.refreshToken.updateMany).toHaveBeenCalledWith({ where: { userId: 'u1', revokedAt: null }, data: { revokedAt: expect.any(Date) } });
+    expect(db.refreshToken.updateManyAndReturn).toHaveBeenCalledWith({ where: { userId: 'u1', revokedAt: null }, data: { revokedAt: expect.any(Date) }, select: { familyId: true } });
     const cutoff = db.user.update.mock.calls.map((c: any[]) => c[0]).find((a: any) => a.data.tokensValidAfter);
     expect(cutoff.data.tokensValidAfter.getTime()).toBeGreaterThanOrEqual(before);
     update.data.tokensValidAfter = cutoff.data.tokensValidAfter;

@@ -3,6 +3,7 @@ import prisma from '../config/database';
 import socketManager from '../config/socket';
 import { tokenTtlSeconds } from '../utils/jwt';
 import { startSession, rotateSession, endAllSessions } from './session.service';
+import { forgetAuthUsers } from './auth-cache.service';
 import { secondStepFor } from './staff-two-factor.service';
 import { formatPhoneNumber, isValidPhoneNumber, realPhoneOrNull } from '../utils/otp';
 import { AppError } from '../middleware/errorHandler';
@@ -169,6 +170,7 @@ export class AuthService {
         },
       });
     });
+    if (evictedAccountId) await forgetAuthUsers(evictedAccountId);
 
     // If registering as seller, create seller record with pending status
     let seller = null;
@@ -572,7 +574,8 @@ export class AuthService {
     const formattedPhone = formatPhoneNumber(phone);
     await otpService.verifyOTP(formattedPhone, otpCode, 'registration');
 
-    return prisma.$transaction(async (tx) => {
+    let evictedId: string | null = null;
+    const result = await prisma.$transaction(async (tx) => {
       const holder = await tx.user.findUnique({ where: { phone: formattedPhone } });
       if (holder && holder.id !== userId) {
         if (holder.phoneVerified) {
@@ -583,6 +586,7 @@ export class AuthService {
           // tokensValidAfter: the squatter's sessions die with the number they never owned.
           data: { phone: placeholderPhone(`evicted-${holder.id}`), phoneVerified: false, tokensValidAfter: new Date() },
         });
+        evictedId = holder.id;
       }
       const user = await tx.user.update({
         where: { id: userId },
@@ -590,6 +594,8 @@ export class AuthService {
       });
       return { phone: user.phone, phoneVerified: user.phoneVerified };
     });
+    if (evictedId) await forgetAuthUsers(evictedId);
+    return result;
   }
 
   /**
@@ -660,6 +666,7 @@ export class AuthService {
         },
       });
     });
+    if (resetUserId) await forgetAuthUsers(resetUserId);
     // Every session ends with a password reset: leave a trail of who and when.
     if (resetUserId) socketManager.disconnectUser(resetUserId);
     if (resetUserId) void recordAudit({ userId: resetUserId, action: 'auth:PASSWORD_RESET', entityType: 'user', entityId: resetUserId, responseStatus: 200 });

@@ -3,6 +3,7 @@ import { reopenDeliveryData } from './delivery-lifecycle.service';
 import { BEFORE_PICKUP_STATUSES, ON_THE_WAY_STATUSES } from '../utils/deliveryStatus';
 import { Prisma } from '@prisma/client';
 import prisma from '../config/database';
+import { forgetAuthUsers } from './auth-cache.service';
 import socketManager from '../config/socket';
 import { AppError } from '../middleware/errorHandler';
 import { formatPhoneNumber } from '../utils/otp';
@@ -108,6 +109,7 @@ export async function setUserStatus(adminId: string, userId: string, status: str
     prisma.seller.updateMany({ where: { userId }, data: { status } }),
     prisma.rider.updateMany({ where: { userId }, data: { status } }),
   ]);
+  await forgetAuthUsers(userId);
   if (status === 'suspended') socketManager.disconnectUser(userId);
   return { id: userId, status };
 }
@@ -171,6 +173,7 @@ export async function makeHubManager(identifier: string) {
   const hasRider = await prisma.rider.count({ where: { userId: user.id } });
   if (hasRider) throw new AppError('This account has a rider application; it cannot become a hub manager', 409, 'ROLE_NOT_ALLOWED');
   await prisma.user.update({ where: { id: user.id }, data: { userType: 'hub_manager', tokensValidAfter: new Date() } });
+  await forgetAuthUsers(user.id);
   return { id: user.id, userType: 'hub_manager' };
 }
 
@@ -183,6 +186,7 @@ export async function removeHubManager(userId: string) {
     prisma.hubCenter.updateMany({ where: { managerId: userId }, data: { managerId: null } }),
     prisma.user.update({ where: { id: userId }, data: { userType: 'customer', tokensValidAfter: new Date() } }),
   ]);
+  await forgetAuthUsers(userId);
   return { id: userId, userType: 'customer' };
 }
 

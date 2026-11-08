@@ -7,11 +7,13 @@ import bcrypt from 'bcrypt';
 const db: any = {};
 jest.mock('../src/config/database', () => ({ __esModule: true, default: db }));
 jest.mock('../src/middleware/audit', () => ({ recordAudit: jest.fn(() => Promise.resolve()) }));
+jest.mock('../src/services/auth-cache.service', () => ({ forgetAuthUsers: jest.fn(() => Promise.resolve()) }));
 jest.mock('../src/services/rider-ledger.service', () => ({ riderMoney: jest.fn(async () => ({ balance: 0, cashHeld: 0, unpaid: 0, earned: 0, paidOut: 0 })) }));
 
 import { deleteOwnAccount } from '../src/services/account-deletion.service';
 import { recordAudit } from '../src/middleware/audit';
 import { riderMoney } from '../src/services/rider-ledger.service';
+import { forgetAuthUsers } from '../src/services/auth-cache.service';
 
 const USER = 'user-1';
 let hash: string;
@@ -105,6 +107,7 @@ describe('deleteOwnAccount', () => {
     expect(data).toMatchObject({ status: 'deleted', email: null, passwordHash: null, emailVerified: false, phoneVerified: false });
     expect(data.phone).toMatch(/^\+999/); // a placeholder, never shown as a real number
     expect(data.tokensValidAfter).toBeInstanceOf(Date);
+    expect(forgetAuthUsers).toHaveBeenCalledWith(USER);
     expect(tx.userAddress.deleteMany).toHaveBeenCalledWith({ where: { userId: USER } });
     expect(tx.pushSubscription.deleteMany).toHaveBeenCalledWith({ where: { userId: USER } });
     expect(tx.cart.delete).toHaveBeenCalledWith({ where: { id: 'cart-1' } });
