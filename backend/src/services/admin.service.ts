@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client';
 import { kitchenApplicationGaps } from '../utils/kitchenApplication';
 import prisma from '../config/database';
+import { forgetAuthUsers } from './auth-cache.service';
 import { computeSellerBalance } from './seller-balance.service';
 import { pageArgs } from '../utils/pagination';
 import { AppError } from '../middleware/errorHandler';
@@ -182,6 +183,7 @@ export class AdminService {
         where: { id: seller.userId },
         data: { userType: 'seller' },
       });
+      await forgetAuthUsers(seller.userId);
     }
 
     void notify({

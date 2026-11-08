@@ -7,7 +7,6 @@ jest.mock('../src/config/database', () => ({
   default: {
     delivery: { count: jest.fn(), findUnique: jest.fn(), findMany: jest.fn(), groupBy: jest.fn(), updateMany: jest.fn() },
     rider: { findMany: jest.fn(), findUnique: jest.fn() },
-    riderLedgerEntry: { groupBy: jest.fn() },
     $queryRaw: jest.fn(),
     $transaction: jest.fn(),
   },
@@ -195,13 +194,12 @@ describe('automatic assignment pay', () => {
     jest.clearAllMocks();
     db.$transaction.mockImplementation((fn: (tx: unknown) => unknown) => fn(db));
     db.$queryRaw.mockResolvedValue([{ id: 'rider-1' }]);
-    db.rider.findMany.mockResolvedValue([{ id: 'rider-1', userId: 'user-1', communityId: null, cashLimit: null }]);
-    db.rider.findUnique.mockResolvedValue({ isAvailable: true, status: 'active', cashLimit: null });
+    db.rider.findMany.mockResolvedValue([{ id: 'rider-1', userId: 'user-1', communityId: null, cashLimit: null, cashHeld: 0 }]);
+    db.rider.findUnique.mockResolvedValue({ isAvailable: true, status: 'active', cashLimit: null, cashHeld: 0 });
     db.delivery.findMany.mockResolvedValue([]);
     db.delivery.groupBy.mockResolvedValue([]);
     db.delivery.updateMany.mockResolvedValue({ count: 1 });
     db.delivery.count.mockResolvedValue(1);
-    db.riderLedgerEntry.groupBy.mockResolvedValue([]);
   });
 
   it('fixes no more than the fee at the max delivery distance when a pin is a thousand km off, as a claim does', async () => {
@@ -233,5 +231,62 @@ describe('automatic assignment pay', () => {
     await expect(dispatchDelivery('d1')).resolves.toMatchObject({ assigned: true, riderId: 'rider-1' });
     const { data } = db.delivery.updateMany.mock.calls[0][0];
     expect(data).toMatchObject({ riderId: 'rider-1', assignmentMode: 'auto', riderFee: 100 + 20 * 20 });
+  });
+});
+
+describe('automatic assignment and the cash limit', () => {
+  const db = prisma as any;
+  const cashJob = {
+    id: 'd2',
+    orderId: 'o2',
+    riderId: null,
+    status: 'pending',
+    releasedRiderIds: [],
+    pickupAddress: 'Kitchen',
+    deliveryAddress: 'Home',
+    pickupLatitude: null,
+    pickupLongitude: null,
+    deliveryLatitude: null,
+    deliveryLongitude: null,
+    order: {
+      orderNumber: 'FN2',
+      orderStatus: 'confirmed',
+      paymentMethod: 'cod',
+      paymentStatus: 'pending',
+      totalAmount: 800,
+      deliveryAddress: { communityId: null, area: 'Askari 11', city: 'Lahore' },
+      deliveryAddressSnapshot: null,
+      items: [],
+    },
+  };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    db.$transaction.mockImplementation((fn: (tx: unknown) => unknown) => fn(db));
+    db.$queryRaw.mockResolvedValue([{ id: 'rider-1' }]);
+    db.delivery.findUnique.mockResolvedValue(cashJob);
+    db.delivery.findMany.mockResolvedValue([]);
+    db.delivery.groupBy.mockResolvedValue([]);
+    db.delivery.updateMany.mockResolvedValue({ count: 1 });
+    db.delivery.count.mockResolvedValue(1);
+  });
+
+  it("leaves a cash job in the pool when the rider's stored cash held would pass the limit", async () => {
+    db.rider.findMany.mockResolvedValue([{ id: 'rider-1', userId: 'user-1', communityId: null, cashLimit: null, cashHeld: 9_500 }]);
+    await expect(dispatchDelivery('d2')).resolves.toMatchObject({ assigned: false, reason: 'no_eligible_rider' });
+    expect(db.delivery.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('re-checks the cash held on the locked row, which may have grown since the riders were listed', async () => {
+    db.rider.findMany.mockResolvedValue([{ id: 'rider-1', userId: 'user-1', communityId: null, cashLimit: null, cashHeld: 0 }]);
+    db.rider.findUnique.mockResolvedValue({ isAvailable: true, status: 'active', cashLimit: null, cashHeld: 9_500 });
+    await expect(dispatchDelivery('d2')).resolves.toMatchObject({ assigned: false, reason: 'lost_race' });
+    expect(db.delivery.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('assigns it when it fits under the limit', async () => {
+    db.rider.findMany.mockResolvedValue([{ id: 'rider-1', userId: 'user-1', communityId: null, cashLimit: null, cashHeld: 9_200 }]);
+    db.rider.findUnique.mockResolvedValue({ isAvailable: true, status: 'active', cashLimit: null, cashHeld: 9_200 });
+    await expect(dispatchDelivery('d2')).resolves.toMatchObject({ assigned: true, riderId: 'rider-1' });
   });
 });

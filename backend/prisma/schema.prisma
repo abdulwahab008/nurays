@@ -755,6 +755,9 @@ model Rider {
   // Most cash-on-delivery money this rider may hold before depositing it (null = the default,
   // RIDER_CASH_LIMIT). Cash orders aren't offered beyond it.
   cashLimit          Decimal?  @map("cash_limit") @db.Decimal(10, 2)
+  // Cash the rider is carrying: always minus the sum of their cod_collected and cash_deposit ledger
+  // entries. Kept by a database trigger on rider_ledger_entries (migration 20261108100000), never by the app.
+  cashHeld           Decimal   @default(0) @map("cash_held") @db.Decimal(12, 2)
   // The community this rider serves (an admin sets it): new jobs in or near it go to them first.
   communityId        String?   @map("community_id")
   createdAt          DateTime  @default(now()) @map("created_at")

@@ -1,5 +1,6 @@
 import bcrypt from 'bcrypt';
 import prisma from '../config/database';
+import { forgetAuthUsers } from './auth-cache.service';
 import socketManager from '../config/socket';
 import { AppError } from '../middleware/errorHandler';
 import { placeholderPhone } from './auth.service';
@@ -88,6 +89,7 @@ export async function changeStaffRole(actorId: string, staffId: string, role: st
   await loadTarget(actorId, staffId);
   // Their sessions end so the new role applies at once.
   const user = await prisma.user.update({ where: { id: staffId }, data: { staffRole: role, tokensValidAfter: new Date() }, select: SELECT });
+  await forgetAuthUsers(staffId);
   socketManager.disconnectUser(staffId);
   return present(user);
 }
@@ -100,6 +102,7 @@ export async function setStaffStatus(actorId: string, staffId: string, status: s
     data: { status, ...(status === 'suspended' ? { tokensValidAfter: new Date() } : {}) },
     select: SELECT,
   });
+  await forgetAuthUsers(staffId);
   if (status === 'suspended') socketManager.disconnectUser(staffId);
   return present(user);
 }
@@ -108,6 +111,7 @@ export async function resetStaffPassword(actorId: string, staffId: string, passw
   const target = await loadTarget(actorId, staffId);
   assertPassword(password, { email: target.email, name: target.profile?.fullName });
   await prisma.user.update({ where: { id: staffId }, data: { passwordHash: await bcrypt.hash(password, 10), tokensValidAfter: new Date() } });
+  await forgetAuthUsers(staffId);
   socketManager.disconnectUser(staffId);
   return { id: staffId };
 }
@@ -116,6 +120,7 @@ export async function resetStaffPassword(actorId: string, staffId: string, passw
 export async function removeStaff(actorId: string, staffId: string) {
   await loadTarget(actorId, staffId);
   await prisma.user.update({ where: { id: staffId }, data: { userType: 'customer', staffRole: null, tokensValidAfter: new Date() } });
+  await forgetAuthUsers(staffId);
   socketManager.disconnectUser(staffId);
   return { id: staffId, userType: 'customer' };
 }

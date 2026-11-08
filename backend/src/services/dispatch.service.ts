@@ -4,7 +4,7 @@ import { AppError } from '../middleware/errorHandler';
 import socketManager from '../config/socket';
 import realtimeOrderService from './realtime-order.service';
 import { notify } from './notify.service';
-import { cashLimitOf, riderMoney, riderMoneyMany } from './rider-ledger.service';
+import { cashLimitOf } from './rider-ledger.service';
 import { calculateDeliveryFeeCorridor } from '../utils/deliveryFee';
 import { getPlatformDeliveryPricing } from './delivery-pricing.service';
 import { cashToCollect, dropoffAreaOf, endsOf, routeMatch } from '../utils/riderJobs';
@@ -80,28 +80,26 @@ export async function dispatchDelivery(deliveryId: string, opts: { announced?: b
 
   const riders = await prisma.rider.findMany({
     where: { ...ON_DUTY_RIDER, id: { notIn: job.releasedRiderIds } },
-    select: { id: true, userId: true, communityId: true, cashLimit: true },
+    select: { id: true, userId: true, communityId: true, cashLimit: true, cashHeld: true },
   });
   if (riders.length === 0) return { assigned: false, reason: 'no_riders' };
 
   const riderIds = riders.map((r) => r.id);
   const startOfDay = new Date();
   startOfDay.setHours(0, 0, 0, 0);
-  const [activeJobs, doneToday, moneyByRider] = await Promise.all([
+  const [activeJobs, doneToday] = await Promise.all([
     prisma.delivery.findMany({ where: { riderId: { in: riderIds }, status: { in: ACTIVE_DELIVERY_STATUSES } }, include: JOB_INCLUDE }),
     prisma.delivery.groupBy({ by: ['riderId'], where: { riderId: { in: riderIds }, status: 'delivered', deliveryTime: { gte: startOfDay } }, _count: { _all: true } }),
-    riderMoneyMany(prisma, riderIds),
   ]);
 
   const candidates: DispatchCandidate[] = [];
   for (const r of riders) {
     const mine = activeJobs.filter((d) => d.riderId === r.id);
-    const cashHeld = moneyByRider.get(r.id)?.cashHeld ?? 0;
     candidates.push({
       id: r.id,
       communityId: r.communityId,
       active: mine.map(endsWithCommunities),
-      cashHeld,
+      cashHeld: Number(r.cashHeld),
       cashToCollect: cashToCollect(mine),
       cashLimit: cashLimitOf(r),
       deliveriesToday: doneToday.find((d) => d.riderId === r.id)?._count._all ?? 0,
@@ -126,14 +124,11 @@ export async function dispatchDelivery(deliveryId: string, opts: { announced?: b
   // One assignment at a time per rider (their row locked), re-checking what the choice assumed.
   const done = await prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT id FROM riders WHERE id = ${rider.id} FOR UPDATE`;
-    const fresh = await tx.rider.findUnique({ where: { id: rider.id }, select: { isAvailable: true, status: true, cashLimit: true } });
+    const fresh = await tx.rider.findUnique({ where: { id: rider.id }, select: { isAvailable: true, status: true, cashLimit: true, cashHeld: true } });
     if (!fresh || !fresh.isAvailable || fresh.status !== 'active') return false;
     const active = await tx.delivery.findMany({ where: { riderId: rider.id, status: { in: ACTIVE_DELIVERY_STATUSES } }, include: { order: { select: { paymentMethod: true, paymentStatus: true, totalAmount: true } } } });
     if (active.length >= MAX_ACTIVE_JOBS) return false;
-    if (cod) {
-      const { cashHeld } = await riderMoney(tx, rider.id);
-      if (cashHeld + cashToCollect(active) + Number(job.order.totalAmount) > cashLimitOf(fresh)) return false;
-    }
+    if (cod && Number(fresh.cashHeld) + cashToCollect(active) + Number(job.order.totalAmount) > cashLimitOf(fresh)) return false;
     const bonus = routeMatch(active.length === 1 ? active[0] : null, job)?.bonus ?? 0;
     const claimed = await tx.delivery.updateMany({
       where: { id: deliveryId, riderId: null, status: 'pending' },

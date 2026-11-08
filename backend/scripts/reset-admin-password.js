@@ -55,6 +55,7 @@ async function resetAdminPassword() {
 
   const passwordHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
   // A new password ends every session the account had: whoever was signed in must sign in again.
+  // The API caches sign-in checks for up to 30 s (auth-cache.service.ts), so sessions from before this end within 30 s.
   await prisma.user.update({ where: { id: user.id }, data: { passwordHash, tokensValidAfter: new Date() } });
   await prisma.auditLog.create({
     data: { userId: user.id, action: 'auth:PASSWORD_RESET', entityType: 'user', entityId: user.id, requestData: { via: 'reset-admin-password script' }, responseStatus: 200 },

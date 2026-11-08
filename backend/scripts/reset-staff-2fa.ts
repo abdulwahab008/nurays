@@ -10,6 +10,7 @@ import prisma from '../src/config/database';
 import '../src/middleware/auth.middleware'; // brings in the Request.user type the audit module uses
 import { recordAudit } from '../src/middleware/audit';
 import { endAllSessions } from '../src/services/session.service';
+import { closeRedis } from '../src/config/redis';
 
 async function main() {
   const email = (process.argv[2] ?? '').trim().toLowerCase();
@@ -27,4 +28,4 @@ main()
     console.error(err instanceof Error ? err.message : err);
     process.exitCode = 1;
   })
-  .finally(() => prisma.$disconnect());
+  .finally(() => Promise.all([prisma.$disconnect(), closeRedis()]));

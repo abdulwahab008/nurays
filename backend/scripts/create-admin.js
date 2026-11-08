@@ -90,6 +90,7 @@ async function createAdmin() {
       const hashedPassword = await bcrypt.hash(password, 10);
       await prisma.user.update({
         where: { id: existingUser.id },
+        // The API caches sign-in checks for up to 30 s (auth-cache.service.ts), so sessions from before this end within 30 s.
         data: { passwordHash: hashedPassword, tokensValidAfter: new Date() },
       });
       await prisma.auditLog.create({
