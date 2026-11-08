@@ -539,6 +539,13 @@ async function main() {
       hoEntries.some((e) => e.type === 'delivery_fee' && Number(e.amount) === hoFee) &&
       hoEntries.some((e) => e.type === 'cod_collected' && Number(e.amount) === -hoTotal),
     hoEntries.map((e) => `${e.type}:${e.amount}`).join(','));
+  // LOAD-7: riders.cash_held (kept by a trigger, read by dispatch, the pool and claims) must equal the ledger sum.
+  const storedHeldMatches = async (after: string) => {
+    const stored = Number((await prisma.rider.findUnique({ where: { id: hoRider.id }, select: { cashHeld: true } }))!.cashHeld);
+    const fromLedger = (await riderMoney(prisma, hoRider.id)).cashHeld;
+    ok(`the stored cash held equals the ledger after ${after}`, stored === fromLedger, `stored ${stored}, ledger ${fromLedger}`);
+  };
+  await storedHeldMatches('a cash delivery (fee + cash taken) and a repeated "delivered" tap');
   let rm = await riderMoney(prisma, hoRider.id);
   ok('the rider holds the order total and is owed their fee', rm.cashHeld === hoTotal && rm.unpaid === hoFee && rm.balance === Math.round((hoFee - hoTotal) * 100) / 100, JSON.stringify(rm));
   const earnings: any = await riderService.getRiderEarnings(riderUser.id);
@@ -553,6 +560,23 @@ async function main() {
   ok('two settlements at once: one goes through; the rider then holds nothing and is owed nothing',
     settledBoth.filter((r) => r === 'OK').length === 1 && rm.cashHeld === 0 && rm.balance === 0 && rm.paidOut === hoFee, `${settledBoth} ${JSON.stringify(rm)}`);
   ok('with nothing owed, a payout is refused', (await code(recordPayout(hoRider.id, admin.id, { amount: 1 }))) === 'PAYOUT_EXCEEDS_BALANCE');
+  await storedHeldMatches('refused settlements, and two settlements at once (cash handed in + pay kept)');
+  const { recordAdjustment } = require('../src/services/rider-ledger.service');
+  await recordAdjustment(hoRider.id, admin.id, { amount: 75, note: 'Failed delivery, not the rider\'s fault' });
+  await storedHeldMatches('an adjustment');
+  await recordPayout(hoRider.id, admin.id, { amount: 75, reference: 'PAY-ADJ' });
+  await storedHeldMatches('a payout');
+  // A ledger row is never edited or deleted by the app, but the stored total must still follow if one is.
+  const codRow = (await prisma.riderLedgerEntry.findFirst({ where: { riderId: hoRider.id, type: 'cod_collected' } }))!;
+  await prisma.riderLedgerEntry.update({ where: { id: codRow.id }, data: { amount: Number(codRow.amount) - 10 } });
+  await storedHeldMatches('a cash entry is edited');
+  await prisma.riderLedgerEntry.update({ where: { id: codRow.id }, data: { type: 'adjustment' } });
+  await storedHeldMatches('a cash entry changes type');
+  await prisma.riderLedgerEntry.delete({ where: { id: codRow.id } });
+  await storedHeldMatches('a cash entry is deleted');
+  await prisma.riderLedgerEntry.create({ data: { ...codRow, createdAt: undefined } });
+  await storedHeldMatches('the cash entry is put back');
+  ok('and the rider again holds nothing', (await riderMoney(prisma, hoRider.id)).cashHeld === 0);
 
   // an address saved before pins were required: the order is refused until the pin is added (DELIV-4)
   const noPin = await prisma.userAddress.create({ data: { userId: hoCust.id, addressLine1: 'House 4 Street', area: 'X', city: 'Lahore' } });
@@ -608,6 +632,7 @@ async function main() {
     await riderService.ensureDeliveryForOrder(o.id, 0);
     return { job: (await prisma.delivery.findUnique({ where: { orderId: o.id } }))!, total: Number(o.totalAmount) };
   }));
+  await storedHeldMatches('a second cash delivery');
   const heldNow = (await riderMoney(prisma, hoRider.id)).cashHeld;
   await setCashLimit(hoRider.id, Math.round(heldNow + raceJobs[0].total * 1.5));
   const raced = await Promise.all(raceJobs.map((r) => code(riderService.claimDelivery(riderUser.id, r.job.id))));
@@ -1920,6 +1945,11 @@ async function main() {
     ok('a payment to Nuray is never something an admin can "complete" or "fail" again', (await code(adminSvc.failPayout(part.paymentId, 'x'))) === 'PAYOUT_NOT_PENDING');
     ok('each payment leaves a trail', (await prisma.auditLog.count({ where: { action: 'admin:KITCHEN_PAID_NURAY', entityId: { in: [part.paymentId, rest.paymentId] } } })) === 2);
   }
+
+  const drifted = await prisma.$queryRaw<Array<{ id: string }>>`
+    SELECT r.id FROM riders r LEFT JOIN rider_ledger_entries e ON e.rider_id = r.id
+    GROUP BY r.id HAVING r.cash_held <> -COALESCE(SUM(e.amount) FILTER (WHERE e.type IN ('cod_collected', 'cash_deposit')), 0)`;
+  ok("after every flow above, each rider's stored cash held equals their ledger", drifted.length === 0, drifted.map((r) => r.id).join(','));
 
   console.log(`\n${pass} passed, ${fail} failed`);
   await prisma.$disconnect();

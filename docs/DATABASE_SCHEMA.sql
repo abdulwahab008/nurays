@@ -504,6 +504,7 @@ CREATE TABLE "riders" (
     "verification_status" TEXT NOT NULL DEFAULT 'pending',
     "rejection_reason" TEXT,
     "cash_limit" DECIMAL(10,2),
+    "cash_held" DECIMAL(12,2) NOT NULL DEFAULT 0,
     "community_id" TEXT,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMP(3) NOT NULL,
