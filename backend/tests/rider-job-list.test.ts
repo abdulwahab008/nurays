@@ -9,7 +9,6 @@ jest.mock('../src/config/database', () => ({
   default: {
     rider: { findUnique: jest.fn() },
     delivery: { findMany: jest.fn() },
-    riderLedgerEntry: { groupBy: jest.fn().mockResolvedValue([]) },
   },
 }));
 jest.mock('../src/services/delivery-pricing.service', () => ({
@@ -53,7 +52,7 @@ const runningQuery = () => queries().find((q) => q.where.status.notIn);
 beforeEach(() => {
   findRider.mockReset();
   findDeliveries.mockReset();
-  findRider.mockResolvedValue({ id: 'rider-1', userId: 'user-1', status: 'active', verificationStatus: 'approved' });
+  findRider.mockResolvedValue({ id: 'rider-1', userId: 'user-1', status: 'active', verificationStatus: 'approved', cashHeld: 0, cashLimit: null });
 });
 
 describe('getMyDeliveries', () => {
@@ -169,5 +168,14 @@ describe('the open pool (getAvailableDeliveries)', () => {
     expect(list.map((d) => d.id).at(-1)).toBe('handed-back');
     expect(list.find((d) => d.id === 'handed-back')?.handedBackByYou).toBe(true);
     expect(list.filter((d) => d.handedBackByYou)).toHaveLength(1);
+  });
+
+  it("flags a cash job past the limit from the cash held kept on the rider's row (no ledger query)", async () => {
+    findRider.mockResolvedValue({ id: 'rider-1', userId: 'user-1', status: 'active', verificationStatus: 'approved', cashHeld: 9_600, cashLimit: null });
+    const cash = (id: string) => ({ ...job(id, 'pending', 1), riderId: null, releasedRiderIds: [], order: { ...job(id, 'pending', 1).order, paymentStatus: 'pending' } });
+    findDeliveries.mockImplementation(async (args: any) => (args.where.riderId === null ? [cash('cash-500'), open('prepaid', 1)] : []));
+    const list = await riderService.getAvailableDeliveries('user-1');
+    expect(list.find((d) => d.id === 'cash-500')?.exceedsCashLimit).toBe(true);
+    expect(list.find((d) => d.id === 'prepaid')?.exceedsCashLimit).toBe(false);
   });
 });

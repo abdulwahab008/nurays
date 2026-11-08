@@ -342,7 +342,7 @@ export class RiderService {
     // With exactly one active job, jobs along the same route earn a bonus.
     const activeOne = activeDeliveries.length === 1 ? activeDeliveries[0] : null;
     // Cash in hand plus cash still to collect on jobs already taken, against the limit.
-    const cashCommitted = (await riderMoney(prisma, rider.id)).cashHeld + cashToCollect(activeDeliveries);
+    const cashCommitted = Number(rider.cashHeld) + cashToCollect(activeDeliveries);
     const cashLimit = cashLimitOf(rider);
     const { maxKm } = await getPlatformDeliveryPricing();
 
@@ -442,7 +442,7 @@ export class RiderService {
     // One claim at a time per rider (their row locked), so two quick claims can't both pass
     // the two-job and cash limits.
     const claimedOrderNumber = await prisma.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT id FROM riders WHERE id = ${rider.id} FOR UPDATE`;
+      const [locked] = await tx.$queryRaw<Array<{ cash_held: Prisma.Decimal }>>`SELECT cash_held FROM riders WHERE id = ${rider.id} FOR UPDATE`;
 
       // At most two jobs at once.
       const active = await tx.delivery.findMany({ where: { riderId: rider.id, status: { in: ACTIVE_DELIVERY_STATUSES } }, include: PAYMENT_INCLUDE });
@@ -465,7 +465,7 @@ export class RiderService {
       // No more customer cash than the rider's limit, counting what they hold and what they'll
       // collect on the jobs they already have. Prepaid jobs are always fine.
       if (isCashAtDoor(liveOrder)) {
-        const { cashHeld } = await riderMoney(tx, rider.id);
+        const cashHeld = Number(locked.cash_held);
         const toCollect = cashToCollect(active);
         const limit = cashLimitOf(rider);
         if (cashHeld + toCollect + Number(liveOrder.totalAmount) > limit) {
