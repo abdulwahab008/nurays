@@ -11,6 +11,7 @@ import socketManager from '../config/socket';
 import { realPhoneOrNull } from '../utils/otp';
 import { computeSellerAvailability } from './availability.service';
 import { NotificationText, notificationText } from '../utils/notificationText';
+import { invalidateCatalogCache } from '../utils/catalogCache';
 
 const DAY_NAMES = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'] as const;
 
@@ -500,6 +501,7 @@ export class AdminService {
         rejectionReason: approved ? null : why,
       },
     });
+    await invalidateCatalogCache();
 
     await notifySeller(product.sellerId, approved
       ? { text: notificationText('dish.approved', { name: product.name }), actionUrl: `/products/${product.id}`, dedupeKey: `product:${product.id}:approved:${Date.now()}` }

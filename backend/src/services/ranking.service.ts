@@ -10,6 +10,7 @@ import {
   trendScores,
 } from '../utils/ranking';
 import { onMenuWhere } from '../utils/menu';
+import { cachedCatalogRead, catalogKey } from '../utils/catalogCache';
 
 /**
  * Ranking: trending kitchens and dishes, trustworthy ratings, search relevance and
@@ -115,6 +116,12 @@ const FUZZY_WHEN_FEWER_THAN = 5;
 export async function searchRankedProductIds(terms: string[], max = 500): Promise<string[]> {
   const clean = terms.map((t) => t.trim().toLowerCase()).filter((t) => t.length > 0).slice(0, 8);
   if (clean.length === 0) return [];
+  // The ids depend only on the terms and public dish data; the listing re-applies every visibility
+  // filter to them, so a cached list can only miss a dish that started matching in the last few seconds.
+  return cachedCatalogRead(catalogKey('search', [clean, max]), () => queryRankedProductIds(clean, max));
+}
+
+async function queryRankedProductIds(clean: string[], max: number): Promise<string[]> {
   const likes = clean.map((t) => `%${t.replace(/[\\%_]/g, (c) => `\\${c}`)}%`);
   const prefixes = clean.map((t) => `${t.replace(/[\\%_]/g, (c) => `\\${c}`)}%`);
   // The per-term filter below spans the unnest and the kitchen join, so on its own it only gets a
