@@ -307,6 +307,11 @@ export default function SellerSettingsPage() {
     return () => window.removeEventListener('hashchange', fromHash);
   }, []);
 
+  // On a phone the tab strip scrolls sideways, so a tab opened from a link can be off-screen.
+  useEffect(() => {
+    document.getElementById(`${tab}-tab`)?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }, [tab, settingsRead]);
+
   useEffect(() => {
     if (!isAuthenticated) {
       router.replace(loginUrlHere());
