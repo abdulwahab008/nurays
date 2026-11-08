@@ -443,6 +443,7 @@ export class RiderService {
     // the two-job and cash limits.
     const claimedOrderNumber = await prisma.$transaction(async (tx) => {
       const [locked] = await tx.$queryRaw<Array<{ cash_held: Prisma.Decimal }>>`SELECT cash_held FROM riders WHERE id = ${rider.id} FOR UPDATE`;
+      if (!locked) throw new AppError('Rider profile not found', 404, 'RIDER_NOT_FOUND');
 
       // At most two jobs at once.
       const active = await tx.delivery.findMany({ where: { riderId: rider.id, status: { in: ACTIVE_DELIVERY_STATUSES } }, include: PAYMENT_INCLUDE });
