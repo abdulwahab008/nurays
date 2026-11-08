@@ -20,6 +20,7 @@ import { isUploadedBy } from '../utils/uploadPaths';
 import { isStoredFile } from '../storage';
 import { thrown } from '../utils/thrown';
 import { notificationText } from '../utils/notificationText';
+import { cachedCatalogRead, catalogKey, invalidateCatalogCache } from '../utils/catalogCache';
 
 const SELLER_AVAILABILITY_SELECT = {
   status: true,
@@ -641,7 +642,11 @@ export class ProductService {
       const byId = new Map(rows.map((r) => [r.id, r]));
       products = pageIds.map((id) => byId.get(id)!).filter(Boolean);
     } else {
-      const counts = await Promise.all(tiers.map((tierWhere) => prisma.product.count({ where: tierWhere })));
+      // Cached briefly, keyed by the whole filter: a count of public dishes says nothing beyond the filter itself.
+      // A stale count can shift a tier boundary by a dish for a few seconds; the rows themselves are always live.
+      const counts = await Promise.all(
+        tiers.map((tierWhere) => cachedCatalogRead(catalogKey('count', tierWhere), () => prisma.product.count({ where: tierWhere })))
+      );
       total = counts.reduce((sum, n) => sum + n, 0);
       const slices: Array<{ where: Prisma.ProductWhereInput; skip: number; take: number }> = [];
       let offset = skip;
@@ -1100,6 +1105,7 @@ export class ProductService {
         tags: true,
       },
     });
+    await invalidateCatalogCache();
 
     if (needsReview) {
       notifyApprovers({ text: notificationText('approval.dishChanged', { name: updatedProduct.name }), actionUrl: '/admin/products', dedupeKey: `product-review:${productId}:${Date.now()}` });
@@ -1129,6 +1135,7 @@ export class ProductService {
     await prisma.product.delete({
       where: { id: productId },
     });
+    await invalidateCatalogCache();
 
     return { message: 'Product deleted successfully' };
   }
