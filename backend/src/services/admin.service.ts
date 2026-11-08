@@ -174,6 +174,7 @@ export class AdminService {
         rejectionReason: approved ? null : notes!.trim(),
       },
     });
+    await invalidateCatalogCache();
 
     // Update user type if approved
     if (approved) {
@@ -629,6 +630,7 @@ export class AdminService {
       where: { id: sellerId },
       data: { status },
     });
+    await invalidateCatalogCache();
 
     void notify({
       userId: seller.userId,

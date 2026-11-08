@@ -8,6 +8,7 @@ import { recordAudit } from '../middleware/audit';
 import { riderMoney } from './rider-ledger.service';
 import { placeholderPhone } from './auth.service';
 import { assertCurrentPassword } from './reauth.service';
+import { invalidateCatalogCache } from '../utils/catalogCache';
 
 /**
  * A person closes their own account (the app stores require this to be possible from inside the app).
@@ -111,6 +112,7 @@ export async function deleteOwnAccount(userId: string, password?: string, ctx: {
     });
   });
   socketManager.disconnectUser(userId);
+  await invalidateCatalogCache();
   // Identity documents are removed from storage as well as from the database (best effort, logged).
   for (const ref of documentRefs) {
     if (!isPrivateRef(ref)) continue;

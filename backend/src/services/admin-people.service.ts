@@ -7,6 +7,7 @@ import socketManager from '../config/socket';
 import { AppError } from '../middleware/errorHandler';
 import { formatPhoneNumber } from '../utils/otp';
 import { pageArgs } from '../utils/pagination';
+import { invalidateCatalogCache } from '../utils/catalogCache';
 
 /**
  * People, for admins: every account (search, suspend, reactivate), riders' standing, and the
@@ -108,6 +109,7 @@ export async function setUserStatus(adminId: string, userId: string, status: str
     prisma.seller.updateMany({ where: { userId }, data: { status } }),
     prisma.rider.updateMany({ where: { userId }, data: { status } }),
   ]);
+  await invalidateCatalogCache();
   if (status === 'suspended') socketManager.disconnectUser(userId);
   return { id: userId, status };
 }
