@@ -1,5 +1,6 @@
 import { recordAudit } from '../middleware/audit';
 import prisma from '../config/database';
+import { forgetAuthUsers } from './auth-cache.service';
 import { getPlatformDeliveryPricing } from './delivery-pricing.service';
 import { haversineKm, platformDeliveryFee } from '../utils/deliveryFee';
 import { roundMoney } from '../utils/pricing';
@@ -268,6 +269,7 @@ export class SellerService {
         where: { id: userId },
         data: { userType: 'seller' },
       });
+      await forgetAuthUsers(userId);
     }
 
     notifyApprovers({ text: notificationText('approval.kitchenApplication', { businessName: data.businessName }), actionUrl: '/admin/pending-sellers', dedupeKey: `seller-application:${seller.id}` });

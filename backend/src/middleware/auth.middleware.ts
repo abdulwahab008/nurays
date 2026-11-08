@@ -4,6 +4,7 @@ import { AppError } from './errorHandler';
 import prisma from '../config/database';
 import { setLogUser } from '../utils/logger';
 import { isSessionActive } from '../services/session.service';
+import { getAuthUser } from '../services/auth-cache.service';
 
 // Extend Express Request to include user
 declare global {
@@ -64,10 +65,7 @@ export const authenticate = async (
     }
 
     // Verify user still exists and is active
-    const user = await prisma.user.findUnique({
-      where: { id: payload.userId },
-      select: { id: true, status: true, userType: true, staffRole: true, tokensValidAfter: true },
-    });
+    const user = await getAuthUser(payload.userId);
 
     if (!user) {
       throw new AppError('User not found', 401, 'USER_NOT_FOUND');
@@ -119,10 +117,7 @@ export const optionalAuthenticate = async (
       const token = authHeader.substring(7);
       const payload = verifyToken(token);
 
-      const user = await prisma.user.findUnique({
-        where: { id: payload.userId },
-        select: { id: true, status: true, userType: true, staffRole: true, tokensValidAfter: true },
-      });
+      const user = await getAuthUser(payload.userId);
 
       if (
         user &&

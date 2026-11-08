@@ -5,6 +5,7 @@
  * registered it before the real owner, so that password and every session issued for it are dropped.
  */
 import prisma from '../config/database';
+import { forgetAuthUsers } from './auth-cache.service';
 import { tokenTtlSeconds } from '../utils/jwt';
 import { startSession } from './session.service';
 import { AppError } from '../middleware/errorHandler';
@@ -44,6 +45,7 @@ export async function signInVerifiedEmail({ email, name, picture }: { email: str
       },
     });
 
+    if (!user.emailVerified) await forgetAuthUsers(user.id);
     const { accessToken, refreshToken } = await startSession(updatedUser);
 
     return {

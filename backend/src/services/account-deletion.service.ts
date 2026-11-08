@@ -2,6 +2,7 @@ import { logger } from '../utils/logger';
 import { ACTIVE_DELIVERY_STATUSES } from '../utils/deliveryStatus';
 import { isPrivateRef, keyOfPrivateRef, storage } from '../storage';
 import prisma from '../config/database';
+import { forgetAuthUsers } from './auth-cache.service';
 import socketManager from '../config/socket';
 import { AppError } from '../middleware/errorHandler';
 import { recordAudit } from '../middleware/audit';
@@ -110,6 +111,7 @@ export async function deleteOwnAccount(userId: string, password?: string, ctx: {
       },
     });
   });
+  await forgetAuthUsers(userId);
   socketManager.disconnectUser(userId);
   // Identity documents are removed from storage as well as from the database (best effort, logged).
   for (const ref of documentRefs) {

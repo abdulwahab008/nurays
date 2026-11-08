@@ -66,6 +66,11 @@ beforeEach(() => {
       hit.forEach((r) => Object.assign(r, data));
       return { count: hit.length };
     }),
+    updateManyAndReturn: jest.fn(async ({ where, data }: any) => {
+      const hit = rows.filter((r) => matches(r, where));
+      hit.forEach((r) => Object.assign(r, data));
+      return hit.map((r) => ({ familyId: r.familyId }));
+    }),
     deleteMany: jest.fn(async ({ where }: any) => {
       const before = rows.length;
       rows = rows.filter((r) => !matches(r, where));

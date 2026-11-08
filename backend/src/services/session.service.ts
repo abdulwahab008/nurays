@@ -13,6 +13,7 @@ import { AppError } from '../middleware/errorHandler';
 import { recordAudit } from '../middleware/audit';
 import { generateRefreshToken, generateToken, isTokenRevoked, tokenExpiry, verifyRefreshToken, JWTPayload } from '../utils/jwt';
 import { requestContext } from '../utils/logger';
+import { cachedSessionActive, forgetAuthUsers, forgetSessions } from './auth-cache.service';
 
 export const REUSE_LEEWAY_MS = 30_000;
 
@@ -57,6 +58,7 @@ export async function endSession(userId: string, familyId: string): Promise<bool
     where: { userId, familyId, revokedAt: null },
     data: { revokedAt: new Date() },
   });
+  await forgetSessions([familyId]);
   return count > 0;
 }
 
@@ -66,19 +68,22 @@ export async function endSession(userId: string, familyId: string): Promise<bool
  */
 export async function endAllSessions(userId: string): Promise<void> {
   const now = new Date();
-  await prisma.$transaction([
-    prisma.refreshToken.updateMany({ where: { userId, revokedAt: null }, data: { revokedAt: now } }),
+  const [ended] = await prisma.$transaction([
+    prisma.refreshToken.updateManyAndReturn({ where: { userId, revokedAt: null }, data: { revokedAt: now }, select: { familyId: true } }),
     prisma.user.update({ where: { id: userId }, data: { tokensValidAfter: now } }),
   ]);
+  await Promise.all([forgetAuthUsers(userId), forgetSessions(ended.map((r) => r.familyId))]);
 }
 
 /** Is this session still signed in? (Ended, or every token in it expired → no.) */
-export async function isSessionActive(familyId: string): Promise<boolean> {
-  const row = await prisma.refreshToken.findFirst({
-    where: { familyId, revokedAt: null, expiresAt: { gt: new Date() } },
-    select: { id: true },
+export function isSessionActive(familyId: string): Promise<boolean> {
+  return cachedSessionActive(familyId, async () => {
+    const row = await prisma.refreshToken.findFirst({
+      where: { familyId, revokedAt: null, expiresAt: { gt: new Date() } },
+      select: { id: true },
+    });
+    return row !== null;
   });
-  return row !== null;
 }
 
 /** Swap a refresh token for a new pair in the same session. */

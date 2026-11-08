@@ -8,6 +8,7 @@ import prisma from './database';
 import { canTakePoolJobs } from '../utils/riderDuty';
 import { logger, requestContext } from '../utils/logger';
 import { isSessionActive } from '../services/session.service';
+import { getAuthUser } from '../services/auth-cache.service';
 
 /**
  * The connections of riders who can take a job from the open pool (approved, active, on duty). Pool
@@ -109,10 +110,7 @@ class SocketManager {
       }
 
       try {
-        const user = await prisma.user.findUnique({
-          where: { id: payload.userId },
-          select: { id: true, status: true, userType: true, tokensValidAfter: true },
-        });
+        const user = await getAuthUser(payload.userId);
 
         if (
           !user ||
