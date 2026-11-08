@@ -103,7 +103,9 @@ export function PersonalInfoSection({ profile, onReload, onSaved, showLocation =
     try {
       // Changing the email re-points the account: the server asks for the password when there is one.
       const emailChanged = formData.email.trim().toLowerCase() !== (profile.email || '').toLowerCase();
-      const submit = (currentPassword?: string) => userProfileService.updateProfile(currentPassword ? { ...formData, currentPassword } : formData);
+      const { fullName, email, languagePreference } = formData;
+      const payload = showLocation ? formData : { fullName, email, languagePreference };
+      const submit = (currentPassword?: string) => userProfileService.updateProfile(currentPassword ? { ...payload, currentPassword } : payload);
       let response;
       try {
         response = await submit();
@@ -166,26 +168,30 @@ export function PersonalInfoSection({ profile, onReload, onSaved, showLocation =
                 dir="ltr"
               />
             </div>
-            <div>
-              <label className="block text-sm font-medium text-ink mb-2">{t('city')}</label>
-              <input
-                type="text"
-                value={formData.city}
-                onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-                className="w-full px-4 py-3 border border-line rounded-xl bg-surface text-ink focus:ring-2 focus:ring-brand/30 focus:border-brand transition-all"
-                placeholder={t('cityPlaceholder')}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-ink mb-2">{t('area')}</label>
-              <input
-                type="text"
-                value={formData.area}
-                onChange={(e) => setFormData({ ...formData, area: e.target.value })}
-                className="w-full px-4 py-3 border border-line rounded-xl bg-surface text-ink focus:ring-2 focus:ring-brand/30 focus:border-brand transition-all"
-                placeholder={t('areaPlaceholder')}
-              />
-            </div>
+            {showLocation && (
+              <>
+                <div>
+                  <label className="block text-sm font-medium text-ink mb-2">{t('city')}</label>
+                  <input
+                    type="text"
+                    value={formData.city}
+                    onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                    className="w-full px-4 py-3 border border-line rounded-xl bg-surface text-ink focus:ring-2 focus:ring-brand/30 focus:border-brand transition-all"
+                    placeholder={t('cityPlaceholder')}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-ink mb-2">{t('area')}</label>
+                  <input
+                    type="text"
+                    value={formData.area}
+                    onChange={(e) => setFormData({ ...formData, area: e.target.value })}
+                    className="w-full px-4 py-3 border border-line rounded-xl bg-surface text-ink focus:ring-2 focus:ring-brand/30 focus:border-brand transition-all"
+                    placeholder={t('areaPlaceholder')}
+                  />
+                </div>
+              </>
+            )}
             <div className="md:col-span-2">
               <label className="block text-sm font-medium text-ink mb-2">
                 {t('languagePreference')}
