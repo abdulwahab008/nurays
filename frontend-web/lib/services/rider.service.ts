@@ -80,6 +80,19 @@ export interface RiderProfile {
   balance: number;
 }
 
+/** GET /riders/me/application: open to every rider, approved or not, unlike GET /riders/me. */
+export interface RiderApplication {
+  verificationStatus: 'pending' | 'approved' | 'rejected';
+  rejectionReason: string | null;
+  /** Account standing ('active', 'suspended'), apart from the vetting above. */
+  status: string;
+  city: string;
+  vehicleType: string | null;
+  vehicleNumber: string | null;
+  licenseNumber: string | null;
+  documents: Array<{ type: string; url: string | null; uploadedAt: string }>;
+}
+
 export type RiderLedgerType = 'delivery_fee' | 'bonus' | 'cod_collected' | 'cash_deposit' | 'payout' | 'adjustment';
 
 export interface RiderLedgerEntry {
@@ -150,6 +163,11 @@ export const riderService = {
   getRiderProfile: async () => {
     const response = await apiClient.get<ApiResponse<RiderProfile>>('/riders/me');
     return response.data;
+  },
+
+  getApplication: async () => {
+    const response = await apiClient.get<ApiResponse<RiderApplication>>('/riders/me/application');
+    return response.data.data!;
   },
 
   updateVehicle: async (vehicle: { vehicleType: string; vehicleNumber: string }) => {

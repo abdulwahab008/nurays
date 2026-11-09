@@ -2,25 +2,23 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { loginUrlHere } from '@/lib/auth-redirect';
-import { apiClient, apiErrorMessage, apiErrorCode, errorMessage } from '@/lib/api-client';
+import { apiClient, apiErrorMessage } from '@/lib/api-client';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { userProfileService, UserProfile, type Address } from '@/lib/services/user-profile.service';
-import { formatPhoneNumber } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { LoadError } from '@/components/ui/LoadError';
 import { useToast } from '@/components/ui/toast';
-import { useDialogs } from '@/components/ui/Dialogs';
-import { authService } from '@/lib/services/auth.service';
 import { useAuthStore, hasSession } from '@/lib/store/auth-store';
-import { PasswordCard } from '@/components/profile/PasswordCard';
-import { SessionsCard } from '@/components/profile/SessionsCard';
-import { TwoFactorCard } from '@/components/profile/TwoFactorCard';
 import { RiderVehicleCard } from '@/components/profile/RiderVehicleCard';
+import { PersonalInfoSection } from '@/components/account/PersonalInfoSection';
+import { LanguageSection } from '@/components/account/LanguageSection';
+import { AppearanceSection } from '@/components/account/AppearanceSection';
+import { AccountSecuritySection } from '@/components/account/AccountSecuritySection';
+import { SignOutCard } from '@/components/account/SignOutCard';
+import { DangerZoneSection } from '@/components/account/DangerZoneSection';
 import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS, RIDER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
-import { ThemeToggle } from '@/components/layout/ThemeToggle';
-import { useT, useLocale, LOCALES, LOCALE_NAMES } from '@/lib/i18n';
-import { commonMessages } from '@/lib/i18n/messages/common';
+import { useT } from '@/lib/i18n';
 import { accountMessages } from '@/lib/i18n/messages/account';
 import {
   Store,
@@ -29,63 +27,30 @@ import {
   Camera,
   MapPin,
   BarChart3,
-  User,
-  Pencil,
-  Phone,
-  Mail,
-  Lock,
-  AlertTriangle,
   Check,
-  Globe,
-  LogOut,
-  Palette,
   Heart,
   Wallet,
   Bell,
   LifeBuoy,
   ChevronRight,
+  Settings,
 } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
 export default function ProfilePage() {
   const router = useRouter();
-  const { isAuthenticated, user, setUser, logout } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated, user: s.user, setUser: s.setUser, logout: s.logout })));
-  const [deleting, setDeleting] = useState(false);
+  const { isAuthenticated, user, logout } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated, user: s.user, logout: s.logout })));
   // Set when this page signs the person out itself (the button, or closing the account): the page is then already on its way to the
   // home page, and the "sign in to see your profile" redirect below must not send it to the sign-in page instead.
   const leaving = useRef(false);
-
-  // Closing the account: typed confirmation, then the password if the server asks for one.
-  const handleDeleteAccount = async () => {
-    if ((await askDialog({ title: t('deleteAccount'), message: t('deleteConfirmPrompt'), label: 'DELETE', mustEqual: 'DELETE', destructive: true })) !== 'DELETE') return;
-    const attempt = async (password?: string) => {
-      await userProfileService.deleteAccount(password);
-      showToast(t('accountDeleted'), 'success');
-      leaving.current = true;
-      logout();
-      router.push('/');
-    };
-    try {
-      setDeleting(true);
-      try {
-        await attempt();
-      } catch (error) {
-        if (apiErrorCode(error) !== 'PASSWORD_REQUIRED') throw error;
-        const password = (await askDialog({ title: t('password'), message: t('deletePasswordPrompt'), type: 'password', destructive: true }));
-        if (!password) return;
-        await attempt(password);
-      }
-    } catch (error) {
-      showToast(errorMessage(error, 'Could not close the account'), 'error');
-    } finally {
-      setDeleting(false);
-    }
+  const leaveSignedOut = () => {
+    leaving.current = true;
+    logout();
+    router.push('/');
   };
+
   const { showToast } = useToast();
-  const { ask: askDialog } = useDialogs();
   const t = useT(accountMessages);
-  const tc = useT(commonMessages);
-  const { locale, setLocale } = useLocale();
   const roleLabel = (type?: string) => {
     const key = `role.${type || 'customer'}` as keyof typeof accountMessages.en;
     return key in accountMessages.en ? t(key) : (type as string);
@@ -94,78 +59,13 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(true);
   // Why the profile could not be read; shown instead of a blank profile ("Not provided", "Not set"), which Edit would then save.
   const [loadError, setLoadError] = useState<unknown>(null);
-  // Phone verification: a number only counts (for OTP login) once its owner has proven it.
-  const [verifyingPhone, setVerifyingPhone] = useState(false);
-  const [phoneInput, setPhoneInput] = useState('');
-  const [phoneCode, setPhoneCode] = useState('');
-  const [phoneCodeSent, setPhoneCodeSent] = useState(false);
-  const [phoneBusy, setPhoneBusy] = useState(false);
-  const [editing, setEditing] = useState(false);
-  const [sendingVerification, setSendingVerification] = useState(false);
   const [defaultAddress, setDefaultAddress] = useState<Address | null>(null);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const photoInputRef = useRef<HTMLInputElement>(null);
-  const [formData, setFormData] = useState({
-    fullName: '',
-    email: '',
-    city: '',
-    area: '',
-    languagePreference: 'en',
-  });
 
   const isRider = (user?.userType ?? user?.user_type) === 'rider';
   const sidebarItems = isRider ? RIDER_SIDEBAR_ITEMS : CUSTOMER_SIDEBAR_ITEMS;
   const layoutRole = isRider ? 'rider' : 'customer';
-
-  const hasRealPhone = !!profile?.phone && !profile.phone.startsWith('+999');
-
-  const sendPhoneCode = async () => {
-    const number = (phoneInput || (hasRealPhone ? profile!.phone : '')).trim();
-    if (number.length < 10) {
-      showToast(t('enterValidPhone'), 'error');
-      return;
-    }
-    setPhoneBusy(true);
-    try {
-      await authService.requestPhoneVerification(number);
-      setPhoneInput(number);
-      setPhoneCodeSent(true);
-      showToast(t('codeSent'), 'success');
-    } catch (err) {
-      showToast(apiErrorMessage(err, t('codeSendFailed')), 'error');
-    } finally {
-      setPhoneBusy(false);
-    }
-  };
-
-  const confirmPhoneCode = async () => {
-    setPhoneBusy(true);
-    try {
-      await authService.verifyPhone(phoneInput, phoneCode.trim());
-      showToast(t('phoneVerified'), 'success');
-      setVerifyingPhone(false);
-      setPhoneCode('');
-      setPhoneCodeSent(false);
-      loadProfile();
-    } catch (err) {
-      showToast(apiErrorMessage(err, t('codeDidNotWork')), 'error');
-    } finally {
-      setPhoneBusy(false);
-    }
-  };
-
-  // The account's e-mail address is only trusted once its owner has clicked the link sent to it.
-  const sendVerificationLink = async () => {
-    setSendingVerification(true);
-    try {
-      await authService.resendVerificationEmail();
-      showToast(t('verificationEmailSent'), 'success');
-    } catch (err) {
-      showToast(apiErrorMessage(err, t('verificationEmailFailed')), 'error');
-    } finally {
-      setSendingVerification(false);
-    }
-  };
 
   // A new photo is uploaded (resized by the server), then set as the profile picture.
   const changePhoto = async (file: File) => {
@@ -196,13 +96,6 @@ export default function ProfilePage() {
     try {
       const response = await userProfileService.getProfile();
       setProfile(response.data);
-      setFormData({
-        fullName: response.data.profile?.fullName || '',
-        email: response.data.email || '',
-        city: response.data.profile?.city || '',
-        area: response.data.profile?.area || '',
-        languagePreference: response.data.profile?.languagePreference || 'en',
-      });
     } catch (error) {
       console.error('Failed to load profile:', error);
       setLoadError(error);
@@ -210,12 +103,6 @@ export default function ProfilePage() {
       setLoading(false);
     }
   };
-
-  // Switching the language (here or in the header) already saved it to the profile: the form follows, so saving the
-  // other details does not put the old language back.
-  useEffect(() => {
-    setFormData((prev) => (prev.languagePreference === locale ? prev : { ...prev, languagePreference: locale }));
-  }, [locale]);
 
   useEffect(() => {
     if (leaving.current) return;
@@ -225,31 +112,6 @@ export default function ProfilePage() {
     }
     loadProfile();
   }, [isAuthenticated]);
-
-  const handleUpdateProfile = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      // Changing the email re-points the account: the server asks for the password when there is one.
-      const emailChanged = !!profile && formData.email.trim().toLowerCase() !== (profile.email || '').toLowerCase();
-      const submit = (currentPassword?: string) => userProfileService.updateProfile(currentPassword ? { ...formData, currentPassword } : formData);
-      let response;
-      try {
-        response = await submit();
-      } catch (error) {
-        if (!emailChanged || apiErrorCode(error) !== 'PASSWORD_REQUIRED') throw error;
-        const currentPassword = (await askDialog({ title: t('password'), message: t('emailChangePasswordPrompt'), type: 'password' }));
-        if (!currentPassword) return;
-        response = await submit(currentPassword);
-      }
-      setProfile(response.data);
-      // The profile answer has no staff role or permissions: keep the signed-in user's, and take the rest from the answer.
-      setUser(user ? { ...user, ...response.data } : null);
-      setEditing(false);
-      showToast(t('profileUpdated'), 'success');
-    } catch (error) {
-      showToast(apiErrorMessage(error, t('profileUpdateFailed')), 'error');
-    }
-  };
 
   if (loading) {
     return (
@@ -358,6 +220,7 @@ export default function ProfilePage() {
             <h3 id="quick-links" className="sr-only">{t('quickLinks')}</h3>
             <ul className="divide-y divide-line">
               {(isRider ? [
+                { href: '/riders/settings', icon: Settings, label: t('riderSettings') },
                 { href: '/riders/dashboard', icon: Bike, label: t('riderDeliveries') },
                 { href: '/notifications/settings', icon: Bell, label: t('notifications') },
                 { href: '/support', icon: LifeBuoy, label: t('helpSupport') },
@@ -385,332 +248,21 @@ export default function ProfilePage() {
 
         {/* Main Content - Right Side */}
         <div className="lg:col-span-2 space-y-6">
-          {/* Personal Information */}
-          <div className="bg-surface rounded-[20px] border border-line p-6">
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <h2 className="text-lg font-bold text-ink flex items-center gap-2">
-                  <User className="w-5 h-5 text-brand-ink" /> {t('personalInfo')}
-                </h2>
-                <p className="text-sm text-muted">{t('personalInfoDesc')}</p>
-              </div>
-              {!editing && (
-                <Button variant="outline" onClick={() => setEditing(true)} size="sm" className="flex items-center gap-1.5">
-                  <Pencil className="w-4 h-4" /> {tc('edit')}
-                </Button>
-              )}
-            </div>
-
-            {editing ? (
-              <form onSubmit={handleUpdateProfile}>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-ink mb-2">
-                      {t('fullName')}
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.fullName}
-                      onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
-                      className="w-full px-4 py-3 border border-line rounded-xl bg-surface text-ink focus:ring-2 focus:ring-brand/30 focus:border-brand transition-all"
-                      required
-                      placeholder={t('enterName')}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-ink mb-2">{t('email')}</label>
-                    <input
-                      type="email"
-                      value={formData.email}
-                      onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                      className="w-full px-4 py-3 border border-line rounded-xl bg-surface text-ink focus:ring-2 focus:ring-brand/30 focus:border-brand transition-all"
-                      placeholder={t('enterEmail')}
-                      dir="ltr"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-ink mb-2">{t('city')}</label>
-                    <input
-                      type="text"
-                      value={formData.city}
-                      onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-                      className="w-full px-4 py-3 border border-line rounded-xl bg-surface text-ink focus:ring-2 focus:ring-brand/30 focus:border-brand transition-all"
-                      placeholder={t('cityPlaceholder')}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-ink mb-2">{t('area')}</label>
-                    <input
-                      type="text"
-                      value={formData.area}
-                      onChange={(e) => setFormData({ ...formData, area: e.target.value })}
-                      className="w-full px-4 py-3 border border-line rounded-xl bg-surface text-ink focus:ring-2 focus:ring-brand/30 focus:border-brand transition-all"
-                      placeholder={t('areaPlaceholder')}
-                    />
-                  </div>
-                  <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-ink mb-2">
-                      {t('languagePreference')}
-                    </label>
-                    <select
-                      value={formData.languagePreference}
-                      onChange={(e) =>
-                        setFormData({ ...formData, languagePreference: e.target.value })
-                      }
-                      className="w-full px-4 py-3 border border-line rounded-xl bg-surface text-ink focus:ring-2 focus:ring-brand/30 focus:border-brand transition-all"
-                    >
-                      <option value="en">{t('langEnglish')}</option>
-                      <option value="ur">{t('langUrdu')}</option>
-                    </select>
-                  </div>
-                </div>
-                <div className="flex gap-3 mt-6">
-                  <Button type="submit" className="flex items-center gap-1.5">
-                    <Check className="w-4 h-4" /> {t('saveChanges')}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => {
-                      setEditing(false);
-                      loadProfile();
-                    }}
-                  >
-                    {tc('cancel')}
-                  </Button>
-                </div>
-              </form>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 md:gap-x-6 divide-y divide-line md:divide-y-0 border-t border-line md:border-t-0">
-                <div className="py-3 md:py-0">
-                  <p className="text-xs text-muted mb-1">{t('phoneNumber')}</p>
-                  <p className="font-semibold text-ink flex items-center gap-2">
-                    <Phone className="w-4 h-4 text-muted" />
-                    {hasRealPhone ? <span data-ltr>{formatPhoneNumber(profile!.phone)}</span> : t('notProvided')}
-                    {hasRealPhone && (
-                      <span
-                        className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${
-                          profile?.phoneVerified ? 'bg-brand-soft text-brand-soft-ink' : 'bg-accent-soft text-accent-soft-ink'
-                        }`}
-                      >
-                        {profile?.phoneVerified ? t('verified') : t('notVerified')}
-                      </span>
-                    )}
-                  </p>
-                  {!(hasRealPhone && profile?.phoneVerified) && !verifyingPhone && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setVerifyingPhone(true);
-                        setPhoneInput(hasRealPhone ? profile!.phone : '');
-                      }}
-                      className="mt-1 inline-flex items-center min-h-11 text-sm font-semibold text-brand-ink hover:underline"
-                    >
-                      {hasRealPhone ? t('verifyThisNumber') : t('addVerifyPhone')}
-                    </button>
-                  )}
-                  {verifyingPhone && (
-                    <div className="mt-3 space-y-2">
-                      <input
-                        type="tel"
-                        value={phoneInput}
-                        onChange={(e) => setPhoneInput(e.target.value)}
-                        placeholder="+923001234567"
-                        dir="ltr"
-                        disabled={phoneCodeSent}
-                        className="w-full h-11 px-3 text-sm border border-line-strong rounded-xl bg-surface text-ink"
-                      />
-                      {phoneCodeSent && (
-                        <input
-                          type="text"
-                          inputMode="numeric"
-                          maxLength={6}
-                          value={phoneCode}
-                          onChange={(e) => setPhoneCode(e.target.value.replace(/\D/g, ''))}
-                          placeholder={t('sixDigitCode')}
-                          dir="ltr"
-                          className="w-full h-11 px-3 text-sm border border-line-strong rounded-xl bg-surface text-ink"
-                        />
-                      )}
-                      <div className="flex gap-2">
-                        {!phoneCodeSent ? (
-                          <button type="button" disabled={phoneBusy} onClick={sendPhoneCode} className="min-h-11 px-4 text-sm font-semibold rounded-xl bg-brand text-on-brand disabled:opacity-50">
-                            {phoneBusy ? t('sending') : t('sendCode')}
-                          </button>
-                        ) : (
-                          <button type="button" disabled={phoneBusy || phoneCode.length !== 6} onClick={confirmPhoneCode} className="min-h-11 px-4 text-sm font-semibold rounded-xl bg-brand text-on-brand disabled:opacity-50">
-                            {phoneBusy ? t('verifying') : t('verify')}
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => { setVerifyingPhone(false); setPhoneCode(''); setPhoneCodeSent(false); }}
-                          className="min-h-11 px-4 text-sm font-semibold rounded-xl border border-line-strong text-ink"
-                        >
-                          {tc('cancel')}
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-                <div className="py-3 md:py-0">
-                  <p className="text-xs text-muted mb-1">{t('emailAddress')}</p>
-                  <p className="font-semibold text-ink flex items-center gap-2">
-                    <Mail className="w-4 h-4 text-muted" />
-                    {profile?.email ? <span data-ltr>{profile.email}</span> : t('notProvided')}
-                  </p>
-                </div>
-                <div className="py-3 md:py-0">
-                  <p className="text-xs text-muted mb-1">{t('fullName')}</p>
-                  <p className="font-semibold text-ink flex items-center gap-2">
-                    <User className="w-4 h-4 text-muted" />
-                    {profile?.profile?.fullName || t('notSet')}
-                  </p>
-                </div>
-                <div className="py-3 md:py-0">
-                  <p className="text-xs text-muted mb-1">{t('location')}</p>
-                  <p className="font-semibold text-ink flex items-center gap-2">
-                    <MapPin className="w-4 h-4 text-muted shrink-0" />
-                    <span className="min-w-0">
-                      {defaultAddress
-                        ? [defaultAddress.area, defaultAddress.city].filter(Boolean).join(', ')
-                        : profile?.profile?.area && profile?.profile?.city
-                          ? `${profile.profile.area}, ${profile.profile.city}`
-                          : t('notSet')}
-                    </span>
-                  </p>
-                  <Link href="/profile/addresses" className="inline-flex items-center min-h-11 text-xs font-semibold text-brand-ink hover:underline">
-                    {defaultAddress ? t('editAddresses') : t('addAnAddress')}
-                  </Link>
-                </div>
-              </div>
-            )}
-          </div>
+          {profile && <PersonalInfoSection profile={profile} defaultAddress={defaultAddress} onReload={loadProfile} onSaved={setProfile} />}
 
           {isRider && <RiderVehicleCard />}
 
-          {/* Language */}
-          <div className="bg-surface rounded-[20px] border border-line p-6" data-testid="language-setting">
-            <h2 className="text-lg font-bold text-ink mb-1 flex items-center gap-2">
-              <Globe className="w-5 h-5 text-brand-ink" /> {t('appLanguage')}
-            </h2>
-            <p className="text-sm text-muted mb-4">{t('appLanguageDesc')}</p>
-            <div className="grid grid-cols-2 gap-3" role="radiogroup" aria-label={t('appLanguage')}>
-              {LOCALES.map((code) => {
-                const selected = locale === code;
-                return (
-                  <button
-                    key={code}
-                    type="button"
-                    role="radio"
-                    aria-checked={selected}
-                    lang={code}
-                    onClick={() => setLocale(code)}
-                    data-testid={`language-option-${code}`}
-                    className={`flex items-center justify-between gap-2 p-4 rounded-xl border-2 text-start font-semibold transition-colors ${
-                      selected
-                        ? 'border-brand bg-brand-50 text-ink'
-                        : 'border-line bg-surface text-ink hover:border-line-strong'
-                    }`}
-                  >
-                    <span>{LOCALE_NAMES[code]}</span>
-                    {selected && <Check className="w-4 h-4 text-brand-ink" />}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+          <LanguageSection />
 
-          {/* Appearance */}
-          <div className="bg-surface rounded-[20px] border border-line p-6" data-testid="appearance-setting">
-            <h2 className="text-lg font-bold text-ink mb-1 flex items-center gap-2">
-              <Palette className="w-5 h-5 text-brand-ink" /> {t('appearance')}
-            </h2>
-            <p className="text-sm text-muted mb-4">{t('appearanceDesc')}</p>
-            <ThemeToggle className="max-w-sm" />
-          </div>
+          <AppearanceSection />
 
-          {/* Security & Account */}
-          <div className="bg-surface rounded-[20px] border border-line p-6">
-            <h2 className="text-lg font-bold text-ink mb-4 flex items-center gap-2">
-              <Lock className="w-5 h-5 text-ink" /> {t('accountSecurity')}
-            </h2>
-            <div className="space-y-3">
-              <PasswordCard hasPassword={profile?.hasPassword !== false} email={profile?.email} emailVerified={!!profile?.emailVerified} />
-              <SessionsCard />
-              {(user?.userType ?? user?.user_type) === 'admin' && <TwoFactorCard />}
-              {profile?.email && (
-                <div className="flex items-center justify-between gap-3 p-4 bg-raised rounded-xl" data-testid="email-verification">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-10 h-10 shrink-0 bg-brand-soft rounded-xl flex items-center justify-center text-brand-soft-ink">
-                      <Mail className="w-5 h-5" />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="font-medium text-ink">{t('emailVerification')}</p>
-                      <p className="text-xs text-muted">
-                        {profile.emailVerified ? t('emailIsVerified') : t('verifyEmailAddress')}
-                      </p>
-                    </div>
-                  </div>
-                  {!profile.emailVerified && (
-                    <Button variant="outline" size="sm" className="shrink-0" disabled={sendingVerification} onClick={sendVerificationLink} data-testid="send-verification">
-                      {sendingVerification ? t('sending') : t('verify')}
-                    </Button>
-                  )}
-                  {profile.emailVerified && (
-                    <span className="text-brand-ink font-bold text-sm flex items-center gap-1 shrink-0">
-                      <Check className="w-4 h-4" /> {t('verified')}
-                    </span>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
+          {profile && <AccountSecuritySection profile={profile} />}
 
-          <div className="bg-surface rounded-[20px] border border-line p-4 flex items-center justify-between gap-3">
-            <div className="min-w-0">
-              <p className="font-medium text-ink">{t('signOut')}</p>
-              <p className="text-xs text-muted">{t('signOutDesc')}</p>
-            </div>
-            <Button
-              variant="outline"
-              className="shrink-0 min-h-11"
-              data-testid="profile-sign-out"
-              onClick={() => {
-                leaving.current = true;
-                logout();
-                router.push('/');
-              }}
-            >
-              <LogOut className="w-4 h-4" /> {t('signOut')}
-            </Button>
-          </div>
+          <SignOutCard onSignOut={leaveSignedOut} />
 
-          {/* Danger Zone */}
-          <div className="bg-surface rounded-[20px] border border-red-200 p-6">
-            <h2 className="text-lg font-bold text-red-700 mb-4 flex items-center gap-2">
-              <AlertTriangle className="w-5 h-5 text-red-700" /> {t('dangerZone')}
-            </h2>
-            <div className="flex items-center justify-between gap-3 p-4 bg-red-50 rounded-xl">
-              <div className="min-w-0">
-                <p className="font-medium text-ink">{t('deleteAccount')}</p>
-                <p className="text-xs text-muted">{t('deleteAccountDesc')}</p>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                className="border-red-300 text-red-700 hover:bg-red-100 shrink-0"
-                data-testid="delete-account"
-                disabled={deleting}
-                onClick={handleDeleteAccount}
-              >
-                {t('deleteAccount')}
-              </Button>
-            </div>
-          </div>
+          <DangerZoneSection onClosed={leaveSignedOut} />
         </div>
       </div>
     </DashboardLayout>
   );
 }
-
