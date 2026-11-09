@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Nuray system architecture</title>
+<style>
+  body { margin: 0; background: #ffffff; font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; }
+  svg { display: block; }
+  .title { font-size: 30px; font-weight: 700; fill: #0f2e2a; }
+  .sub { font-size: 16px; fill: #4b635f; }
+  .band { font-size: 13px; font-weight: 700; fill: #4b635f; letter-spacing: .04em; }
+  .h { font-size: 18px; font-weight: 700; fill: #0f2e2a; }
+  .t { font-size: 14px; fill: #29433f; }
+  .s { font-size: 12.5px; fill: #4b635f; }
+  .lbl { font-size: 12.5px; fill: #1d4f48; font-weight: 600; }
+  .ours { fill: #e3f7f4; stroke: #2bb3a3; stroke-width: 2; }
+  .api { fill: #ffffff; stroke: #2bb3a3; stroke-width: 1.5; }
+  .store { fill: #fff6d6; stroke: #d9a400; stroke-width: 2; }
+  .client { fill: #f3f6f6; stroke: #9db3af; stroke-width: 1.5; }
+  .ext { fill: #f7f4fb; stroke: #8c79b8; stroke-width: 1.5; }
+  .edge { fill: #ffffff; stroke: #9db3af; stroke-width: 1.5; stroke-dasharray: 6 4; }
+  .line { stroke: #31544f; stroke-width: 2; fill: none; }
+  .dash { stroke: #8c79b8; stroke-width: 1.8; fill: none; stroke-dasharray: 5 4; }
+</style>
+</head>
+<body>
+<svg width="1600" height="1100" viewBox="0 0 1600 1100" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#31544f"/>
+    </marker>
+    <marker id="p" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#8c79b8"/>
+    </marker>
+  </defs>
+
+  <text x="40" y="52" class="title">Nuray system architecture</text>
+  <text x="40" y="80" class="sub">2 programs you deploy (Web, API) · 2 stores you operate (PostgreSQL, Redis) · 1 bucket · 10 outside services</text>
+
+  <!-- Clients -->
+  <text x="40" y="128" class="band">PEOPLE AND DEVICES</text>
+  <rect x="40" y="140" width="1060" height="110" rx="14" class="client"/>
+  <text x="64" y="172" class="h">Browsers</text>
+  <text x="64" y="196" class="t">Customers · Kitchens · Riders · Hub managers · Admin staff</text>
+  <text x="64" y="220" class="s">English and Urdu (right-to-left) · phone tab bar per role</text>
+  <line x1="580" y1="156" x2="580" y2="234" stroke="#c5d3d1" stroke-width="1.5"/>
+  <text x="604" y="172" class="h">Android and iOS apps (Capacitor 8)</text>
+  <text x="604" y="196" class="t">A native shell that opens the same website (server.url)</text>
+  <text x="604" y="220" class="s">Native: push, background location for riders, Google/Apple sign-in</text>
+
+  <!-- Edge -->
+  <text x="40" y="292" class="band">EDGE (YOU ADD IN PRODUCTION)</text>
+  <rect x="40" y="304" width="1060" height="62" rx="14" class="edge"/>
+  <text x="64" y="341" class="t"><tspan class="h">Load balancer + TLS</tspan>   sticky sessions for Socket.IO · one domain: nuray.pk and api.nuray.pk · <tspan font-weight="700">CDN</tspan> for /_next/static and photos</text>
+
+  <!-- Arrows clients -> edge -->
+  <path d="M310 250 V 302" class="line" marker-end="url(#a)"/>
+  <path d="M840 250 V 302" class="line" marker-end="url(#a)"/>
+
+  <!-- Our services -->
+  <text x="40" y="410" class="band">WHAT YOU RUN</text>
+
+  <rect x="40" y="422" width="330" height="300" rx="14" class="ours"/>
+  <text x="62" y="456" class="h">Web · Next.js 16</text>
+  <text x="62" y="478" class="s">frontend-web/ · port 3000 · Node 22</text>
+  <text x="62" y="512" class="t">73 pages for 5 roles</text>
+  <text x="62" y="536" class="t">proxy.ts: CSP nonce per request</text>
+  <text x="62" y="560" class="t">Kitchen and dish pages fetched</text>
+  <text x="62" y="580" class="t">on the server (cached 5 min)</text>
+  <text x="62" y="604" class="t">/api/geocode → OpenStreetMap</text>
+  <text x="62" y="628" class="t">Rewrites /media, /files → API</text>
+  <text x="62" y="664" class="s">Most data is fetched by the browser</text>
+  <text x="62" y="684" class="s">straight from the API.</text>
+
+  <rect x="420" y="422" width="680" height="300" rx="14" class="ours"/>
+  <text x="442" y="456" class="h">API · Express 4 + Prisma 6</text>
+  <text x="442" y="478" class="s">backend/ · port 3001 · one process holds all four parts below · run 1 to N copies</text>
+  <rect x="442" y="496" width="306" height="104" rx="10" class="api"/>
+  <text x="460" y="524" class="h">REST /api/v1</text>
+  <text x="460" y="548" class="t">27 route files · 258 handlers</text>
+  <text x="460" y="570" class="s">route → controller → service (72)</text>
+  <text x="460" y="590" class="s">JWT + refresh cookie nuray_rt</text>
+  <rect x="772" y="496" width="306" height="104" rx="10" class="api"/>
+  <text x="790" y="524" class="h">Socket.IO</text>
+  <text x="790" y="548" class="t">live orders, rider jobs, tracking</text>
+  <text x="790" y="570" class="s">rooms: user, role, order, riders:on-duty</text>
+  <text x="790" y="590" class="s">fan-out to all copies via Redis</text>
+  <rect x="442" y="612" width="306" height="92" rx="10" class="api"/>
+  <text x="460" y="640" class="h">Scheduler · 12 jobs</text>
+  <text x="460" y="664" class="t">dispatch, stale orders, payouts…</text>
+  <text x="460" y="686" class="s">one copy runs each job (Redis lease)</text>
+  <rect x="772" y="612" width="306" height="92" rx="10" class="api"/>
+  <text x="790" y="640" class="h">Job worker · BullMQ</text>
+  <text x="790" y="664" class="t">email, push, SMS delivery</text>
+  <text x="790" y="686" class="s">5 retries · spread over all copies</text>
+
+  <!-- Edge -> services -->
+  <path d="M205 366 V 420" class="line" marker-end="url(#a)"/>
+  <text x="215" y="400" class="lbl">pages</text>
+  <path d="M760 366 V 420" class="line" marker-end="url(#a)"/>
+  <text x="770" y="400" class="lbl">REST + websocket (browser calls the API directly)</text>
+  <path d="M370 560 H 418" class="line" marker-end="url(#a)"/>
+  <text x="374" y="550" class="lbl">server</text>
+  <text x="374" y="578" class="lbl">fetch</text>
+
+  <!-- Stores -->
+  <text x="40" y="766" class="band">DATA</text>
+  <rect x="40" y="778" width="400" height="150" rx="14" class="store"/>
+  <text x="62" y="812" class="h">PostgreSQL 15 + pg_trgm</text>
+  <text x="62" y="838" class="t">53 tables · 25 migrations · the only truth</text>
+  <text x="62" y="862" class="s">orders, money ledgers, sessions, audit log</text>
+  <text x="62" y="884" class="s">row locks + unique keys keep money exact</text>
+  <text x="62" y="906" class="s">trigger keeps riders.cash_held</text>
+
+  <rect x="470" y="778" width="320" height="150" rx="14" class="store"/>
+  <text x="492" y="812" class="h">Redis 7</text>
+  <text x="492" y="838" class="t">shared short-lived state</text>
+  <text x="492" y="862" class="s">rate limits · auth cache (30 s)</text>
+  <text x="492" y="884" class="s">catalog cache (30 s) · job leases</text>
+  <text x="492" y="906" class="s">BullMQ queue · Socket.IO adapter</text>
+
+  <rect x="820" y="778" width="280" height="150" rx="14" class="store"/>
+  <text x="842" y="812" class="h">File storage</text>
+  <text x="842" y="838" class="t">S3-compatible bucket + CDN</text>
+  <text x="842" y="862" class="s">or one local disk (single API only)</text>
+  <text x="842" y="884" class="s">public photos, private documents</text>
+  <text x="842" y="906" class="s">(signed 10-minute links)</text>
+
+  <path d="M560 722 V 776" class="line" marker-end="url(#a)"/>
+  <path d="M430 722 V 776" class="line" marker-end="url(#a)"/>
+  <text x="420" y="752" class="lbl" text-anchor="end">Prisma (10 connections per copy)</text>
+  <text x="570" y="752" class="lbl">ioredis</text>
+  <path d="M960 722 V 776" class="line" marker-end="url(#a)"/>
+  <text x="970" y="752" class="lbl">uploads</text>
+
+  <!-- External services -->
+  <text x="1160" y="128" class="band">OUTSIDE SERVICES</text>
+  <rect x="1160" y="140" width="400" height="788" rx="14" fill="#fbfaff" stroke="#d9d1ea" stroke-width="1.5"/>
+
+  <rect x="1180" y="160" width="360" height="96" rx="10" class="ext"/>
+  <text x="1198" y="188" class="h">Payments</text>
+  <text x="1198" y="212" class="t">Safepay hosted checkout + webhook</text>
+  <text x="1198" y="236" class="s">cards, JazzCash, EasyPaisa · cash on delivery in-app</text>
+
+  <rect x="1180" y="270" width="360" height="96" rx="10" class="ext"/>
+  <text x="1198" y="298" class="h">Messages</text>
+  <text x="1198" y="322" class="t">SMTP email (required)</text>
+  <text x="1198" y="346" class="t">Twilio SMS OTP (required*)</text>
+
+  <rect x="1180" y="380" width="360" height="96" rx="10" class="ext"/>
+  <text x="1198" y="408" class="h">Push</text>
+  <text x="1198" y="432" class="t">Web Push (VAPID) · FCM (Android)</text>
+  <text x="1198" y="456" class="t">APNs (iOS)</text>
+
+  <rect x="1180" y="490" width="360" height="96" rx="10" class="ext"/>
+  <text x="1198" y="518" class="h">Sign-in</text>
+  <text x="1198" y="542" class="t">Google Sign-In · Sign in with Apple</text>
+  <text x="1198" y="566" class="s">token checked by the API</text>
+
+  <rect x="1180" y="600" width="360" height="96" rx="10" class="ext"/>
+  <text x="1198" y="628" class="h">Maps</text>
+  <text x="1198" y="652" class="t">OpenStreetMap Nominatim + tiles</text>
+  <text x="1198" y="676" class="s">called by the Web server and browser</text>
+
+  <rect x="1180" y="710" width="360" height="96" rx="10" class="ext"/>
+  <text x="1198" y="738" class="h">Errors</text>
+  <text x="1198" y="762" class="t">Sentry (API and browser)</text>
+  <text x="1198" y="786" class="s">optional</text>
+
+  <text x="1180" y="836" class="s">* unless SMS_PROVIDER=none</text>
+  <text x="1180" y="860" class="s">Everything except SMTP and Twilio is optional.</text>
+  <text x="1180" y="884" class="s">Safepay is needed only for online payment.</text>
+
+  <!-- API -> external -->
+  <path d="M1100 470 C 1130 470, 1140 210, 1178 208" class="dash" marker-end="url(#p)"/>
+  <path d="M1100 500 C 1135 500, 1145 318, 1178 318" class="dash" marker-end="url(#p)"/>
+  <path d="M1100 640 C 1135 640, 1145 430, 1178 430" class="dash" marker-end="url(#p)"/>
+  <path d="M1100 540 C 1140 540, 1150 540, 1178 540" class="dash" marker-end="url(#p)"/>
+  <path d="M1100 700 C 1140 700, 1150 758, 1178 758" class="dash" marker-end="url(#p)"/>
+
+  <!-- CI/CD -->
+  <text x="40" y="972" class="band">BUILD AND SHIP</text>
+  <rect x="40" y="984" width="1520" height="96" rx="14" class="client"/>
+  <text x="64" y="1016" class="h">GitHub Actions</text>
+  <text x="64" y="1042" class="t">8 CI jobs: backend, frontend, E2E (Playwright, real Postgres + Redis), Android build, money flows, load tooling, Docker + Trivy, security (audit, gitleaks)</text>
+  <text x="1170" y="1016" class="h">→ GHCR images</text>
+  <text x="1170" y="1042" class="t">nuray-backend · nuray-frontend</text>
+  <text x="1170" y="1060" class="s">no deploy step yet</text>
+</svg>
+</body>
+</html>
