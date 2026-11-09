@@ -37,14 +37,14 @@ test.describe('on a phone', () => {
   test('the menu opens to the pages a visitor needs, fits the screen, and a tap on a page goes there', async ({ page }) => {
     await page.goto('/');
     await page.getByRole('button', { name: 'Open navigation menu' }).tap();
-    const menu = page.locator('aside', { has: page.getByRole('link', { name: 'All dishes & menus' }) });
-    for (const name of ['All dishes & menus', 'Verified kitchens', 'Sign in', 'Join', 'Open a home kitchen']) {
+    const menu = page.locator('aside', { has: page.getByRole('link', { name: 'All dishes' }) });
+    for (const name of ['All dishes', 'Kitchens', 'Sign in', 'Join', 'Cook with Nuray']) {
       await expect(menu.getByRole('link', { name }), `the menu links to "${name}"`).toBeVisible();
     }
     const box = await menu.boundingBox();
     expect(box!.x).toBeGreaterThanOrEqual(0);
     expect(box!.x + box!.width).toBeLessThanOrEqual(page.viewportSize()!.width);
-    await menu.getByRole('link', { name: 'All dishes & menus' }).tap();
+    await menu.getByRole('link', { name: 'All dishes' }).tap();
     await expect(page).toHaveURL(/\/products/);
   });
 
