@@ -2,7 +2,7 @@
 
 /** Dish cards and the three dish sections: order again and recommended (signed in), and popular dishes. */
 import Link from 'next/link';
-import { Snowflake, Flame, Plus, ChefHat, Star, ChevronRight } from 'lucide-react';
+import { Snowflake, Flame, Plus, Minus, ChefHat, Star, ChevronRight } from 'lucide-react';
 import { CoverImage } from '@/components/ui/CoverImage';
 import { formatPrice } from '@/lib/utils';
 import { useT } from '@/lib/i18n';
@@ -11,7 +11,10 @@ import type { HomeT } from '@/lib/home-feed';
 import type { HomeDish, LoadState } from '@/lib/home-filters';
 import { DishCardSkeleton, RetryButton, SectionNotice } from './HomeStates';
 
-type AddDish = (dish: HomeDish, e: React.MouseEvent) => void;
+type TrayAction = (dish: HomeDish, e: React.MouseEvent) => void;
+
+/** What a dish card does with the tray: add one, take one out, and how many of a dish it holds. */
+export type DishTray = { add: TrayAction; remove: TrayAction; quantityOf: (dishId: string) => number };
 
 /** Why a dish is recommended, as the small line above its name; none when the section's subtitle already says it. */
 const reasonNote = (t: HomeT, reason?: string) =>
@@ -29,8 +32,9 @@ const SHORT_ROW = 3;
  * One dish card (popular, order again, recommended). `note` is a small line above the name. `row` lays a card of a short
  * row (three or fewer) out sideways on a wide screen, so three cards fill the width without becoming posters.
  */
-export function DishCard({ dish, onAdd, note, row = false }: { dish: HomeDish; onAdd: AddDish; note?: string; row?: boolean }) {
+export function DishCard({ dish, tray, note, row = false }: { dish: HomeDish; tray: DishTray; note?: string; row?: boolean }) {
   const t = useT(homeMessages);
+  const quantity = tray.quantityOf(dish.id);
   return (
     <div className={`group relative bg-surface rounded-[20px] border border-line hover:border-line-strong hover:shadow-[var(--shadow-card)] transition-all flex flex-col overflow-hidden ${row ? 'lg:flex-row' : ''}`}>
       <div className={`relative aspect-square overflow-hidden bg-raised ${row ? 'lg:w-40 lg:shrink-0' : ''}`}>
@@ -54,17 +58,41 @@ export function DishCard({ dish, onAdd, note, row = false }: { dish: HomeDish; o
           </span>
         )}
 
-        <button
-          type="button"
-          onClick={(e) => onAdd(dish, e)}
-          className="group/add absolute z-10 bottom-0 end-0 w-11 h-11 flex items-center justify-center"
-          title={t('addToTray')}
-          aria-label={t('addNameToTray', { name: dish.name })}
-        >
-          <span className="w-9 h-9 rounded-full bg-brand group-hover/add:bg-brand-500 text-on-brand shadow-md flex items-center justify-center transition-transform group-active/add:scale-95">
-            <Plus className="w-4 h-4" strokeWidth={3} aria-hidden />
-          </span>
-        </button>
+        {quantity > 0 ? (
+          <div className="absolute z-10 bottom-1.5 end-1.5 flex items-center gap-1 bg-surface p-0.5 rounded-xl shadow-md">
+            <button
+              type="button"
+              onClick={(e) => tray.remove(dish, e)}
+              aria-label={t('removeOne', { name: dish.name })}
+              className="w-10 h-10 rounded-[10px] bg-raised text-ink hover:bg-line transition-colors flex items-center justify-center"
+            >
+              <Minus className="w-4 h-4" strokeWidth={3} aria-hidden />
+            </button>
+            <span className="font-extrabold text-sm text-ink min-w-5 text-center" aria-live="polite">
+              {quantity}
+            </span>
+            <button
+              type="button"
+              onClick={(e) => tray.add(dish, e)}
+              aria-label={t('addOne', { name: dish.name })}
+              className="w-10 h-10 rounded-[10px] bg-brand text-on-brand hover:bg-brand-500 transition-colors flex items-center justify-center"
+            >
+              <Plus className="w-4 h-4" strokeWidth={3} aria-hidden />
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={(e) => tray.add(dish, e)}
+            className="group/add absolute z-10 bottom-0 end-0 w-11 h-11 flex items-center justify-center"
+            title={t('addToTray')}
+            aria-label={t('addNameToTray', { name: dish.name })}
+          >
+            <span className="w-9 h-9 rounded-full bg-brand group-hover/add:bg-brand-500 text-on-brand shadow-md flex items-center justify-center transition-transform group-active/add:scale-95">
+              <Plus className="w-4 h-4" strokeWidth={3} aria-hidden />
+            </span>
+          </button>
+        )}
       </div>
 
       <div className="p-3 flex-1 flex flex-col gap-1">
@@ -107,7 +135,7 @@ function DishRail({ count, children }: { count: number; children: React.ReactNod
 }
 
 /** "Order again": the dishes this customer had before; hidden when there are none. */
-export function OrderAgainDishes({ dishes, onAdd }: { dishes: HomeDish[]; onAdd: AddDish }) {
+export function OrderAgainDishes({ dishes, tray }: { dishes: HomeDish[]; tray: DishTray }) {
   const t = useT(homeMessages);
   if (dishes.length === 0) return null;
   return (
@@ -115,7 +143,7 @@ export function OrderAgainDishes({ dishes, onAdd }: { dishes: HomeDish[]; onAdd:
       <h2 className="text-lg sm:text-[22px] font-extrabold text-ink tracking-tight mb-3">{t('orderAgain')}</h2>
       <DishRail count={dishes.length}>
         {dishes.map((dish) => (
-          <DishCard key={dish.id} dish={dish} onAdd={onAdd} row={dishes.length <= SHORT_ROW} />
+          <DishCard key={dish.id} dish={dish} tray={tray} row={dishes.length <= SHORT_ROW} />
         ))}
       </DishRail>
     </section>
@@ -123,7 +151,7 @@ export function OrderAgainDishes({ dishes, onAdd }: { dishes: HomeDish[]; onAdd:
 }
 
 /** "Recommended for you", each with why; hidden when there is nothing to recommend. */
-export function RecommendedDishes({ dishes, onAdd }: { dishes: Array<{ dish: HomeDish; reason?: string }>; onAdd: AddDish }) {
+export function RecommendedDishes({ dishes, tray }: { dishes: Array<{ dish: HomeDish; reason?: string }>; tray: DishTray }) {
   const t = useT(homeMessages);
   if (dishes.length === 0) return null;
   return (
@@ -132,7 +160,7 @@ export function RecommendedDishes({ dishes, onAdd }: { dishes: Array<{ dish: Hom
       <p className="text-xs text-muted font-medium mt-0.5 mb-4">{t('recommendedForYouSub')}</p>
       <DishRail count={dishes.length}>
         {dishes.map(({ dish, reason }) => (
-          <DishCard key={dish.id} dish={dish} onAdd={onAdd} note={reasonNote(t, reason)} row={dishes.length <= SHORT_ROW} />
+          <DishCard key={dish.id} dish={dish} tray={tray} note={reasonNote(t, reason)} row={dishes.length <= SHORT_ROW} />
         ))}
       </DishRail>
     </section>
@@ -144,12 +172,12 @@ export function PopularDishes({
   dishes,
   state,
   onRetry,
-  onAdd,
+  tray,
 }: {
   dishes: HomeDish[];
   state: LoadState;
   onRetry: () => void;
-  onAdd: AddDish;
+  tray: DishTray;
 }) {
   const t = useT(homeMessages);
   return (
@@ -180,7 +208,7 @@ export function PopularDishes({
         /* Dishes Grid */
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
           {dishes.map((dish) => (
-            <DishCard key={dish.id} dish={dish} onAdd={onAdd} />
+            <DishCard key={dish.id} dish={dish} tray={tray} />
           ))}
         </div>
       )}

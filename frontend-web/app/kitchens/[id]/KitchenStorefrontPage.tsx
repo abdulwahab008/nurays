@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { SiteHeader } from '@/components/layout/SiteHeader';
 import { isAxiosError } from 'axios';
 import { CoverImage } from '@/components/ui/CoverImage';
+import { TrayBar, ViewTrayLink } from '@/components/cart/TrayBar';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { useToast } from '@/components/ui/toast';
 import { displayRating, formatDate, formatPrice } from '@/lib/utils';
@@ -35,7 +36,6 @@ import {
   UtensilsCrossed,
   Flame,
   Snowflake,
-  ChevronRight,
   ArrowLeft,
   Check,
   Bell,
@@ -1113,43 +1113,25 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
           </div>
       </section>
 
-      {/* Floating Kitchen Cart Pill (Foodpanda/DoorDash style) */}
       {cartCount > 0 && (
-        <div className="fixed bottom-[calc(1.5rem+var(--safe-bottom)+var(--tabbar-offset))] inset-x-0 z-50 flex justify-center px-4">
-          <div className="bg-[#0D2624] text-white p-2.5 ps-3 rounded-[18px] shadow-xl flex items-center justify-between gap-4 max-w-lg w-full">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-brand flex items-center justify-center text-on-brand font-extrabold text-sm">
-                {cartCount}
-              </div>
-              <div>
-                <div className="text-xs text-[#A3BCB7] font-semibold">
-                  {kitchen.preOrderOnly ? tk('preOrderTotal') : tk('totalOrder')}
-                </div>
-                <div className="text-base font-extrabold text-white">{formatPrice(cartTotal)}</div>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-              {orderingBlocked ? (
-                <button
-                  type="button"
-                  disabled
-                  className="h-11 px-4 rounded-xl bg-white/10 text-[#A3BCB7] text-sm font-bold cursor-not-allowed"
-                >
-                  {tk('checkoutDisabled')}
-                </button>
-              ) : (
-                <Link
-                  href="/cart"
-                  className="inline-flex items-center gap-1 h-11 px-4 rounded-xl bg-brand hover:bg-brand-500 text-on-brand text-sm font-extrabold transition-colors"
-                >
-                  <span>{kitchen.preOrderOnly ? tk('schedulePreOrder') : tk('reviewCheckout')}</span>
-                  <ChevronRight className="rtl:-scale-x-100 w-3.5 h-3.5" />
-                </Link>
-              )}
-            </div>
-          </div>
-        </div>
+        <TrayBar
+          count={cartCount}
+          total={cartTotal}
+          label={kitchen.preOrderOnly ? tk('preOrderTotal') : tk('totalOrder')}
+          action={
+            orderingBlocked ? (
+              <button
+                type="button"
+                disabled
+                className="h-11 px-4 rounded-xl bg-white/10 text-[#A3BCB7] text-sm font-bold cursor-not-allowed"
+              >
+                {tk('checkoutDisabled')}
+              </button>
+            ) : (
+              <ViewTrayLink label={kitchen.preOrderOnly ? tk('schedulePreOrder') : tk('reviewCheckout')} />
+            )
+          }
+        />
       )}
 
       {/* Styled Modern Modal for Single Kitchen Batch Switching */}

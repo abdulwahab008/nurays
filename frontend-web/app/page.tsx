@@ -28,7 +28,9 @@ import HomeHero from '@/components/home/HomeHero';
 import FilterBar from '@/components/home/FilterBar';
 import PromoBanners from '@/components/home/PromoBanners';
 import { KitchenGrid, TrendingKitchens } from '@/components/home/KitchenSections';
-import { OrderAgainDishes, PopularDishes, RecommendedDishes } from '@/components/home/DishSections';
+import { OrderAgainDishes, PopularDishes, RecommendedDishes, type DishTray } from '@/components/home/DishSections';
+import { TrayBar, ViewTrayLink } from '@/components/cart/TrayBar';
+import { useHydrated } from '@/lib/hooks/use-hydrated';
 import StatsBand from '@/components/home/StatsBand';
 import HomeFooter from '@/components/home/HomeFooter';
 import { useHomeFeed } from '@/components/home/useHomeFeed';
@@ -65,6 +67,12 @@ export default function Home() {
   const router = useRouter();
   const { isAuthenticated, user } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated, user: s.user })));
   const addItem = useCartStore((s) => s.addItem);
+  const trayItems = useCartStore((s) => s.items);
+  // The tray lives in this browser's storage: until the page has hydrated, render as the server did (empty).
+  const hydrated = useHydrated();
+  const shownTray = hydrated ? trayItems : [];
+  const trayCount = shownTray.reduce((sum, i) => sum + i.quantity, 0);
+  const trayTotal = shownTray.reduce((sum, i) => sum + i.subtotal, 0);
   const { showToast } = useToast();
   const t = useT(homeMessages);
   const tb = useT(browseMessages);
@@ -217,6 +225,30 @@ export default function Home() {
     showToast(t('addedToTray', { name: dish.name }), 'success');
   };
 
+  const handleRemoveDishFromCart = async (dish: HomeDish, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const item = useCartStore.getState().items.find((i) => i.productId === dish.id);
+    if (!item) return;
+    useCartStore.getState().updateItem(item.id, item.quantity - 1);
+    if (!hasSession()) return;
+    try {
+      const serverItem = (await cartService.getCart()).data?.items?.find((i) => i.product.id === dish.id);
+      if (!serverItem) return;
+      if (serverItem.quantity <= 1) await cartService.removeCartItem(serverItem.id);
+      else await cartService.updateCartItem(serverItem.id, serverItem.quantity - 1);
+    } catch (err) {
+      useCartStore.getState().addItem({ ...item, quantity: 1, subtotal: item.unitPrice });
+      showToast(errorMessage(err, t('trayRemoveFailed')), 'error');
+    }
+  };
+
+  const dishTray: DishTray = {
+    add: handleAddDishToCart,
+    remove: handleRemoveDishFromCart,
+    quantityOf: (dishId) => shownTray.filter((i) => i.productId === dishId).reduce((sum, i) => sum + i.quantity, 0),
+  };
+
   const handleConfirmSwitchKitchen = async () => {
     const dish = conflictModal.dish;
     if (!dish) return;
@@ -279,7 +311,7 @@ export default function Home() {
       />
       {/* A visitor learns what Nuray is; a signed-in customer goes straight to what they order. */}
       {!isAuthenticated && <PromoBanners />}
-      <OrderAgainDishes dishes={orderAgainDishes} onAdd={handleAddDishToCart} />
+      <OrderAgainDishes dishes={orderAgainDishes} tray={dishTray} />
       <TrendingKitchens kitchens={trendingKitchens} />
       <KitchenGrid
         title={selectedCommunity ? t('kitchensForArea', { area: selectedCommunity.name }) : undefined}
@@ -294,10 +326,17 @@ export default function Home() {
         onToggleFavorite={toggleFavorite}
         phoneLimit={!filtering}
       />
-      <RecommendedDishes dishes={recommendedDishes} onAdd={handleAddDishToCart} />
-      <PopularDishes dishes={popularDishes} state={dishesState} onRetry={retryDishes} onAdd={handleAddDishToCart} />
+      <RecommendedDishes dishes={recommendedDishes} tray={dishTray} />
+      <PopularDishes dishes={popularDishes} state={dishesState} onRetry={retryDishes} tray={dishTray} />
       {!isAuthenticated && <StatsBand stats={stats} />}
       <HomeFooter />
+      {trayCount > 0 && (
+        <>
+          {/* Keeps the footer clear of the tray bar */}
+          <div aria-hidden className="h-24" />
+          <TrayBar count={trayCount} total={trayTotal} label={t('trayBarLabel')} action={<ViewTrayLink label={t('viewTray')} />} />
+        </>
+      )}
 
       <ConfirmModal
         isOpen={conflictModal.isOpen}
