@@ -550,6 +550,18 @@ export function DashboardNavbar({ userType = 'customer', onMenuToggle, drawerOpe
                       {t('settings')}
                     </Link>
                   )}
+                  {isRider && (
+                    <>
+                      <Link href="/riders/settings" className={menuRow}>
+                        <Settings className={menuIcon} aria-hidden="true" />
+                        {t('settings')}
+                      </Link>
+                      <Link href="/support" className={menuRow}>
+                        <LifeBuoy className={menuIcon} aria-hidden="true" />
+                        {t('helpSupport')}
+                      </Link>
+                    </>
+                  )}
                   {isCustomer && (
                     <>
                       <Link href="/profile" className={menuRow}>
