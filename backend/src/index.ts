@@ -67,6 +67,7 @@ import uploadRoutes from './routes/upload.routes';
 import communityRoutes from './routes/community.routes';
 import favoriteRoutes from './routes/favorite.routes';
 import { dispatchWaiting } from './services/dispatch.service';
+import ledgerService from './services/ledger.service';
 
 const app = express();
 const httpServer = createServer(app);
@@ -176,17 +177,19 @@ httpServer.listen(PORT, () => {
   scheduleJob('purge-expired-secrets', 6 * 60 * 60 * 1000, () => purgeExpiredSecrets());
   // Audit log rows older than two years (the retention period; the database refuses anything newer).
   scheduleJob('audit-retention', 24 * 60 * 60 * 1000, () => purgeOldAuditLogs());
-  // Refresh tokens nobody can use any more (expired, or in a session that ended a day ago).
   // Monday's kitchen payouts (from 06:00 Pakistan time; hourly, so a missed hour catches up). Off on test servers.
   if (process.env.WEEKLY_PAYOUTS_ENABLED !== 'false') scheduleJob('weekly-payouts', 60 * 60 * 1000, () => runWeeklyPayouts());
   // Which kitchens owe Nuray and since when (their cash orders pause after two weeks), with a daily reminder.
   scheduleJob('kitchen-owing', 6 * 60 * 60 * 1000, () => refreshAllOwing());
+  // Refresh tokens nobody can use any more (expired, or in a session that ended a day ago).
   scheduleJob('prune-refresh-tokens', 6 * 60 * 60 * 1000, () => pruneRefreshTokens());
   // Online checkout sessions nobody completed (a late payment confirmation still settles).
   scheduleJob('expire-payment-attempts', 15 * 60 * 1000, () => expireAbandonedAttempts());
+  // Delivered, paid orders whose ledger posting failed after the delivery was saved.
+  scheduleJob('ledger-catch-up', 15 * 60 * 1000, () => ledgerService.postMissedCompletions());
+  scheduleJob('ops-snapshot', 5 * 60 * 1000, () => logOpsSnapshot());
   // Trending and rating scores the listings sort by (recent orders fade over days, so this
   // keeps them current even when nobody orders).
-  scheduleJob('ops-snapshot', 5 * 60 * 1000, () => logOpsSnapshot());
   scheduleJob('ranking-scores', 15 * 60 * 1000, () => recomputeRankings());
 
   // Background jobs (emails, notifications). With Redis every instance takes queued jobs.

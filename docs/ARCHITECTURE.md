@@ -79,6 +79,7 @@ Two mechanisms, both started from `index.ts`:
 | `stale-orders` | 2 min | Cancels unaccepted and unpaid orders, escalates unconfirmed transfers (`order-maintenance.service`). |
 | `expire-payment-attempts` | 15 min | Marks Safepay checkout sessions older than 2 h as `expired`. |
 | `ranking-scores` | 15 min | Recomputes trending and rating scores (`ranking.service`). |
+| `ledger-catch-up` | 15 min | Posts the platform ledger for delivered, paid orders of the last 14 days that have none (the posting after a delivery is not retried; `ledger.service`). |
 | `hub-expiry` | 1 h | Marks hub batches past their expiry. |
 | `stock-alerts` | 6 h | Safety-net low/out-of-stock alerts. |
 | `purge-expired-secrets` | 6 h | Deletes OTP rows and reset tokens older than a day. |

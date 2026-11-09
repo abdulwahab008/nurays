@@ -4,7 +4,35 @@ import { pageArgs } from '../utils/pagination';
 import { parseBreakdown, platformDeliveryFee } from '../utils/deliveryEarnings';
 import { collectorOf } from '../utils/paymentCustody';
 
+const CATCH_UP_DAYS = 14;
+const CATCH_UP_SETTLE_MS = 5 * 60 * 1000;
+
 export class LedgerService {
+  /**
+   * Posts delivered, paid orders that have no entries. The posting runs after the delivery commits and a failure there is
+   * only logged, so without this the platform ledger would silently miss the order. Recent orders only (and not the last
+   * few minutes, which the delivery path may still be posting); recordOrderCompletion skips any posted meanwhile.
+   */
+  async postMissedCompletions(now: Date = new Date()) {
+    const since = new Date(now.getTime() - CATCH_UP_DAYS * 24 * 60 * 60 * 1000);
+    const settled = new Date(now.getTime() - CATCH_UP_SETTLE_MS);
+    const missed = await prisma.$queryRaw<Array<{ id: string }>>`
+      SELECT o.id FROM orders o
+      WHERE o.created_at > ${since}
+        AND o.payment_status = 'paid'
+        AND o.order_status IN ('delivered', 'completed')
+        AND o.updated_at < ${settled}
+        AND NOT EXISTS (SELECT 1 FROM ledger_entries l WHERE l.order_id = o.id)
+      ORDER BY o.created_at
+      LIMIT 100`;
+    let posted = 0;
+    for (const { id } of missed) {
+      const result = await this.recordOrderCompletion(id);
+      if (result.recorded) posted++;
+    }
+    return { checked: missed.length, posted };
+  }
+
   /**
    * Record immutable double-entry ledger entries upon successful order completion.
    * Idempotent: if ledger entries for orderId already exist, returns existing count.

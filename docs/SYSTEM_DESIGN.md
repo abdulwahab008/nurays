@@ -22,7 +22,7 @@ Nuray is a marketplace for home kitchens in Karachi and Lahore. Customers order,
 
 | # | Service | Code | Port | What it does | Can you run several? |
 |---|---|---|---|---|---|
-| 1 | **API** (Express 4, Node 22, TypeScript) | `backend/` | 3001 | REST API under `/api/v1` (27 route files, 258 handlers), the Socket.IO server, 12 scheduled jobs and the BullMQ job worker. All of this runs in **one process**. | Yes, once Redis and S3 storage are set (see [Scaling](#scaling)) |
+| 1 | **API** (Express 4, Node 22, TypeScript) | `backend/` | 3001 | REST API under `/api/v1` (27 route files, 258 handlers), the Socket.IO server, 13 scheduled jobs and the BullMQ job worker. All of this runs in **one process**. | Yes, once Redis and S3 storage are set (see [Scaling](#scaling)) |
 | 2 | **Web** (Next.js 16, React 19) | `frontend-web/` | 3000 | Renders the 73 pages for all five roles, sets the CSP, and proxies `/media`, `/files` and geocoding | Yes, with the caveats under [Scaling](#scaling) |
 | 3 | **PostgreSQL 15+** with `pg_trgm` | `backend/prisma/` | 5432 | 53 tables, 25 migrations; the only source of truth | One primary today (no replicas) |
 | 4 | **Redis 7+** | `backend/src/config/redis.ts` | 6379 | Rate limits, auth and catalog caches, job leases, the BullMQ queue, Socket.IO fan-out | One instance; required in production |
@@ -115,7 +115,7 @@ Services hold all the rules; controllers stay thin. A service that changes money
 3. Online payment goes to Safepay's hosted page. The return URL and the webhook both settle the same `payment_attempts` row once (`tracker` is unique, and the row is locked).
 4. The kitchen is told live through Socket.IO (`order:new`) and by push. Accept, prepare and ready are each a compare-and-set on the current status.
 5. When the order is ready, **dispatch** offers the job to on-duty riders (`riders:on-duty` room). A claim is `UPDATE … WHERE rider_id IS NULL`, so only one rider gets it. A rider holding more cash than their limit cannot take cash jobs. Cash held is kept in `riders.cash_held` by a **database trigger** on the rider ledger.
-6. Delivery ends with an OTP or handover code. The ledgers are posted in the same transaction: the platform's double-entry ledger, the rider ledger (one row per delivery and type), and the kitchen's balance, which is calculated from its orders when needed.
+6. Delivery ends with the customer's 4-digit code. The rider ledger (one row per delivery and type) is written in the same transaction. The platform's double-entry ledger is posted just after it commits, and the `ledger-catch-up` job posts any order where that failed. The kitchen's balance is not stored: it is calculated from its orders when needed.
 
 ### Live updates
 
@@ -125,7 +125,7 @@ Services hold all the rules; controllers stay thin. A service that changes money
 
 ### Background work
 
-- **Scheduled jobs** (12, in `backend/src/index.ts`): dispatch waiting orders (every 60 s), sweep stale orders (2 min), expire payment attempts (15 min), ranking scores (15 min), ops snapshot (5 min), hub batch expiry and weekly payouts (1 h), stock alerts, secrets purge, kitchen owing and refresh-token pruning (6 h), audit retention (24 h). Every instance runs the timers, but each run first takes a **Redis lease** (`lock:job:<name>`), so only one instance does the work.
+- **Scheduled jobs** (13, in `backend/src/index.ts`): dispatch waiting orders (every 60 s), sweep stale orders (2 min), expire payment attempts, ranking scores and ledger catch-up (15 min), ops snapshot (5 min), hub batch expiry and weekly payouts (1 h), stock alerts, secrets purge, kitchen owing and refresh-token pruning (6 h), audit retention (24 h). Every instance runs the timers, but each run first takes a **Redis lease** (`lock:job:<name>`), so only one instance does the work.
 - **Queued jobs** (BullMQ queue `nuray-jobs`): emails and notification delivery (push, email, SMS), with 5 attempts and backoff. Every instance runs a worker, so the work spreads out.
 
 ## Data design
