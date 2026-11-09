@@ -45,15 +45,16 @@ export const CUSTOMER_SIDEBAR_ITEMS: SidebarItem[] = [
 ];
 
 export const RIDER_SIDEBAR_ITEMS: SidebarItem[] = [
-  { name: 'Deliveries', href: '/riders/dashboard', icon: 'dashboard' },
-  { name: 'Earnings and cash', href: '/riders/earnings', icon: 'earnings' },
-  { name: 'Settings', href: '/profile', icon: 'settings' },
+  { name: 'Deliveries', href: '/riders/dashboard', icon: 'dashboard', phoneTab: true },
+  { name: 'Earnings and cash', href: '/riders/earnings', icon: 'earnings', phoneTab: true },
+  { name: 'Settings', href: '/profile', icon: 'settings', phoneTab: true },
   { name: 'Help and support', href: '/support', icon: 'support' },
 ];
 
 export const SELLER_SIDEBAR_ITEMS: SidebarItem[] = [
-  { name: 'Your kitchen', href: '/sellers/dashboard', icon: 'dashboard' },
-  { name: 'Orders', href: '/sellers/orders', icon: 'orders' },
+  { name: 'Your kitchen', href: '/sellers/dashboard', icon: 'dashboard', phoneTab: true },
+  { name: 'Orders', href: '/sellers/orders', icon: 'orders', phoneTab: true },
+  // Not a phoneTab although the Menu tab covers it: the phone menu is the only way to Discounts.
   {
     name: 'Menu',
     href: '/sellers/products',
@@ -64,10 +65,10 @@ export const SELLER_SIDEBAR_ITEMS: SidebarItem[] = [
     ],
   },
   { name: 'Delivery', href: '/sellers/delivery', icon: 'delivery' },
-  { name: 'Earnings', href: '/sellers/earnings', icon: 'earnings' },
+  { name: 'Earnings', href: '/sellers/earnings', icon: 'earnings', phoneTab: true },
   { name: 'Reports', href: '/sellers/analytics', icon: 'analytics' },
   { name: 'Notifications', href: '/sellers/notifications', icon: 'notifications' },
-  { name: 'Settings', href: '/sellers/settings', icon: 'settings' },
+  { name: 'Settings', href: '/sellers/settings', icon: 'settings', phoneTab: true },
 ];
 
 /** Every admin page, one menu for all of them. */

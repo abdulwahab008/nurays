@@ -3,7 +3,7 @@
 /**
  * The header of the customer-facing pages (home, kitchens, dishes, a kitchen's menu): logo, area, the main links, an
  * optional search, language, appearance, tray and account. One component, so the pages cannot drift apart again.
- * On a phone the tray, orders and profile live in the tab bar (CustomerTabBar), so the header keeps to the essentials.
+ * On a phone the tray, orders and profile live in the tab bar (PhoneTabBar), so the header keeps to the essentials.
  */
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import Link from 'next/link';

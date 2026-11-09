@@ -411,7 +411,7 @@ export default function ProductForm(props: Props) {
             </section>
           )}
 
-          <div data-bottom-bar className="sticky bottom-0 z-10 flex flex-wrap items-center justify-end gap-3 border-t border-line bg-page/95 py-4 pb-[calc(1rem+var(--safe-bottom,0px))] backdrop-blur">
+          <div data-bottom-bar className="sticky bottom-[var(--tabbar-offset)] z-10 flex flex-wrap items-center justify-end gap-3 border-t border-line bg-page/95 py-4 pb-[calc(1rem+var(--safe-bottom,0px))] backdrop-blur">
             <ShortcutsButton onClick={() => setHelpOpen(!helpOpen)} />
             <span className="hidden flex-1 sm:block" />
             <Link href="/sellers/products" className="flex-1 sm:flex-none">

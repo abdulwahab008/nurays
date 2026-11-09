@@ -237,7 +237,7 @@ export default function RiderDashboardPage() {
   useEffect(() => {
     if (!actionBarShown) return;
     const root = document.documentElement;
-    root.style.scrollPaddingBottom = 'calc(8rem + var(--safe-bottom))';
+    root.style.scrollPaddingBottom = 'calc(8rem + var(--safe-bottom) + var(--tabbar-offset))';
     return () => {
       root.style.scrollPaddingBottom = '';
     };
@@ -975,7 +975,7 @@ export default function RiderDashboardPage() {
                           </section>
 
                           {/* The one next step: at the bottom of the screen on a phone, under the thumb. */}
-                          <div className="max-sm:fixed max-sm:inset-x-0 max-sm:bottom-0 max-sm:z-30 max-sm:border-t max-sm:border-line max-sm:bg-surface max-sm:px-4 max-sm:pt-2 max-sm:pb-[calc(0.75rem+var(--safe-bottom))] sm:px-5 sm:pt-6">
+                          <div className="max-sm:fixed max-sm:inset-x-0 max-sm:bottom-[var(--tabbar-offset)] max-sm:z-30 max-sm:border-t max-sm:border-line max-sm:bg-surface max-sm:px-4 max-sm:pt-2 max-sm:pb-[calc(0.75rem+var(--safe-bottom))] sm:px-5 sm:pt-6">
                             {jobsByStep.length > 1 && (
                               <p className="sm:hidden mb-1.5 flex gap-1.5 text-sm text-muted min-w-0" data-testid="action-bar-job">
                                 <span className="tabular-nums shrink-0">{t('orderShort', { last: lastDigits(delivery) })}</span>

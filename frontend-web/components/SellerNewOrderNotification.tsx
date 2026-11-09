@@ -408,13 +408,13 @@ export function SellerNewOrderNotification() {
       <div className="fixed inset-x-3 top-[calc(var(--header-offset)+0.5rem)] z-[9999] hidden max-sm:[body:has([data-bottom-bar])_&]:block">
         {slimBar('shadow-[var(--shadow-card)]')}
       </div>
-      <div className="fixed inset-x-3 bottom-[calc(0.75rem+var(--safe-bottom,0px))] z-[9999] pointer-events-none max-sm:[body:has([data-bottom-bar])_&]:hidden sm:inset-x-auto sm:bottom-auto sm:top-[calc(4.5rem+var(--safe-top,0px))] sm:end-[calc(1rem+var(--safe-end,0px))]">
+      <div className="fixed inset-x-3 bottom-[calc(0.75rem+var(--safe-bottom,0px)+var(--tabbar-offset))] z-[9999] pointer-events-none max-sm:[body:has([data-bottom-bar])_&]:hidden sm:inset-x-auto sm:bottom-auto sm:top-[calc(4.5rem+var(--safe-top,0px))] sm:end-[calc(1rem+var(--safe-end,0px))]">
         <section
           id={`seller-alert-order-${activeOrder.orderId}`}
           role="alertdialog"
           aria-labelledby="seller-alert-title"
           aria-describedby="seller-alert-rings"
-          className="pointer-events-auto w-full sm:w-[380px] max-h-[calc(100dvh-6rem)] overflow-y-auto rounded-[20px] border border-line bg-surface text-ink shadow-[var(--shadow-card)] motion-safe:animate-[sellerAlertIn_0.25s_ease-out]"
+          className="pointer-events-auto w-full sm:w-[380px] max-h-[calc(100dvh-6rem-var(--tabbar-offset))] overflow-y-auto rounded-[20px] border border-line bg-surface text-ink shadow-[var(--shadow-card)] motion-safe:animate-[sellerAlertIn_0.25s_ease-out]"
         >
           <header className="flex items-center justify-between gap-3 bg-accent-soft px-4 py-2">
             <div className="flex min-w-0 items-center gap-2.5">
