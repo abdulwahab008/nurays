@@ -41,6 +41,23 @@ describe('accepting an order', () => {
     expect(out).toMatchObject({ preparationMinutes: 45 });
   });
 
+  it("refuses an online checkout the customer hasn't paid, and takes it once paid", async () => {
+    const online = (paymentStatus: string) => ({ id: 'o1', orderStatus: 'pending', paymentMethod: 'safepay', paymentStatus, items: [{ id: 'i1', product: { preparationTime: 45 } }] });
+    db.order.findUnique = jest.fn(async () => online('pending'));
+    await expect(sellerOrderService.acceptOrder('o1', 'u1')).rejects.toMatchObject({ statusCode: 409, code: 'PAYMENT_NOT_CONFIRMED' });
+    expect(db.$transaction).not.toHaveBeenCalled();
+
+    db.order.findUnique = jest.fn(async () => online('paid'));
+    await expect(sellerOrderService.acceptOrder('o1', 'u1')).resolves.toMatchObject({ preparationMinutes: 45 });
+  });
+
+  it('still accepts cash and bank-transfer orders before they are paid', async () => {
+    for (const paymentMethod of ['cod', 'bank']) {
+      db.order.findUnique = jest.fn(async () => ({ id: 'o1', orderStatus: 'pending', paymentMethod, paymentStatus: 'pending', items: [{ id: 'i1', product: { preparationTime: 45 } }] }));
+      await expect(sellerOrderService.acceptOrder('o1', 'u1')).resolves.toMatchObject({ preparationMinutes: 45 });
+    }
+  });
+
   it('takes no body, or a whole number of minutes from 5 to 240', () => {
     expect(acceptOrderSchema.safeParse(undefined).success).toBe(true);
     expect(acceptOrderSchema.safeParse({}).success).toBe(true);

@@ -57,6 +57,51 @@ async function orderAudience(
   return { rooms, customerId: order.customerId, orderNumber: order.orderNumber, deliveryType: order.deliveryType, sellerUserIds, cancelledBy: order.cancelledBy, cancellationReason: order.cancellationReason };
 }
 
+function findOrderForKitchens(orderId: string) {
+  return prisma.order.findUnique({
+    where: { id: orderId },
+    include: {
+      items: {
+        include: {
+          seller: { select: { userId: true, businessName: true } },
+          product: { select: { name: true } },
+        },
+      },
+    },
+  });
+}
+
+type KitchenOrder = NonNullable<Awaited<ReturnType<typeof findOrderForKitchens>>>;
+type KitchenItem = { productName: string; quantity: number; totalPrice: number };
+
+function itemsByKitchen(order: KitchenOrder) {
+  const byKitchen = new Map<string, KitchenItem[]>();
+  for (const item of order.items) {
+    if (!item.seller.userId) continue;
+    const items = byKitchen.get(item.seller.userId) ?? [];
+    items.push({ productName: item.product?.name || item.productName, quantity: item.quantity, totalPrice: Number(item.totalPrice) });
+    byKitchen.set(item.seller.userId, items);
+  }
+  return byKitchen;
+}
+
+// A kitchen is told what its own dishes come to: the order total also holds other kitchens' dishes, tax and the delivery fee.
+const dishesTotalOf = (items: KitchenItem[]) => roundMoney(items.reduce((sum, item) => sum + item.totalPrice, 0));
+
+function emitToKitchens(order: KitchenOrder, byKitchen: Map<string, KitchenItem[]>) {
+  for (const [sellerUserId, items] of byKitchen) {
+    socketManager.emitToUser(sellerUserId, 'order:new', {
+      orderId: order.id,
+      orderNumber: order.orderNumber,
+      // The whole order, kept for older apps; `dishesTotal` is this kitchen's part.
+      totalAmount: Number(order.totalAmount),
+      dishesTotal: dishesTotalOf(items),
+      items,
+      createdAt: order.createdAt.toISOString(),
+    });
+  }
+}
+
 export class RealtimeOrderService {
   /**
    * Tell an order's parties its status changed. Called after the change is committed, so it never throws:
@@ -204,45 +249,11 @@ export class RealtimeOrderService {
    * Emit new order notification to sellers
    */
   async emitNewOrderNotification(orderId: string) {
-    const order = await prisma.order.findUnique({
-      where: { id: orderId },
-      include: {
-        items: {
-          include: {
-            seller: {
-              select: {
-                userId: true,
-                businessName: true,
-              },
-            },
-            product: {
-              select: {
-                name: true,
-              },
-            },
-          },
-        },
-      },
-    });
-
+    const order = await findOrderForKitchens(orderId);
     if (!order) {
       return;
     }
-
-    // Group items by seller
-    const sellerOrders = new Map<string, Array<{ productName: string; quantity: number; totalPrice: number }>>();
-    order.items.forEach((item) => {
-      if (item.seller.userId) {
-        if (!sellerOrders.has(item.seller.userId)) {
-          sellerOrders.set(item.seller.userId, []);
-        }
-        sellerOrders.get(item.seller.userId)!.push({
-          productName: item.product?.name || item.productName,
-          quantity: item.quantity,
-          totalPrice: Number(item.totalPrice),
-        });
-      }
-    });
+    const sellerOrders = itemsByKitchen(order);
 
     const totalAmountFormatted = `Rs ${Number(order.totalAmount).toLocaleString()}`;
 
@@ -264,23 +275,9 @@ export class RealtimeOrderService {
     // (see online-payment.service): a kitchen shouldn't start on an unpaid order.
     const awaitingOnlinePayment = ONLINE_GATEWAY_METHODS.includes(order.paymentMethod) && order.paymentStatus !== 'paid';
 
-    // A kitchen is told what its own dishes come to: the order total also holds other kitchens' dishes, tax and the delivery fee.
-    const dishesTotalOf = (items: Array<{ totalPrice: number }>) => roundMoney(items.reduce((sum, item) => sum + item.totalPrice, 0));
-
-    // Emit to each seller and create a persistent notification for the Notifications page
-    sellerOrders.forEach((items, sellerUserId) => {
-      const payload = {
-        orderId: order.id,
-        orderNumber: order.orderNumber,
-        // The whole order, kept for older apps; `dishesTotal` is this kitchen's part.
-        totalAmount: Number(order.totalAmount),
-        dishesTotal: dishesTotalOf(items),
-        items,
-        createdAt: order.createdAt.toISOString(),
-      };
-
-      socketManager.emitToUser(sellerUserId, 'order:new', payload);
-    });
+    // The live event opens the kitchen's alert with an Accept button: an unpaid online order waits for
+    // emitKitchenNewOrder, which the payment settlement sends.
+    if (!awaitingOnlinePayment) emitToKitchens(order, sellerOrders);
     for (const [sellerUserId, items] of sellerOrders) {
       const dishesFormatted = `Rs ${dishesTotalOf(items).toLocaleString()}`;
       await notify({
@@ -304,6 +301,13 @@ export class RealtimeOrderService {
       customerId: order.customerId,
       createdAt: order.createdAt.toISOString(),
     });
+  }
+
+  /** The kitchen's new-order alert for an online order that has just been paid and still waits to be accepted. */
+  async emitKitchenNewOrder(orderId: string) {
+    const order = await findOrderForKitchens(orderId);
+    if (!order || order.orderStatus !== 'pending') return;
+    emitToKitchens(order, itemsByKitchen(order));
   }
 
   /**

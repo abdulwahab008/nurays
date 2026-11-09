@@ -1,5 +1,5 @@
 import { Prisma } from '@prisma/client';
-import { codCollectorOf, deliveryProviderOf, isCashAtDoor } from '../utils/paymentCustody';
+import { codCollectorOf, deliveryProviderOf, isCashAtDoor, ONLINE_GATEWAY_METHODS } from '../utils/paymentCustody';
 import { assertMayHandOver, verifyHandoverCode } from './handover.service';
 import { presentFile } from '../storage';
 import { cancelOpenDelivery, notifyDeliveryCancelled, CancelledDelivery } from './delivery-lifecycle.service';
@@ -16,6 +16,14 @@ import { firstName, kitchenContactRule, kitchenOrderSelect, presentKitchenOrder,
 import { logEvent, logger } from '../utils/logger';
 import { selfDeliveryFeeFor, sellerPaidDeliveryFor } from '../utils/deliveryEarnings';
 import { roundMoney } from '../utils/pricing';
+
+// A card or Safepay checkout the customer hasn't finished is not the kitchen's to start: if it is never paid the food
+// is wasted. Cash and bank-transfer orders are confirmed by the kitchen itself, so they can be accepted as before.
+function assertOnlinePaymentDone(order: { paymentMethod: string; paymentStatus: string }) {
+  if (ONLINE_GATEWAY_METHODS.includes(order.paymentMethod) && order.paymentStatus !== 'paid') {
+    throw new AppError("The customer hasn't paid online yet. You'll get the order as soon as the payment comes in.", 409, 'PAYMENT_NOT_CONFIRMED');
+  }
+}
 
 /**
  * Order items move forward through this pipeline only (or cancel before dispatch) — no skipping stages, no moving backward.
@@ -435,6 +443,7 @@ export class SellerOrderService {
     // this step at all come before the customer's code is looked at: a wrong code is counted against the order, so a request
     // that is refused anyway must not use up the attempts.
     assertMayHandOver(orderItem.order, seller.deliveryProvider, status);
+    if (status === 'confirmed') assertOnlinePaymentDone(orderItem.order);
     if (!ITEM_TRANSITIONS[orderItem.status]?.includes(status)) {
       throw new AppError(
         `Cannot move an item from "${orderItem.status}" to "${status}"`,
@@ -780,6 +789,7 @@ export class SellerOrderService {
     if (!['pending', 'confirmed'].includes(order.orderStatus)) {
       throw new AppError(`Cannot accept order with status: ${order.orderStatus}`, 400, 'INVALID_STATUS');
     }
+    assertOnlinePaymentDone(order);
 
     // Determine prep time from items or seller default
     const maxPrepMinutes = preparationMinutes ?? prepMinutesFor(order.items.map((i) => i.product?.preparationTime), seller.minPrepTimeMinutes);

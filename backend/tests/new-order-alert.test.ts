@@ -15,6 +15,38 @@ import { renderNotification } from '../src/utils/notificationText';
 const db = prisma as any;
 const item = (sellerUserId: string, name: string, totalPrice: string) => ({ quantity: 1, totalPrice, productName: name, product: { name }, seller: { userId: sellerUserId, businessName: sellerUserId } });
 
+beforeEach(() => jest.clearAllMocks());
+
+it("opens no kitchen alert for an online checkout not paid yet, and opens it once paid", async () => {
+  const order = (paymentStatus: string, orderStatus = 'pending') => ({
+    id: 'o2',
+    orderNumber: 'FN2',
+    customerId: null,
+    totalAmount: '900',
+    paymentMethod: 'safepay',
+    paymentStatus,
+    orderStatus,
+    createdAt: new Date('2026-11-06T10:00:00Z'),
+    items: [item('kitchen-a', 'Nihari', '900')],
+  });
+  db.order.findUnique.mockResolvedValue(order('pending'));
+  await realtimeOrderService.emitNewOrderNotification('o2');
+  expect(socketManager.emitToUser).not.toHaveBeenCalled();
+  const note = (notify as jest.Mock).mock.calls.find(([n]) => n.userId === 'kitchen-a')[0];
+  expect(note.channels).toEqual([]);
+  expect(renderNotification(note.text, 'en').title).toContain('awaiting payment');
+
+  db.order.findUnique.mockResolvedValue(order('paid'));
+  await realtimeOrderService.emitKitchenNewOrder('o2');
+  expect(socketManager.emitToUser).toHaveBeenCalledWith('kitchen-a', 'order:new', expect.objectContaining({ orderId: 'o2', dishesTotal: 900 }));
+});
+
+it('opens no kitchen alert when the payment lands on an order that is no longer waiting', async () => {
+  db.order.findUnique.mockResolvedValue({ id: 'o3', orderNumber: 'FN3', totalAmount: '900', orderStatus: 'cancelled', createdAt: new Date(), items: [item('kitchen-a', 'Nihari', '900')] });
+  await realtimeOrderService.emitKitchenNewOrder('o3');
+  expect(socketManager.emitToUser).not.toHaveBeenCalled();
+});
+
 it("tells each kitchen its own dishes' total, in the alert and in the live event", async () => {
   db.order.findUnique.mockResolvedValue({
     id: 'o1',

@@ -236,6 +236,7 @@ export async function settleAttempt(tracker: string, via: 'return' | 'webhook', 
         await realtimeOrderService.emitOrderStatusUpdate(result.orderId, order.orderStatus, 'payment');
         if (result.outcome === 'paid') {
           // Paid: now the kitchen should start (the new-order alert waited for this).
+          await realtimeOrderService.emitKitchenNewOrder(result.orderId);
           await notifyMany(
             order.items.map((i) => i.seller.userId).filter(Boolean),
             (sellerUserId) => ({
