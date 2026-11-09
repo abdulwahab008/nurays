@@ -24,6 +24,9 @@ import {
 } from '@/components/sellers/new-order-alert';
 import { useShallow } from 'zustand/react/shallow';
 
+// The methods the API settles through the payment gateway (backend ONLINE_GATEWAY_METHODS).
+const ONLINE_CHECKOUT_METHODS = ['safepay', 'card'];
+
 interface NewOrderData {
   orderId: string;
   orderNumber: string;
@@ -232,7 +235,7 @@ export function SellerNewOrderNotification() {
             !isNewOrderSeen(o.order.id) &&
             o.order.orderStatus === 'pending' &&
             // An online checkout not paid yet isn't the kitchen's to accept.
-            !(o.order.paymentMethod === 'online' && o.order.paymentStatus !== 'paid')
+            !(ONLINE_CHECKOUT_METHODS.includes(o.order.paymentMethod) && o.order.paymentStatus !== 'paid')
         );
         if (!waiting) return;
         setActiveOrder((current) =>

@@ -4,12 +4,14 @@ import { notify } from './notify.service';
 import { logger } from '../utils/logger';
 import { thrown } from '../utils/thrown';
 import { notificationText } from '../utils/notificationText';
+import { ONLINE_GATEWAY_METHODS } from '../utils/paymentCustody';
 
 /**
  * Orders that nobody is moving forward release their stock and the customer's money.
  *
- *  - Not accepted by the kitchen within ORDER_ACCEPT_TIMEOUT_MINUTES (default 30):
- *    cancelled, stock returned, any payment refunded.
+ *  - Not accepted by the kitchen within ORDER_ACCEPT_TIMEOUT_MINUTES (default 30) of
+ *    placement, or of payment for an online checkout: cancelled, stock returned, any
+ *    payment refunded.
  *  - Paid online / by transfer but the payment never completed within
  *    ORDER_PAYMENT_TIMEOUT_MINUTES (default 60): cancelled.
  *  - A transfer the customer reported but the kitchen hasn't confirmed (or disputed)
@@ -63,10 +65,18 @@ export async function sweepStaleOrders(now: Date = new Date()) {
   });
   for (const o of unpaid) await cancel(o.id, "The payment wasn't completed in time.", 'cancelledUnpaid');
 
+  // The kitchen's time to accept starts when it could first accept: at placement, or for an online
+  // checkout once it is paid (the kitchen is told "accept within 30 minutes" at that moment). An online
+  // checkout still unpaid is the payment rule's to cancel, after its own longer wait.
+  const acceptBefore = new Date(now.getTime() - minutes(rules.acceptMinutes));
   const unaccepted = await prisma.order.findMany({
     where: {
       orderStatus: 'pending',
-      createdAt: { lt: new Date(now.getTime() - minutes(rules.acceptMinutes)) },
+      OR: [
+        { paymentMethod: { notIn: ONLINE_GATEWAY_METHODS }, createdAt: { lt: acceptBefore } },
+        { paymentMethod: { in: ONLINE_GATEWAY_METHODS }, paymentStatus: 'paid', paidAt: { lt: acceptBefore } },
+        { paymentMethod: { in: ONLINE_GATEWAY_METHODS }, paymentStatus: 'paid', paidAt: null, createdAt: { lt: acceptBefore } },
+      ],
     },
     select: { id: true },
     take: 200,
