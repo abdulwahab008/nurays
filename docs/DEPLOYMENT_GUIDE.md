@@ -317,6 +317,7 @@ after boot (so they do not all start together, then or on every later boundary) 
 | `stale-orders` | 2 min | Cancels orders the kitchen did not accept, or whose online payment or transfer never completed, and returns stock; creates refunds; alerts admins to unconfirmed transfers (timeouts above). |
 | `expire-payment-attempts` | 15 min | Expires abandoned online checkout sessions (a late confirmation still settles). |
 | `ranking-scores` | 15 min | Recomputes trending and rating scores. |
+| `ledger-catch-up` | 15 min | Posts the platform ledger for delivered, paid orders whose posting failed (last 14 days). |
 | `hub-expiry` | 1 h | Hides expired hub batches. |
 | `stock-alerts` | 6 h | Safety-net stock alert check. |
 | `purge-expired-secrets` | 6 h | Deletes old OTP codes and used or expired reset tokens. |
