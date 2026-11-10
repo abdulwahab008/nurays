@@ -2,8 +2,10 @@
  * List all admin users in the database (email/phone only - passwords cannot be retrieved).
  * Run from backend folder: node scripts/list-admin-users.js
  */
+require('dotenv/config');
 const { PrismaClient } = require('@prisma/client');
-const prisma = new PrismaClient();
+const { PrismaPg } = require('@prisma/adapter-pg');
+const prisma = new PrismaClient({ adapter: new PrismaPg(process.env.DATABASE_URL ?? '') });
 
 async function listAdminUsers() {
   const admins = await prisma.user.findMany({

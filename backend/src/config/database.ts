@@ -1,4 +1,7 @@
+import { createHash } from 'crypto';
 import { PrismaClient, Prisma } from '@prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
+import { logger } from '../utils/logger';
 
 // Secrets that must never reach an API response by accident: the customer's handover
 // code. Every query leaves them out unless it explicitly selects them
@@ -33,22 +36,58 @@ export function withStatementTimeout(url: string, ms: number): string {
 }
 
 /**
- * Without connection_limit Prisma opens 2 x CPU cores + 1 connections per instance (17 on an
- * 8-core host), so a handful of instances exceeds PostgreSQL's max_connections (100 by default).
- * An explicit limit in DATABASE_URL wins; see docs/DEPLOYMENT_GUIDE.md for the sizing.
+ * A pool of DEFAULT_CONNECTION_LIMIT connections per instance unless DATABASE_URL names a connection_limit, so a handful of
+ * instances stays under PostgreSQL's max_connections (100 by default); see docs/DEPLOYMENT_GUIDE.md for the sizing. A query
+ * waits pool_timeout seconds for a free connection (10 unless set, 0 for no limit) and then fails as "busy".
  */
 const DEFAULT_CONNECTION_LIMIT = 10;
-export function withConnectionLimit(url: string): string {
-  if (new URLSearchParams(url.split('?')[1] ?? '').has('connection_limit')) return url;
-  return `${url}${url.includes('?') ? '&' : '?'}connection_limit=${DEFAULT_CONNECTION_LIMIT}`;
+const DEFAULT_POOL_TIMEOUT_S = 10;
+const CONNECTION_LIFETIME_S = 600;
+// Prisma 7 talks to PostgreSQL through node-postgres, which would read these as connection settings of its own.
+const PRISMA_URL_PARAMS = ['connection_limit', 'pool_timeout', 'pgbouncer', 'schema'];
+
+export function poolSettings(url: string, statementTimeout: number) {
+  const [base, raw = ''] = withStatementTimeout(url, statementTimeout).split('?');
+  const query = new URLSearchParams(raw);
+  const limit = Number(query.get('connection_limit'));
+  const wait = query.get('pool_timeout');
+  const waitSeconds = wait !== null && wait.trim() !== '' && Number(wait) >= 0 ? Number(wait) : DEFAULT_POOL_TIMEOUT_S;
+  const schema = query.get('schema') ?? undefined;
+  const preparedStatements = query.get('pgbouncer') !== 'true';
+  for (const key of PRISMA_URL_PARAMS) query.delete(key);
+  const rest = query.toString();
+  return {
+    pool: {
+      connectionString: rest ? `${base}?${rest}` : base,
+      max: Number.isInteger(limit) && limit > 0 ? limit : DEFAULT_CONNECTION_LIMIT,
+      connectionTimeoutMillis: waitSeconds * 1000,
+      // ponytail: each connection keeps every statement it prepared (node-postgres has no cap, Prisma 6 kept 100), so it is
+      // replaced after 10 minutes; an LRU in statementName would bound it tighter if PostgreSQL memory ever shows it.
+      maxLifetimeSeconds: CONNECTION_LIFETIME_S,
+    },
+    schema,
+    preparedStatements,
+  };
 }
 
-const databaseUrl = process.env.DATABASE_URL;
+/**
+ * The same SQL gets the same statement name, so each connection parses and plans a query once and reuses it, as Prisma
+ * did before 7; without a name node-postgres plans every query again. Off behind an old PgBouncer (pgbouncer=true), which
+ * cannot keep prepared statements; PgBouncer 1.21+ with max_prepared_statements can (docs/DEPLOYMENT_GUIDE.md).
+ */
+export const statementName = ({ sql }: { sql: string }) => `p${createHash('sha1').update(sql).digest('base64url').slice(0, 27)}`;
 
-const prisma = new PrismaClient<{ log: Prisma.LogLevel[]; omit: typeof globalOmit }>({
+const settings = poolSettings(process.env.DATABASE_URL ?? '', statementTimeoutMs());
+
+const prisma = new PrismaClient({
   log,
   omit: globalOmit,
-  ...(databaseUrl ? { datasourceUrl: withStatementTimeout(withConnectionLimit(databaseUrl), statementTimeoutMs()) } : {}),
+  adapter: new PrismaPg(settings.pool, {
+    schema: settings.schema,
+    ...(settings.preparedStatements ? { statementNameGenerator: statementName } : {}),
+    onPoolError: (err) => logger.error({ err }, 'Database pool error'),
+    onConnectionError: (err) => logger.error({ err }, 'Database connection error'),
+  }),
 });
 
 // Handle graceful shutdown
