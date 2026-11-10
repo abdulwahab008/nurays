@@ -9,7 +9,7 @@ FROM node:22-bookworm-slim AS builder
 WORKDIR /app
 
 # Install dependencies first (better layer caching)
-COPY package.json package-lock.json* ./
+COPY package.json package-lock.json* prisma.config.ts ./
 COPY prisma ./prisma
 RUN npm ci
 
@@ -43,7 +43,7 @@ RUN apt-get update \
 # Install only production deps (no dev/test, no ts-node etc.) and generate the Prisma client,
 # then remove npm, npx, corepack and yarn: the running service needs none of them and they
 # bring their own vulnerable libraries. (Migrations run the local Prisma CLI, see CMD.)
-COPY package.json package-lock.json* ./
+COPY package.json package-lock.json* prisma.config.ts ./
 COPY prisma ./prisma
 RUN npm ci --omit=dev && npx prisma generate && npm cache clean --force \
  && rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack /opt/yarn-* \

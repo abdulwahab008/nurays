@@ -8,7 +8,6 @@ generator client {
 
 datasource db {
   provider   = "postgresql"
-  url        = env("DATABASE_URL")
   // pg_trgm: indexes for the catalog's "contains" search. Bundled with PostgreSQL and
   // enabled on every major managed service (RDS, Cloud SQL, Azure, Supabase, Neon).
   extensions = [pg_trgm]

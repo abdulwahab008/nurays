@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { logger } from '../utils/logger';
 import { reportError } from '../config/sentry';
+import { sqlState } from '../utils/thrown';
 
 /** Set on res.locals for a 5xx logged here with its stack, so the request log line does not log it again. */
 export const ERROR_LOGGED = 'errorLogged';
@@ -42,7 +43,7 @@ export class AppError extends Error {
 interface LibraryError extends Error {
   code?: string;
   clientVersion?: string;
-  meta?: { code?: unknown };
+  meta?: { code?: unknown; driverAdapterError?: unknown };
   type?: string;
 }
 
@@ -80,9 +81,13 @@ export const toAppError = (err: LibraryError): Error | AppError => {
   if (err?.name === 'PrismaClientInitializationError') {
     return new AppError('The service is temporarily unavailable. Please try again in a moment.', 503, 'SERVICE_UNAVAILABLE');
   }
-  // PostgreSQL cancelled a statement that ran past DB_STATEMENT_TIMEOUT_MS (SQLSTATE 57014): the same answer. Prisma reports
-  // a raw query as P2010 with the SQLSTATE in meta, and any other query as an error without a code that names it in its message.
-  if (err?.clientVersion && (err.meta?.code === '57014' || /code: "57014"/.test(String(err.message)))) {
+  // PostgreSQL cancelled a statement that ran past DB_STATEMENT_TIMEOUT_MS (SQLSTATE 57014): the same answer. Prisma 7 passes
+  // the SQLSTATE on in the driver adapter's cause; older clients put it in meta.code or only in the message.
+  if (err?.clientVersion && (sqlState(err) === '57014' || err.meta?.code === '57014' || /code: ["`]57014["`]/i.test(String(err.message)))) {
+    return new AppError('The service is busy. Please try again in a moment.', 503, 'SERVICE_BUSY');
+  }
+  // No pool connection came free within pool_timeout: node-postgres says so in a plain Error, before Prisma is involved.
+  if (err?.message === 'timeout exceeded when trying to connect') {
     return new AppError('The service is busy. Please try again in a moment.', 503, 'SERVICE_BUSY');
   }
 

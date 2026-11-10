@@ -23,7 +23,7 @@ import { onlinePaymentsAvailable } from './online-payment.service';
 import { newHandoverCode } from './handover.service';
 import { debitWallet } from './wallet.service';
 import { logEvent, logger } from '../utils/logger';
-import { thrownMessage, thrown } from '../utils/thrown';
+import { thrownMessage, thrown, uniqueTarget } from '../utils/thrown';
 
 /** When each delivery window closes, in minutes after midnight Pakistan time (the windows checkout offers). */
 export const SLOT_END_MINUTES = { morning: 12 * 60, afternoon: 17 * 60, evening: 21 * 60 + 30 } as const;
@@ -103,10 +103,7 @@ export class OrderPlacement {
       try {
         return await create(this.generateOrderNumber());
       } catch (err) {
-        const target = thrown(err).meta?.target;
-        const isOrderNumberClash =
-          thrown(err).code === 'P2002' &&
-          (Array.isArray(target) ? target.includes('order_number') || target.includes('orderNumber') : /order_?number/i.test(String(target ?? '')));
+        const isOrderNumberClash = thrown(err).code === 'P2002' && /order_?number/i.test(uniqueTarget(err));
         // A deadlock / serialization failure aborts only this attempt; the whole
         // transaction is safe to run again.
         const isDeadlock = thrown(err).code === 'P2034' || /deadlock detected|40P01/i.test(String(thrownMessage(err, '')));
@@ -799,7 +796,7 @@ export class OrderPlacement {
       order = await placeOrder();
     } catch (err) {
       // The same checkout submitted twice at once: the other request placed it.
-      const target = String(thrown(err).meta?.target ?? '');
+      const target = uniqueTarget(err);
       if (idempotencyKey && thrown(err).code === 'P2002' && /idempotency/i.test(target)) {
         const placedMeanwhile = await replay();
         if (placedMeanwhile) return placedMeanwhile;

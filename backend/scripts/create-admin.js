@@ -12,10 +12,12 @@
  * is only a recovery route for when nobody can sign in.
  */
 
+require('dotenv/config');
 const { PrismaClient } = require('@prisma/client');
+const { PrismaPg } = require('@prisma/adapter-pg');
 const bcrypt = require('bcrypt');
 
-const prisma = new PrismaClient();
+const prisma = new PrismaClient({ adapter: new PrismaPg(process.env.DATABASE_URL ?? '') });
 
 const MIN_STAFF_PASSWORD_LENGTH = 12;
 

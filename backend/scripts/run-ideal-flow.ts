@@ -1,4 +1,6 @@
 import { PrismaClient } from '@prisma/client';
+import 'dotenv/config';
+import { PrismaPg } from '@prisma/adapter-pg';
 
 /**
  * The few axios calls this script makes, on Node's own fetch (the backend does not depend on axios): the answer is in
@@ -28,7 +30,7 @@ const axios = {
 };
 
 const API_BASE = process.env.API_BASE ?? 'http://localhost:3001/api/v1';
-const prisma = new PrismaClient();
+const prisma = new PrismaClient({ adapter: new PrismaPg(process.env.DATABASE_URL ?? '') });
 
 const USERS = {
   customer: { email: 'customer@nuray.test', pass: 'Password123!' },

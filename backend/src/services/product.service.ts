@@ -18,7 +18,7 @@ import { notifySeller } from './notify.service';
 import { SELLER_COMMUNITY_DELIVERY_SELECT } from '../utils/sellerDeliverySelect';
 import { isUploadedBy } from '../utils/uploadPaths';
 import { isStoredFile } from '../storage';
-import { thrown } from '../utils/thrown';
+import { thrown, uniqueTarget } from '../utils/thrown';
 import { notificationText } from '../utils/notificationText';
 import { cachedCatalogRead, catalogKey, invalidateCatalogCache } from '../utils/catalogCache';
 
@@ -1014,7 +1014,7 @@ export class ProductService {
         notifyApprovers({ text: notificationText('approval.newDish', { name: created.name }), actionUrl: '/admin/products', dedupeKey: `product-new:${created.id}` });
         return created;
       } catch (err) {
-        const target = String(thrown(err).meta?.target ?? '');
+        const target = uniqueTarget(err);
         if (thrown(err).code !== 'P2002' || !/slug/i.test(target) || attempt >= 5) throw err;
       }
     }
