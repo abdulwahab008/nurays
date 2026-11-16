@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useRef, useState } from 'react';
 import { loginUrlHere } from '@/lib/auth-redirect';
-import { getStackedDiscountedPrice } from '@/lib/pricing';
+import { dealsOnOneUnit, getStackedDiscountedPrice } from '@/lib/pricing';
 import { useCartStore, type CartItem } from '@/lib/store/cart-store';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
@@ -56,6 +56,8 @@ interface CatalogPromotion {
   name: string;
   type: string;
   discountValue: number;
+  minOrderAmount?: number;
+  maxDiscountAmount?: number | null;
 }
 
 interface Category {
@@ -322,7 +324,9 @@ function ProductsContent() {
             `/promotions/catalog?productIds=${encodeURIComponent(ids)}`
           );
           if (!isCurrent()) return;
-          if (promRes.data.success && promRes.data.data) setPromotionsByProductId(promRes.data.data);
+          const deals = promRes.data.success ? promRes.data.data : null;
+          // A card shows one dish by itself, so it shows only the deals one unit gets (a deal with a minimum order appears in the tray once the tray reaches it).
+          if (deals) setPromotionsByProductId(Object.fromEntries(list.map((p: Product) => [p.id, dealsOnOneUnit(p.price, deals[p.id])])));
           else setPromotionsByProductId({});
         } catch {
           if (isCurrent()) setPromotionsByProductId({});

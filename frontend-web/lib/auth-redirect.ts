@@ -78,6 +78,16 @@ export function loginUrlHere(loginPath = '/login'): string {
   return loginUrlFor(window.location.pathname + window.location.search, loginPath);
 }
 
+/**
+ * The address of the other sign-in page (sign-up from sign-in, and back) that keeps the page the person asked for, so
+ * creating an account returns them there just as signing in would.
+ */
+export function carryNextTo(authPath: string): string {
+  if (typeof window === 'undefined') return authPath;
+  const params = new URLSearchParams(window.location.search);
+  return loginUrlFor(params.get('next') ?? params.get('redirect') ?? '', authPath);
+}
+
 export type AccountType = 'customer' | 'seller' | 'rider' | 'admin' | 'hub_manager';
 
 const AREAS: Array<{ path: RegExp; role: AccountType }> = [

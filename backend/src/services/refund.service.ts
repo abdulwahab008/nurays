@@ -60,8 +60,10 @@ export async function issueRefund(
   // SENT a manual transfer but whose payment the seller hasn't confirmed yet
   // ('payment_submitted') may already have lost their money, so cancelling must queue a
   // refund for the admin to check against the receiving account (and dismiss if nothing
-  // actually arrived) rather than quietly creating nothing.
-  const unconfirmedTransfer = order.paymentStatus === 'payment_submitted';
+  // actually arrived) rather than quietly creating nothing. The same holds once the kitchen
+  // has disputed the transfer: its word alone must not make the customer's money vanish.
+  const disputed = order.paymentStatus === 'disputed';
+  const unconfirmedTransfer = disputed || order.paymentStatus === 'payment_submitted';
   if (order.paymentStatus !== 'paid' && !unconfirmedTransfer) return null;
 
   const total = Number(order.totalAmount);
@@ -114,7 +116,11 @@ export async function issueRefund(
       amount,
       method: isWallet ? 'wallet' : 'manual',
       status: isWallet ? 'completed' : 'pending',
-      reason: unconfirmedTransfer ? `UNCONFIRMED TRANSFER — verify receipt first. ${opts.reason}` : opts.reason,
+      reason: disputed
+        ? `DISPUTED TRANSFER — the kitchen says it did not arrive; verify receipt first. ${opts.reason}`
+        : unconfirmedTransfer
+          ? `UNCONFIRMED TRANSFER — verify receipt first. ${opts.reason}`
+          : opts.reason,
       createdBy: opts.createdBy,
       processedBy: isWallet ? opts.createdBy : null,
       processedAt: isWallet ? new Date() : null,
@@ -135,7 +141,7 @@ export async function issueRefund(
       notes: isWallet
         ? `Refund of ${amount} credited to the customer's wallet (${opts.reason})`
         : unconfirmedTransfer
-          ? `Customer reported sending ${amount} by ${order.paymentMethod} but it was never confirmed. Verify receipt, then send it back or dismiss this refund (${opts.reason})`
+          ? `Customer reported sending ${amount} by ${order.paymentMethod} but it was ${disputed ? 'disputed by the kitchen' : 'never confirmed'}. Verify receipt, then send it back or dismiss this refund (${opts.reason})`
           : `Refund of ${amount} is owed to the customer — awaiting manual ${order.paymentMethod} transfer (${opts.reason})`,
       changedBy: opts.createdBy,
     },
@@ -233,7 +239,8 @@ export async function refundForCancelledItems(
   const order = await tx.order.findUnique({ where: { id: orderId } });
   if (!order) throw new AppError('Order not found', 404, 'ORDER_NOT_FOUND');
 
-  if (['pending', 'failed', 'disputed'].includes(order.paymentStatus)) {
+  // A disputed transfer may still have left the customer's account: it is refunded (flagged for checking), not re-priced.
+  if (['pending', 'failed'].includes(order.paymentStatus)) {
     await shrinkUnpaidOrder(tx, order);
     return null;
   }

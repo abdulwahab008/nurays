@@ -10,7 +10,7 @@ import { TrayBar, ViewTrayLink } from '@/components/cart/TrayBar';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { useToast } from '@/components/ui/toast';
 import { displayRating, formatDate, formatPrice } from '@/lib/utils';
-import { getStackedDiscountedPrice, type CatalogPromotionLike } from '@/lib/pricing';
+import { dealsOnOneUnit, getStackedDiscountedPrice, type CatalogPromotionLike } from '@/lib/pricing';
 import { apiClient, ApiResponse, apiErrorStatus, apiErrorCode, apiErrorDetails, errorMessage, type CartConflictDetails } from '@/lib/api-client';
 import type { PublicSeller, PublicSellerAvailability } from '@/lib/services/seller.service';
 import { cartService } from '@/lib/services/cart.service';
@@ -251,9 +251,9 @@ function toKitchenProfile(
     })),
     dishes: (s.products ?? []).map((p) => {
       const listPrice = Number(p.price);
-      const deals = promotions[p.id];
+      const deals = dealsOnOneUnit(listPrice, promotions[p.id]);
       const price = getStackedDiscountedPrice(listPrice, deals);
-      const originalPrice = deals?.length ? listPrice : p.originalPrice != null ? Number(p.originalPrice) : null;
+      const originalPrice = deals.length ? listPrice : p.originalPrice != null ? Number(p.originalPrice) : null;
       const prepMinutes = positiveAmount(p.preparationTime);
       const typeKey = productTypeKey(p.productType);
       return {

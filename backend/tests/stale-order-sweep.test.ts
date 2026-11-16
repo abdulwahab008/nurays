@@ -1,6 +1,7 @@
 /**
  * Which orders the stale-order sweep cancels for not being accepted in time. The kitchen's 30 minutes start when it could
  * first accept: at placement, or for an online checkout when it is paid. An unpaid online checkout is left to the payment rule.
+ * An order booked for a later day is not timed before that day begins in Pakistan.
  * The database is a double that applies the sweep's own filters to a few orders.
  */
 const db: { order?: { findMany: jest.Mock } } = {};
@@ -17,20 +18,22 @@ type Filter = Record<string, unknown>;
 function matches(row: Row, where: Filter): boolean {
   return Object.entries(where).every(([field, cond]) => {
     if (field === 'OR') return (cond as Filter[]).some((w) => matches(row, w));
+    if (field === 'AND') return (cond as Filter[]).every((w) => matches(row, w));
     const value = row[field];
     if (cond === null || typeof cond !== 'object' || cond instanceof Date) return value === cond;
-    const c = cond as { in?: unknown[]; notIn?: unknown[]; not?: unknown; lt?: Date };
+    const c = cond as { in?: unknown[]; notIn?: unknown[]; not?: unknown; lt?: Date; lte?: Date };
     if (c.in && !c.in.includes(value)) return false;
     if (c.notIn && c.notIn.includes(value)) return false;
     if ('not' in c && value === c.not) return false;
     if (c.lt && !(value instanceof Date && value < c.lt)) return false;
+    if (c.lte && !(value instanceof Date && value <= c.lte)) return false;
     return true;
   });
 }
 
 const now = new Date('2026-11-09T12:00:00Z');
 const ago = (min: number) => new Date(now.getTime() - min * 60_000);
-const order = (id: string, o: Row): Row => ({ id, orderStatus: 'pending', paymentStatus: 'pending', paidAt: null, ...o });
+const order = (id: string, o: Row): Row => ({ id, orderStatus: 'pending', paymentStatus: 'pending', paidAt: null, deliverySlotDate: null, ...o });
 
 const orders = [
   order('cod-late', { paymentMethod: 'cod', createdAt: ago(35) }),
@@ -61,4 +64,38 @@ it('gives the kitchen 30 minutes from when it could first accept, and leaves an 
   );
   expect(cancelled.map(([id]) => id).sort()).toEqual(['bank-late', 'cod-late', 'paid-long-ago', 'unpaid-online-65']);
   expect(result).toMatchObject({ cancelledUnpaid: 1, cancelledUnaccepted: 3 });
+});
+
+describe('an order booked for a later day', () => {
+  // 00:20 on 10 November in Pakistan.
+  const justAfterMidnight = new Date('2026-11-09T19:20:00Z');
+  const before = (at: Date, min: number) => new Date(at.getTime() - min * 60_000);
+  const day = (d: string) => new Date(`${d}T00:00:00Z`);
+  const sweep = async (at: Date, rows: Row[]) => {
+    db.order = { findMany: jest.fn(async ({ where }: { where: Filter }) => rows.filter((o) => matches(o, where))) };
+    await sweepStaleOrders(at);
+    return (adminOrderService.cancelOrder as jest.Mock).mock.calls.map(([id]) => id).sort();
+  };
+
+  it('is not cancelled for not being accepted before its day begins, whether cash or paid online', async () => {
+    const cancelled = await sweep(now, [
+      order('cod-tomorrow', { paymentMethod: 'cod', createdAt: ago(600), deliverySlotDate: day('2026-11-10') }),
+      order('paid-in-3-days', { paymentMethod: 'safepay', paymentStatus: 'paid', createdAt: ago(600), paidAt: ago(590), deliverySlotDate: day('2026-11-12') }),
+      order('cod-today', { paymentMethod: 'cod', createdAt: ago(35), deliverySlotDate: day('2026-11-09') }),
+    ]);
+    expect(cancelled).toEqual(['cod-today']);
+  });
+
+  it('gets the usual 30 minutes from the start of its day', async () => {
+    const placed = before(justAfterMidnight, 600);
+    expect(await sweep(justAfterMidnight, [order('cod-for-the-10th', { paymentMethod: 'cod', createdAt: placed, deliverySlotDate: day('2026-11-10') })])).toEqual([]);
+
+    const tenMinutesLater = new Date(justAfterMidnight.getTime() + 10 * 60_000);
+    expect(await sweep(tenMinutesLater, [order('cod-for-the-10th', { paymentMethod: 'cod', createdAt: placed, deliverySlotDate: day('2026-11-10') })])).toEqual(['cod-for-the-10th']);
+  });
+
+  it('is still cancelled when its online payment is never completed', async () => {
+    const cancelled = await sweep(now, [order('unpaid-tomorrow', { paymentMethod: 'safepay', createdAt: ago(65), deliverySlotDate: day('2026-11-10') })]);
+    expect(cancelled).toEqual(['unpaid-tomorrow']);
+  });
 });

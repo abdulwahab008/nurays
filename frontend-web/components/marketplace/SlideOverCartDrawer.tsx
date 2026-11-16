@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import {
   ShoppingBag,
@@ -12,11 +12,17 @@ import {
   ArrowRight,
   Bike,
 } from 'lucide-react';
-import { useCartStore } from '@/lib/store/cart-store';
+import { useCartStore, trayFromServer, type CartItem } from '@/lib/store/cart-store';
+import { hasSession } from '@/lib/store/auth-store';
+import { cartService } from '@/lib/services/cart.service';
+import { writeTrayLine } from '@/lib/tray-server';
+import { apiErrorMessage } from '@/lib/api-client';
+import { useToast } from '@/components/ui/toast';
 import { formatPrice } from '@/lib/utils';
 import { useT } from '@/lib/i18n';
 import { homeMessages } from '@/lib/i18n/messages/home';
 import { commonMessages } from '@/lib/i18n/messages/common';
+import { checkoutMessages } from '@/lib/i18n/messages/checkout';
 import { useShallow } from 'zustand/react/shallow';
 
 interface SlideOverCartDrawerProps {
@@ -29,6 +35,49 @@ export function SlideOverCartDrawer({ isOpen, onClose }: SlideOverCartDrawerProp
   const drawerRef = useRef<HTMLDivElement>(null);
   const t = useT(homeMessages);
   const tc = useT(commonMessages);
+  const tk = useT(checkoutMessages);
+  const { showToast } = useToast();
+  // A change is being saved to the account's tray: a second one waits, so two never reach the server out of order.
+  const [saving, setSaving] = useState(false);
+
+  // Signed in, checkout orders the account's tray, so every change here is made there too; one the server refuses is
+  // undone on screen and the tray is read again.
+  const saveToAccount = async (snapshot: CartItem[], write: () => Promise<void>, failed: string) => {
+    setSaving(true);
+    try {
+      await write();
+    } catch (error) {
+      showToast(apiErrorMessage(error, failed), 'error');
+      useCartStore.getState().setItems(snapshot);
+      try {
+        const fresh = await cartService.getCart();
+        if (fresh.data) useCartStore.getState().setItems(trayFromServer(fresh.data.items));
+      } catch {
+        // keep the restored snapshot
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+  const changeQuantity = (line: CartItem, quantity: number) => {
+    const snapshot = useCartStore.getState().items;
+    if (quantity > 0) updateItem(line.id, quantity);
+    else removeItem(line.id);
+    if (!hasSession()) return;
+    void saveToAccount(snapshot, () => writeTrayLine(cartService, line, quantity), tk(quantity > 0 ? 'couldNotUpdateQty' : 'failedRemoveItem'));
+  };
+  const clearTray = async () => {
+    if (!hasSession()) return clearCart();
+    setSaving(true);
+    try {
+      await cartService.clearCart();
+      clearCart();
+    } catch (error) {
+      showToast(apiErrorMessage(error, tk('failedClearTray')), 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   // Close on Escape key
   useEffect(() => {
@@ -128,7 +177,8 @@ export function SlideOverCartDrawer({ isOpen, onClose }: SlideOverCartDrawerProp
                     <div className="flex items-center h-10 rounded-xl border border-line flex-shrink-0">
                       {item.quantity > 1 ? (
                         <button
-                          onClick={() => updateItem(item.id, item.quantity - 1)}
+                          onClick={() => changeQuantity(item, item.quantity - 1)}
+                          disabled={saving}
                           aria-label={t('decreaseNamed', { name: item.productName })}
                           className="w-10 h-10 flex items-center justify-center text-ink hover:bg-raised rounded-s-xl transition-colors"
                         >
@@ -136,7 +186,8 @@ export function SlideOverCartDrawer({ isOpen, onClose }: SlideOverCartDrawerProp
                         </button>
                       ) : (
                         <button
-                          onClick={() => removeItem(item.id)}
+                          onClick={() => changeQuantity(item, 0)}
+                          disabled={saving}
                           aria-label={t('removeNamed', { name: item.productName })}
                           className="w-10 h-10 flex items-center justify-center text-muted hover:text-red-600 hover:bg-raised rounded-s-xl transition-colors"
                         >
@@ -147,7 +198,8 @@ export function SlideOverCartDrawer({ isOpen, onClose }: SlideOverCartDrawerProp
                         {item.quantity}
                       </span>
                       <button
-                        onClick={() => updateItem(item.id, item.quantity + 1)}
+                        onClick={() => changeQuantity(item, item.quantity + 1)}
+                        disabled={saving}
                         aria-label={t('increaseNamed', { name: item.productName })}
                         className="w-10 h-10 flex items-center justify-center text-brand-ink hover:bg-raised rounded-e-xl transition-colors"
                       >
@@ -173,7 +225,8 @@ export function SlideOverCartDrawer({ isOpen, onClose }: SlideOverCartDrawerProp
                   <span className="font-semibold text-muted text-end">{t('deliveryAtCheckout')}</span>
                 </div>
                 <button
-                  onClick={clearCart}
+                  onClick={clearTray}
+                  disabled={saving}
                   className="pt-1 text-sm font-bold text-muted hover:text-red-600 inline-flex items-center gap-1.5 transition-colors"
                 >
                   <Trash2 className="w-4 h-4" aria-hidden />

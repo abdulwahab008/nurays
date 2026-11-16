@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { StaffSecondStep } from '@/components/auth/StaffSecondStep';
 import { homeFor } from '@/lib/utils';
-import { landingAfterLogin } from '@/lib/auth-redirect';
+import { carryNextTo, landingAfterLogin } from '@/lib/auth-redirect';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -449,7 +449,17 @@ export default function LoginPage() {
 
             <p className="mt-8 text-sm text-muted">
               {t('noAccount')}{' '}
-              <Link href="/register" className={authLink}>
+              <Link
+                href="/register"
+                onClick={(e) => {
+                  // The page asked for (?next=) is only known in the browser, so it is added on the way out.
+                  const withNext = carryNextTo('/register');
+                  if (withNext === '/register') return;
+                  e.preventDefault();
+                  router.push(withNext);
+                }}
+                className={authLink}
+              >
                 {t('signUpLink')}
               </Link>
             </p>

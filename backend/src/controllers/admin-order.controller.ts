@@ -93,6 +93,20 @@ export const retryDelivery = async (req: Request, res: Response) => {
   });
 };
 
+export const unassignRider = async (req: Request, res: Response) => {
+  if (!req.user) {
+    throw new AppError('Authentication required', 401, 'AUTH_REQUIRED');
+  }
+
+  const result = await adminOrderService.unassignRider(req.params.id, req.user.userId);
+
+  res.status(200).json({
+    success: true,
+    message: 'Job taken back from the rider and returned to the pool',
+    data: result,
+  });
+};
+
 export const processRefund = async (req: Request, res: Response) => {
   if (!req.user) {
     throw new AppError('Authentication required', 401, 'AUTH_REQUIRED');

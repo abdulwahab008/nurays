@@ -335,6 +335,10 @@ const CATALOGUE = {
     (p) => ({ title: 'Job cancelled', message: `Order #${p.orderNumber} was cancelled. Don't pick it up; if you already have the food, contact support.` }),
     (p) => ({ title: 'جاب منسوخ', message: `آرڈر ${no(p.orderNumber)} منسوخ ہو گیا ہے۔ اسے نہ اٹھائیں؛ اگر کھانا آپ کے پاس ہے تو سپورٹ سے رابطہ کریں۔` })
   ),
+  'delivery.takenBack': entry<Order>(
+    (p) => ({ title: 'Job taken back', message: `Order #${p.orderNumber} is no longer yours: it was given back to other riders. Don't pick it up.` }),
+    (p) => ({ title: 'جاب واپس لے لی گئی', message: `آرڈر ${no(p.orderNumber)} اب آپ کا نہیں رہا: یہ دوسرے رائیڈرز کو دے دیا گیا ہے۔ اسے نہ اٹھائیں۔` })
+  ),
   'rider.settlement': entry<{ cashHandedIn: number; keptAsPay: number; cashHeld: number }>(
     (p) => {
       const parts = [

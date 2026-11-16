@@ -23,6 +23,7 @@ import { doorField } from '../utils/addressSnapshot';
 import { logEvent, logger } from '../utils/logger';
 import { notificationText } from '../utils/notificationText';
 import { recordAudit } from '../middleware/audit';
+import { pktDate } from '../utils/payoutWeek';
 
 // The delivery status machine (which status follows which, and what the order must look like) is in utils/deliveryStatus.ts.
 
@@ -233,6 +234,8 @@ export class RiderService {
     });
     if (!order || order.deliveryType !== 'home_delivery') return;
     if (ORDER_CLOSED_FOR_DELIVERY.includes(order.orderStatus)) return;
+    // Booked for a later day (Pakistan time): no rider is sent before that day. createDueDeliveries posts the job then.
+    if (order.deliverySlotDate && order.deliverySlotDate > new Date(pktDate(new Date()))) return;
 
     // Sellers who deliver themselves don't post to the rider pool; they drive the
     // order to delivered / delivery_failed from their own dashboard. The provider is
@@ -293,6 +296,36 @@ export class RiderService {
       const isDuplicate = err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002';
       if (!isDuplicate) throw err;
     }
+  }
+
+  /**
+   * Rider jobs for orders that were accepted ahead of their delivery day and so got none then, once that day
+   * (Pakistan time) has come. Run every minute.
+   */
+  async createDueDeliveries(now: Date = new Date()): Promise<number> {
+    const today = pktDate(now);
+    const due = await prisma.order.findMany({
+      where: {
+        deliveryType: 'home_delivery',
+        deliveryProvider: 'platform',
+        orderStatus: { in: ['preparing', 'ready'] },
+        deliverySlotDate: { lte: new Date(today) },
+        createdAt: { lt: new Date(`${today}T00:00:00+05:00`) },
+        delivery: { is: null },
+      },
+      orderBy: { createdAt: 'asc' },
+      take: 50,
+      select: { id: true, orderStatus: true },
+    });
+    for (const o of due) {
+      try {
+        if (o.orderStatus === 'ready') await this.ensureDeliveryForOrder(o.id, 0);
+        else await this.ensureDeliveryForOrder(o.id);
+      } catch (err) {
+        logger.error({ err, orderId: o.id }, 'Could not post the rider job for a scheduled order');
+      }
+    }
+    return due.length;
   }
 
   private async requireRider(userId: string) {

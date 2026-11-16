@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { loginUrlHere } from '@/lib/auth-redirect';
-import { getPromotionLabel, getStackedDiscountedPrice } from '@/lib/pricing';
+import { getPromotionLabel, priceTray } from '@/lib/pricing';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -81,17 +81,15 @@ interface CatalogPromotion {
   name: string;
   type: string;
   discountValue: number;
+  minOrderAmount?: number;
+  maxDiscountAmount?: number | null;
 }
 
 type AppliedPromo = { code: string; discountAmount: number };
 
 /** The tray's goods at the prices the order charges: each dish after its kitchen's menu deals. */
 const dealSubtotal = (items: CartResponse['items'], promotions: Record<string, CatalogPromotion[]>) =>
-  items.reduce((sum, item) => {
-    const base = item.variant?.price ?? item.product.price;
-    const promos = promotions[item.product.id] || [];
-    return sum + (promos.length > 0 ? getStackedDiscountedPrice(base, promos) : base) * item.quantity;
-  }, 0);
+  priceTray(items, promotions).unitPrices.reduce((sum, unitPrice, i) => sum + unitPrice * items[i].quantity, 0);
 
 const validatePromo = async (code: string, cartTotal: number): Promise<AppliedPromo | null> => {
   const res = await apiClient.post<{ success: boolean; data: AppliedPromo }>('/promotions/validate', { code: code.trim(), cartTotal });
@@ -577,7 +575,8 @@ export default function CheckoutPage() {
   const closedOpensText = kitchenClosed ? opensLabel(kitchenAvailability?.opensAt || kitchenAvailability?.nextOpenAt) : null;
 
   // Subtotals with promotions
-  const discountedSubtotal = dealSubtotal(cart.items, promotionsByProductId);
+  const trayDeals = priceTray(cart.items, promotionsByProductId);
+  const discountedSubtotal = trayDeals.unitPrices.reduce((sum, unitPrice, i) => sum + unitPrice * cart.items[i].quantity, 0);
   const promotionSavings = Math.max(0, cart.summary.subtotal - discountedSubtotal);
   // Delivery is added to the total only once the server has said what it costs to the chosen address.
   // Collecting from the kitchen costs nothing to deliver, so the total is known straight away.
@@ -1292,10 +1291,10 @@ export default function CheckoutPage() {
 
               {/* Items List with Quantity Controls */}
               <div className="space-y-3 max-h-72 overflow-y-auto pe-1">
-                {cart.items.map((item) => {
+                {cart.items.map((item, itemIndex) => {
                   const base = item.variant?.price ?? item.product.price;
-                  const promos = promotionsByProductId[item.product.id] || [];
-                  const unitPrice = promos.length > 0 ? getStackedDiscountedPrice(base, promos) : base;
+                  const promos = trayDeals.applied[itemIndex];
+                  const unitPrice = trayDeals.unitPrices[itemIndex];
                   const lineTotal = unitPrice * item.quantity;
                   const label = promos.length > 0 ? promos.map((p) => getPromotionLabel(p, t, formatPrice)).join(' + ') : null;
 

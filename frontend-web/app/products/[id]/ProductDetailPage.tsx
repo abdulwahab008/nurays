@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { loginUrlHere } from '@/lib/auth-redirect';
-import { getPromotionLabel, getStackedDiscountedPrice } from '@/lib/pricing';
+import { dealsOnOneUnit, getPromotionLabel, getStackedDiscountedPrice } from '@/lib/pricing';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { productService } from '@/lib/services/product.service';
@@ -31,6 +31,8 @@ interface CatalogPromotion {
   name: string;
   type: string;
   discountValue: number;
+  minOrderAmount?: number;
+  maxDiscountAmount?: number | null;
 }
 
 /**
@@ -240,11 +242,8 @@ export default function ProductDetailPage({ initial }: { initial?: RawProduct })
         const promRes = await apiClient.get<{ success: boolean; data: Record<string, CatalogPromotion[]> }>(
           `/promotions/catalog?productIds=${encodeURIComponent(data.id)}`
         );
-        if (promRes.data?.success && promRes.data?.data?.[data.id]?.length) {
-          setCatalogPromotions(promRes.data.data[data.id]);
-        } else {
-          setCatalogPromotions([]);
-        }
+        // The page shows one dish by itself, so it shows only the deals one unit gets (a deal with a minimum order appears in the tray once the tray reaches it).
+        setCatalogPromotions(promRes.data?.success ? dealsOnOneUnit(data.price, promRes.data.data?.[data.id]) : []);
       } catch {
         setCatalogPromotions([]);
       }

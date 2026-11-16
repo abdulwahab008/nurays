@@ -10,7 +10,7 @@ jest.mock('../src/config/database', () => ({
 import prisma from '../src/config/database';
 import promotionService from '../src/services/promotion.service';
 import { quotedTotalProblem } from '../src/services/order-placement.service';
-import { applyStackedDiscount } from '../src/utils/pricing';
+import { priceDealLines } from '../src/utils/pricing';
 
 const db = prisma as unknown as {
   product: { findMany: jest.Mock };
@@ -34,10 +34,8 @@ const weekendDeal = {
 /** The unit price the storefront, tray and checkout show: the catalog's deals stacked on the dish price. */
 async function shownUnitPrice(userId: string | undefined, price: number) {
   const catalog = await promotionService.getPromotionsForCatalog(['samosa'], userId);
-  return applyStackedDiscount(
-    price,
-    (catalog.samosa ?? []).map((p) => ({ discountType: p.type, discountValue: p.discountValue }))
-  );
+  const deals = (catalog.samosa ?? []).map((p, i) => ({ id: String(i), discountType: p.type, discountValue: p.discountValue, minOrderAmount: 0, maxDiscountAmount: null }));
+  return priceDealLines([{ sellerId: 'seller-1', unitPrice: price, quantity: 1, deals }]).unitPrices[0];
 }
 
 async function chargedUnitPrice(userId: string, price: number) {

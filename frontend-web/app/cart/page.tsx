@@ -35,7 +35,7 @@ import { useToast } from '@/components/ui/toast';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { DEFAULT_ADDRESS, useDeliveryEstimate } from '@/lib/hooks/use-delivery-estimate';
 import { useT } from '@/lib/i18n';
-import { getPromotionLabel, getStackedDiscountedPrice } from '@/lib/pricing';
+import { getPromotionLabel, priceTray } from '@/lib/pricing';
 import { commonMessages } from '@/lib/i18n/messages/common';
 import { checkoutMessages, richText } from '@/lib/i18n/messages/checkout';
 import { useShallow } from 'zustand/react/shallow';
@@ -45,6 +45,8 @@ interface CatalogPromotion {
   name: string;
   type: string;
   discountValue: number;
+  minOrderAmount?: number;
+  maxDiscountAmount?: number | null;
 }
 
 function localItemsToCartResponse(localItems: LocalCartItem[]): CartResponse {
@@ -317,12 +319,9 @@ export default function CartPage() {
   const hasItems = cart && cart.items && cart.items.length > 0;
 
   // A sum over the few lines of one cart: cheap enough to work out on every render.
-  const discountedSubtotal = (cart?.items ?? []).reduce((sum, item) => {
-    const basePrice = item.variant?.price ?? item.product.price;
-    const promos = promotionsByProductId[item.product.id] || [];
-    const unitPrice = promos.length > 0 ? getStackedDiscountedPrice(basePrice, promos) : basePrice;
-    return sum + unitPrice * item.quantity;
-  }, 0);
+  const trayItems = cart?.items ?? [];
+  const trayDeals = priceTray(trayItems, promotionsByProductId);
+  const discountedSubtotal = trayDeals.unitPrices.reduce((sum, unitPrice, i) => sum + unitPrice * trayItems[i].quantity, 0);
 
   const promotionSavings = hasItems ? Math.max(0, cart.summary.subtotal - discountedSubtotal) : 0;
 
@@ -597,10 +596,10 @@ export default function CartPage() {
 
             {/* Dish Item Cards */}
             <div className="space-y-3">
-              {cart.items.map((item) => {
-                const promos = promotionsByProductId[item.product.id] || [];
+              {cart.items.map((item, itemIndex) => {
+                const promos = trayDeals.applied[itemIndex];
                 const originalPrice = item.variant?.price ?? item.product.price;
-                const unitPrice = promos.length > 0 ? getStackedDiscountedPrice(originalPrice, promos) : originalPrice;
+                const unitPrice = trayDeals.unitPrices[itemIndex];
                 const lineTotal = unitPrice * item.quantity;
                 const promotionLabel = promos.length > 0 ? promos.map((p) => getPromotionLabel(p, t, formatPrice)).join(' + ') : null;
                 const isItemUpdating = updatingItem === item.id;

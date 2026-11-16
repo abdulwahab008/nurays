@@ -13,6 +13,7 @@ import { useDialogs } from '@/components/ui/Dialogs';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient, apiErrorMessage } from '@/lib/api-client';
 import { formatPrice } from '@/lib/utils';
+import { readAllPages } from '@/lib/all-pages';
 import { useShallow } from 'zustand/react/shallow';
 import { ImageOff, Loader2, Package, Pencil, Plus, Search, Trash2, X } from 'lucide-react';
 import { StockList } from '@/components/sellers/StockList';
@@ -110,10 +111,12 @@ function SellerProductsContent() {
     try {
       setLoading(true);
       setLoadError(null);
-      const response = await apiClient.get('/products/seller/my-products');
-      if (response.data.success) {
-        setProducts(response.data.data.products || []);
-      }
+      // The whole menu, not the server's first 20: the counts, search, filters and bulk stock update all work on this list.
+      const all = await readAllPages<Product>(async (page) => {
+        const response = await apiClient.get('/products/seller/my-products', { params: { page, limit: 100 } });
+        return { rows: response.data.data.products || [], totalPages: response.data.data.pagination?.totalPages ?? 1 };
+      });
+      setProducts(all);
     } catch (error: unknown) {
       // The dishes already on the screen stay (a refresh after an action must not wipe the list).
       setLoadError(error);

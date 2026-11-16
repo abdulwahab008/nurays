@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { accountTypeFor, clearSignOut, landingAfterLogin, loginUrlFor, loginUrlHere, noteSignOut, safeNextPath } from '../../lib/auth-redirect.ts';
+import { accountTypeFor, carryNextTo, clearSignOut, landingAfterLogin, loginUrlFor, loginUrlHere, noteSignOut, safeNextPath } from '../../lib/auth-redirect.ts';
 
 const at = (href: string) => {
   (globalThis as unknown as { window: { location: URL } }).window = { location: new URL(href, 'https://x.test') };
@@ -108,4 +108,17 @@ test('a sign-out is remembered by the tab, so a page that Back loads afresh does
   assert.equal(loginUrlHere(), '/login');
   clearSignOut();
   assert.equal(loginUrlHere(), '/login?next=%2Friders%2Fearnings');
+});
+
+// A guest sent to sign in for checkout who chooses to sign up instead must still come back to checkout.
+test('the link between sign-in and sign-up keeps the page asked for', () => {
+  at('/login?next=%2Fcheckout');
+  assert.equal(carryNextTo('/register'), '/register?next=%2Fcheckout');
+  at('/register?next=%2Fcheckout');
+  assert.equal(carryNextTo('/login'), '/login?next=%2Fcheckout');
+  assert.equal(landingAfterLogin('/'), '/checkout');
+  at('/login');
+  assert.equal(carryNextTo('/register'), '/register');
+  at('/login?next=https%3A%2F%2Fevil.example');
+  assert.equal(carryNextTo('/register'), '/register');
 });
