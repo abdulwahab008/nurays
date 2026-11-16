@@ -8,6 +8,7 @@ jest.mock('../src/config/database', () => ({
   __esModule: true,
   default: {
     user: { findFirst: jest.fn(), update: jest.fn(), create: jest.fn() },
+    pushSubscription: { deleteMany: jest.fn() },
     refreshToken: { create: jest.fn(async () => ({})), updateMany: jest.fn(async () => ({ count: 0 })) },
   },
 }));
@@ -83,5 +84,7 @@ it('signs an existing account in, but never a suspended one or a staff account',
 it('drops a password set before the address was verified, and every session issued for it', async () => {
   db.user.findFirst.mockResolvedValueOnce(existing({ emailVerified: false, passwordHash: 'set-by-someone' }));
   await signInWithApple('a.b.c');
-  expect(db.user.update.mock.calls[0][0].data).toMatchObject({ emailVerified: true, passwordHash: null, tokensValidAfter: expect.any(Date) });
+  expect(db.user.update.mock.calls[0][0].data).toMatchObject({ emailVerified: true, passwordHash: null, tokensValidAfter: expect.any(Date), phoneVerified: false });
+  expect(db.user.update.mock.calls[0][0].data.phone).not.toBe('+923001234567');
+  expect(db.pushSubscription.deleteMany).toHaveBeenCalledWith({ where: { userId: 'u1' } });
 });

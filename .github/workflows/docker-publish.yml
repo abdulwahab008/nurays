@@ -48,15 +48,20 @@ jobs:
         env:
           REVIEWED: ${{ vars.NEXT_PUBLIC_LEGAL_REVIEWED }}
           EMAIL: ${{ vars.NEXT_PUBLIC_SUPPORT_EMAIL }}
+          API_URL: ${{ vars.NEXT_PUBLIC_API_URL }}
+          SITE_URL: ${{ vars.NEXT_PUBLIC_SITE_URL }}
         run: |
           missing=""
           [ "$REVIEWED" = "true" ] || missing="$missing NEXT_PUBLIC_LEGAL_REVIEWED=true"
           [ -n "$EMAIL" ] || missing="$missing NEXT_PUBLIC_SUPPORT_EMAIL"
+          # These are built into the image: without them it calls an API on localhost and tells search engines to index nothing.
+          case "$API_URL" in https://*) ;; *) missing="$missing NEXT_PUBLIC_API_URL(https)" ;; esac
+          case "$SITE_URL" in https://*) ;; *) missing="$missing NEXT_PUBLIC_SITE_URL(https)" ;; esac
           if [ -z "$missing" ]; then
-            echo "The legal details are set."
+            echo "The legal details and the public addresses are set."
             exit 0
           fi
-          message="The frontend image would carry legal pages marked as not reviewed or without a support e-mail. Set the repository variables:$missing."
+          message="The frontend image would carry draft legal pages, or no public API or site address. Set the repository variables:$missing."
           case "$GITHUB_REF" in
             refs/tags/v*)
               echo "::error title=Draft legal pages in a release::$message"
@@ -103,6 +108,7 @@ jobs:
             NEXT_PUBLIC_GOOGLE_IOS_CLIENT_ID=${{ vars.NEXT_PUBLIC_GOOGLE_IOS_CLIENT_ID || '' }}
             NEXT_PUBLIC_SAFEPAY_SANDBOX=${{ vars.NEXT_PUBLIC_SAFEPAY_SANDBOX || 'true' }}
             NEXT_PUBLIC_WS_URL=${{ vars.NEXT_PUBLIC_WS_URL || '' }}
+            NEXT_PUBLIC_SITE_URL=${{ vars.NEXT_PUBLIC_SITE_URL || '' }}
             NEXT_PUBLIC_LEGAL_COMPANY_NAME=${{ vars.NEXT_PUBLIC_LEGAL_COMPANY_NAME || '' }}
             NEXT_PUBLIC_LEGAL_ADDRESS=${{ vars.NEXT_PUBLIC_LEGAL_ADDRESS || '' }}
             NEXT_PUBLIC_SUPPORT_EMAIL=${{ vars.NEXT_PUBLIC_SUPPORT_EMAIL || '' }}

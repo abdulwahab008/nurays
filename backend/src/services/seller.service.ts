@@ -1148,7 +1148,10 @@ export class SellerService {
     }
 
     const currentAvailability = computeSellerAvailability(seller);
-    const nextOverride = currentAvailability.isOpen ? 'closed' : 'open';
+    // Reopening goes back to the opening hours when they say open now; "open whatever the hours" is only kept when the
+    // kitchen opens outside them, otherwise one tap would leave it open all night for good.
+    const openByHours = computeSellerAvailability({ ...seller, availabilityOverride: null, availabilityOverrideUntil: null }).isOpen;
+    const nextOverride = currentAvailability.isOpen ? 'closed' : openByHours ? null : 'open';
 
     const updated = await prisma.seller.update({
       where: { id: sellerId },

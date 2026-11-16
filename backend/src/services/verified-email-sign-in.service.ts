@@ -2,13 +2,14 @@
  * Signing in someone whose e-mail a provider (Google or Apple) has verified: the account with that e-mail signs in, or
  * a customer account is made for it. A suspended account and a staff account (staff sign in with a password and their
  * second step) are refused. When the address had never been verified, whoever set the account's password may have
- * registered it before the real owner, so that password and every session issued for it are dropped.
+ * registered it before the real owner, so that password, the phone they attached and every session issued for it are dropped.
  */
 import prisma from '../config/database';
 import { forgetAuthUsers } from './auth-cache.service';
 import { tokenTtlSeconds } from '../utils/jwt';
 import { startSession } from './session.service';
 import { AppError } from '../middleware/errorHandler';
+import { placeholderPhone } from './auth.service';
 
 export async function signInVerifiedEmail({ email, name, picture }: { email: string; name: string; picture: string | null }) {
   // Check if user exists by email
@@ -38,14 +39,21 @@ export async function signInVerifiedEmail({ email, name, picture }: { email: str
         // proven ownership, so drop that password; the owner signs in through the provider.
         // Also void every session already issued for it: the person who set that password (and holds a
         // 30-day refresh token from signup) must not stay logged in to the real owner's account.
-        ...(user.emailVerified ? {} : { passwordHash: null, tokensValidAfter: new Date() }),
+        // Their phone goes too: a verified phone signs in by SMS code, which would let them straight back in.
+        ...(user.emailVerified
+          ? {}
+          : { passwordHash: null, tokensValidAfter: new Date(), phone: placeholderPhone(`reclaimed-${user.id}`), phoneVerified: false }),
       },
       include: {
         profile: true,
       },
     });
 
-    if (!user.emailVerified) await forgetAuthUsers(user.id);
+    if (!user.emailVerified) {
+      // And the devices they registered for this account's notifications.
+      await prisma.pushSubscription.deleteMany({ where: { userId: user.id } });
+      await forgetAuthUsers(user.id);
+    }
     const { accessToken, refreshToken } = await startSession(updatedUser);
 
     return {

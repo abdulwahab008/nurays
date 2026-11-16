@@ -215,6 +215,7 @@ describe('forgetting', () => {
     db.user.findFirst = jest.fn(async () => ({ ...ACTIVE, phone: '+923001110001', emailVerified: false, profile: null }));
     db.user.update = jest.fn(async () => ({ ...ACTIVE, phone: '+923001110001', email: 'a@example.com', profile: null }));
     db.refreshToken.create = jest.fn(async () => ({}));
+    db.pushSubscription = { deleteMany: jest.fn() };
     await signInVerifiedEmail({ email: 'a@example.com', name: 'A', picture: null });
     expect(forgotten('u1')).toBe(true);
   });

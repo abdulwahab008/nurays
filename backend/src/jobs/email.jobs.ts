@@ -44,7 +44,7 @@ defineJob<{ userId: string }>('email.password-reset', async ({ userId }) => {
 
   // Only the most recent link works.
   const token = generateVerificationToken();
-  await prisma.$transaction([
+  const [, link] = await prisma.$transaction([
     prisma.passwordReset.deleteMany({ where: { userId, usedAt: null } }),
     prisma.passwordReset.create({
       data: {
@@ -54,7 +54,13 @@ defineJob<{ userId: string }>('email.password-reset', async ({ userId }) => {
       },
     }),
   ]);
-  await emailService.sendPasswordResetEmail(user.email, user.profile?.fullName || 'there', token);
+  try {
+    await emailService.sendPasswordResetEmail(user.email, user.profile?.fullName || 'there', token);
+  } catch (err) {
+    // The link never left: without this the retry would find it above, take it for one on its way, and send nothing.
+    await prisma.passwordReset.deleteMany({ where: { id: link.id } });
+    throw err;
+  }
 });
 
 defineJob<{ to: string; subject: string; html: string; text?: string; stockAlertId?: string }>('email.send', async (job) => {

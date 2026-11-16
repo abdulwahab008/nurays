@@ -10,6 +10,19 @@ import promotionService from './promotion.service';
 import { sellableBatchWhere } from '../utils/hubStock';
 import { thrown } from '../utils/thrown';
 
+// What a cart line says about its dish. The whole row also holds the kitchen's cost price, moderation notes and ranking
+// scores, which are not the customer's to see.
+const CART_PRODUCT_FIELDS = {
+  id: true,
+  name: true,
+  nameUrdu: true,
+  slug: true,
+  price: true,
+  images: { where: { isPrimary: true }, take: 1 },
+} as const;
+
+const offersPickup = (modes: string[] | null | undefined) => (modes ?? []).includes('pickup');
+
 export class CartService {
   /**
    * Get or create cart for user
@@ -186,8 +199,9 @@ export class CartService {
             easypaisaNumber: items[0].seller.easypaisaNumber,
             easypaisaAccountTitle: items[0].seller.easypaisaAccountTitle,
             deliveryModes: items[0].seller.deliveryModes,
-            pickupAddress: items[0].seller.pickupAddress,
-            pickupLandmark: items[0].seller.pickupLandmark,
+            // A home kitchen's street address: only once it says customers may collect from it.
+            pickupAddress: offersPickup(items[0].seller.deliveryModes) ? items[0].seller.pickupAddress : null,
+            pickupLandmark: offersPickup(items[0].seller.deliveryModes) ? items[0].seller.pickupLandmark : null,
             preOrderOnly: items[0].seller.preOrderOnly,
             advanceBookingMinDays: items[0].seller.advanceBookingMinDays,
             advanceBookingMaxDays: items[0].seller.advanceBookingMaxDays,
@@ -469,14 +483,7 @@ export class CartService {
             priceSnapshot, // Update price snapshot
           },
           include: {
-            product: {
-              include: {
-                images: {
-                  where: { isPrimary: true },
-                  take: 1,
-                },
-              },
-            },
+            product: { select: CART_PRODUCT_FIELDS },
           },
         });
 
@@ -496,14 +503,7 @@ export class CartService {
           priceSnapshot,
         },
         include: {
-          product: {
-            include: {
-              images: {
-                where: { isPrimary: true },
-                take: 1,
-              },
-            },
-          },
+          product: { select: CART_PRODUCT_FIELDS },
           seller: {
             select: {
               id: true,
@@ -538,6 +538,7 @@ export class CartService {
       },
       include: {
         product: true,
+        variant: { select: { price: true } },
       },
     });
 
@@ -594,17 +595,10 @@ export class CartService {
         quantity: data.quantity,
         stockType: data.stockType,
         hubId: data.hubId,
-        priceSnapshot: cartItem.product.price, // Update price snapshot
+        priceSnapshot: cartItem.variant?.price ?? cartItem.product.price,
       },
       include: {
-        product: {
-          include: {
-            images: {
-              where: { isPrimary: true },
-              take: 1,
-            },
-          },
-        },
+        product: { select: CART_PRODUCT_FIELDS },
       },
     });
 

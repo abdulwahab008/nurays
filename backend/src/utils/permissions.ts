@@ -74,12 +74,27 @@ const RULES: Rule[] = [
   { method: 'GET', path: /^\/approvals$/, permission: 'read.core' },
 ];
 
+/**
+ * The path as the router matches it. Express ignores letter case, a trailing slash and repeated slashes when it picks
+ * a route, so the rules must too: otherwise /STAFF or /staff/ reaches the handler under the default permission.
+ */
+function routedPath(path: string): string {
+  let decoded = path;
+  try {
+    decoded = decodeURIComponent(path);
+  } catch {
+    // Not valid percent-encoding: no route matches it either, and the default permission applies.
+  }
+  return decoded.toLowerCase().replace(/\/{2,}/g, '/').replace(/(.)\/+$/, '$1');
+}
+
 export function permissionForRequest(method: string, path: string): Permission {
   const write = method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS';
+  const routed = routedPath(path);
   for (const rule of RULES) {
     if (rule.method === 'GET' && write) continue;
     if (rule.method === 'WRITE' && !write) continue;
-    if (rule.path.test(path)) return rule.permission;
+    if (rule.path.test(routed)) return rule.permission;
   }
   return write ? 'ops.write' : 'read.core';
 }
