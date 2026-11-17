@@ -306,7 +306,7 @@ export default function KitchensDirectoryPage() {
       <Link
         key={kitchen.id}
         href={kitchen.href}
-        className="group flex flex-col bg-surface rounded-[20px] border border-line hover:border-line-strong hover:shadow-[var(--shadow-card)] transition-all duration-200 overflow-hidden"
+        className="group flex flex-col bg-surface rounded-[20px] border border-line hover:border-line-strong transition-colors duration-200 overflow-hidden"
       >
         <div className="relative aspect-[16/10] w-full overflow-hidden bg-raised">
           <CoverImage
@@ -314,7 +314,7 @@ export default function KitchensDirectoryPage() {
             alt={kitchen.name}
             label={kitchen.name}
             size="md"
-            className="w-full h-full transition-transform duration-500 group-hover:scale-[1.03]"
+            className="w-full h-full"
           />
 
           {kitchen.hasDiscount && (
@@ -412,7 +412,7 @@ export default function KitchensDirectoryPage() {
       <SiteHeader />
 
       <div className="max-w-[1280px] mx-auto px-4 sm:px-8 pt-6 pb-10">
-        <h1 className="text-[24px] sm:text-[32px] leading-tight font-extrabold tracking-tight text-ink">
+        <h1 className="text-[24px] sm:text-[32px] leading-tight font-semibold tracking-tight text-ink">
           {selectedCommunity ? tk('titleArea', { area: selectedCommunity.name }) : tk('titleAll')}
         </h1>
         {selectedCommunity ? (

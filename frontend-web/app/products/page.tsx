@@ -503,7 +503,7 @@ function ProductsContent() {
       {/* Clean Marketplace Header */}
       <div className="flex items-center justify-between flex-wrap gap-2 pt-1">
         <div>
-          <h1 className="text-[22px] sm:text-[28px] leading-tight font-extrabold text-ink tracking-tight">
+          <h1 className="text-[22px] sm:text-[28px] leading-tight font-semibold text-ink tracking-tight">
             {viewMode === 'kitchens' ? t('titleKitchens') : t('titleDishes')}
           </h1>
           <p className="text-sm text-muted mt-1 flex items-center gap-1.5 flex-wrap">
@@ -539,7 +539,7 @@ function ProductsContent() {
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
               aria-label={t('searchPlaceholder')}
-              className="w-full ps-10 pe-24 border border-transparent rounded-[14px] text-[15px] font-semibold text-ink placeholder:text-muted placeholder:font-medium focus:border-brand focus:ring-2 focus:ring-brand/20 outline-none bg-raised focus:bg-surface transition-all h-12"
+              className="w-full ps-10 pe-24 border border-transparent rounded-[14px] text-[15px] font-semibold text-ink placeholder:text-muted placeholder:font-medium focus:border-brand focus:ring-2 focus:ring-brand/20 outline-none bg-raised focus:bg-surface transition-colors h-12"
             />
             {searchInput && (
               <button
@@ -558,7 +558,7 @@ function ProductsContent() {
             )}
             <button
               type="submit"
-              className="absolute end-1.5 top-1/2 -translate-y-1/2 h-9 px-3.5 bg-brand hover:bg-brand-500 text-on-brand text-sm font-extrabold rounded-[10px] transition-all active:scale-95 cursor-pointer"
+              className="absolute end-1.5 top-1/2 -translate-y-1/2 h-9 px-3.5 bg-brand hover:bg-brand-500 text-on-brand text-sm font-semibold rounded-[10px] transition-[color,background-color,border-color,opacity,transform] active:scale-95 cursor-pointer"
             >
               {tc('search')}
             </button>
@@ -570,15 +570,15 @@ function ProductsContent() {
               type="button"
               onClick={() => setViewMode('kitchens')}
               aria-pressed={viewMode === 'kitchens'}
-              className={`flex items-center justify-center gap-1.5 px-4 rounded-[9px] text-sm transition-all h-full cursor-pointer ${
-                viewMode === 'kitchens' ? 'bg-surface text-ink font-extrabold shadow-xs' : 'text-muted font-bold hover:text-ink'
+              className={`flex items-center justify-center gap-1.5 px-4 rounded-[9px] text-sm transition-colors h-full cursor-pointer ${
+                viewMode === 'kitchens' ? 'bg-surface text-ink font-semibold shadow-xs' : 'text-muted font-bold hover:text-ink'
               }`}
             >
               <ChefHat className="w-3.5 h-3.5" />
               <span>{t('viewKitchens')}</span>
               {activeCommunityDetail && (
                 <span
-                  className={`px-1.5 rounded-full text-[11px] font-extrabold ${
+                  className={`px-1.5 rounded-full text-[11px] font-semibold ${
                     viewMode === 'kitchens' ? 'bg-brand-soft text-brand-soft-ink' : 'bg-line text-muted'
                   }`}
                 >
@@ -590,15 +590,15 @@ function ProductsContent() {
               type="button"
               onClick={() => setViewMode('dishes')}
               aria-pressed={viewMode === 'dishes'}
-              className={`flex items-center justify-center gap-1.5 px-4 rounded-[9px] text-sm transition-all h-full cursor-pointer ${
-                viewMode === 'dishes' ? 'bg-surface text-ink font-extrabold shadow-xs' : 'text-muted font-bold hover:text-ink'
+              className={`flex items-center justify-center gap-1.5 px-4 rounded-[9px] text-sm transition-colors h-full cursor-pointer ${
+                viewMode === 'dishes' ? 'bg-surface text-ink font-semibold shadow-xs' : 'text-muted font-bold hover:text-ink'
               }`}
             >
               <UtensilsCrossed className="w-3.5 h-3.5" />
               <span>{t('viewDishes')}</span>
               {!loading && !error && (
                 <span
-                  className={`px-1.5 rounded-full text-[11px] font-extrabold ${
+                  className={`px-1.5 rounded-full text-[11px] font-semibold ${
                     viewMode === 'dishes' ? 'bg-brand-soft text-brand-soft-ink' : 'bg-line text-muted'
                   }`}
                 >
@@ -791,7 +791,7 @@ function ProductsContent() {
 
               {activeCommunityDetail?.neighbors && activeCommunityDetail.neighbors.length > 0 && (
                 <div className="flex flex-col items-center gap-2 mb-5">
-                  <span className="text-xs font-bold text-muted uppercase tracking-wider">
+                  <span className="text-xs font-bold text-muted">
                     {t('nearbyCommunities')}
                   </span>
                   <div className="flex items-center justify-center gap-2 flex-wrap">
@@ -839,10 +839,10 @@ function ProductsContent() {
                         setClosedKitchenModalData(k);
                       }
                     }}
-                    className={`group flex flex-col justify-between rounded-[20px] border bg-surface transition-all duration-200 overflow-hidden ${
+                    className={`group flex flex-col justify-between rounded-[20px] border bg-surface transition-colors duration-200 overflow-hidden ${
                       isClosed
                         ? 'border-line opacity-80 hover:opacity-100 hover:border-line-strong'
-                        : 'border-line hover:border-line-strong hover:shadow-[var(--shadow-card)]'
+                        : 'border-line hover:border-line-strong'
                     }`}
                   >
                     {/* Cover Image with Modern Aspect Ratio & Subtle Overlays */}
@@ -852,12 +852,12 @@ function ProductsContent() {
                         alt={k.businessName}
                         label={k.businessName}
                         size="md"
-                        className="w-full h-full group-hover:scale-105 transition-transform duration-500"
+                        className="w-full h-full"
                       />
 
                       {/* Clean Top Status */}
                       {isClosed ? (
-                        <span className="absolute top-3 start-3 px-2.5 py-1 rounded-full text-ink text-[11px] font-extrabold bg-surface/95 inline-flex items-center gap-1.5 shadow-xs">
+                        <span className="absolute top-3 start-3 px-2.5 py-1 rounded-full text-ink text-[11px] font-semibold bg-surface/95 inline-flex items-center gap-1.5 shadow-xs">
                           <span className="w-2 h-2 rounded-full bg-accent" />
                           <span>
                             {k.acceptsPreOrders
@@ -870,7 +870,7 @@ function ProductsContent() {
                           </span>
                         </span>
                       ) : (
-                        <span className="absolute top-3 start-3 px-2.5 py-1 rounded-full text-ink text-[11px] font-extrabold bg-surface/95 inline-flex items-center gap-1 shadow-xs">
+                        <span className="absolute top-3 start-3 px-2.5 py-1 rounded-full text-ink text-[11px] font-semibold bg-surface/95 inline-flex items-center gap-1 shadow-xs">
                           <ChefHat className="w-3 h-3 text-brand-ink" />
                           <span>{t('homeKitchen')}</span>
                         </span>
@@ -879,7 +879,7 @@ function ProductsContent() {
                       {/* Favorite Button */}
                       <button
                         onClick={(e) => handleToggleFavorite(e, k.id, k.businessName)}
-                        className="absolute top-3 end-3 w-9 h-9 rounded-full bg-surface/95 hover:bg-surface flex items-center justify-center text-ink transition-all active:scale-90 shadow-xs z-10"
+                        className="absolute top-3 end-3 w-9 h-9 rounded-full bg-surface/95 hover:bg-surface flex items-center justify-center text-ink transition-[color,background-color,border-color,opacity,transform] active:scale-90 shadow-xs z-10"
                         title={t('saveFavKitchens')}
                         aria-label={t('saveFavKitchens')}
                       >
@@ -905,7 +905,7 @@ function ProductsContent() {
                       ) : null}
 
                       {/* Bottom Right: Star Rating (or "New" until the kitchen has reviews) */}
-                      <span className="absolute bottom-3 end-3 px-2.5 py-1 rounded-full bg-surface/95 text-ink text-xs font-extrabold flex items-center gap-1 shadow-xs">
+                      <span className="absolute bottom-3 end-3 px-2.5 py-1 rounded-full bg-surface/95 text-ink text-xs font-semibold flex items-center gap-1 shadow-xs">
                         {rating ? (
                           <>
                             <Star className="w-3 h-3 fill-accent text-accent" />
@@ -915,7 +915,7 @@ function ProductsContent() {
                             ) : null}
                           </>
                         ) : (
-                          <span>{t('new')}</span>
+                          <span className="text-muted font-medium">{t('new')}</span>
                         )}
                       </span>
                     </div>
@@ -927,7 +927,7 @@ function ProductsContent() {
                         <div className="flex items-start justify-between gap-2.5 mb-1.5">
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-1.5">
-                              <h3 className="font-extrabold text-ink text-base leading-tight truncate">
+                              <h3 className="font-semibold text-ink text-base leading-tight truncate">
                                 {k.businessName}
                               </h3>
                               <CheckCircle2 className="w-4 h-4 text-brand-ink shrink-0" />
@@ -959,12 +959,12 @@ function ProductsContent() {
                         {k.products && k.products.length > 0 && (
                           <div className="mt-3 pt-2.5 border-t border-line flex items-center justify-between text-xs">
                             <div className="flex items-center gap-1.5 text-muted truncate min-w-0">
-                              <span className="px-2 py-0.5 rounded-full bg-accent-soft text-accent-soft-ink font-extrabold text-[11px] shrink-0">
+                              <span className="px-2 py-0.5 rounded-full bg-accent-soft text-accent-soft-ink font-semibold text-[11px] shrink-0">
                                 {t('onTheMenu')}
                               </span>
                               <span className="font-semibold text-ink truncate">{k.products[0].name}</span>
                             </div>
-                            <span className="font-black text-ink shrink-0 ms-2">Rs {k.products[0].price}</span>
+                            <span className="font-semibold text-ink shrink-0 ms-2">Rs {k.products[0].price}</span>
                           </div>
                         )}
                       </div>
@@ -972,7 +972,7 @@ function ProductsContent() {
                       {/* Footer CTA */}
                       <div className="pt-2 border-t border-line flex items-center justify-between text-xs">
                         <span
-                          className={`text-[11px] font-extrabold px-2 py-0.5 rounded-full ${
+                          className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${
                             isClosed
                               ? 'text-accent-soft-ink bg-accent-soft'
                               : 'text-brand-soft-ink bg-brand-soft'
@@ -980,7 +980,7 @@ function ProductsContent() {
                         >
                           {isClosed ? (k.acceptsPreOrders ? t('preOrderSlot') : t('kitchenClosed')) : t('domesticKitchen')}
                         </span>
-                        <span className="font-bold text-brand-ink inline-flex items-center gap-1 group-hover:translate-x-1 transition-transform">
+                        <span className="font-bold text-brand-ink inline-flex items-center gap-1 transition-transform">
                           <span>{isClosed ? (k.acceptsPreOrders ? t('checkPreOrder') : t('viewSchedule')) : t('viewMenu')}</span>
                           <ChevronRight className="rtl:-scale-x-100 w-3.5 h-3.5" />
                         </span>
@@ -1023,7 +1023,7 @@ function ProductsContent() {
       const hasFilters = isAnyFilterActive || selectedCategory !== 'all';
       return (
         <div className="bg-surface rounded-[20px] border border-dashed border-line-strong p-10 text-center">
-          <h2 className="text-xl font-extrabold text-ink mb-1.5">
+          <h2 className="text-xl font-semibold text-ink mb-1.5">
             {hasFilters
               ? t('noDishesMatch')
               : selectedCommunity
@@ -1075,7 +1075,7 @@ function ProductsContent() {
               <Link
                 key={product.id}
                 href={`/products/${product.id}`}
-                className="group flex flex-col justify-between bg-surface rounded-[20px] border border-line hover:border-line-strong hover:shadow-[var(--shadow-card)] transition-all duration-200 overflow-hidden"
+                className="group flex flex-col justify-between bg-surface rounded-[20px] border border-line hover:border-line-strong transition-colors duration-200 overflow-hidden"
               >
                 <div className="aspect-[16/11] bg-raised relative overflow-hidden">
                   <CoverImage
@@ -1083,13 +1083,13 @@ function ProductsContent() {
                     alt={product.name}
                     label={product.name}
                     size="md"
-                    className="w-full h-full group-hover:scale-[1.03] transition-transform duration-500"
+                    className="w-full h-full"
                   />
 
                   {/* Product type tag (Fresh Cook / Frozen / Ready to Eat / Ready to Cook), from the API */}
                   {typeBadge && TypeIcon && typeLabelKey && (
                     <span
-                      className={`absolute top-2.5 start-2.5 px-2.5 py-1 rounded-full text-[11px] font-extrabold ${typeBadge.className} shadow-xs z-10 flex items-center gap-1`}
+                      className={`absolute top-2.5 start-2.5 px-2.5 py-1 rounded-full text-[11px] font-semibold ${typeBadge.className} shadow-xs z-10 flex items-center gap-1`}
                     >
                       <TypeIcon className="w-3 h-3" />
                       <span>{t(typeLabelKey)}</span>
@@ -1128,7 +1128,7 @@ function ProductsContent() {
                 <div className="p-3 sm:p-3.5 flex-1 flex flex-col justify-between">
                   <div>
                     {/* Clean Chef & Community Row */}
-                    <h3 className="font-extrabold text-ink text-sm sm:text-[15px] leading-snug line-clamp-2">
+                    <h3 className="font-semibold text-ink text-sm sm:text-[15px] leading-snug line-clamp-2">
                       {product.name}
                     </h3>
                     <div className="flex items-center justify-between gap-1.5 mt-1 flex-wrap">
@@ -1164,7 +1164,7 @@ function ProductsContent() {
                     <div>
                       {promotionsByProductId[product.id]?.length ? (
                         <div className="flex items-baseline gap-1.5">
-                          <span className="text-[15px] font-extrabold text-ink">
+                          <span className="text-[15px] font-semibold text-ink">
                             {formatPrice(getStackedDiscountedPrice(product.price, promotionsByProductId[product.id]))}
                           </span>
                           <span className="text-xs text-muted line-through">
@@ -1172,12 +1172,12 @@ function ProductsContent() {
                           </span>
                         </div>
                       ) : (
-                        <span className="text-[15px] font-extrabold text-ink">
+                        <span className="text-[15px] font-semibold text-ink">
                           {formatPrice(product.price)}
                         </span>
                       )}
                       {rating && (
-                        <div className="flex items-center gap-1 mt-0.5 text-xs text-ink font-extrabold">
+                        <div className="flex items-center gap-1 mt-0.5 text-xs text-ink font-semibold">
                           <Star className="w-3 h-3 fill-accent text-accent" aria-hidden />
                           <span>{rating}</span>
                           {product.totalReviews ? <span className="text-muted font-normal">({product.totalReviews})</span> : null}
@@ -1191,7 +1191,7 @@ function ProductsContent() {
                       disabled={addingProductId === product.id}
                       title={t('addToCart')}
                       aria-label={t('addNameToTray', { name: product.name })}
-                      className="flex items-center justify-center gap-1 h-11 min-w-11 px-2.5 sm:px-3 rounded-[10px] bg-brand hover:bg-brand-500 text-on-brand font-extrabold text-sm transition-all active:scale-95 cursor-pointer"
+                      className="flex items-center justify-center gap-1 h-11 min-w-11 px-2.5 sm:px-3 rounded-[10px] bg-brand hover:bg-brand-500 text-on-brand font-semibold text-sm transition-[color,background-color,border-color,opacity,transform] active:scale-95 cursor-pointer"
                     >
                       {addingProductId === product.id ? (
                         <div className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />

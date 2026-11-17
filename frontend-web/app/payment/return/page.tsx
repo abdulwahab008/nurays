@@ -65,7 +65,7 @@ function PaymentReturnContent() {
   return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-8 max-w-md w-full text-center">
-        <div className={`w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-4 text-2xl font-black ${copy.tone}`}>!</div>
+        <div className={`w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-4 text-2xl font-semibold ${copy.tone}`}>!</div>
         <h1 className="text-xl font-bold text-slate-900">{t(copy.title)}</h1>
         <p className="mt-2 text-sm text-slate-600">{t(copy.text)}</p>
         {error && <p className="mt-3 text-sm font-medium text-red-700">{error}</p>}

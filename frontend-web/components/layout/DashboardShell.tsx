@@ -202,7 +202,7 @@ export function DashboardShell({
           >
             {title && (
               <div className="mb-5 sm:mb-6">
-                <h1 className="text-2xl lg:text-[28px] leading-tight font-extrabold text-ink tracking-tight">
+                <h1 className="text-2xl lg:text-[28px] leading-tight font-semibold text-ink tracking-tight">
                   {title}
                 </h1>
                 {subtitle && <p className="mt-1 text-sm text-muted">{subtitle}</p>}

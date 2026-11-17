@@ -124,7 +124,7 @@ export function RiderNewJobNotification() {
   return (
     <div className="fixed z-[100] space-y-3 max-sm:inset-x-3 max-sm:top-[calc(var(--header-offset)+0.5rem)] sm:top-[calc(1rem+var(--safe-top))] sm:end-[calc(1rem+var(--safe-end))] sm:w-[380px]" data-testid="rider-job-popups">
       {popups.map((p) => (
-        <div key={p.key} role="alert" className="rounded-[20px] bg-surface border border-line-strong shadow-[var(--shadow-card)] max-sm:shadow-2xl p-4" data-testid={p.kind === 'assigned' ? 'rider-assigned-popup' : 'rider-pool-popup'}>
+        <div key={p.key} role="alert" className="rounded-[20px] bg-surface border border-line-strong shadow-[var(--shadow-card)] max-sm:shadow-[var(--shadow-hover)] p-4" data-testid={p.kind === 'assigned' ? 'rider-assigned-popup' : 'rider-pool-popup'}>
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0 pt-2.5">
               <p className="text-[15px] font-semibold text-ink leading-snug">{p.kind === 'assigned' ? t('popupAssignedTitle') : t('popupPoolTitle')}</p>

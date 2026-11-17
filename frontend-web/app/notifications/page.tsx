@@ -338,7 +338,7 @@ export default function NotificationsPage() {
       {undoable && (
         <div
           role="status"
-          className="fixed inset-x-4 bottom-[calc(1rem+var(--tabbar-offset)+var(--safe-bottom))] z-40 mx-auto max-w-md flex items-center justify-between gap-3 rounded-2xl bg-ink text-page px-4 py-2 shadow-lg"
+          className="fixed inset-x-4 bottom-[calc(1rem+var(--tabbar-offset)+var(--safe-bottom))] z-40 mx-auto max-w-md flex items-center justify-between gap-3 rounded-2xl bg-ink text-page px-4 py-2 shadow-[var(--shadow-hover)]"
           data-testid="notification-undo"
         >
           <span className="text-sm">{t('notificationDeleted')}</span>

@@ -20,7 +20,6 @@ import { CoverImage } from '@/components/ui/CoverImage';
 import { LoadError } from '@/components/ui/LoadError';
 import { CuisineCarousel, PLATFORM_CUISINES } from '@/components/marketplace/CuisineCarousel';
 import {
-  Sparkles,
   ChevronRight,
   ChevronLeft,
   Trophy,
@@ -30,11 +29,9 @@ import {
   Star,
   MapPin,
   Clock,
-  ShieldCheck,
   Tag,
   Copy,
   Check,
-  Flame,
   Snowflake,
   ShoppingBag,
   Plus,
@@ -262,7 +259,7 @@ function CustomerDashboard() {
     return list.slice(0, viewMode === 'kitchens' ? 12 : 6);
   }, [matchingKitchens, isRandomOrder, shuffleNonce, viewMode]);
 
-  // Netflix-style Row Scrollers
+  // Row scrollers
   const top10RowRef = useRef<HTMLDivElement>(null);
   const kitchensRowRef = useRef<HTMLDivElement>(null);
   const biryaniRowRef = useRef<HTMLDivElement>(null);
@@ -275,7 +272,7 @@ function CustomerDashboard() {
     }
   };
 
-  // Top 10 dishes for signature Netflix row with giant numerals
+  // Top 10 dishes
   const top10Dishes = useMemo(() => {
     return displayDishes.slice(0, 10);
   }, [displayDishes]);
@@ -480,7 +477,7 @@ function CustomerDashboard() {
         {/* ── ACTIVE ORDER LIVE TRACKER ── */}
         {activeOrder && (
           <Link href={`/orders/${activeOrder.id}`} className="block">
-            <div className="rounded-2xl p-4 sm:p-5 bg-surface border border-brand/40 shadow-xs hover:shadow-md transition-all flex items-center justify-between gap-4">
+            <div className="rounded-2xl p-4 sm:p-5 bg-surface border border-brand/40 shadow-xs transition-colors flex items-center justify-between gap-4">
               <div className="flex items-center gap-3.5">
                 <div className="w-10 h-10 rounded-xl bg-brand-100 text-brand-ink flex items-center justify-center font-bold shrink-0">
                   <Bike className="w-5 h-5" />
@@ -578,7 +575,7 @@ function CustomerDashboard() {
                 }`}
                 title={t('randomizeTitle')}
               >
-                <Dices className={`w-3.5 h-3.5 ${isRandomOrder ? 'animate-bounce' : ''}`} />
+                <Dices className="w-3.5 h-3.5" />
                 <span>{isRandomOrder ? t('shuffled') : t('surpriseMe')}</span>
               </button>
 
@@ -617,11 +614,7 @@ function CustomerDashboard() {
             <section>
               <div className="flex items-center justify-between mb-3">
                 <div>
-                  <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-raised text-ink text-[11px] font-bold mb-1">
-                    <ChefHat className="w-3.5 h-3.5 text-brand-ink" />
-                    <span>{t('verifiedDomesticCooks')}</span>
-                  </div>
-                  <h2 className="text-xl font-extrabold text-ink tracking-tight">
+                  <h2 className="text-xl font-semibold text-ink tracking-tight">
                     {currentCommunityName
                       ? t('cuisineKitchensIn', { cuisine: selectedCuisineLabel, community: currentCommunityName })
                       : t('cuisineKitchens', { cuisine: selectedCuisineLabel })}
@@ -658,7 +651,7 @@ function CustomerDashboard() {
                   <div key={k.id} className="w-[280px] sm:w-[310px] shrink-0">
                     <Link
                       href={`/kitchens/${k.id}`}
-                      className="group bg-surface rounded-2xl border border-line shadow-2xs hover:shadow-lg hover:border-line-strong transition-all overflow-hidden flex flex-col justify-between h-full"
+                      className="group bg-surface rounded-2xl border border-line shadow-2xs hover:border-line-strong transition-colors overflow-hidden flex flex-col justify-between h-full"
                     >
                       <div className="relative aspect-[16/10] w-full overflow-hidden bg-raised">
                         <CoverImage
@@ -666,16 +659,16 @@ function CustomerDashboard() {
                           alt={k.businessName}
                           label={k.businessName}
                           size="md"
-                          className="w-full h-full group-hover:scale-105 transition-transform duration-300"
+                          className="w-full h-full"
                         />
-                        <span className="absolute bottom-2.5 start-2.5 px-2 py-0.5 rounded-md bg-surface/95 text-ink text-[11px] font-bold shadow-xs flex items-center gap-1">
-                          <ShieldCheck className="w-3 h-3" />
-                          <span>{t('verified')}</span>
-                        </span>
-                        <span className="absolute bottom-2.5 end-2.5 px-2 py-0.5 rounded-md bg-surface/95 text-ink text-[11px] font-bold shadow-xs flex items-center gap-1">
-                          <Star className="w-3 h-3 fill-accent text-accent" />
-                          <span>{displayRating(k.ratingAverage, k.totalReviews) ?? t('new')}</span>
-                        </span>
+                        {displayRating(k.ratingAverage, k.totalReviews) ? (
+                          <span className="absolute bottom-2.5 end-2.5 px-2 py-0.5 rounded-md bg-surface/95 text-ink text-[11px] font-semibold shadow-xs flex items-center gap-1">
+                            <Star className="w-3 h-3 fill-accent text-accent" />
+                            <span>{displayRating(k.ratingAverage, k.totalReviews)}</span>
+                          </span>
+                        ) : (
+                          <span className="absolute bottom-2.5 end-2.5 px-2 py-0.5 rounded-md bg-surface/95 text-muted text-[11px] font-medium">{t('new')}</span>
+                        )}
                       </div>
 
                       <div className="p-4 flex-1 flex flex-col justify-between">
@@ -715,7 +708,7 @@ function CustomerDashboard() {
                           <span className="text-[11px] font-semibold text-muted truncate">
                             {k.mealCategories?.[0] || t('homeCooked')}
                           </span>
-                          <span className="font-bold text-brand-ink inline-flex items-center gap-0.5 group-hover:translate-x-0.5 transition-transform shrink-0">
+                          <span className="font-bold text-brand-ink inline-flex items-center gap-0.5 transition-transform shrink-0">
                             <span>{t('viewMenu')}</span>
                             <ChevronRight className="rtl:-scale-x-100 w-3.5 h-3.5" />
                           </span>
@@ -731,11 +724,7 @@ function CustomerDashboard() {
             <section>
               <div className="flex items-center justify-between mb-3">
                 <div>
-                  <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-brand-soft text-brand-soft-ink text-[11px] font-bold mb-1">
-                    <Flame className="w-3.5 h-3.5 text-brand-ink" />
-                    <span>{t('popularDishes')}</span>
-                  </div>
-                  <h2 className="text-xl font-extrabold text-ink tracking-tight">
+                  <h2 className="text-xl font-semibold text-ink tracking-tight">
                     {t('cuisineDishes', { cuisine: selectedCuisineLabel })}
                   </h2>
                   <p className="text-xs text-muted font-medium">
@@ -773,20 +762,24 @@ function CustomerDashboard() {
                 )}
                 {displayDishes.map((dish) => (
                   <div key={dish.id} className="w-[240px] sm:w-[270px] shrink-0">
-                    <div className="group bg-surface rounded-2xl border border-line shadow-2xs hover:shadow-lg hover:border-brand-300 transition-all overflow-hidden flex flex-col justify-between h-full">
+                    <div className="group bg-surface rounded-2xl border border-line shadow-2xs hover:border-brand-300 transition-colors overflow-hidden flex flex-col justify-between h-full">
                       <div className="relative aspect-[16/10] w-full overflow-hidden bg-raised">
                         <CoverImage
                           src={dish.photo}
                           alt={dish.name}
                           label={dish.name}
                           size="md"
-                          className="w-full h-full group-hover:scale-105 transition-transform duration-300"
+                          className="w-full h-full"
                         />
                         <DealBadge dish={dish} />
-                        <span className="absolute bottom-2.5 end-2.5 px-2 py-0.5 rounded-md bg-surface/95 text-ink text-[11px] font-bold flex items-center gap-1 shadow-2xs">
-                          <Star className="w-3 h-3 fill-accent text-accent" />
-                          <span>{dish.rating ?? t('new')}</span>
-                        </span>
+                        {dish.rating ? (
+                          <span className="absolute bottom-2.5 end-2.5 px-2 py-0.5 rounded-md bg-surface/95 text-ink text-[11px] font-semibold flex items-center gap-1 shadow-2xs">
+                            <Star className="w-3 h-3 fill-accent text-accent" />
+                            <span>{dish.rating}</span>
+                          </span>
+                        ) : (
+                          <span className="absolute bottom-2.5 end-2.5 px-2 py-0.5 rounded-md bg-surface/95 text-muted text-[11px] font-medium">{t('new')}</span>
+                        )}
                       </div>
 
                       <div className="p-3.5 flex-1 flex flex-col justify-between">
@@ -822,33 +815,22 @@ function CustomerDashboard() {
             </section>
           </div>
         ) : (
-          /* ── NETFLIX-STYLE MULTI-ROW CATALOG ── */
+          /* ── MULTI-ROW CATALOG ── */
           <div className="space-y-10">
 
-            {/* ── ROW 1: 🏆 TOP 10 TRENDING IN [COMMUNITY] (SIGNATURE NETFLIX ROW WITH GIANT NUMBERS) ── */}
+            {/* ── ROW 1: TOP 10 IN THE COMMUNITY ── */}
             {(viewMode === 'all' || viewMode === 'top10') && (
               <section>
                 <div className="flex items-center justify-between mb-3">
                   <div>
-                    <div className="flex items-center gap-2 mb-1">
-                      <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-accent text-on-accent text-[11px] font-extrabold">
-                        <Trophy className="w-3 h-3" />
-                        <span>{t('top10Badge')}</span>
-                      </div>
-                      {isRandomOrder && (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-raised text-ink text-[11px] font-bold">
-                          <Dices className="w-3 h-3" />
-                          <span>{t('shuffled')}</span>
-                        </span>
-                      )}
-                    </div>
-                    <h2 className="text-xl sm:text-2xl font-extrabold text-ink tracking-tight">
+                    <h2 className="text-xl sm:text-2xl font-semibold text-ink tracking-tight">
                       {t('top10Title')}
                     </h2>
                     <p className="text-xs text-muted font-medium mt-0.5">
                       {selectedCommunity?.name
                         ? t('top10SubIn', { community: selectedCommunity.name })
                         : t('top10Sub')}
+                      {isRandomOrder && <> · {t('shuffled')}</>}
                     </p>
                   </div>
 
@@ -873,7 +855,7 @@ function CustomerDashboard() {
                   </div>
                 </div>
 
-                {/* Netflix-style Horizontal Row with Giant Rank Numerals */}
+                {/* Top 10 row */}
                 <div
                   ref={top10RowRef}
                   className="flex gap-2 sm:gap-4 overflow-x-auto scrollbar-none pb-4 pt-1 px-1 scroll-smooth"
@@ -885,32 +867,19 @@ function CustomerDashboard() {
                         : t('noDishes')}
                     </p>
                   )}
-                  {top10Dishes.map((dish, index) => (
+                  {top10Dishes.map((dish) => (
                     <div
                       key={dish.id}
                       className="relative flex items-end shrink-0 group select-none py-1"
                     >
-                      {/* Giant Netflix Rank Numeral */}
-                      <span
-                        aria-hidden="true"
-                        className="text-8xl sm:text-9xl font-extrabold italic tracking-tighter leading-none select-none text-line group-hover:text-brand/30 transition-all me-[-28px] sm:me-[-36px] z-0 drop-shadow-sm pointer-events-none"
-                        style={{
-                          WebkitTextStroke: '3px var(--border-rule)',
-                          fontFamily: 'system-ui, -apple-system, sans-serif',
-                        }}
-                      >
-                        {index + 1}
-                      </span>
-
-                      {/* Food Poster Card (slightly overlaps the number) */}
-                      <div className="relative z-10 w-[230px] sm:w-[260px] bg-surface rounded-2xl border border-line shadow-2xs hover:shadow-xl hover:border-brand-300 transition-all overflow-hidden flex flex-col justify-between shrink-0">
+                      <div className="relative z-10 w-[230px] sm:w-[260px] bg-surface rounded-2xl border border-line shadow-2xs hover:border-brand-300 transition-colors overflow-hidden flex flex-col justify-between shrink-0">
                         <div className="relative aspect-[16/10] w-full overflow-hidden bg-raised">
                           <CoverImage
                             src={dish.photo}
                             alt={dish.name}
                             label={dish.name}
                             size="md"
-                            className="w-full h-full group-hover:scale-105 transition-transform duration-300"
+                            className="w-full h-full"
                           />
 
                           <DealBadge dish={dish} />
@@ -931,10 +900,14 @@ function CustomerDashboard() {
                             </span>
                           )}
 
-                          <span className="absolute bottom-2.5 end-2.5 px-2 py-0.5 rounded-md bg-surface/95 text-ink text-[11px] font-bold flex items-center gap-1 shadow-2xs">
-                            <Star className="w-3 h-3 fill-accent text-accent" />
-                            <span>{dish.rating ?? t('new')}</span>
-                          </span>
+                          {dish.rating ? (
+                            <span className="absolute bottom-2.5 end-2.5 px-2 py-0.5 rounded-md bg-surface/95 text-ink text-[11px] font-semibold flex items-center gap-1 shadow-2xs">
+                              <Star className="w-3 h-3 fill-accent text-accent" />
+                              <span>{dish.rating}</span>
+                            </span>
+                          ) : (
+                            <span className="absolute bottom-2.5 end-2.5 px-2 py-0.5 rounded-md bg-surface/95 text-muted text-[11px] font-medium">{t('new')}</span>
+                          )}
                         </div>
 
                         <div className="p-3.5 flex-1 flex flex-col justify-between">
@@ -979,16 +952,12 @@ function CustomerDashboard() {
               </section>
             )}
 
-            {/* ── ROW 2: 👨‍🍳 VERIFIED HOME KITCHENS ── */}
+            {/* ── ROW 2: VERIFIED HOME KITCHENS ── */}
             {(viewMode === 'all' || viewMode === 'kitchens') && (
               <section>
                 <div className="flex items-center justify-between mb-3">
                   <div>
-                    <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-raised text-ink text-[11px] font-bold mb-1">
-                      <ChefHat className="w-3.5 h-3.5 text-brand-ink" />
-                      <span>{t('verifiedHomeCooks')}</span>
-                    </div>
-                    <h2 className="text-xl sm:text-2xl font-extrabold text-ink tracking-tight">
+                    <h2 className="text-xl sm:text-2xl font-semibold text-ink tracking-tight">
                       {currentCommunityName
                         ? t('verifiedKitchensIn', { community: currentCommunityName })
                         : t('verifiedKitchens')}
@@ -1032,7 +1001,7 @@ function CustomerDashboard() {
                     <div key={k.id} className="w-[280px] sm:w-[310px] shrink-0">
                       <Link
                         href={`/kitchens/${k.id}`}
-                        className="group bg-surface rounded-2xl border border-line shadow-2xs hover:shadow-lg hover:border-line-strong transition-all overflow-hidden flex flex-col justify-between h-full"
+                        className="group bg-surface rounded-2xl border border-line shadow-2xs hover:border-line-strong transition-colors overflow-hidden flex flex-col justify-between h-full"
                       >
                         <div className="relative aspect-[16/10] w-full overflow-hidden bg-raised">
                           <CoverImage
@@ -1040,16 +1009,16 @@ function CustomerDashboard() {
                             alt={k.businessName}
                             label={k.businessName}
                             size="md"
-                            className="w-full h-full group-hover:scale-105 transition-transform duration-300"
+                            className="w-full h-full"
                           />
-                          <span className="absolute bottom-2.5 start-2.5 px-2 py-0.5 rounded-md bg-surface/95 text-ink text-[11px] font-bold shadow-xs flex items-center gap-1">
-                            <ShieldCheck className="w-3 h-3" />
-                            <span>{t('verifiedDomesticCook')}</span>
-                          </span>
-                          <span className="absolute bottom-2.5 end-2.5 px-2 py-0.5 rounded-md bg-surface/95 text-ink text-[11px] font-bold shadow-xs flex items-center gap-1">
-                            <Star className="w-3 h-3 fill-accent text-accent" />
-                            <span>{displayRating(k.ratingAverage, k.totalReviews) ?? t('new')}</span>
-                          </span>
+                          {displayRating(k.ratingAverage, k.totalReviews) ? (
+                            <span className="absolute bottom-2.5 end-2.5 px-2 py-0.5 rounded-md bg-surface/95 text-ink text-[11px] font-semibold shadow-xs flex items-center gap-1">
+                              <Star className="w-3 h-3 fill-accent text-accent" />
+                              <span>{displayRating(k.ratingAverage, k.totalReviews)}</span>
+                            </span>
+                          ) : (
+                            <span className="absolute bottom-2.5 end-2.5 px-2 py-0.5 rounded-md bg-surface/95 text-muted text-[11px] font-medium">{t('new')}</span>
+                          )}
                         </div>
 
                         <div className="p-4 flex-1 flex flex-col justify-between">
@@ -1089,7 +1058,7 @@ function CustomerDashboard() {
                             <span className="text-[11px] font-semibold text-muted truncate">
                               {k.mealCategories?.[0] || t('homeCooked')}
                             </span>
-                            <span className="font-bold text-brand-ink inline-flex items-center gap-0.5 group-hover:translate-x-0.5 transition-transform shrink-0">
+                            <span className="font-bold text-brand-ink inline-flex items-center gap-0.5 transition-transform shrink-0">
                               <span>{t('viewMenu')}</span>
                               <ChevronRight className="rtl:-scale-x-100 w-3.5 h-3.5" />
                             </span>
@@ -1102,16 +1071,12 @@ function CustomerDashboard() {
               </section>
             )}
 
-            {/* ── ROW 3: 🍛 DUM BIRYANIS & DEGI PULAO SPECIALS ── */}
+            {/* ── ROW 3: DUM BIRYANIS & DEGI PULAO SPECIALS ── */}
             {viewMode === 'all' && biryaniDishes.length > 0 && (
               <section>
                 <div className="flex items-center justify-between mb-3">
                   <div>
-                    <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-accent-soft text-accent-soft-ink text-[11px] font-bold mb-1">
-                      <Sparkles className="w-3.5 h-3.5 text-brand-ink" />
-                      <span>{t('generationalRecipes')}</span>
-                    </div>
-                    <h2 className="text-xl sm:text-2xl font-extrabold text-ink tracking-tight">
+                    <h2 className="text-xl sm:text-2xl font-semibold text-ink tracking-tight">
                       {t('biryaniTitle')}
                     </h2>
                     <p className="text-xs text-muted font-medium mt-0.5">
@@ -1145,20 +1110,24 @@ function CustomerDashboard() {
                 >
                   {biryaniDishes.map((dish) => (
                     <div key={dish.id} className="w-[240px] sm:w-[270px] shrink-0">
-                      <div className="group bg-surface rounded-2xl border border-line shadow-2xs hover:shadow-lg hover:border-brand-300 transition-all overflow-hidden flex flex-col justify-between h-full">
+                      <div className="group bg-surface rounded-2xl border border-line shadow-2xs hover:border-brand-300 transition-colors overflow-hidden flex flex-col justify-between h-full">
                         <div className="relative aspect-[16/10] w-full overflow-hidden bg-raised">
                           <CoverImage
                             src={dish.photo}
                             alt={dish.name}
                             label={dish.name}
                             size="md"
-                            className="w-full h-full group-hover:scale-105 transition-transform duration-300"
+                            className="w-full h-full"
                           />
                           <DealBadge dish={dish} />
-                          <span className="absolute bottom-2.5 end-2.5 px-2 py-0.5 rounded-md bg-surface/95 text-ink text-[11px] font-bold flex items-center gap-1 shadow-2xs">
-                            <Star className="w-3 h-3 fill-accent text-accent" />
-                            <span>{dish.rating ?? t('new')}</span>
-                          </span>
+                          {dish.rating ? (
+                            <span className="absolute bottom-2.5 end-2.5 px-2 py-0.5 rounded-md bg-surface/95 text-ink text-[11px] font-semibold flex items-center gap-1 shadow-2xs">
+                              <Star className="w-3 h-3 fill-accent text-accent" />
+                              <span>{dish.rating}</span>
+                            </span>
+                          ) : (
+                            <span className="absolute bottom-2.5 end-2.5 px-2 py-0.5 rounded-md bg-surface/95 text-muted text-[11px] font-medium">{t('new')}</span>
+                          )}
                         </div>
 
                         <div className="p-3.5 flex-1 flex flex-col justify-between">
@@ -1194,16 +1163,12 @@ function CustomerDashboard() {
               </section>
             )}
 
-            {/* ── ROW 4: 🥩 SLOW-COOKED NIHARI & CLAY POT KARAHI ── */}
+            {/* ── ROW 4: SLOW-COOKED NIHARI & CLAY POT KARAHI ── */}
             {viewMode === 'all' && slowPotDishes.length > 0 && (
               <section>
                 <div className="flex items-center justify-between mb-3">
                   <div>
-                    <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-raised text-ink text-[11px] font-bold mb-1">
-                      <Flame className="w-3.5 h-3.5 text-red-600" />
-                      <span>{t('slowBraised')}</span>
-                    </div>
-                    <h2 className="text-xl sm:text-2xl font-extrabold text-ink tracking-tight">
+                    <h2 className="text-xl sm:text-2xl font-semibold text-ink tracking-tight">
                       {t('nihariTitle')}
                     </h2>
                     <p className="text-xs text-muted font-medium mt-0.5">
@@ -1237,20 +1202,24 @@ function CustomerDashboard() {
                 >
                   {slowPotDishes.map((dish) => (
                     <div key={dish.id} className="w-[240px] sm:w-[270px] shrink-0">
-                      <div className="group bg-surface rounded-2xl border border-line shadow-2xs hover:shadow-lg hover:border-brand-300 transition-all overflow-hidden flex flex-col justify-between h-full">
+                      <div className="group bg-surface rounded-2xl border border-line shadow-2xs hover:border-brand-300 transition-colors overflow-hidden flex flex-col justify-between h-full">
                         <div className="relative aspect-[16/10] w-full overflow-hidden bg-raised">
                           <CoverImage
                             src={dish.photo}
                             alt={dish.name}
                             label={dish.name}
                             size="md"
-                            className="w-full h-full group-hover:scale-105 transition-transform duration-300"
+                            className="w-full h-full"
                           />
                           <DealBadge dish={dish} />
-                          <span className="absolute bottom-2.5 end-2.5 px-2 py-0.5 rounded-md bg-surface/95 text-ink text-[11px] font-bold flex items-center gap-1 shadow-2xs">
-                            <Star className="w-3 h-3 fill-accent text-accent" />
-                            <span>{dish.rating ?? t('new')}</span>
-                          </span>
+                          {dish.rating ? (
+                            <span className="absolute bottom-2.5 end-2.5 px-2 py-0.5 rounded-md bg-surface/95 text-ink text-[11px] font-semibold flex items-center gap-1 shadow-2xs">
+                              <Star className="w-3 h-3 fill-accent text-accent" />
+                              <span>{dish.rating}</span>
+                            </span>
+                          ) : (
+                            <span className="absolute bottom-2.5 end-2.5 px-2 py-0.5 rounded-md bg-surface/95 text-muted text-[11px] font-medium">{t('new')}</span>
+                          )}
                         </div>
 
                         <div className="p-3.5 flex-1 flex flex-col justify-between">
@@ -1286,16 +1255,12 @@ function CustomerDashboard() {
               </section>
             )}
 
-            {/* ── ROW 5: ❄️ ARTISANAL FLASH FROZEN SAVORIES & PARATHAS ── */}
+            {/* ── ROW 5: ARTISANAL FLASH FROZEN SAVORIES & PARATHAS ── */}
             {viewMode === 'all' && frozenSavoriesDishes.length > 0 && (
               <section>
                 <div className="flex items-center justify-between mb-3">
                   <div>
-                    <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-frozen-soft text-frozen-ink text-[11px] font-bold mb-1">
-                      <Snowflake className="w-3.5 h-3.5 text-frozen-ink" />
-                      <span>{t('freezerReady')}</span>
-                    </div>
-                    <h2 className="text-xl sm:text-2xl font-extrabold text-ink tracking-tight">
+                    <h2 className="text-xl sm:text-2xl font-semibold text-ink tracking-tight">
                       {t('frozenTitle')}
                     </h2>
                     <p className="text-xs text-muted font-medium mt-0.5">
@@ -1329,14 +1294,14 @@ function CustomerDashboard() {
                 >
                   {frozenSavoriesDishes.map((dish) => (
                     <div key={dish.id} className="w-[240px] sm:w-[270px] shrink-0">
-                      <div className="group bg-surface rounded-2xl border border-line shadow-2xs hover:shadow-lg hover:border-frozen-ink/30 transition-all overflow-hidden flex flex-col justify-between h-full">
+                      <div className="group bg-surface rounded-2xl border border-line shadow-2xs hover:border-frozen-ink/30 transition-colors overflow-hidden flex flex-col justify-between h-full">
                         <div className="relative aspect-[16/10] w-full overflow-hidden bg-raised">
                           <CoverImage
                             src={dish.photo}
                             alt={dish.name}
                             label={dish.name}
                             size="md"
-                            className="w-full h-full group-hover:scale-105 transition-transform duration-300"
+                            className="w-full h-full"
                           />
                           {dish.isFrozen ? (
                             <span className="absolute top-2.5 start-2.5 px-2 py-0.5 rounded-lg text-white text-[11px] font-bold bg-frozen shadow-xs flex items-center gap-1">
@@ -1346,10 +1311,14 @@ function CustomerDashboard() {
                           ) : (
                             <DealBadge dish={dish} />
                           )}
-                          <span className="absolute bottom-2.5 end-2.5 px-2 py-0.5 rounded-md bg-surface/95 text-ink text-[11px] font-bold flex items-center gap-1 shadow-2xs">
-                            <Star className="w-3 h-3 fill-accent text-accent" />
-                            <span>{dish.rating ?? t('new')}</span>
-                          </span>
+                          {dish.rating ? (
+                            <span className="absolute bottom-2.5 end-2.5 px-2 py-0.5 rounded-md bg-surface/95 text-ink text-[11px] font-semibold flex items-center gap-1 shadow-2xs">
+                              <Star className="w-3 h-3 fill-accent text-accent" />
+                              <span>{dish.rating}</span>
+                            </span>
+                          ) : (
+                            <span className="absolute bottom-2.5 end-2.5 px-2 py-0.5 rounded-md bg-surface/95 text-muted text-[11px] font-medium">{t('new')}</span>
+                          )}
                         </div>
 
                         <div className="p-3.5 flex-1 flex flex-col justify-between">

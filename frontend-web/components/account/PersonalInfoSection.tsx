@@ -152,7 +152,7 @@ export function PersonalInfoSection({ profile, onReload, onSaved, showLocation =
                 type="text"
                 value={formData.fullName}
                 onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
-                className="w-full px-4 py-3 border border-line rounded-xl bg-surface text-ink focus:ring-2 focus:ring-brand/30 focus:border-brand transition-all"
+                className="w-full px-4 py-3 border border-line rounded-xl bg-surface text-ink focus:ring-2 focus:ring-brand/30 focus:border-brand transition-colors"
                 required
                 placeholder={t('enterName')}
               />
@@ -163,7 +163,7 @@ export function PersonalInfoSection({ profile, onReload, onSaved, showLocation =
                 type="email"
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                className="w-full px-4 py-3 border border-line rounded-xl bg-surface text-ink focus:ring-2 focus:ring-brand/30 focus:border-brand transition-all"
+                className="w-full px-4 py-3 border border-line rounded-xl bg-surface text-ink focus:ring-2 focus:ring-brand/30 focus:border-brand transition-colors"
                 placeholder={t('enterEmail')}
                 dir="ltr"
               />
@@ -176,7 +176,7 @@ export function PersonalInfoSection({ profile, onReload, onSaved, showLocation =
                     type="text"
                     value={formData.city}
                     onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-                    className="w-full px-4 py-3 border border-line rounded-xl bg-surface text-ink focus:ring-2 focus:ring-brand/30 focus:border-brand transition-all"
+                    className="w-full px-4 py-3 border border-line rounded-xl bg-surface text-ink focus:ring-2 focus:ring-brand/30 focus:border-brand transition-colors"
                     placeholder={t('cityPlaceholder')}
                   />
                 </div>
@@ -186,7 +186,7 @@ export function PersonalInfoSection({ profile, onReload, onSaved, showLocation =
                     type="text"
                     value={formData.area}
                     onChange={(e) => setFormData({ ...formData, area: e.target.value })}
-                    className="w-full px-4 py-3 border border-line rounded-xl bg-surface text-ink focus:ring-2 focus:ring-brand/30 focus:border-brand transition-all"
+                    className="w-full px-4 py-3 border border-line rounded-xl bg-surface text-ink focus:ring-2 focus:ring-brand/30 focus:border-brand transition-colors"
                     placeholder={t('areaPlaceholder')}
                   />
                 </div>
@@ -201,7 +201,7 @@ export function PersonalInfoSection({ profile, onReload, onSaved, showLocation =
                 onChange={(e) =>
                   setFormData({ ...formData, languagePreference: e.target.value })
                 }
-                className="w-full px-4 py-3 border border-line rounded-xl bg-surface text-ink focus:ring-2 focus:ring-brand/30 focus:border-brand transition-all"
+                className="w-full px-4 py-3 border border-line rounded-xl bg-surface text-ink focus:ring-2 focus:ring-brand/30 focus:border-brand transition-colors"
               >
                 <option value="en">{t('langEnglish')}</option>
                 <option value="ur">{t('langUrdu')}</option>

@@ -158,7 +158,7 @@ function VoiceNotePlayer({
         {/* Progress Bar / Waveform Simulator */}
         <div className="relative w-full h-2 bg-black/15 rounded-full overflow-hidden">
           <div
-            className={`h-full transition-all duration-100 rounded-full ${
+            className={`h-full transition-colors duration-100 rounded-full ${
               isMeBubble ? 'bg-surface' : 'bg-brand-700'
             }`}
             style={{ width: `${Math.min(100, Math.max(0, progress))}%` }}
@@ -169,7 +169,7 @@ function VoiceNotePlayer({
       {/* Speed Button */}
       <button
         onClick={cycleSpeed}
-        className={`text-[11px] font-black px-1.5 py-0.5 rounded-md border shrink-0 ${
+        className={`text-[11px] font-semibold px-1.5 py-0.5 rounded-md border shrink-0 ${
           isMeBubble
             ? 'border-white/30 hover:bg-white/10 text-white'
             : 'border-line-strong hover:bg-line text-ink'
@@ -420,7 +420,7 @@ export default function OrderChatModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="order-chat-title"
-        className="relative w-full max-w-lg bg-surface rounded-3xl shadow-2xl border border-line overflow-hidden flex flex-col h-[640px] max-h-[92vh]"
+        className="relative w-full max-w-lg bg-surface rounded-2xl shadow-[var(--shadow-hover)] border border-line overflow-hidden flex flex-col h-[640px] max-h-[92vh]"
       >
         <div className="px-4 py-3 bg-surface flex items-center justify-between gap-3 border-b border-line">
           <div className="flex items-center gap-3 min-w-0 flex-1">
@@ -479,7 +479,7 @@ export default function OrderChatModal({
               key={idx}
               onClick={() => handleSendMessage(undefined, chip)}
               disabled={sending}
-              className="text-[11px] font-semibold bg-surface hover:bg-raised border border-line text-ink px-2.5 py-1 rounded-full whitespace-nowrap transition-all shadow-2xs hover:border-line-strong active:scale-95 disabled:opacity-50"
+              className="text-[11px] font-semibold bg-surface hover:bg-raised border border-line text-ink px-2.5 py-1 rounded-full whitespace-nowrap transition-[color,background-color,border-color,opacity,transform] shadow-2xs hover:border-line-strong active:scale-95 disabled:opacity-50"
             >
               {chip}
             </button>
@@ -536,7 +536,7 @@ export default function OrderChatModal({
                 <div key={msg.id} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
                   {/* Sender Name & Time */}
                   <div className="flex items-center gap-1.5 mb-1 px-1">
-                    <span className="text-[11px] font-extrabold text-muted">{senderLabel}</span>
+                    <span className="text-[11px] font-semibold text-muted">{senderLabel}</span>
                     <span className="text-[11px] text-muted">
                       {formatTime(msg.createdAt)}
                     </span>
@@ -585,7 +585,7 @@ export default function OrderChatModal({
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-red-600"></span>
               </span>
-              <span className="text-xs font-black text-red-700 font-mono tracking-wider">
+              <span className="text-xs font-semibold text-red-700 font-mono tracking-wider">
                 {t('chat.recording', {
                   time: `${Math.floor(recordingSeconds / 60)}:${recordingSeconds % 60 < 10 ? '0' : ''}${recordingSeconds % 60}`,
                 })}
@@ -605,7 +605,7 @@ export default function OrderChatModal({
               {/* Send Voice Note Button */}
               <button
                 onClick={stopAndSendRecording}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-black transition-colors shadow-md active:scale-95"
+                className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-semibold transition-colors shadow-md active:scale-95"
               >
                 <Send className="w-3.5 h-3.5" />
                 <span>{t('chat.sendVoice')}</span>
@@ -636,7 +636,7 @@ export default function OrderChatModal({
                   ? t('chat.placeholderSeller', { name: targetName })
                   : t('chat.placeholderCustomer', { name: targetName })
               }
-              className={`flex-1 px-4 py-3 rounded-2xl border border-line text-xs font-semibold focus:outline-none focus:ring-2 ${activeFocusRing} focus:border-transparent bg-raised focus:bg-surface transition-all`}
+              className={`flex-1 px-4 py-3 rounded-2xl border border-line text-xs font-semibold focus:outline-none focus:ring-2 ${activeFocusRing} focus:border-transparent bg-raised focus:bg-surface transition-colors`}
               disabled={sending}
             />
 

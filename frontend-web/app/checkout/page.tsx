@@ -714,7 +714,7 @@ export default function CheckoutPage() {
                     return (
                       <label
                         key={address.id}
-                        className={`flex items-start gap-3 p-3.5 rounded-2xl border-2 cursor-pointer transition-all ${
+                        className={`flex items-start gap-3 p-3.5 rounded-2xl border-2 cursor-pointer transition-colors ${
                           isSelected
                             ? 'border-brand bg-brand-soft/40'
                             : 'border-line hover:border-line-strong bg-surface'
@@ -851,7 +851,7 @@ export default function CheckoutPage() {
                 {/* Method 1: Cash on Delivery */}
                 {!cashUnavailable && (
                 <label
-                  className={`block p-4 rounded-2xl border-2 cursor-pointer transition-all ${
+                  className={`block p-4 rounded-2xl border-2 cursor-pointer transition-colors ${
                     paymentMethod === 'cod'
                       ? 'border-brand bg-brand-soft/40'
                       : 'border-line hover:border-line-strong bg-surface'
@@ -891,7 +891,7 @@ export default function CheckoutPage() {
                 {/* Online: card / JazzCash / EasyPaisa through Safepay */}
                 {onlineAvailable && (
                   <label
-                    className={`block p-4 rounded-2xl border-2 cursor-pointer transition-all ${
+                    className={`block p-4 rounded-2xl border-2 cursor-pointer transition-colors ${
                       paymentMethod === 'safepay'
                         ? 'border-brand bg-brand-soft/40'
                         : 'border-line hover:border-line-strong bg-surface'
@@ -926,7 +926,7 @@ export default function CheckoutPage() {
                 {/* Nuray Wallet */}
                 {walletBalance !== null && (
                   <label
-                    className={`block p-4 rounded-2xl border-2 transition-all ${
+                    className={`block p-4 rounded-2xl border-2 transition-colors ${
                       walletBalance < totalPayable
                         ? 'border-line bg-raised cursor-not-allowed opacity-70'
                         : paymentMethod === 'wallet'
@@ -968,7 +968,7 @@ export default function CheckoutPage() {
                 {/* Method 2: Bank Transfer / Raast (IBFT) */}
                 {takesTransfer('bank') && (
                 <label
-                  className={`block p-4 rounded-2xl border-2 cursor-pointer transition-all ${
+                  className={`block p-4 rounded-2xl border-2 cursor-pointer transition-colors ${
                     paymentMethod === 'bank'
                       ? 'border-brand bg-brand-soft/40'
                       : 'border-line hover:border-line-strong bg-surface'
@@ -1006,7 +1006,7 @@ export default function CheckoutPage() {
                 {/* Method 3: JazzCash Direct Transfer */}
                 {takesTransfer('jazzcash') && (
                 <label
-                  className={`block p-4 rounded-2xl border-2 cursor-pointer transition-all ${
+                  className={`block p-4 rounded-2xl border-2 cursor-pointer transition-colors ${
                     paymentMethod === 'jazzcash'
                       ? 'border-brand bg-brand-soft/40'
                       : 'border-line hover:border-line-strong bg-surface'
@@ -1039,7 +1039,7 @@ export default function CheckoutPage() {
                 {/* Method 4: EasyPaisa Direct Transfer */}
                 {takesTransfer('easypaisa') && (
                 <label
-                  className={`block p-4 rounded-2xl border-2 cursor-pointer transition-all ${
+                  className={`block p-4 rounded-2xl border-2 cursor-pointer transition-colors ${
                     paymentMethod === 'easypaisa'
                       ? 'border-brand bg-brand-soft/40'
                       : 'border-line hover:border-line-strong bg-surface'
@@ -1118,7 +1118,7 @@ export default function CheckoutPage() {
                           )}
                         </div>
                         <div className="text-end shrink-0">
-                          <span className="text-sm font-extrabold text-ink">{formatPrice(lineTotal)}</span>
+                          <span className="text-sm font-semibold text-ink">{formatPrice(lineTotal)}</span>
                           {promos.length > 0 && base > unitPrice && (
                             <p className="text-xs text-muted line-through">
                               {formatPrice(base * item.quantity)}
@@ -1143,7 +1143,7 @@ export default function CheckoutPage() {
                           >
                             <Minus className="w-4 h-4" strokeWidth={2.5} />
                           </button>
-                          <span className="min-w-6 text-center text-sm font-extrabold text-ink" aria-live="polite">
+                          <span className="min-w-6 text-center text-sm font-semibold text-ink" aria-live="polite">
                             {item.quantity}
                           </span>
                           <button
@@ -1278,11 +1278,11 @@ export default function CheckoutPage() {
 
                 <div className="pt-3 border-t border-line flex items-baseline justify-between">
                   <div>
-                    <span className="text-base font-extrabold text-ink block">{deliveryKnown ? t('totalPayable') : t('totalBeforeDelivery')}</span>
+                    <span className="text-base font-semibold text-ink block">{deliveryKnown ? t('totalPayable') : t('totalBeforeDelivery')}</span>
                     <span className="text-xs text-muted">{deliveryKnown ? t('includesDeliveryTax') : t('deliveryAddedWhenPlaced')}</span>
                   </div>
                   <span className="text-end">
-                    <bdi dir="ltr" className="text-2xl font-extrabold text-ink">{formatPrice(totalPayable)}</bdi>
+                    <bdi dir="ltr" className="text-2xl font-semibold text-ink">{formatPrice(totalPayable)}</bdi>
                     {deliveryToAdd && <span className="block text-xs font-semibold text-muted">{t('plusDelivery')}</span>}
                   </span>
                 </div>
@@ -1295,7 +1295,7 @@ export default function CheckoutPage() {
                 type="button"
                 disabled={!canPlaceOrder}
                 onClick={() => handleCreateOrder(deliveryKnown ? totalPayable : undefined)}
-                className="hidden lg:flex w-full h-14 bg-brand hover:bg-brand-500 text-on-brand font-extrabold text-base rounded-2xl transition-all active:scale-[0.99] items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                className="hidden lg:flex w-full h-14 bg-brand hover:bg-brand-500 text-on-brand font-semibold text-base rounded-2xl transition-[color,background-color,border-color,opacity,transform] active:scale-[0.99] items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
               >
                 {placeOrderLabel}
               </Button>
@@ -1325,7 +1325,7 @@ export default function CheckoutPage() {
           type="button"
           disabled={!canPlaceOrder}
           onClick={() => handleCreateOrder(deliveryKnown ? totalPayable : undefined)}
-          className="w-full h-13 bg-brand hover:bg-brand-500 text-on-brand font-extrabold text-base rounded-2xl active:scale-[0.99] flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+          className="w-full h-13 bg-brand hover:bg-brand-500 text-on-brand font-semibold text-base rounded-2xl active:scale-[0.99] flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
           data-testid="place-order-bar"
         >
           {placeOrderLabel}

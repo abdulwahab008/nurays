@@ -137,7 +137,7 @@ function WalletContent() {
               <div className="flex items-center gap-2 text-[#A3BCB7] text-sm font-semibold">
                 <Wallet className="w-4 h-4" /> {t('balance')}
               </div>
-              <div className="mt-2 text-4xl font-extrabold">{formatPrice(wallet.balance)}</div>
+              <div className="mt-2 text-4xl font-semibold">{formatPrice(wallet.balance)}</div>
               {wallet.isLocked && (
                 <p className="mt-3 flex items-center gap-2 text-sm text-accent">
                   <Lock className="w-4 h-4" /> {t('walletLocked')}

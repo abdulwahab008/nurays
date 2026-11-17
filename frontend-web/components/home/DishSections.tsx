@@ -36,20 +36,20 @@ export function DishCard({ dish, tray, note, row = false }: { dish: HomeDish; tr
   const t = useT(homeMessages);
   const quantity = tray.quantityOf(dish.id);
   return (
-    <div className={`group relative bg-surface rounded-[20px] border border-line hover:border-line-strong hover:shadow-[var(--shadow-card)] transition-all flex flex-col overflow-hidden ${row ? 'lg:flex-row' : ''}`}>
+    <div className={`group relative bg-surface rounded-[20px] border border-line hover:border-line-strong transition-colors flex flex-col overflow-hidden ${row ? 'lg:flex-row' : ''}`}>
       <div className={`relative aspect-square overflow-hidden bg-raised ${row ? 'lg:w-40 lg:shrink-0' : ''}`}>
         <CoverImage
           src={dish.photo}
           alt={dish.name}
           label={dish.name}
           size="md"
-          className="w-full h-full group-hover:scale-[1.03] transition-transform duration-300"
+          className="w-full h-full"
         />
 
         {/* Fresh or frozen, as set by the kitchen */}
         {dish.typeLabel && (
           <span
-            className={`absolute top-2 start-2 px-2 py-0.5 rounded-full text-[11px] font-extrabold flex items-center gap-1 ${
+            className={`absolute top-2 start-2 px-2 py-0.5 rounded-full text-[11px] font-semibold flex items-center gap-1 ${
               dish.isFrozen ? 'bg-frozen-soft text-frozen-ink' : 'bg-surface/95 text-ink'
             }`}
           >
@@ -68,7 +68,7 @@ export function DishCard({ dish, tray, note, row = false }: { dish: HomeDish; tr
             >
               <Minus className="w-4 h-4" strokeWidth={3} aria-hidden />
             </button>
-            <span className="font-extrabold text-sm text-ink min-w-5 text-center" aria-live="polite">
+            <span className="font-semibold text-sm text-ink min-w-5 text-center" aria-live="polite">
               {quantity}
             </span>
             <button
@@ -97,7 +97,7 @@ export function DishCard({ dish, tray, note, row = false }: { dish: HomeDish; tr
 
       <div className="p-3 flex-1 flex flex-col gap-1">
         {note && <p className="text-[11px] font-bold text-brand-ink truncate">{note}</p>}
-        <h4 className="text-sm font-extrabold text-ink leading-snug line-clamp-2">
+        <h4 className="text-sm font-semibold text-ink leading-snug line-clamp-2">
           <Link href={`/products/${dish.id}`} className="after:absolute after:inset-0 after:rounded-[20px] focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-brand">
             {dish.name}
           </Link>
@@ -108,13 +108,13 @@ export function DishCard({ dish, tray, note, row = false }: { dish: HomeDish; tr
         </p>
         <div className="mt-auto pt-1.5 flex items-center justify-between gap-2">
           <div className="flex items-baseline gap-1.5 min-w-0">
-            <span className="text-sm font-extrabold text-ink">{formatPrice(dish.price)}</span>
+            <span className="text-sm font-semibold text-ink">{formatPrice(dish.price)}</span>
             {dish.originalPrice != null && (
               <span className="text-[11px] text-muted line-through truncate">{formatPrice(dish.originalPrice)}</span>
             )}
           </div>
           {dish.rating && (
-            <span className="text-xs font-extrabold text-ink flex items-center gap-0.5 flex-shrink-0">
+            <span className="text-xs font-semibold text-ink flex items-center gap-0.5 flex-shrink-0">
               <Star className="w-3.5 h-3.5 fill-accent text-accent" aria-hidden />
               <span>{dish.rating}</span>
             </span>
@@ -140,7 +140,7 @@ export function OrderAgainDishes({ dishes, tray }: { dishes: HomeDish[]; tray: D
   if (dishes.length === 0) return null;
   return (
     <section className="max-w-[1280px] mx-auto px-4 sm:px-8 pt-6" data-testid="order-again">
-      <h2 className="text-lg sm:text-[22px] font-extrabold text-ink tracking-tight mb-3">{t('orderAgain')}</h2>
+      <h2 className="text-lg sm:text-[22px] font-semibold text-ink tracking-tight mb-3">{t('orderAgain')}</h2>
       <DishRail count={dishes.length}>
         {dishes.map((dish) => (
           <DishCard key={dish.id} dish={dish} tray={tray} row={dishes.length <= SHORT_ROW} />
@@ -156,7 +156,7 @@ export function RecommendedDishes({ dishes, tray }: { dishes: Array<{ dish: Home
   if (dishes.length === 0) return null;
   return (
     <section className="max-w-[1280px] mx-auto px-4 sm:px-8 pt-8" data-testid="recommended">
-      <h2 className="text-[22px] sm:text-[28px] font-extrabold text-ink tracking-tight">{t('recommendedForYou')}</h2>
+      <h2 className="text-[22px] sm:text-[28px] font-semibold text-ink tracking-tight">{t('recommendedForYou')}</h2>
       <p className="text-xs text-muted font-medium mt-0.5 mb-4">{t('recommendedForYouSub')}</p>
       <DishRail count={dishes.length}>
         {dishes.map(({ dish, reason }) => (
@@ -184,7 +184,7 @@ export function PopularDishes({
     <section className="max-w-[1280px] mx-auto px-4 sm:px-8 py-8">
       <div className="flex items-end justify-between gap-3 mb-4">
         <div className="min-w-0">
-          <h2 className="text-[22px] sm:text-[28px] font-extrabold text-ink tracking-tight">{t('popularDishes')}</h2>
+          <h2 className="text-[22px] sm:text-[28px] font-semibold text-ink tracking-tight">{t('popularDishes')}</h2>
           <p className="text-xs text-muted font-medium mt-0.5">{t('popularDishesSub')}</p>
         </div>
         <Link href="/products" className="shrink-0 min-h-11 text-sm font-bold text-brand-ink hover:underline flex items-center gap-1">

@@ -28,7 +28,7 @@ export const authInput =
 export const authSubmit = 'w-full h-12 min-h-12 text-[15px] font-bold';
 /** A link that goes somewhere but looks like the main button (a <button> inside a link is not valid HTML). */
 export const authLinkButton =
-  'inline-flex h-12 w-full items-center justify-center rounded-xl bg-brand px-6 text-[15px] font-bold tracking-tight text-on-brand transition-colors hover:bg-brand-500 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-brand/40';
+  'inline-flex h-12 w-full items-center justify-center rounded-xl bg-brand px-6 text-[15px] font-semibold text-on-brand transition-colors hover:bg-brand-500 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-brand/40';
 
 export function AuthLogo() {
   return (

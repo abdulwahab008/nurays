@@ -149,7 +149,7 @@ export default function TriPartiteReviewModal({
           onClick={() => onChange(star)}
           aria-label={t('review.starAria', { count: star })}
           aria-pressed={star <= value}
-          className="w-11 h-11 flex items-center justify-center rounded-full transition-transform hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
+          className="w-11 h-11 flex items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
         >
           <Star
             className={`w-6 h-6 ${
@@ -175,7 +175,7 @@ export default function TriPartiteReviewModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="review-title"
-        className="relative w-full max-w-md bg-surface rounded-3xl shadow-2xl border border-line overflow-hidden max-h-[92vh] overflow-y-auto"
+        className="relative w-full max-w-md bg-surface rounded-2xl shadow-[var(--shadow-hover)] border border-line overflow-hidden max-h-[92vh] overflow-y-auto"
       >
         <div className="px-4 py-3 flex items-center justify-between gap-3 border-b border-line">
           <div className="min-w-0">
@@ -197,7 +197,7 @@ export default function TriPartiteReviewModal({
             <div className="w-16 h-16 rounded-full bg-brand-soft text-brand-soft-ink flex items-center justify-center mx-auto shadow-sm">
               <CheckCircle2 className="w-10 h-10" />
             </div>
-            <h4 className="text-lg font-extrabold text-ink">{t('review.submittedTitle')}</h4>
+            <h4 className="text-lg font-semibold text-ink">{t('review.submittedTitle')}</h4>
             <p className="text-xs text-muted font-medium">
               {t('review.submittedBody')}
             </p>
@@ -252,7 +252,7 @@ export default function TriPartiteReviewModal({
 
             {/* Comments */}
             <div>
-              <label className="block text-xs font-extrabold text-ink mb-1">
+              <label className="block text-xs font-semibold text-ink mb-1">
                 {t('review.commentLabel')}
               </label>
               <textarea

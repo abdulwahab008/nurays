@@ -163,13 +163,13 @@ export default function ProfilePage() {
                   />
                 ) : (
                   <div className="w-full h-full bg-brand flex items-center justify-center">
-                    <span className="text-3xl font-extrabold text-on-brand">
+                    <span className="text-3xl font-semibold text-on-brand">
                       {profile?.profile?.fullName?.charAt(0).toUpperCase() || 'U'}
                     </span>
                   </div>
                 )}
               </div>
-              <h3 className="text-xl font-extrabold text-ink mb-1">
+              <h3 className="text-xl font-semibold text-ink mb-1">
                 {profile?.profile?.fullName || t('user')}
               </h3>
               <p className="text-muted text-sm mb-4">

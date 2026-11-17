@@ -611,7 +611,7 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
 
   if (pageState === 'not_found') {
     return renderStatePage(
-      <div className="text-center py-14 px-6 bg-surface rounded-3xl border border-line shadow-xs max-w-md mx-auto my-12">
+      <div className="text-center py-14 px-6 bg-surface rounded-2xl border border-line shadow-xs max-w-md mx-auto my-12">
         <div className="w-12 h-12 rounded-2xl bg-brand-soft text-brand-soft-ink flex items-center justify-center mx-auto mb-4">
           <ChefHat className="w-6 h-6" />
         </div>
@@ -634,7 +634,7 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
     return renderStatePage(
       <div
         role="alert"
-        className="text-center py-14 px-6 bg-surface rounded-3xl border border-line shadow-xs max-w-md mx-auto my-12"
+        className="text-center py-14 px-6 bg-surface rounded-2xl border border-line shadow-xs max-w-md mx-auto my-12"
       >
         <div className="w-12 h-12 rounded-2xl bg-brand-soft text-brand-soft-ink flex items-center justify-center mx-auto mb-4">
           <ChefHat className="w-6 h-6" />
@@ -722,7 +722,7 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
                 className="w-14 h-14 sm:w-20 sm:h-20 rounded-2xl shrink-0"
               />
               <div className="min-w-0">
-                <h1 className="text-[22px] sm:text-[32px] leading-tight font-extrabold tracking-tight text-ink flex items-center gap-1.5">
+                <h1 className="text-[22px] sm:text-[32px] leading-tight font-semibold tracking-tight text-ink flex items-center gap-1.5">
                   <span>{kitchen.name}</span>
                   {kitchen.isVerified && (
                     <ShieldCheck className="w-5 h-5 shrink-0 text-brand-ink" aria-label={kitchen.verifiedLabel} />
@@ -803,16 +803,16 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
               </div>
               <div>
                 <div className="flex items-center gap-2 flex-wrap mb-1">
-                  <span className="px-2.5 py-0.5 rounded-full bg-surface text-ink text-[11px] font-extrabold">
+                  <span className="px-2.5 py-0.5 rounded-full bg-surface text-ink text-[11px] font-semibold">
                     {tk('closedInstant')}
                   </span>
                   {kitchen.preOrderOnly && (
-                    <span className="px-2.5 py-0.5 rounded-full bg-brand-soft text-brand-soft-ink text-[11px] font-extrabold">
+                    <span className="px-2.5 py-0.5 rounded-full bg-brand-soft text-brand-soft-ink text-[11px] font-semibold">
                       {tk('acceptingPreOrders')}
                     </span>
                   )}
                 </div>
-                <h4 className="font-extrabold text-ink text-sm">
+                <h4 className="font-semibold text-ink text-sm">
                   {kitchen.preOrderOnly
                     ? tk('takingPreorders', { name: kitchen.name })
                     : (() => {
@@ -838,7 +838,7 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
             <div className="flex items-center gap-2 shrink-0">
               <Link
                 href="/products?openNow=true&view=kitchens"
-                className="inline-flex items-center h-11 px-4 rounded-xl bg-on-accent text-accent-100 hover:opacity-90 text-sm font-extrabold transition-opacity whitespace-nowrap"
+                className="inline-flex items-center h-11 px-4 rounded-xl bg-on-accent text-accent-100 hover:opacity-90 text-sm font-semibold transition-opacity whitespace-nowrap"
               >
                 {tk('browseOpenNow')}
               </Link>
@@ -855,7 +855,7 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
               <Bell className="w-4 h-4" />
             </div>
             <div>
-              <h4 className="text-sm font-extrabold text-accent-soft-ink">{tk('noticeFromChef')}</h4>
+              <h4 className="text-sm font-semibold text-accent-soft-ink">{tk('noticeFromChef')}</h4>
               <p className="text-sm text-accent-soft-ink mt-0.5">{kitchen.storeNotice}</p>
             </div>
           </div>
@@ -897,7 +897,7 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
             <p className="text-xs text-muted mt-1">{tk('noDishesBody')}</p>
             <Link
               href="/kitchens"
-              className="inline-flex items-center gap-1.5 mt-4 h-11 px-5 rounded-xl bg-brand text-on-brand text-sm font-extrabold hover:bg-brand-500 transition-colors"
+              className="inline-flex items-center gap-1.5 mt-4 h-11 px-5 rounded-xl bg-brand text-on-brand text-sm font-semibold hover:bg-brand-500 transition-colors"
             >
               {tb('browseKitchens')}
             </Link>
@@ -905,7 +905,7 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
         ) : (
           <>
             <div className="mb-4 flex items-end justify-between gap-4">
-              <h2 className="text-[22px] sm:text-[28px] font-extrabold tracking-tight text-ink">
+              <h2 className="text-[22px] sm:text-[28px] font-semibold tracking-tight text-ink">
                 {category === 'all'
                   ? tk('currentMenu')
                   : category === 'fresh'
@@ -943,12 +943,12 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
                           className="w-full h-full"
                         />
                         {dish.originalPrice != null && (
-                          <span className="absolute top-2 start-2 px-2 py-0.5 rounded-full bg-accent text-on-accent text-[11px] font-extrabold">
+                          <span className="absolute top-2 start-2 px-2 py-0.5 rounded-full bg-accent text-on-accent text-[11px] font-semibold">
                             {tk('specialDeal')}
                           </span>
                         )}
                         <span
-                          className={`absolute bottom-2 start-2 px-2 py-0.5 rounded-full text-[11px] font-extrabold flex items-center gap-1 ${
+                          className={`absolute bottom-2 start-2 px-2 py-0.5 rounded-full text-[11px] font-semibold flex items-center gap-1 ${
                             dish.isFrozen ? 'bg-frozen-soft text-frozen-ink' : 'bg-surface/95 text-ink'
                           }`}
                         >
@@ -960,7 +960,7 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
                       <div className="flex-1 flex flex-col justify-between min-w-0">
                         <div>
                           <div className="flex items-center justify-between gap-2">
-                            <h3 className="font-extrabold text-ink text-[15px] sm:text-base leading-snug">
+                            <h3 className="font-semibold text-ink text-[15px] sm:text-base leading-snug">
                               {dish.name}
                             </h3>
                           </div>
@@ -979,7 +979,7 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
                         <div className="mt-3 flex items-end justify-between gap-2 flex-wrap">
                           <div>
                             <div className="flex items-baseline gap-1.5">
-                              <span className="text-base font-extrabold text-ink">
+                              <span className="text-base font-semibold text-ink">
                                 {formatPrice(dish.price)}
                               </span>
                               {dish.originalPrice != null && (
@@ -1012,7 +1012,7 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
                               type="button"
                               onClick={() => handleAddToCart(dish)}
                               aria-label={tb('addNameToTray', { name: dish.name })}
-                              className={`inline-flex items-center gap-1.5 h-11 px-4 rounded-xl text-sm font-bold transition-all active:scale-95 ${
+                              className={`inline-flex items-center gap-1.5 h-11 px-4 rounded-xl text-sm font-bold transition-[color,background-color,border-color,opacity,transform] active:scale-95 ${
                                 kitchen.preOrderOnly ? 'bg-accent hover:bg-accent-300 text-on-accent' : 'bg-brand hover:bg-brand-500 text-on-brand'
                               }`}
                             >
@@ -1030,18 +1030,18 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
                               <button
                                 onClick={() => handleRemoveFromCart(dish)}
                                 aria-label={tk('removeOne', { name: dish.name })}
-                                className="w-10 h-10 rounded-[10px] bg-surface text-ink font-extrabold hover:bg-line transition-colors flex items-center justify-center text-base shadow-xs"
+                                className="w-10 h-10 rounded-[10px] bg-surface text-ink font-semibold hover:bg-line transition-colors flex items-center justify-center text-base shadow-xs"
                               >
                                 -
                               </button>
-                              <span className="font-extrabold text-sm text-ink min-w-6 text-center" aria-live="polite">
+                              <span className="font-semibold text-sm text-ink min-w-6 text-center" aria-live="polite">
                                 {count}
                               </span>
                               <button
                                 onClick={() => handleAddToCart(dish)}
                                 disabled={atStock}
                                 aria-label={tk('addOne', { name: dish.name })}
-                                className="w-10 h-10 rounded-[10px] bg-brand text-on-brand font-extrabold hover:bg-brand-500 transition-colors flex items-center justify-center text-base disabled:opacity-50 disabled:cursor-not-allowed"
+                                className="w-10 h-10 rounded-[10px] bg-brand text-on-brand font-semibold hover:bg-brand-500 transition-colors flex items-center justify-center text-base disabled:opacity-50 disabled:cursor-not-allowed"
                               >
                                 +
                               </button>
@@ -1061,7 +1061,7 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
       {/* What customers said, flat on the page: the header carries the score, each review is one card. */}
       <section id="customer-reviews" className="max-w-[1280px] mx-auto px-4 sm:px-8 mt-12 mb-10 scroll-mt-24">
           <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 mb-4">
-            <h2 className="text-[22px] sm:text-[28px] font-extrabold tracking-tight text-ink">{tk('reviewsTitle')}</h2>
+            <h2 className="text-[22px] sm:text-[28px] font-semibold tracking-tight text-ink">{tk('reviewsTitle')}</h2>
             <p className="flex items-center gap-1.5 text-sm text-muted">
               <Star className="w-4 h-4 fill-accent text-accent" aria-hidden />
               <span className="font-bold text-ink">{kitchen.rating ?? tk('new')}</span>
@@ -1081,7 +1081,7 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
                   <article key={rev.id} className="p-4 rounded-2xl bg-surface border border-line">
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex items-center gap-2.5 min-w-0">
-                        <div className="w-9 h-9 shrink-0 rounded-full bg-brand-soft flex items-center justify-center text-brand-soft-ink font-extrabold text-sm">
+                        <div className="w-9 h-9 shrink-0 rounded-full bg-brand-soft flex items-center justify-center text-brand-soft-ink font-semibold text-sm">
                           {rev.author.charAt(0).toUpperCase()}
                         </div>
                         <div className="min-w-0">

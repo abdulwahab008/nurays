@@ -64,7 +64,7 @@ export function ClosedKitchenModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
       <div
-        className="relative bg-white rounded-3xl max-w-md w-full p-6 sm:p-7 shadow-2xl border border-slate-100 overflow-hidden"
+        className="relative bg-white rounded-2xl max-w-md w-full p-6 sm:p-7 shadow-[var(--shadow-hover)] border border-slate-100 overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Subtle accent glow */}
@@ -87,11 +87,11 @@ export function ClosedKitchenModal({
           </div>
 
           <div className="min-w-0 pe-6">
-            <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-red-100 text-red-800 text-[11px] font-bold uppercase tracking-wider mb-1">
+            <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-red-100 text-red-800 text-[11px] font-bold mb-1">
               <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
               <span>{t('closedInstant')}</span>
             </div>
-            <h3 className="text-lg font-black text-slate-900 leading-tight truncate">
+            <h3 className="text-lg font-semibold text-slate-900 leading-tight truncate">
               {kitchenName}
             </h3>
             {chefName && (
@@ -138,7 +138,7 @@ export function ClosedKitchenModal({
             <button
               type="button"
               onClick={handleViewMenu}
-              className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-brand hover:bg-brand-500 text-on-brand font-bold text-xs sm:text-sm transition-all shadow-md active:scale-98 cursor-pointer"
+              className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-brand hover:bg-brand-500 text-on-brand font-bold text-xs sm:text-sm transition-[color,background-color,border-color,opacity,transform] shadow-md active:scale-98 cursor-pointer"
             >
               <span>{t('browsePreorder', { time: opensAt })}</span>
               <ArrowRight className="rtl:-scale-x-100 w-4 h-4" />

@@ -13,7 +13,7 @@ export function BackgroundLocationNotice({ onChoice }: { onChoice: (allow: boole
   const t = useT(riderMessages);
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-ink/40">
-      <div role="dialog" aria-modal="true" aria-labelledby="bgloc-title" className="w-full sm:max-w-md bg-surface rounded-t-3xl sm:rounded-3xl p-6 pb-[calc(1.5rem+var(--safe-bottom))] sm:pb-6 shadow-2xl" data-testid="background-location-notice">
+      <div role="dialog" aria-modal="true" aria-labelledby="bgloc-title" className="w-full sm:max-w-md bg-surface rounded-t-2xl sm:rounded-2xl p-6 pb-[calc(1.5rem+var(--safe-bottom))] sm:pb-6 shadow-[var(--shadow-hover)]" data-testid="background-location-notice">
         <span className="w-11 h-11 rounded-full flex items-center justify-center bg-brand-soft text-brand-soft-ink mb-4" aria-hidden="true">
           <MapPin className="w-5 h-5" />
         </span>

@@ -395,7 +395,7 @@ export default function CartPage() {
         userType="customer"
       >
         <div className="flex items-center justify-center min-h-[400px]">
-          <div className="text-center p-8 bg-surface rounded-3xl border border-line shadow-xs max-w-sm">
+          <div className="text-center p-8 bg-surface rounded-2xl border border-line shadow-xs max-w-sm">
             <div className="w-10 h-10 border-3 border-brand border-t-transparent rounded-full animate-spin mx-auto mb-3" />
             <p className="text-sm font-bold text-ink">{t('loadingTray')}</p>
             <p className="text-xs text-muted mt-1">{t('loadingTrayHint')}</p>
@@ -433,7 +433,7 @@ export default function CartPage() {
               <ShoppingBag className="w-8 h-8 text-brand-soft-ink" aria-hidden />
             </div>
 
-            <h2 className="text-2xl sm:text-[28px] font-extrabold text-ink tracking-tight mb-2">
+            <h2 className="text-2xl sm:text-[28px] font-semibold text-ink tracking-tight mb-2">
               {t('emptyTitle')}
             </h2>
             <p className="text-sm text-muted max-w-md mx-auto leading-relaxed mb-6">
@@ -482,7 +482,7 @@ export default function CartPage() {
             {/* Primary Action Button */}
             <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
               <Link href="/products" className="w-full sm:w-auto">
-                <span className="w-full sm:w-auto inline-flex items-center justify-center gap-2 h-12 px-6 rounded-xl bg-brand hover:bg-brand-500 text-on-brand text-[15px] font-extrabold transition-colors active:scale-95 cursor-pointer">
+                <span className="w-full sm:w-auto inline-flex items-center justify-center gap-2 h-12 px-6 rounded-xl bg-brand hover:bg-brand-500 text-on-brand text-[15px] font-semibold transition-colors active:scale-95 cursor-pointer">
                   <span>{t('discoverDishes')}</span>
                   <ArrowRight className="rtl:-scale-x-100 w-4 h-4" />
                 </span>
@@ -525,7 +525,7 @@ export default function CartPage() {
                 <ChefHat className="w-5 h-5" aria-hidden />
               </div>
               <div className="min-w-0">
-                <h3 className="font-extrabold text-ink text-base break-words">{activeSeller.businessName}</h3>
+                <h3 className="font-semibold text-ink text-base break-words">{activeSeller.businessName}</h3>
                 {activeSeller.community?.name && (
                   <p className="flex items-center gap-1 text-xs text-muted truncate">
                     <MapPin className="w-3 h-3 shrink-0" aria-hidden />
@@ -554,21 +554,21 @@ export default function CartPage() {
               <span className="font-bold text-ink flex items-center gap-1.5">
                 <Truck className="w-4 h-4 text-brand-ink" />
                 {isFreeDelivery ? (
-                  <span className="text-brand-soft-ink font-extrabold">{t('unlockedFree')}</span>
+                  <span className="text-brand-soft-ink font-semibold">{t('unlockedFree')}</span>
                 ) : (
                   <span>
                     {richText(t('addMoreForFree'), {
-                      amount: <strong className="text-ink font-black">{formatPrice(freeDeliveryRemaining)}</strong>,
+                      amount: <strong className="text-ink font-semibold">{formatPrice(freeDeliveryRemaining)}</strong>,
                       free: <span className="text-brand-ink font-bold">{t('freeDelivery')}</span>,
                     })}
                   </span>
                 )}
               </span>
-              <span className="font-extrabold text-muted">{freeDeliveryProgress}%</span>
+              <span className="font-semibold text-muted">{freeDeliveryProgress}%</span>
             </div>
             <div className="w-full h-2 rounded-full bg-raised overflow-hidden">
               <div
-                className={`h-full rounded-full transition-all duration-500 ${
+                className={`h-full rounded-full transition-colors duration-500 ${
                   isFreeDelivery ? 'bg-brand' : 'bg-accent'
                 }`}
                 style={{ width: `${freeDeliveryProgress}%` }}
@@ -582,7 +582,7 @@ export default function CartPage() {
           {/* ── LEFT: DISH ITEMS ── */}
           <div className="lg:col-span-2 space-y-4">
             <div className="flex items-center justify-between px-1">
-              <h2 className="text-base font-extrabold text-ink">{t('selectedDishes')}</h2>
+              <h2 className="text-base font-semibold text-ink">{t('selectedDishes')}</h2>
 
               <button
                 type="button"
@@ -627,7 +627,7 @@ export default function CartPage() {
                           <CoverImage alt={item.product.name} label={item.product.name} size="sm" className="w-full h-full" />
                         )}
                         <span
-                          className={`absolute bottom-1.5 start-1.5 px-2 py-0.5 rounded-full text-[11px] font-extrabold flex items-center gap-1 ${
+                          className={`absolute bottom-1.5 start-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold flex items-center gap-1 ${
                             isFrozenItem(item) ? 'bg-frozen-soft text-frozen-ink' : 'bg-surface/95 text-ink'
                           }`}
                         >
@@ -650,7 +650,7 @@ export default function CartPage() {
                         <div className="flex items-start justify-between gap-2">
                           <div>
                             <Link href={`/products/${item.product.id}`}>
-                              <h3 className="text-[15px] sm:text-base font-extrabold text-ink hover:underline leading-snug">
+                              <h3 className="text-[15px] sm:text-base font-semibold text-ink hover:underline leading-snug">
                                 {item.product.name}
                               </h3>
                             </Link>
@@ -668,7 +668,7 @@ export default function CartPage() {
                         </div>
 
                         {promotionLabel && (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent text-on-accent text-[11px] font-extrabold mt-1.5">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent text-on-accent text-[11px] font-semibold mt-1.5">
                             <Tag className="w-2.5 h-2.5" />
                             <span>{promotionLabel}</span>
                           </span>
@@ -680,19 +680,19 @@ export default function CartPage() {
                             <button
                               type="button"
                               onClick={() => handleUpdateQuantity(item.id, item.quantity - 1)}
-                              className="w-11 h-11 rounded-s-xl text-ink font-extrabold hover:bg-raised flex items-center justify-center text-lg transition-colors"
+                              className="w-11 h-11 rounded-s-xl text-ink font-semibold hover:bg-raised flex items-center justify-center text-lg transition-colors"
                               title={t('decrease')}
                               aria-label={t('decrease')}
                             >
                               −
                             </button>
-                            <span className="min-w-6 text-center text-sm font-extrabold text-ink" aria-live="polite">
+                            <span className="min-w-6 text-center text-sm font-semibold text-ink" aria-live="polite">
                               {item.quantity}
                             </span>
                             <button
                               type="button"
                               onClick={() => handleUpdateQuantity(item.id, item.quantity + 1)}
-                              className="w-11 h-11 rounded-e-xl text-brand-ink font-extrabold hover:bg-raised flex items-center justify-center text-lg transition-colors"
+                              className="w-11 h-11 rounded-e-xl text-brand-ink font-semibold hover:bg-raised flex items-center justify-center text-lg transition-colors"
                               title={t('increase')}
                               aria-label={t('increase')}
                             >
@@ -701,7 +701,7 @@ export default function CartPage() {
                           </div>
 
                           <div className="text-end">
-                            <span className="text-base font-extrabold text-ink block">
+                            <span className="text-base font-semibold text-ink block">
                               {formatPrice(lineTotal)}
                             </span>
                             {originalPrice > unitPrice && (
@@ -722,7 +722,7 @@ export default function CartPage() {
           {/* ── RIGHT: ORDER SUMMARY ── */}
           <div className="lg:col-span-1 sticky top-[calc(5rem+var(--safe-top))]">
             <div className="bg-surface rounded-[24px] border border-line p-5 sm:p-6 space-y-4">
-              <h3 className="text-base font-extrabold text-ink pb-3 border-b border-line flex items-center justify-between">
+              <h3 className="text-base font-semibold text-ink pb-3 border-b border-line flex items-center justify-between">
                 <span>{t('orderSummary')}</span>
                 <span className="text-xs font-semibold text-muted">
                   {t(trayCount === 1 ? 'itemsOne' : 'itemsMany', { count: trayCount })}
@@ -844,7 +844,7 @@ export default function CartPage() {
                   <span className="text-sm font-bold text-ink">
                     {deliveryKnown ? t('totalPayable') : areaQuoteKnown ? tk('trayEstimatedTotal') : t('totalBeforeDelivery')}
                   </span>
-                  <span className="text-2xl font-extrabold text-ink">{formatPrice(displayTotal)}</span>
+                  <span className="text-2xl font-semibold text-ink">{formatPrice(displayTotal)}</span>
                 </div>
                 <span className="text-xs text-muted block mt-0.5">
                   {deliveryKnown ? t('includesAll') : areaQuoteKnown ? tk('trayAreaNote') : t('deliveryAddedAtCheckout')}
@@ -855,7 +855,7 @@ export default function CartPage() {
               {isAuthenticated ? (
                 <Link
                   href="/checkout"
-                  className="w-full h-14 rounded-2xl bg-brand hover:bg-brand-500 text-on-brand text-base font-extrabold transition-colors active:scale-98 flex items-center justify-center gap-2"
+                  className="w-full h-14 rounded-2xl bg-brand hover:bg-brand-500 text-on-brand text-base font-semibold transition-colors active:scale-98 flex items-center justify-center gap-2"
                 >
                   <ShoppingBag className="w-5 h-5" aria-hidden />
                   <span>{t('proceedCheckout')}</span>
@@ -864,7 +864,7 @@ export default function CartPage() {
               ) : (
                 <Link
                   href={loginUrlFor('/checkout')}
-                  className="w-full h-14 rounded-2xl bg-brand hover:bg-brand-500 text-on-brand text-base font-extrabold transition-colors active:scale-98 flex items-center justify-center gap-2"
+                  className="w-full h-14 rounded-2xl bg-brand hover:bg-brand-500 text-on-brand text-base font-semibold transition-colors active:scale-98 flex items-center justify-center gap-2"
                 >
                   <span>{t('signInToComplete')}</span>
                   <ArrowRight className="rtl:-scale-x-100 w-4 h-4 ms-1" aria-hidden />

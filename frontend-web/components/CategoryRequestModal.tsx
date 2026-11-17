@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { LoadError } from '@/components/ui/LoadError';
 import { apiClient, apiErrorMessage, apiErrorStatus } from '@/lib/api-client';
+import { Snowflake, Leaf, UtensilsCrossed, CookingPot, Folder, FolderTree, Info } from 'lucide-react';
 
 interface Category {
   id: string;
@@ -27,10 +28,10 @@ interface CategoryRequestModalProps {
 }
 
 const productTypeOptions = [
-  { value: 'frozen', label: 'Frozen', icon: '❄️', color: 'blue' },
-  { value: 'fresh', label: 'Fresh', icon: '🥬', color: 'green' },
-  { value: 'ready_to_eat', label: 'Ready to Eat', icon: '🍽️', color: 'orange' },
-  { value: 'ready_to_cook', label: 'Ready to Cook', icon: '🍳', color: 'purple' },
+  { value: 'frozen', label: 'Frozen', icon: Snowflake },
+  { value: 'fresh', label: 'Fresh', icon: Leaf },
+  { value: 'ready_to_eat', label: 'Ready to Eat', icon: UtensilsCrossed },
+  { value: 'ready_to_cook', label: 'Ready to Cook', icon: CookingPot },
 ];
 
 export function CategoryRequestModal({
@@ -151,7 +152,7 @@ export function CategoryRequestModal({
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto shadow-xl">
+      <div className="bg-white rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto shadow-[var(--shadow-hover)]">
         {/* Header */}
         <div className="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 rounded-t-2xl">
           <div className="flex items-center justify-between">
@@ -188,22 +189,14 @@ export function CategoryRequestModal({
                     setProductType(type.value);
                     setFormData({ ...formData, parentCategoryId: '' });
                   }}
-                  className={`px-4 py-3 rounded-xl text-sm font-medium transition-all border-2 ${
+                  className={`px-4 py-3 rounded-xl text-sm font-medium transition-colors border ${
                     productType === type.value
-                      ? 'ring-2 ring-offset-1 ring-blue-200'
-                      : 'bg-gray-50 border-gray-200 text-gray-600 hover:border-gray-300'
+                      ? 'bg-brand-soft border-brand text-brand-soft-ink'
+                      : 'bg-surface border-line text-muted hover:border-line-strong'
                   }`}
-                  style={productType === type.value ? { 
-                    backgroundColor: type.color === 'blue' ? '#EFF6FF' : 
-                                    type.color === 'green' ? '#F0FDF4' :
-                                    type.color === 'orange' ? '#FFF7ED' : '#FAF5FF',
-                    borderColor: type.color === 'blue' ? '#3B82F6' :
-                                type.color === 'green' ? '#22C55E' :
-                                type.color === 'orange' ? '#F97316' : '#A855F7'
-                  } : {}}
                 >
                   <div className="flex items-center justify-center gap-2">
-                    <span className="text-lg">{type.icon}</span>
+                    <type.icon className="w-4 h-4" aria-hidden />
                     <span>{type.label}</span>
                   </div>
                 </button>
@@ -224,14 +217,14 @@ export function CategoryRequestModal({
                     setRequestType('category');
                     setFormData({ ...formData, parentCategoryId: '' });
                   }}
-                  className={`flex-1 px-4 py-3 rounded-xl text-sm font-medium transition-all border-2 ${
+                  className={`flex-1 px-4 py-3 rounded-xl text-sm font-medium transition-colors border ${
                     requestType === 'category'
-                      ? 'bg-blue-50 border-blue-500 text-blue-700'
-                      : 'bg-gray-50 border-gray-200 text-gray-600 hover:border-gray-300'
+                      ? 'bg-brand-soft border-brand text-brand-soft-ink'
+                      : 'bg-surface border-line text-muted hover:border-line-strong'
                   }`}
                 >
                   <div className="flex items-center justify-center gap-2">
-                    <span className="text-lg">📁</span>
+                    <Folder className="w-4 h-4" aria-hidden />
                     <span>New Category</span>
                   </div>
                   <p className="text-xs mt-1 opacity-70">Main category</p>
@@ -239,14 +232,14 @@ export function CategoryRequestModal({
                 <button
                   type="button"
                   onClick={() => setRequestType('subcategory')}
-                  className={`flex-1 px-4 py-3 rounded-xl text-sm font-medium transition-all border-2 ${
+                  className={`flex-1 px-4 py-3 rounded-xl text-sm font-medium transition-colors border ${
                     requestType === 'subcategory'
-                      ? 'bg-emerald-50 border-emerald-500 text-emerald-700'
-                      : 'bg-gray-50 border-gray-200 text-gray-600 hover:border-gray-300'
+                      ? 'bg-brand-soft border-brand text-brand-soft-ink'
+                      : 'bg-surface border-line text-muted hover:border-line-strong'
                   }`}
                 >
                   <div className="flex items-center justify-center gap-2">
-                    <span className="text-lg">📂</span>
+                    <FolderTree className="w-4 h-4" aria-hidden />
                     <span>Subcategory</span>
                   </div>
                   <p className="text-xs mt-1 opacity-70">Under existing</p>
@@ -271,7 +264,7 @@ export function CategoryRequestModal({
                 <select
                   value={formData.parentCategoryId}
                   onChange={(e) => setFormData({ ...formData, parentCategoryId: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-brand/40 focus:border-transparent"
                 >
                   <option value="">Select parent category...</option>
                   {parentCategories.map((cat) => (
@@ -299,7 +292,7 @@ export function CategoryRequestModal({
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 placeholder={requestType === 'category' ? "e.g., Frozen Biryani" : "e.g., Chicken Biryani"}
-                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-brand/40 focus:border-transparent"
                 maxLength={100}
               />
             </div>
@@ -316,7 +309,7 @@ export function CategoryRequestModal({
                 value={formData.nameUrdu}
                 onChange={(e) => setFormData({ ...formData, nameUrdu: e.target.value })}
                 placeholder="مثال: منجمد بریانی"
-                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent text-end"
+                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-brand/40 focus:border-transparent text-end"
                 dir="rtl"
                 maxLength={100}
               />
@@ -334,19 +327,19 @@ export function CategoryRequestModal({
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                 placeholder="Describe the category and what products would go here..."
                 rows={3}
-                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-brand/40 focus:border-transparent resize-none"
                 maxLength={500}
               />
             </div>
           )}
 
           {/* Info Box */}
-          <div className="bg-blue-50 rounded-xl p-4 border border-blue-100">
+          <div className="bg-raised rounded-xl p-4">
             <div className="flex gap-3">
-              <div className="text-blue-500 text-xl">💡</div>
-              <div className="text-sm text-blue-700">
+              <Info className="w-4 h-4 mt-0.5 shrink-0 text-muted" aria-hidden />
+              <div className="text-sm text-ink">
                 <p className="font-medium mb-1">What happens next?</p>
-                <ul className="space-y-1 text-blue-600">
+                <ul className="space-y-1 text-muted">
                   <li>• Admin will review your request</li>
                   <li>• You&apos;ll be notified when approved</li>
                   <li>• Category will appear in your product form</li>
@@ -368,7 +361,7 @@ export function CategoryRequestModal({
             <Button
               type="submit"
               disabled={loading || !productType || !formData.name.trim()}
-              className="flex-1 bg-emerald-600 hover:bg-emerald-700"
+              className="flex-1"
             >
               {loading ? (
                 <span className="flex items-center gap-2">

@@ -343,7 +343,7 @@ function OrdersContent() {
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder={t('list.searchPlaceholder')}
               aria-label={t('list.searchPlaceholder')}
-              className="w-full h-11 ps-9 pe-11 rounded-xl text-sm bg-raised border border-transparent text-ink placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand focus:bg-surface transition-all"
+              className="w-full h-11 ps-9 pe-11 rounded-xl text-sm bg-raised border border-transparent text-ink placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand focus:bg-surface transition-colors"
             />
             {searchQuery && (
               <button

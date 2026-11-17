@@ -91,7 +91,7 @@ export function UberLeftSidebar({ isOpen, onClose }: UberLeftSidebarProps) {
       />
 
       <div className="fixed inset-y-0 start-0 max-w-full flex pe-10">
-        <aside className="w-80 max-w-full pt-(--safe-top) pb-(--safe-bottom) ps-(--safe-start) bg-surface shadow-2xl flex flex-col animate-in slide-in-from-left duration-300">
+        <aside className="w-80 max-w-full pt-(--safe-top) pb-(--safe-bottom) ps-(--safe-start) bg-surface shadow-[var(--shadow-hover)] flex flex-col animate-in slide-in-from-left duration-300">
           <div className="px-4 h-16 flex items-center justify-between">
             <Link href="/" onClick={onClose} className="flex items-center">
               <BrandLockup markSize={28} wordSize={18} />

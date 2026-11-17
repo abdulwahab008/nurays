@@ -59,7 +59,7 @@ const menuIcon = 'w-4 h-4 text-muted';
 const iconButton = 'relative grid h-11 w-11 shrink-0 place-items-center rounded-lg transition-colors';
 // On a phone a panel spans the screen under the bar (anchored to a button it would run off the edge); from sm it hangs
 // under its button.
-const panel = 'fixed inset-x-3 top-[calc(var(--header-offset)+0.5rem)] sm:absolute sm:inset-x-auto sm:top-full sm:end-0 sm:mt-2 bg-surface rounded-2xl shadow-xl border border-line z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-150';
+const panel = 'fixed inset-x-3 top-[calc(var(--header-offset)+0.5rem)] sm:absolute sm:inset-x-auto sm:top-full sm:end-0 sm:mt-2 bg-surface rounded-2xl shadow-[var(--shadow-hover)] border border-line z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-150';
 
 export function DashboardNavbar({ userType = 'customer', onMenuToggle, drawerOpen }: DashboardNavbarProps) {
   const router = useRouter();
@@ -343,7 +343,7 @@ export function DashboardNavbar({ userType = 'customer', onMenuToggle, drawerOpe
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder={t('searchPlaceholder')}
                 aria-label={t('search')}
-                className="w-full min-h-11 ps-10 pe-24 py-2.5 rounded-xl text-sm outline-none transition-all bg-page border border-line text-ink placeholder:text-muted focus:border-brand focus:ring-2 focus:ring-brand/20"
+                className="w-full min-h-11 ps-10 pe-24 py-2.5 rounded-xl text-sm outline-none transition-colors bg-page border border-line text-ink placeholder:text-muted focus:border-brand focus:ring-2 focus:ring-brand/20"
               />
               <button
                 type="submit"

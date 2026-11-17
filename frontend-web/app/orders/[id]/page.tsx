@@ -913,7 +913,7 @@ function OrderDetailContent() {
           className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-4"
           onClick={(e) => { if (e.target === e.currentTarget) { setShowReportModal(false); setReportDetails(''); } }}
         >
-          <div role="dialog" aria-modal="true" aria-labelledby="report-title" className="bg-surface rounded-2xl shadow-2xl w-full max-w-md p-5 space-y-4">
+          <div role="dialog" aria-modal="true" aria-labelledby="report-title" className="bg-surface rounded-2xl shadow-[var(--shadow-hover)] w-full max-w-md p-5 space-y-4">
             <h2 id="report-title" className="text-lg font-semibold text-ink">{t('detail.reportTitle')}</h2>
             <p className="text-sm text-muted">{t('detail.reportBody')}</p>
             <textarea
@@ -941,7 +941,7 @@ function OrderDetailContent() {
           className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-4"
           onClick={(e) => { if (e.target === e.currentTarget) closeCancelModal(); }}
         >
-          <div role="dialog" aria-modal="true" aria-labelledby="cancel-title" className="bg-surface rounded-2xl shadow-2xl w-full max-w-md p-5 space-y-4" data-testid="cancel-dialog">
+          <div role="dialog" aria-modal="true" aria-labelledby="cancel-title" className="bg-surface rounded-2xl shadow-[var(--shadow-hover)] w-full max-w-md p-5 space-y-4" data-testid="cancel-dialog">
             <div>
               <h2 id="cancel-title" className="text-lg font-semibold text-ink">{t('detail.cancelTitle', { number: order.orderNumber })}</h2>
               <p className="text-sm text-muted mt-1">{t('detail.cancelBody')}</p>
@@ -1093,13 +1093,13 @@ function OrderDetailContent() {
             <div className="bg-raised p-3.5 rounded-xl border border-line space-y-1.5">
               <div className="flex items-center justify-between">
                 <span className="font-bold text-ink">{t('receipt.paymentChannel')}</span>
-                <span className="font-extrabold text-ink">
+                <span className="font-semibold text-ink">
                   {paymentChannelLabel(t, order.paymentMethod, order.paymentSenderAccount)}
                 </span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="font-bold text-ink">{t('receipt.verificationStatus')}</span>
-                <span className="font-extrabold text-brand-soft-ink">
+                <span className="font-semibold text-brand-soft-ink">
                   {paymentStatusLabel(t, order.paymentMethod, order.paymentStatus)}
                 </span>
               </div>
@@ -1164,7 +1164,7 @@ function OrderDetailContent() {
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-3 sm:p-4 animate-in fade-in duration-200"
           onClick={(e) => { if (e.target === e.currentTarget) setShowReceiptPreview(false); }}
         >
-          <div role="dialog" aria-modal="true" aria-labelledby="receipt-title" className="relative w-full max-w-2xl bg-surface rounded-3xl shadow-2xl border border-line overflow-hidden flex flex-col max-h-[92vh]">
+          <div role="dialog" aria-modal="true" aria-labelledby="receipt-title" className="relative w-full max-w-2xl bg-surface rounded-2xl shadow-[var(--shadow-hover)] border border-line overflow-hidden flex flex-col max-h-[92vh]">
             <div className="px-4 py-3 flex items-center justify-between gap-2 border-b border-line">
               <h3 id="receipt-title" className="font-semibold text-ink">{t('receipt.preview')}</h3>
               <div className="flex items-center gap-1">
@@ -1233,13 +1233,13 @@ function OrderDetailContent() {
                 <div className="bg-raised p-4 rounded-xl border border-line space-y-2 text-xs">
                   <div className="flex justify-between">
                     <span className="font-bold text-ink">{t('receipt.paymentChannel')}</span>
-                    <span className="font-extrabold text-ink">
+                    <span className="font-semibold text-ink">
                       {paymentChannelLabel(t, order.paymentMethod, order.paymentSenderAccount)}
                     </span>
                   </div>
                   <div className="flex justify-between">
                     <span className="font-bold text-ink">{t('receipt.paymentStatus')}</span>
-                    <span className="font-extrabold text-brand-soft-ink">
+                    <span className="font-semibold text-brand-soft-ink">
                       {paymentStatusLabel(t, order.paymentMethod, order.paymentStatus)}
                     </span>
                   </div>

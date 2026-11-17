@@ -152,11 +152,11 @@ function SummaryCard({
   return (
     <section className={cardClass} aria-labelledby="rider-summary" data-testid="rider-summary">
       <div className="flex items-center gap-4">
-        <div className="w-14 h-14 shrink-0 rounded-full bg-brand flex items-center justify-center text-2xl font-extrabold text-on-brand" aria-hidden>
+        <div className="w-14 h-14 shrink-0 rounded-full bg-brand flex items-center justify-center text-2xl font-semibold text-on-brand" aria-hidden>
           {name?.charAt(0).toUpperCase() || <Bike className="w-6 h-6" />}
         </div>
         <div className="min-w-0 flex-1">
-          <h2 id="rider-summary" className="text-xl font-extrabold text-ink truncate">{name || t('nameNotSet')}</h2>
+          <h2 id="rider-summary" className="text-xl font-semibold text-ink truncate">{name || t('nameNotSet')}</h2>
           {realPhone && <p className="text-sm text-muted truncate"><span data-ltr>{formatPhoneNumber(realPhone)}</span></p>}
           {email && <p className="text-sm text-muted truncate"><span data-ltr>{email}</span></p>}
         </div>

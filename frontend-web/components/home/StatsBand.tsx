@@ -56,7 +56,7 @@ export default function StatsBand({ stats }: { stats: PublicStats | null }) {
   return (
     <section className="max-w-[1280px] mx-auto px-4 sm:px-8 py-8">
       <div className="rounded-[24px] bg-[#0D2624] text-white px-5 py-10 sm:px-10 text-center">
-        <h3 className="text-[22px] sm:text-[28px] font-extrabold tracking-tight">{t('statsTitle')}</h3>
+        <h3 className="text-[22px] sm:text-[28px] font-semibold tracking-tight">{t('statsTitle')}</h3>
         <p className="text-[#A3BCB7] text-sm sm:text-base mt-2 max-w-xl mx-auto">{t('statsBody')}</p>
 
         <div
@@ -69,7 +69,7 @@ export default function StatsBand({ stats }: { stats: PublicStats | null }) {
             return (
               <div key={card.key} className="p-4 rounded-2xl bg-white/[0.06] border border-white/10">
                 <Icon className={`w-5 h-5 mx-auto ${card.iconClass}`} aria-hidden />
-                <div className={`text-2xl font-extrabold mt-2 ${card.valueClass}`}>{card.value}</div>
+                <div className={`text-2xl font-semibold mt-2 ${card.valueClass}`}>{card.value}</div>
                 <div className="text-xs font-semibold text-[#A3BCB7] mt-0.5">{card.label}</div>
               </div>
             );

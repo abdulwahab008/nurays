@@ -121,7 +121,7 @@ export function SlideOverCartDrawer({ isOpen, onClose }: SlideOverCartDrawerProp
           role="dialog"
           aria-modal="true"
           aria-labelledby="tray-title"
-          className="w-screen max-w-md pt-(--safe-top) pb-(--safe-bottom) pe-(--safe-end) bg-page shadow-2xl flex flex-col transform transition-transform ease-out duration-300 animate-in slide-in-from-right"
+          className="w-screen max-w-md pt-(--safe-top) pb-(--safe-bottom) pe-(--safe-end) bg-page shadow-[var(--shadow-hover)] flex flex-col transform transition-transform ease-out duration-300 animate-in slide-in-from-right"
         >
           <div className="h-16 px-2 border-b border-line bg-surface flex items-center gap-2">
             <button
@@ -132,7 +132,7 @@ export function SlideOverCartDrawer({ isOpen, onClose }: SlideOverCartDrawerProp
               <X className="w-5 h-5" />
             </button>
             <div className="min-w-0">
-              <h2 id="tray-title" className="text-lg font-extrabold text-ink leading-tight">{t('trayTitle')}</h2>
+              <h2 id="tray-title" className="text-lg font-semibold text-ink leading-tight">{t('trayTitle')}</h2>
               <p className="text-xs text-muted truncate">
                 {kitchenName ? t('trayFrom', { kitchen: kitchenName }) : t(itemCount === 1 ? 'trayCountOne' : 'trayCount', { n: itemCount })}
               </p>
@@ -145,11 +145,11 @@ export function SlideOverCartDrawer({ isOpen, onClose }: SlideOverCartDrawerProp
                 <div className="w-16 h-16 rounded-2xl bg-brand-soft text-brand-soft-ink flex items-center justify-center mb-4">
                   <ShoppingBag className="w-7 h-7" />
                 </div>
-                <h3 className="text-lg font-extrabold text-ink">{t('emptyTray')}</h3>
+                <h3 className="text-lg font-semibold text-ink">{t('emptyTray')}</h3>
                 <p className="text-sm text-muted mt-1 max-w-[260px] leading-relaxed">{t('emptyTrayBody')}</p>
                 <button
                   onClick={onClose}
-                  className="mt-5 inline-flex items-center gap-1.5 h-11 px-5 rounded-xl bg-brand hover:bg-brand-500 text-on-brand text-sm font-extrabold transition-colors"
+                  className="mt-5 inline-flex items-center gap-1.5 h-11 px-5 rounded-xl bg-brand hover:bg-brand-500 text-on-brand text-sm font-semibold transition-colors"
                 >
                   <span>{t('exploreKitchens')}</span>
                   <ArrowRight className="rtl:-scale-x-100 w-4 h-4" />
@@ -194,7 +194,7 @@ export function SlideOverCartDrawer({ isOpen, onClose }: SlideOverCartDrawerProp
                           <Trash2 className="w-4 h-4" />
                         </button>
                       )}
-                      <span className="min-w-5 text-center text-sm font-extrabold text-ink" aria-live="polite">
+                      <span className="min-w-5 text-center text-sm font-semibold text-ink" aria-live="polite">
                         {item.quantity}
                       </span>
                       <button
@@ -241,7 +241,7 @@ export function SlideOverCartDrawer({ isOpen, onClose }: SlideOverCartDrawerProp
               <Link
                 href="/checkout"
                 onClick={onClose}
-                className="h-14 rounded-2xl text-base font-extrabold bg-brand hover:bg-brand-500 text-on-brand flex items-center justify-center gap-2 transition-colors"
+                className="h-14 rounded-2xl text-base font-semibold bg-brand hover:bg-brand-500 text-on-brand flex items-center justify-center gap-2 transition-colors"
               >
                 <span>{t('goCheckout')}</span>
                 <span aria-hidden>·</span>
