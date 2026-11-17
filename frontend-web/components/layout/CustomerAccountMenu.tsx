@@ -5,12 +5,11 @@
  * (DashboardNavbar). The page names come from the side menu's list (navMessages), so a page is called one thing everywhere.
  */
 import Link from 'next/link';
-import { Heart, LifeBuoy, LogOut, MapPin, ReceiptText, UserRound, type LucideIcon } from 'lucide-react';
-import { useT } from '@/lib/i18n';
+import { Heart, Languages, LifeBuoy, LogOut, MapPin, ReceiptText, UserRound, type LucideIcon } from 'lucide-react';
+import { LOCALE_NAMES, useLocale, useT } from '@/lib/i18n';
 import { navMessages } from '@/lib/i18n/messages/nav';
 import { shellMessages } from '@/lib/i18n/messages/shell';
 import { siteMessages } from '@/lib/i18n/messages/site';
-import { ThemeToggle } from '@/components/layout/ThemeToggle';
 
 export const CUSTOMER_ACCOUNT_LINKS: { name: keyof typeof navMessages.en; href: string; Icon: LucideIcon }[] = [
   { name: 'My profile', href: '/profile', Icon: UserRound },
@@ -26,6 +25,8 @@ export function CustomerAccountMenu({ name, email, onSignOut }: { name: string; 
   const tNav = useT(navMessages);
   const tShell = useT(shellMessages);
   const tSite = useT(siteMessages);
+  const { locale, setLocale } = useLocale();
+  const otherLocale = locale === 'ur' ? 'en' : 'ur';
   return (
     <>
       <div className="px-4 py-3 border-b border-line">
@@ -47,9 +48,14 @@ export function CustomerAccountMenu({ name, email, onSignOut }: { name: string; 
           </Link>
         ))}
       </div>
-      <div className="px-4 py-3 border-t border-line">
-        <p className="mb-2 text-xs font-medium text-muted">{tSite('appearance')}</p>
-        <ThemeToggle className="[&>button]:min-h-11" />
+      <div className="py-1 border-t border-line">
+        <button type="button" onClick={() => setLocale(otherLocale)} className={`${row} w-full`}>
+          <Languages className="w-4 h-4 text-muted" aria-hidden />
+          <span className="flex-1 text-start">{tSite('language')}</span>
+          <span lang={otherLocale} className="font-semibold text-brand-ink">
+            {LOCALE_NAMES[otherLocale]}
+          </span>
+        </button>
       </div>
       <div className="py-1 border-t border-line">
         <button type="button" onClick={onSignOut} className={`${row} w-full font-medium text-red-700 hover:bg-red-50`}>

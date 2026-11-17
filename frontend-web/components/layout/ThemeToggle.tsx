@@ -13,6 +13,19 @@ const OPTIONS: { choice: ThemeChoice; label: 'themeLight' | 'themeDark' | 'theme
   { choice: 'system', label: 'themeSystem', Icon: Monitor },
 ];
 
+/** The top bar's one-tap switch between light and dark; "same as phone" stays on the profile page (AppearanceSection). */
+export function ThemeButton({ className }: { className?: string }) {
+  const t = useT(siteMessages);
+  const { theme, setChoice } = useTheme();
+  const next = theme === 'dark' ? 'light' : 'dark';
+  const label = `${t('appearance')}: ${t(next === 'dark' ? 'themeDark' : 'themeLight')}`;
+  return (
+    <button type="button" onClick={() => setChoice(next)} aria-label={label} title={label} className={className} data-testid="appearance-button">
+      {next === 'dark' ? <Moon className="h-[18px] w-[18px]" aria-hidden /> : <Sun className="h-[18px] w-[18px]" aria-hidden />}
+    </button>
+  );
+}
+
 /** Light, dark, or the same as the phone: three buttons, one pressed. */
 export function ThemeToggle({ className }: { className?: string }) {
   const t = useT(siteMessages);

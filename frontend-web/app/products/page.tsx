@@ -355,8 +355,21 @@ function ProductsContent() {
     businessType, maxDistanceKm, fastDeliveryOnly, customerLocation, selectedCommunity?.id, waitingForAddress,
   ]);
 
+  // Results follow the typing: the search runs a moment after the last key, no Search or Enter needed.
+  const searchTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const typeSearch = (value: string) => {
+    setSearchInput(value);
+    clearTimeout(searchTimer.current);
+    searchTimer.current = setTimeout(() => {
+      setPage(1);
+      setSearchQuery(value);
+      if (value && viewMode !== 'dishes') setViewMode('dishes');
+    }, 300);
+  };
+
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
+    clearTimeout(searchTimer.current);
     setPage(1);
     setSearchQuery(searchInput);
     if (searchInput) {
@@ -537,7 +550,7 @@ function ProductsContent() {
               type="text"
               placeholder={t('searchPlaceholder')}
               value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
+              onChange={(e) => typeSearch(e.target.value)}
               aria-label={t('searchPlaceholder')}
               className="w-full ps-10 pe-24 border border-transparent rounded-[14px] text-[15px] font-semibold text-ink placeholder:text-muted placeholder:font-medium focus:border-brand focus:ring-2 focus:ring-brand/20 outline-none bg-raised focus:bg-surface transition-colors h-12"
             />
@@ -545,6 +558,7 @@ function ProductsContent() {
               <button
                 type="button"
                 onClick={() => {
+                  clearTimeout(searchTimer.current);
                   setSearchInput('');
                   setSearchQuery('');
                   setPage(1);

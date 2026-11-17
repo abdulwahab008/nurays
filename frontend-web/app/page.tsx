@@ -300,7 +300,6 @@ export default function Home() {
         search
         onOpenNav={() => setIsSidebarOpen(true)}
         onOpenTray={() => setIsCartOpen(true)}
-        onFrozen={() => setSelectedFilter('frozen')}
       />
       <HomeHero dishes={dishes} greetingName={isAuthenticated ? firstName : undefined} />
       <FilterBar

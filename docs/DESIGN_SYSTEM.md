@@ -55,7 +55,9 @@ All of it is in `frontend-web/app/globals.css`: the values once for light (`:roo
 
 ## Dark theme
 
-- A person chooses Light, Dark or "Same as phone" from the appearance button in the header (`components/layout/ThemeToggle.tsx`).
+- The sun/moon button in a customer's top bar (`ThemeButton` in `components/layout/ThemeToggle.tsx`) flips light and dark
+  in one tap; Light, Dark or "Same as phone" is chosen on the profile page (`ThemeToggle`). A signed-in customer's
+  language switch is in the account menu, not the top bar.
   The choice is kept in the browser (`nuray-theme`).
 - Until every screen has been redesigned the default is Light, and the kitchen, rider, hub and admin screens stay light
   whatever the choice (`lib/theme.ts`: `DEFAULT_THEME_CHOICE`, `LIGHT_ONLY_PREFIXES`). Both change once those screens are done.

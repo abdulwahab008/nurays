@@ -16,6 +16,7 @@ import { useT } from '@/lib/i18n';
 import { shellMessages } from '@/lib/i18n/messages/shell';
 import { siteMessages } from '@/lib/i18n/messages/site';
 import { CustomerAccountMenu } from '@/components/layout/CustomerAccountMenu';
+import { ThemeButton } from '@/components/layout/ThemeToggle';
 import {
   Bell,
   CheckCheck,
@@ -383,8 +384,12 @@ export function DashboardNavbar({ userType = 'customer', onMenuToggle, drawerOpe
 
             {/* Seller Quick Actions */}
 
-            {/* A customer's phone has the language under Profile; the bar keeps room for the area */}
-            <LanguageSwitcher className={isCustomer ? 'hidden sm:inline-flex h-11 px-2' : 'h-11 min-w-11 justify-center px-2 max-[420px]:[&>span]:hidden'} />
+            {/* A customer has the language in the account menu and a one-tap light/dark switch here; the staff screens stay light (lib/theme.ts). */}
+            {isCustomer ? (
+              <ThemeButton className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-ink transition-colors hover:bg-raised" />
+            ) : (
+              <LanguageSwitcher className="h-11 min-w-11 justify-center px-2 max-[420px]:[&>span]:hidden" />
+            )}
 
             {/* Notifications Panel */}
             <div className="relative" ref={notificationRef}>
