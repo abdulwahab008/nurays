@@ -20,6 +20,7 @@ import { CommunitySelector } from '@/components/community/CommunitySelector';
 import { LanguageSwitcher } from '@/components/i18n/LanguageSwitcher';
 import { ThemeButton } from '@/components/layout/ThemeToggle';
 import { CustomerAccountMenu } from '@/components/layout/CustomerAccountMenu';
+import { UberLeftSidebar } from '@/components/marketplace/UberLeftSidebar';
 import { cn, homeFor } from '@/lib/utils';
 
 export interface SiteHeaderProps {
@@ -27,8 +28,6 @@ export interface SiteHeaderProps {
   search?: { value: string; onChange: (value: string) => void };
   /** Opens the tray drawer; without it the tray button goes to /cart. */
   onOpenTray?: () => void;
-  /** Opens the side menu (home only). */
-  onOpenNav?: () => void;
 }
 
 /** A small menu that closes on a click outside it or on Escape. */
@@ -74,8 +73,9 @@ function Popover({ button, children, label }: { button: (open: boolean, toggle: 
 const iconButton =
   'inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-ink transition-colors hover:bg-raised';
 
-export function SiteHeader({ search, onOpenTray, onOpenNav }: SiteHeaderProps) {
+export function SiteHeader({ search, onOpenTray }: SiteHeaderProps) {
   const t = useT(siteMessages);
+  const [navOpen, setNavOpen] = useState(false);
   const router = useRouter();
   const [ownQuery, setOwnQuery] = useState('');
   const query = search ? search.value : ownQuery;
@@ -115,136 +115,137 @@ export function SiteHeader({ search, onOpenTray, onOpenNav }: SiteHeaderProps) {
   const trayLabel = cartCount > 0 ? t('trayWithCount', { count: cartCount }) : t('tray');
 
   return (
-    <header className="sticky top-0 z-40 border-b border-line bg-surface/95 pt-(--safe-top) backdrop-blur-md">
-      <div className="mx-auto flex h-16 max-w-[1280px] items-center gap-1 px-4 sm:gap-4 sm:px-8">
-        {onOpenNav && (
-          <button type="button" onClick={onOpenNav} aria-label={t('openMenu')} className={iconButton}>
+    <>
+      <UberLeftSidebar isOpen={navOpen} onClose={() => setNavOpen(false)} />
+      <header className="sticky top-0 z-40 border-b border-line bg-surface/95 pt-(--safe-top) backdrop-blur-md">
+        <div className="mx-auto flex h-16 max-w-[1280px] items-center gap-1 px-4 sm:gap-4 sm:px-8">
+          <button type="button" onClick={() => setNavOpen(true)} aria-label={t('openMenu')} className={iconButton}>
             <Menu className="h-5 w-5" aria-hidden />
           </button>
-        )}
-        <Link href="/" aria-label={t('home')} className="shrink-0 inline-flex items-center min-h-11 min-w-11">
-          <span className="sm:hidden">
-            <Mark size={36} />
-          </span>
-          <span className="hidden sm:inline">
-            <BrandLockup markSize={36} wordSize={24} />
-          </span>
-        </Link>
-
-        <div className="min-w-0 shrink">
-          <CommunitySelector variant="navbar" />
-        </div>
-
-        {/* Only the widest bar has room for the links beside the search box. */}
-        <nav aria-label={t('mainNav')} className="hidden items-center gap-1 xl:flex">
-          <Link href="/kitchens" className="rounded-lg px-3 py-2 text-sm font-semibold text-ink hover:bg-raised">
-            {t('kitchens')}
+          <Link href="/" aria-label={t('home')} className="shrink-0 inline-flex items-center min-h-11 min-w-11">
+            <span className="sm:hidden">
+              <Mark size={36} />
+            </span>
+            <span className="hidden sm:inline">
+              <BrandLockup markSize={36} wordSize={24} />
+            </span>
           </Link>
-          <Link href="/products" className="rounded-lg px-3 py-2 text-sm font-semibold text-ink hover:bg-raised">
-            {t('dishes')}
-          </Link>
-        </nav>
 
-        <form role="search" onSubmit={submitSearch} className="relative ms-auto hidden max-w-md flex-1 items-center sm:flex">
-          <label htmlFor="site-search" className="sr-only">{t('searchLabel')}</label>
-          <Search className="pointer-events-none absolute start-3.5 h-[18px] w-[18px] text-muted" aria-hidden />
-          <input
-            id="site-search"
-            type="search"
-            enterKeyHint="search"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder={t('searchPlaceholder')}
-            className="h-11 w-full rounded-xl border border-line bg-raised ps-11 pe-10 text-sm font-medium text-ink outline-none transition-colors placeholder:text-muted [&::-webkit-search-cancel-button]:appearance-none focus:border-brand focus:bg-surface focus:ring-3 focus:ring-brand/30"
-          />
-          {query && (
-            <button type="button" onClick={() => setQuery('')} aria-label={t('clearSearch')} className="absolute end-1 flex h-9 w-9 items-center justify-center rounded-lg text-muted hover:text-ink">
-              <X className="h-4 w-4" aria-hidden />
-            </button>
-          )}
-        </form>
+          <div className="min-w-0 shrink">
+            <CommunitySelector variant="navbar" />
+          </div>
 
-        <div className="ms-auto flex shrink-0 items-center gap-1 sm:gap-2">
-          {/* A signed-in customer finds the language in the account menu. */}
-          {!(signedIn && isCustomer) && <LanguageSwitcher className="h-11 shrink-0 rounded-xl px-3 max-sm:[&>span]:hidden" />}
-          <ThemeButton className={iconButton} />
-
-          {onOpenTray ? (
-            <button type="button" onClick={onOpenTray} aria-label={trayLabel} className={trayClass}>
-              {trayInner}
-            </button>
-          ) : (
-            <Link href="/cart" aria-label={trayLabel} className={trayClass}>
-              {trayInner}
+          {/* Only the widest bar has room for the links beside the search box. */}
+          <nav aria-label={t('mainNav')} className="hidden items-center gap-1 xl:flex">
+            <Link href="/kitchens" className="rounded-lg px-3 py-2 text-sm font-semibold text-ink hover:bg-raised">
+              {t('kitchens')}
             </Link>
-          )}
+            <Link href="/products" className="rounded-lg px-3 py-2 text-sm font-semibold text-ink hover:bg-raised">
+              {t('dishes')}
+            </Link>
+          </nav>
 
-          {signedIn ? (
-            <Popover
-              label={t('account')}
-              button={(open, toggle) => (
-                <button type="button" onClick={toggle} aria-expanded={open} aria-label={t('account')} className="flex h-11 min-w-11 items-center justify-center gap-1.5 rounded-xl sm:ps-1 sm:pe-2 hover:bg-raised">
-                  <span className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-soft text-sm font-semibold text-brand-soft-ink">
-                    {(name[0] || 'U').toUpperCase()}
-                  </span>
-                  <ChevronDown className="hidden h-4 w-4 text-muted sm:block" aria-hidden />
-                </button>
-              )}
-            >
-              {isCustomer ? (
-                <CustomerAccountMenu name={name} email={user?.email} onSignOut={() => logout()} />
-              ) : (
-                <>
-                  <Link href={homeFor(user?.userType)} className="flex h-11 items-center gap-3 px-4 text-sm text-ink hover:bg-raised">
-                    <LayoutDashboard className="h-4 w-4 text-muted" aria-hidden />
-                    {t('dashboard')}
-                  </Link>
-                  <button
-                    type="button"
-                    onClick={() => logout()}
-                    className="flex h-11 w-full items-center gap-3 border-t border-line px-4 text-start text-sm font-medium text-red-700 hover:bg-red-50"
-                  >
-                    <LogOut className="h-4 w-4" aria-hidden />
-                    {t('signOut')}
+          <form role="search" onSubmit={submitSearch} className="relative ms-auto hidden max-w-md flex-1 items-center sm:flex">
+            <label htmlFor="site-search" className="sr-only">{t('searchLabel')}</label>
+            <Search className="pointer-events-none absolute start-3.5 h-[18px] w-[18px] text-muted" aria-hidden />
+            <input
+              id="site-search"
+              type="search"
+              enterKeyHint="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={t('searchPlaceholder')}
+              className="h-11 w-full rounded-xl border border-line bg-raised ps-11 pe-10 text-sm font-medium text-ink outline-none transition-colors placeholder:text-muted [&::-webkit-search-cancel-button]:appearance-none focus:border-brand focus:bg-surface focus:ring-3 focus:ring-brand/30"
+            />
+            {query && (
+              <button type="button" onClick={() => setQuery('')} aria-label={t('clearSearch')} className="absolute end-1 flex h-9 w-9 items-center justify-center rounded-lg text-muted hover:text-ink">
+                <X className="h-4 w-4" aria-hidden />
+              </button>
+            )}
+          </form>
+
+          <div className="ms-auto flex shrink-0 items-center gap-1 sm:gap-2">
+            {/* A signed-in customer finds the language in the account menu. */}
+            {!(signedIn && isCustomer) && <LanguageSwitcher className="h-11 shrink-0 rounded-xl px-3 max-sm:[&>span]:hidden" />}
+            <ThemeButton className={iconButton} />
+
+            {onOpenTray ? (
+              <button type="button" onClick={onOpenTray} aria-label={trayLabel} className={trayClass}>
+                {trayInner}
+              </button>
+            ) : (
+              <Link href="/cart" aria-label={trayLabel} className={trayClass}>
+                {trayInner}
+              </Link>
+            )}
+
+            {signedIn ? (
+              <Popover
+                label={t('account')}
+                button={(open, toggle) => (
+                  <button type="button" onClick={toggle} aria-expanded={open} aria-label={t('account')} className="flex h-11 min-w-11 items-center justify-center gap-1.5 rounded-xl sm:ps-1 sm:pe-2 hover:bg-raised">
+                    <span className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-soft text-sm font-semibold text-brand-soft-ink">
+                      {(name[0] || 'U').toUpperCase()}
+                    </span>
+                    <ChevronDown className="hidden h-4 w-4 text-muted sm:block" aria-hidden />
                   </button>
-                </>
-              )}
-            </Popover>
-          ) : (
-            <>
-              {/* On a phone there is room for one, and only as an icon where the account button sits once signed in, so the
-                  area beside it stays readable: most people opening the app already have an account, and the sign-in page
-                  links to sign-up. */}
-              <Link href="/register" className="hidden h-11 items-center rounded-xl border border-line-strong px-4 text-sm font-semibold text-ink hover:bg-raised sm:inline-flex">
-                {t('join')}
-              </Link>
-              <Link
-                href="/login"
-                aria-label={t('signIn')}
-                className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand text-sm font-semibold text-on-brand hover:bg-brand-500 sm:w-auto sm:px-4"
+                )}
               >
-                <UserRound className="h-5 w-5 sm:hidden" aria-hidden />
-                <span className="hidden sm:inline">{t('signIn')}</span>
-              </Link>
-            </>
-          )}
+                {isCustomer ? (
+                  <CustomerAccountMenu name={name} email={user?.email} onSignOut={() => logout()} />
+                ) : (
+                  <>
+                    <Link href={homeFor(user?.userType)} className="flex h-11 items-center gap-3 px-4 text-sm text-ink hover:bg-raised">
+                      <LayoutDashboard className="h-4 w-4 text-muted" aria-hidden />
+                      {t('dashboard')}
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => logout()}
+                      className="flex h-11 w-full items-center gap-3 border-t border-line px-4 text-start text-sm font-medium text-red-700 hover:bg-red-50"
+                    >
+                      <LogOut className="h-4 w-4" aria-hidden />
+                      {t('signOut')}
+                    </button>
+                  </>
+                )}
+              </Popover>
+            ) : (
+              <>
+                {/* On a phone there is room for one, and only as an icon where the account button sits once signed in, so the
+                    area beside it stays readable: most people opening the app already have an account, and the sign-in page
+                    links to sign-up. */}
+                <Link href="/register" className="hidden h-11 items-center rounded-xl border border-line-strong px-4 text-sm font-semibold text-ink hover:bg-raised sm:inline-flex">
+                  {t('join')}
+                </Link>
+                <Link
+                  href="/login"
+                  aria-label={t('signIn')}
+                  className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand text-sm font-semibold text-on-brand hover:bg-brand-500 sm:w-auto sm:px-4"
+                >
+                  <UserRound className="h-5 w-5 sm:hidden" aria-hidden />
+                  <span className="hidden sm:inline">{t('signIn')}</span>
+                </Link>
+              </>
+            )}
+          </div>
         </div>
-      </div>
 
-      <form role="search" onSubmit={submitSearch} className="px-4 pb-3 sm:hidden">
-        <label className="relative flex items-center">
-          <span className="sr-only">{t('searchLabel')}</span>
-          <Search className="pointer-events-none absolute start-3.5 h-[18px] w-[18px] text-muted" aria-hidden />
-          <input
-            type="search"
-            enterKeyHint="search"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder={t('searchPlaceholder')}
-            className="h-12 w-full rounded-xl border border-line bg-raised ps-11 pe-4 text-base font-medium text-ink outline-none placeholder:text-muted focus:border-brand focus:bg-surface focus:ring-3 focus:ring-brand/30"
-          />
-        </label>
-      </form>
-    </header>
+        <form role="search" onSubmit={submitSearch} className="px-4 pb-3 sm:hidden">
+          <label className="relative flex items-center">
+            <span className="sr-only">{t('searchLabel')}</span>
+            <Search className="pointer-events-none absolute start-3.5 h-[18px] w-[18px] text-muted" aria-hidden />
+            <input
+              type="search"
+              enterKeyHint="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={t('searchPlaceholder')}
+              className="h-12 w-full rounded-xl border border-line bg-raised ps-11 pe-4 text-base font-medium text-ink outline-none placeholder:text-muted focus:border-brand focus:bg-surface focus:ring-3 focus:ring-brand/30"
+            />
+          </label>
+        </form>
+      </header>
+    </>
   );
 }

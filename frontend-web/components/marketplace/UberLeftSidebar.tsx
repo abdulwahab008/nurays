@@ -30,8 +30,6 @@ import { useShallow } from 'zustand/react/shallow';
 interface UberLeftSidebarProps {
   isOpen: boolean;
   onClose: () => void;
-  activeFilter?: string;
-  onSelectFilter?: (filter: string) => void;
 }
 
 type NavName = keyof typeof navMessages.en;

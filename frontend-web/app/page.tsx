@@ -14,7 +14,6 @@ import { useCartStore } from '@/lib/store/cart-store';
 import { useToast } from '@/components/ui/toast';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { SlideOverCartDrawer } from '@/components/marketplace/SlideOverCartDrawer';
-import { UberLeftSidebar } from '@/components/marketplace/UberLeftSidebar';
 import { cartService } from '@/lib/services/cart.service';
 import { favoriteService } from '@/lib/services/favorite.service';
 import { errorMessage } from '@/lib/api-client';
@@ -22,7 +21,7 @@ import { useLocale, useT } from '@/lib/i18n';
 import { homeMessages } from '@/lib/i18n/messages/home';
 import { browseMessages } from '@/lib/i18n/messages/browse';
 import { toHomeDish, toHomeKitchen } from '@/lib/home-feed';
-import { filterKitchens, isKitchenFilter, type HomeDish, type KitchenFilter } from '@/lib/home-filters';
+import { filterKitchens, type HomeDish, type KitchenFilter } from '@/lib/home-filters';
 import { SiteHeader } from '@/components/layout/SiteHeader';
 import HomeHero from '@/components/home/HomeHero';
 import FilterBar from '@/components/home/FilterBar';
@@ -78,7 +77,6 @@ export default function Home() {
   const tb = useT(browseMessages);
   const { locale } = useLocale();
 
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [selectedFilter, setSelectedFilter] = useState<KitchenFilter>('all');
   const [selectedCuisine, setSelectedCuisine] = useState<string>('');
@@ -287,17 +285,8 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-page text-ink">
       <SlideOverCartDrawer isOpen={isCartOpen} onClose={() => setIsCartOpen(false)} />
-      <UberLeftSidebar
-        isOpen={isSidebarOpen}
-        onClose={() => setIsSidebarOpen(false)}
-        activeFilter={selectedFilter}
-        onSelectFilter={(f) => {
-          if (isKitchenFilter(f)) setSelectedFilter(f);
-        }}
-      />
 
       <SiteHeader
-        onOpenNav={() => setIsSidebarOpen(true)}
         onOpenTray={() => setIsCartOpen(true)}
       />
       <HomeHero dishes={dishes} greetingName={isAuthenticated ? firstName : undefined} />
