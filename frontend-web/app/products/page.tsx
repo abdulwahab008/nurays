@@ -277,8 +277,9 @@ function ProductsContent() {
     const paramSearch = searchParams.get('search') || '';
     setSearchQuery(paramSearch);
     setSearchInput(paramSearch);
-    if (paramSearch) setViewModeState('dishes');
-    else if (searchParams.get('view') === 'kitchens') setViewModeState('kitchens');
+    // A chosen tab wins over the search, which opens on dishes only until Kitchens is picked (typing clears the choice).
+    if (searchParams.get('view') === 'kitchens') setViewModeState('kitchens');
+    else if (paramSearch) setViewModeState('dishes');
     setPage(1);
   }, [searchParams.toString()]);
 
