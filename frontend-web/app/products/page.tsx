@@ -42,6 +42,7 @@ import {
   HelpCircle,
   X,
   Plus,
+  Check,
 } from 'lucide-react';
 import { useT } from '@/lib/i18n';
 import { commonMessages } from '@/lib/i18n/messages/common';
@@ -604,75 +605,69 @@ function ProductsContent() {
           </div>
         </div>
 
-        {/* Filter Chips inside Search Panel */}
-        <div className="flex items-center justify-between gap-2 flex-wrap">
-          <div className="flex items-center gap-2 overflow-x-auto scrollbar-none py-0.5 -mx-4 px-4 sm:mx-0 sm:px-0">
-            {productTypeOptions.map((type) => {
-              const isSelected = selectedProductType === type.value;
-              return (
+        {/* Two kinds of filter, drawn differently so they are not read as one row: the dish type is a single choice (a joined
+            control, like Kitchens / Dishes above), the rest are switches that add up (pills with a tick when on). */}
+        <div className="flex flex-col xl:flex-row xl:items-end gap-3 xl:gap-6">
+          <div className="min-w-0">
+            <p id="filter-type-label" className="mb-1.5 text-xs font-medium text-muted">{t('filterTypeLabel')}</p>
+            <div className="overflow-x-auto scrollbar-none -mx-4 px-4 sm:mx-0 sm:px-0">
+              <div role="radiogroup" aria-labelledby="filter-type-label" className="inline-flex gap-1 p-1 bg-raised rounded-xl h-12">
+                {productTypeOptions.map((type) => {
+                  const isSelected = selectedProductType === type.value;
+                  return (
+                    <button
+                      key={type.value}
+                      type="button"
+                      role="radio"
+                      aria-checked={isSelected}
+                      onClick={() => {
+                        setSelectedProductType(type.value);
+                        setPage(1);
+                      }}
+                      className={`px-3 sm:px-4 rounded-[9px] text-sm whitespace-nowrap transition-colors cursor-pointer ${
+                        isSelected ? 'bg-surface text-ink font-semibold shadow-xs' : 'text-muted font-medium hover:text-ink'
+                      }`}
+                    >
+                      {t(type.labelKey)}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          <div className="min-w-0">
+            <p id="filter-only-label" className="mb-1.5 text-xs font-medium text-muted">{t('filterOnlyLabel')}</p>
+            <div role="group" aria-labelledby="filter-only-label" className="flex gap-2 overflow-x-auto scrollbar-none -mx-4 px-4 sm:mx-0 sm:px-0">
+              {[
+                { on: openNow, toggle: () => setOpenNow(!openNow), label: t('openNow') },
+                { on: freeDelivery, toggle: () => setFreeDelivery(!freeDelivery), label: t('freeDeliveryChip') },
+                { on: fastDeliveryOnly, toggle: () => setFastDeliveryOnly(!fastDeliveryOnly), label: t('under45') },
+              ].map(({ on, toggle, label }) => (
                 <button
-                  key={type.value}
+                  key={label}
+                  type="button"
                   onClick={() => {
-                    setSelectedProductType(type.value);
+                    toggle();
                     setPage(1);
                   }}
-                  aria-pressed={isSelected}
-                  className={`h-11 px-4 rounded-full text-sm font-bold transition-colors shrink-0 cursor-pointer ${
-                    isSelected ? 'bg-brand-soft text-brand-soft-ink border border-brand' : 'bg-surface text-ink border border-line hover:bg-raised'
+                  aria-pressed={on}
+                  className={`h-12 inline-flex items-center gap-1.5 px-3.5 rounded-full border text-sm whitespace-nowrap shrink-0 transition-colors cursor-pointer ${
+                    on ? 'bg-brand-soft text-brand-soft-ink border-brand font-semibold' : 'bg-surface text-ink border-line hover:bg-raised font-medium'
                   }`}
                 >
-                  {t(type.labelKey)}
+                  {on ? <Check className="w-4 h-4" aria-hidden /> : <Plus className="w-4 h-4 text-muted" aria-hidden />}
+                  {label}
                 </button>
-              );
-            })}
-
-            <div className="h-6 w-px bg-line mx-1 shrink-0" />
-
-            <button
-              onClick={() => {
-                setOpenNow(!openNow);
-                setPage(1);
-              }}
-              aria-pressed={openNow}
-              className={`h-11 px-4 rounded-full text-sm font-bold transition-colors shrink-0 flex items-center gap-1.5 cursor-pointer ${
-                openNow ? 'bg-brand-soft text-brand-soft-ink border border-brand' : 'bg-surface text-ink border border-line hover:bg-raised'
-              }`}
-            >
-              <span className="w-2 h-2 rounded-full bg-brand" />
-              <span>{t('openNow')}</span>
-            </button>
-
-            <button
-              onClick={() => {
-                setFreeDelivery(!freeDelivery);
-                setPage(1);
-              }}
-              aria-pressed={freeDelivery}
-              className={`h-11 px-4 rounded-full text-sm font-bold transition-colors shrink-0 cursor-pointer ${
-                freeDelivery ? 'bg-brand-soft text-brand-soft-ink border border-brand' : 'bg-surface text-ink border border-line hover:bg-raised'
-              }`}
-            >
-              {t('freeDeliveryChip')}
-            </button>
-
-            <button
-              onClick={() => {
-                setFastDeliveryOnly(!fastDeliveryOnly);
-                setPage(1);
-              }}
-              aria-pressed={fastDeliveryOnly}
-              className={`h-11 px-4 rounded-full text-sm font-bold transition-colors shrink-0 cursor-pointer ${
-                fastDeliveryOnly ? 'bg-brand-soft text-brand-soft-ink border border-brand' : 'bg-surface text-ink border border-line hover:bg-raised'
-              }`}
-            >
-              {t('under45')}
-            </button>
+              ))}
+            </div>
           </div>
 
           {isAnyFilterActive && (
             <button
+              type="button"
               onClick={handleClearAllFilters}
-              className="text-sm font-bold text-brand-ink hover:underline flex items-center gap-1 transition-colors cursor-pointer h-10 px-2"
+              className="self-start xl:self-auto xl:ms-auto whitespace-nowrap text-sm font-semibold text-brand-ink hover:underline flex items-center gap-1 transition-colors cursor-pointer h-12 px-2"
             >
               <X className="w-3.5 h-3.5" />
               <span>{t('resetFilters')}</span>
