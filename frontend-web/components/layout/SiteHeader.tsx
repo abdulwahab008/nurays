@@ -8,7 +8,7 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ChevronDown, LayoutDashboard, LogOut, MapPin, Menu, Moon, Package, Search, ShoppingBag, Snowflake, Sun, UserRound, X } from 'lucide-react';
+import { ChevronDown, LayoutDashboard, LogOut, Menu, Moon, Search, ShoppingBag, Snowflake, Sun, UserRound, X } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { useCartStore } from '@/lib/store/cart-store';
@@ -20,7 +20,8 @@ import { BrandLockup, Mark } from '@/components/ui/Mark';
 import { CommunitySelector } from '@/components/community/CommunitySelector';
 import { LanguageSwitcher } from '@/components/i18n/LanguageSwitcher';
 import { ThemeToggle } from '@/components/layout/ThemeToggle';
-import { cn } from '@/lib/utils';
+import { CustomerAccountMenu } from '@/components/layout/CustomerAccountMenu';
+import { cn, homeFor } from '@/lib/utils';
 
 export interface SiteHeaderProps {
   /** Shows the dish and kitchen search (home); Enter opens the results on /products. Other pages have their own search. */
@@ -34,7 +35,7 @@ export interface SiteHeaderProps {
 }
 
 /** A small menu that closes on a click outside it or on Escape. */
-function Popover({ button, children, label }: { button: (open: boolean, toggle: () => void) => ReactNode; children: ReactNode; label: string }) {
+function Popover({ button, children, label, panelClassName = 'w-64 p-2' }: { button: (open: boolean, toggle: () => void) => ReactNode; children: ReactNode; label: string; panelClassName?: string }) {
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -60,7 +61,7 @@ function Popover({ button, children, label }: { button: (open: boolean, toggle: 
           role="dialog"
           aria-label={label}
           data-top-panel
-          className="absolute end-0 top-full z-50 mt-2 w-64 rounded-2xl border border-line bg-surface p-2 shadow-[var(--shadow-hover)]"
+          className={cn('absolute end-0 top-full z-50 mt-2 rounded-2xl border border-line bg-surface shadow-[var(--shadow-hover)]', panelClassName)}
           onClick={(e) => {
             if ((e.target as HTMLElement).closest('a')) setOpen(false);
           }}
@@ -95,6 +96,7 @@ export function SiteHeader({ search, onOpenTray, onOpenNav, onFrozen }: SiteHead
   const signedIn = hydrated && isAuthenticated && !!user;
   const { theme } = useTheme();
   const name = user?.profile?.fullName || user?.email?.split('@')[0] || '';
+  const isCustomer = (user?.userType ?? 'customer') === 'customer';
 
   const trayInner = (
     <>
@@ -201,6 +203,7 @@ export function SiteHeader({ search, onOpenTray, onOpenNav, onFrozen }: SiteHead
           {signedIn ? (
             <Popover
               label={t('account')}
+              panelClassName="w-72 overflow-hidden py-1"
               button={(open, toggle) => (
                 <button type="button" onClick={toggle} aria-expanded={open} aria-label={t('account')} className="flex h-11 min-w-11 items-center justify-center gap-1.5 rounded-xl sm:ps-1 sm:pe-2 hover:bg-raised">
                   <span className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-soft text-sm font-semibold text-brand-soft-ink">
@@ -210,34 +213,24 @@ export function SiteHeader({ search, onOpenTray, onOpenNav, onFrozen }: SiteHead
                 </button>
               )}
             >
-              <div className="border-b border-line px-2 pb-2 pt-1">
-                <p className="truncate text-sm font-semibold text-ink">{name}</p>
-                {user?.email && (
-                  <p className="truncate text-xs text-muted" data-ltr>
-                    {user.email}
-                  </p>
-                )}
-              </div>
-              <div className="py-1">
-                {[
-                  { href: '/orders', label: t('myOrders'), Icon: Package },
-                  { href: '/dashboard', label: t('dashboard'), Icon: LayoutDashboard },
-                  { href: '/profile/addresses', label: t('savedAddresses'), Icon: MapPin },
-                ].map(({ href, label, Icon }) => (
-                  <Link key={href} href={href} className="flex min-h-11 items-center gap-3 rounded-lg px-2 text-sm text-ink hover:bg-raised">
-                    <Icon className="h-4 w-4 text-muted" aria-hidden />
-                    {label}
+              {isCustomer ? (
+                <CustomerAccountMenu name={name} email={user?.email} onSignOut={() => logout()} />
+              ) : (
+                <>
+                  <Link href={homeFor(user?.userType)} className="flex h-11 items-center gap-3 px-4 text-sm text-ink hover:bg-raised">
+                    <LayoutDashboard className="h-4 w-4 text-muted" aria-hidden />
+                    {t('dashboard')}
                   </Link>
-                ))}
-              </div>
-              <button
-                type="button"
-                onClick={() => logout()}
-                className="flex min-h-11 w-full items-center gap-3 rounded-lg border-t border-line px-2 text-start text-sm font-medium text-red-700 hover:bg-red-50"
-              >
-                <LogOut className="h-4 w-4" aria-hidden />
-                {t('signOut')}
-              </button>
+                  <button
+                    type="button"
+                    onClick={() => logout()}
+                    className="flex h-11 w-full items-center gap-3 border-t border-line px-4 text-start text-sm font-medium text-red-700 hover:bg-red-50"
+                  >
+                    <LogOut className="h-4 w-4" aria-hidden />
+                    {t('signOut')}
+                  </button>
+                </>
+              )}
             </Popover>
           ) : (
             <>

@@ -15,7 +15,7 @@ import { LanguageSwitcher } from '@/components/i18n/LanguageSwitcher';
 import { useT } from '@/lib/i18n';
 import { shellMessages } from '@/lib/i18n/messages/shell';
 import { siteMessages } from '@/lib/i18n/messages/site';
-import { ThemeToggle } from '@/components/layout/ThemeToggle';
+import { CustomerAccountMenu } from '@/components/layout/CustomerAccountMenu';
 import {
   Bell,
   CheckCheck,
@@ -25,15 +25,12 @@ import {
   AlertCircle,
   Info,
   ChevronRight,
-  Heart,
   LayoutGrid,
   LifeBuoy,
   LogOut,
-  MapPin,
   Search,
   Settings,
   ShoppingBag,
-  User,
 } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
@@ -313,307 +310,281 @@ export function DashboardNavbar({ userType = 'customer', onMenuToggle, drawerOpe
                   </>
                 ) : (
                   <>
-                    <line x1="3" y1="6" x2="21" y2="6" />
-                    <line x1="3" y1="12" x2="21" y2="12" />
-                    <line x1="3" y1="18" x2="21" y2="18" />
-                  </>
-                )}
-              </svg>
-            </button>
-          )}
-          <Link href={getDashboardLink()} aria-label={t('goHome')} className="flex items-center gap-3 min-h-11 min-w-11">
-            <Mark size={32} />
-            <div className="hidden sm:block leading-tight">
-              <Wordmark size={22} />
-              <p className="eyebrow text-xs font-medium text-muted">
-                {isSeller ? t('ctxSeller') : isAdmin ? t('ctxAdmin') : isRider ? t('ctxRider') : isHubManager ? t('ctxHub') : t('ctxCustomer')}
-              </p>
-            </div>
-          </Link>
-        </div>
-
-        {/* Center - Search Bar (Only for customers) */}
-        {isCustomer && (
-          <div className="hidden lg:flex flex-1 max-w-lg mx-8">
-            <form onSubmit={handleSearch} role="search" className="w-full relative">
-              <Search className="absolute start-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted" aria-hidden="true" />
-              <input
-                type="search"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder={t('searchPlaceholder')}
-                aria-label={t('search')}
-                className="w-full min-h-11 ps-10 pe-24 py-2.5 rounded-xl text-sm outline-none transition-colors bg-page border border-line text-ink placeholder:text-muted focus:border-brand focus:ring-2 focus:ring-brand/20"
-              />
-              <button
-                type="submit"
-                className="absolute end-1.5 top-1/2 -translate-y-1/2 h-8 px-3.5 text-sm font-semibold rounded-lg transition-colors bg-brand text-on-brand hover:bg-brand-500"
-              >
-                {t('search')}
-              </button>
-            </form>
-          </div>
-        )}
-
-        {/* Right Side - Actions */}
-        <div className="flex items-center justify-end gap-1 sm:gap-2 min-w-0 max-sm:flex-1">
-
-          {/* Below lg the inline search does not fit: a button opens the dish search instead */}
-          {isCustomer && (
-            <Link href="/products" aria-label={t('search')} title={t('search')} className={`${iconButton} hidden md:grid lg:hidden text-muted hover:bg-raised hover:text-ink`}>
-              <Search className="w-5 h-5" aria-hidden="true" />
-            </Link>
-          )}
-
-          {/* Community Selector - Only for customers; on a phone it takes the room the bar has left, so the area's name fits */}
-          {isCustomer && (
-            <div className="flex items-center justify-end min-w-0 max-sm:flex-1 sm:max-w-[200px] md:shrink-0">
-              <CommunitySelector variant="navbar" />
-            </div>
-          )}
-
-          {/* Tray - Only for customers; on a phone it is in the tab bar */}
-          {isCustomer && (
-            <Link href="/cart" aria-label={t('cart')} title={t('cart')} className={`${iconButton} hidden md:grid text-muted hover:bg-raised hover:text-ink`}>
-              <ShoppingBag className="w-5 h-5" aria-hidden="true" />
-              {cartItemCount > 0 && (
-                <span className="absolute top-0.5 end-0.5 min-w-5 h-5 px-1 bg-accent text-on-accent text-xs font-bold rounded-full grid place-items-center" aria-hidden="true">
-                  {cartItemCount > 9 ? '9+' : cartItemCount}
-                </span>
-              )}
-            </Link>
-          )}
-
-          {/* Seller Quick Actions */}
-
-          {/* A customer's phone has the language under Profile; the bar keeps room for the area */}
-          <LanguageSwitcher className={isCustomer ? 'hidden sm:inline-flex h-11 px-2' : 'h-11 min-w-11 justify-center px-2 max-[420px]:[&>span]:hidden'} />
-
-          {/* Notifications Panel */}
-          <div className="relative" ref={notificationRef}>
-            <button
-              type="button"
-              onClick={handleToggleNotifications}
-              aria-label={t('notifications')}
-              aria-expanded={showNotificationsPanel}
-              className={`${iconButton} ${showNotificationsPanel ? 'bg-raised text-ink' : 'text-muted hover:bg-raised hover:text-ink'}`}
-              title={t('notifications')}
-            >
-              <Bell className="w-5 h-5" />
-              {notificationUnreadCount > 0 && (
-                <span className="absolute top-2.5 end-2.5 w-2 h-2 bg-red-500 rounded-full" aria-hidden="true" data-testid="bell-unread" />
-              )}
-            </button>
-
-            {/* Notification Dropdown Panel */}
-            {showNotificationsPanel && (
-              <div data-top-panel className={`${panel} sm:w-96`}>
-                {/* Panel Header */}
-                <div className="flex min-h-12 items-center justify-between ps-4 pe-2 border-b border-line">
-                  <div className="flex items-center gap-2">
-                    <span className="font-semibold text-sm text-ink">{t('notifications')}</span>
-                    {notificationUnreadCount > 0 && !notificationsError && (
-                      <span className="px-2 py-0.5 text-[11px] font-bold rounded-full bg-accent-soft text-accent-soft-ink">
-                        {t('newCount', { count: notificationUnreadCount })}
-                      </span>
-                    )}
-                  </div>
-                  {/* Offline the count is stale and marking would fail: neither is offered until the list loads. */}
-                  {notificationUnreadCount > 0 && !notificationsError && (
-                    <button
-                      type="button"
-                      onClick={handleMarkAllNotificationsRead}
-                      className="min-h-11 px-2 rounded-lg text-sm font-medium text-brand-ink hover:bg-raised flex items-center gap-1.5 transition-colors"
-                    >
-                      <CheckCheck className="w-4 h-4" aria-hidden="true" />
-                      <span>{t('markAllRead')}</span>
-                    </button>
+                      <line x1="3" y1="6" x2="21" y2="6" />
+                      <line x1="3" y1="12" x2="21" y2="12" />
+                      <line x1="3" y1="18" x2="21" y2="18" />
+                    </>
                   )}
-                </div>
-
-                {/* Panel Body */}
-                <div className="max-h-80 overflow-y-auto divide-y divide-line">
-                  {loadingNotifications ? (
-                    <div className="py-8 flex flex-col items-center justify-center gap-2 text-muted">
-                      <div className="w-5 h-5 border-2 border-brand-600 border-t-transparent rounded-full animate-spin" />
-                      <span className="text-xs">{t('loadingUpdates')}</span>
-                    </div>
-                  ) : notificationsError && recentNotifications.length === 0 ? (
-                    <LoadError compact plain error={notificationsError} onRetry={fetchRecentNotifications} />
-                  ) : recentNotifications.length === 0 ? (
-                    <p className="py-10 px-4 text-center text-sm text-muted">{t('noNotifications')}</p>
-                  ) : (
-                    recentNotifications.map((notif) => (
-                      <button
-                        type="button"
-                        key={notif.id}
-                        onClick={() => handleMarkNotificationRead(notif.id, notif.actionUrl)}
-                        className="w-full p-3.5 flex items-start gap-3 text-start hover:bg-raised transition-colors"
-                      >
-                        <span
-                          aria-hidden="true"
-                          className={`w-8 h-8 rounded-full grid place-items-center shrink-0 ${notif.type === 'warning' ? 'bg-red-50 text-red-700' : 'bg-raised text-muted'}`}
-                        >
-                          {getNotificationIcon(notif.type)}
-                        </span>
-                        <span className="flex-1 min-w-0">
-                          <span className="flex items-center justify-between gap-2 mb-0.5">
-                            <span className={`text-sm truncate ${!notif.isRead ? 'font-semibold text-ink' : 'text-muted'}`}>
-                              {notif.title}
-                            </span>
-                            <span className="text-xs text-muted shrink-0">
-                              {formatRelativeTime(notif.createdAt, t)}
-                            </span>
-                          </span>
-                          <span className="block text-xs text-muted line-clamp-2 leading-relaxed">
-                            {notif.message}
-                          </span>
-                        </span>
-                        {!notif.isRead && (
-                          <span className="w-2 h-2 rounded-full bg-brand-600 shrink-0 mt-1.5">
-                            <span className="sr-only">{t('unread')}</span>
-                          </span>
-                        )}
-                      </button>
-                    ))
-                  )}
-                </div>
-
-                {/* Panel Footer: a rider has no full list (the customer page would open the customer menu), so none */}
-                {!isRider && (
-                  <div className="border-t border-line">
-                    <Link
-                      href={isSeller ? "/sellers/notifications" : isAdmin ? "/admin/notifications" : "/notifications"}
-                      onClick={() => setShowNotificationsPanel(false)}
-                      className="w-full min-h-12 px-3 text-sm font-medium text-brand-ink hover:bg-raised transition-colors flex items-center justify-center gap-1"
-                    >
-                      <span>{t('viewAllNotifications')}</span>
-                      <ChevronRight className="rtl:-scale-x-100 w-3.5 h-3.5" />
-                    </Link>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-          
-          {/* User Dropdown or Sign In */}
-          {!user && !isAuthenticated ? (
-            <div className="flex items-center gap-2 ms-2">
-              <Link
-                href="/login"
-                className="inline-flex h-11 items-center px-4 rounded-xl text-sm font-semibold text-on-brand transition-colors bg-brand hover:bg-brand-500"
-              >
-                {t('signIn')}
-              </Link>
-            </div>
-          ) : (
-            <div className="relative ms-0 sm:ms-2" ref={dropdownRef}>
-              <button
-                type="button"
-                onClick={() => setShowDropdown(!showDropdown)}
-                aria-label={tSite('account')}
-                aria-haspopup="menu"
-                aria-expanded={showDropdown}
-                className="flex min-h-11 min-w-11 items-center justify-center gap-2 sm:px-2 rounded-lg hover:bg-raised transition-colors cursor-pointer"
-              >
-                <div className="w-9 h-9 rounded-full flex items-center justify-center bg-brand-soft text-brand-soft-ink">
-                  <span className="font-semibold text-sm">
-                    {user?.profile?.fullName?.charAt(0).toUpperCase() || user?.email?.charAt(0).toUpperCase() || 'U'}
-                  </span>
-                </div>
-                <span className="hidden sm:block text-ink text-sm font-medium">
-                  {user?.profile?.fullName?.split(' ')[0] || user?.email?.split('@')[0] || t('user')}
-                </span>
-                <svg className="hidden sm:block w-4 h-4 text-muted" aria-hidden="true" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                 </svg>
               </button>
-            
-            {/* Dropdown Menu */}
-            {showDropdown && (
-              <div data-top-panel className={`${panel} sm:w-72 py-1`}>
-                <div className="px-4 py-3 border-b border-line">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-ink font-semibold truncate text-sm">{user?.profile?.fullName || user?.email || t('user')}</p>
-                    <span className="px-2 py-0.5 text-xs font-medium rounded-full shrink-0 bg-raised text-muted">
-                      {isSeller ? t('roleSeller') : isAdmin ? t('roleAdmin') : isRider ? t('roleRider') : isHubManager ? t('roleHub') : t('roleCustomer')}
+            )}
+            <Link href={getDashboardLink()} aria-label={t('goHome')} className="flex items-center gap-3 min-h-11 min-w-11">
+              <Mark size={32} />
+              <div className="hidden sm:block leading-tight">
+                <Wordmark size={22} />
+                <p className="eyebrow text-xs font-medium text-muted">
+                  {isSeller ? t('ctxSeller') : isAdmin ? t('ctxAdmin') : isRider ? t('ctxRider') : isHubManager ? t('ctxHub') : t('ctxCustomer')}
+                </p>
+              </div>
+            </Link>
+          </div>
+
+          {/* Center - Search Bar (Only for customers) */}
+          {isCustomer && (
+            <div className="hidden lg:flex flex-1 max-w-lg mx-8">
+              <form onSubmit={handleSearch} role="search" className="w-full relative">
+                <Search className="absolute start-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted" aria-hidden="true" />
+                <input
+                  type="search"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder={t('searchPlaceholder')}
+                  aria-label={t('search')}
+                  className="w-full min-h-11 ps-10 pe-24 py-2.5 rounded-xl text-sm outline-none transition-colors bg-page border border-line text-ink placeholder:text-muted focus:border-brand focus:ring-2 focus:ring-brand/20"
+                />
+                <button
+                  type="submit"
+                  className="absolute end-1.5 top-1/2 -translate-y-1/2 h-8 px-3.5 text-sm font-semibold rounded-lg transition-colors bg-brand text-on-brand hover:bg-brand-500"
+                >
+                  {t('search')}
+                </button>
+              </form>
+            </div>
+          )}
+
+          {/* Right Side - Actions */}
+          <div className="flex items-center justify-end gap-1 sm:gap-2 min-w-0 max-sm:flex-1">
+
+            {/* Below lg the inline search does not fit: a button opens the dish search instead */}
+            {isCustomer && (
+              <Link href="/products" aria-label={t('search')} title={t('search')} className={`${iconButton} hidden md:grid lg:hidden text-muted hover:bg-raised hover:text-ink`}>
+                <Search className="w-5 h-5" aria-hidden="true" />
+              </Link>
+            )}
+
+            {/* Community Selector - Only for customers; on a phone it takes the room the bar has left, so the area's name fits */}
+            {isCustomer && (
+              <div className="flex items-center justify-end min-w-0 max-sm:flex-1 sm:max-w-[200px] md:shrink-0">
+                <CommunitySelector variant="navbar" />
+              </div>
+            )}
+
+            {/* Tray - Only for customers; on a phone it is in the tab bar */}
+            {isCustomer && (
+              <Link href="/cart" aria-label={t('cart')} title={t('cart')} className={`${iconButton} hidden md:grid text-muted hover:bg-raised hover:text-ink`}>
+                <ShoppingBag className="w-5 h-5" aria-hidden="true" />
+                {cartItemCount > 0 && (
+                  <span className="absolute top-0.5 end-0.5 min-w-5 h-5 px-1 bg-accent text-on-accent text-xs font-bold rounded-full grid place-items-center" aria-hidden="true">
+                    {cartItemCount > 9 ? '9+' : cartItemCount}
+                  </span>
+                )}
+              </Link>
+            )}
+
+            {/* Seller Quick Actions */}
+
+            {/* A customer's phone has the language under Profile; the bar keeps room for the area */}
+            <LanguageSwitcher className={isCustomer ? 'hidden sm:inline-flex h-11 px-2' : 'h-11 min-w-11 justify-center px-2 max-[420px]:[&>span]:hidden'} />
+
+            {/* Notifications Panel */}
+            <div className="relative" ref={notificationRef}>
+              <button
+                type="button"
+                onClick={handleToggleNotifications}
+                aria-label={t('notifications')}
+                aria-expanded={showNotificationsPanel}
+                className={`${iconButton} ${showNotificationsPanel ? 'bg-raised text-ink' : 'text-muted hover:bg-raised hover:text-ink'}`}
+                title={t('notifications')}
+              >
+                <Bell className="w-5 h-5" />
+                {notificationUnreadCount > 0 && (
+                  <span className="absolute top-2.5 end-2.5 w-2 h-2 bg-red-500 rounded-full" aria-hidden="true" data-testid="bell-unread" />
+                )}
+              </button>
+
+              {/* Notification Dropdown Panel */}
+              {showNotificationsPanel && (
+                <div data-top-panel className={`${panel} sm:w-96`}>
+                  {/* Panel Header */}
+                  <div className="flex min-h-12 items-center justify-between ps-4 pe-2 border-b border-line">
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-sm text-ink">{t('notifications')}</span>
+                      {notificationUnreadCount > 0 && !notificationsError && (
+                        <span className="px-2 py-0.5 text-[11px] font-bold rounded-full bg-accent-soft text-accent-soft-ink">
+                          {t('newCount', { count: notificationUnreadCount })}
+                        </span>
+                      )}
+                    </div>
+                    {/* Offline the count is stale and marking would fail: neither is offered until the list loads. */}
+                    {notificationUnreadCount > 0 && !notificationsError && (
+                      <button
+                        type="button"
+                        onClick={handleMarkAllNotificationsRead}
+                        className="min-h-11 px-2 rounded-lg text-sm font-medium text-brand-ink hover:bg-raised flex items-center gap-1.5 transition-colors"
+                      >
+                        <CheckCheck className="w-4 h-4" aria-hidden="true" />
+                        <span>{t('markAllRead')}</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Panel Body */}
+                  <div className="max-h-80 overflow-y-auto divide-y divide-line">
+                    {loadingNotifications ? (
+                      <div className="py-8 flex flex-col items-center justify-center gap-2 text-muted">
+                        <div className="w-5 h-5 border-2 border-brand-600 border-t-transparent rounded-full animate-spin" />
+                        <span className="text-xs">{t('loadingUpdates')}</span>
+                      </div>
+                    ) : notificationsError && recentNotifications.length === 0 ? (
+                      <LoadError compact plain error={notificationsError} onRetry={fetchRecentNotifications} />
+                    ) : recentNotifications.length === 0 ? (
+                      <p className="py-10 px-4 text-center text-sm text-muted">{t('noNotifications')}</p>
+                    ) : (
+                      recentNotifications.map((notif) => (
+                        <button
+                          type="button"
+                          key={notif.id}
+                          onClick={() => handleMarkNotificationRead(notif.id, notif.actionUrl)}
+                          className="w-full p-3.5 flex items-start gap-3 text-start hover:bg-raised transition-colors"
+                        >
+                          <span
+                            aria-hidden="true"
+                            className={`w-8 h-8 rounded-full grid place-items-center shrink-0 ${notif.type === 'warning' ? 'bg-red-50 text-red-700' : 'bg-raised text-muted'}`}
+                          >
+                            {getNotificationIcon(notif.type)}
+                          </span>
+                          <span className="flex-1 min-w-0">
+                            <span className="flex items-center justify-between gap-2 mb-0.5">
+                              <span className={`text-sm truncate ${!notif.isRead ? 'font-semibold text-ink' : 'text-muted'}`}>
+                                {notif.title}
+                              </span>
+                              <span className="text-xs text-muted shrink-0">
+                                {formatRelativeTime(notif.createdAt, t)}
+                              </span>
+                            </span>
+                            <span className="block text-xs text-muted line-clamp-2 leading-relaxed">
+                              {notif.message}
+                            </span>
+                          </span>
+                          {!notif.isRead && (
+                            <span className="w-2 h-2 rounded-full bg-brand-600 shrink-0 mt-1.5">
+                              <span className="sr-only">{t('unread')}</span>
+                            </span>
+                          )}
+                        </button>
+                      ))
+                    )}
+                  </div>
+
+                  {/* Panel Footer: a rider has no full list (the customer page would open the customer menu), so none */}
+                  {!isRider && (
+                    <div className="border-t border-line">
+                      <Link
+                        href={isSeller ? "/sellers/notifications" : isAdmin ? "/admin/notifications" : "/notifications"}
+                        onClick={() => setShowNotificationsPanel(false)}
+                        className="w-full min-h-12 px-3 text-sm font-medium text-brand-ink hover:bg-raised transition-colors flex items-center justify-center gap-1"
+                      >
+                        <span>{t('viewAllNotifications')}</span>
+                        <ChevronRight className="rtl:-scale-x-100 w-3.5 h-3.5" />
+                      </Link>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          
+            {/* User Dropdown or Sign In */}
+            {!user && !isAuthenticated ? (
+              <div className="flex items-center gap-2 ms-2">
+                <Link
+                  href="/login"
+                  className="inline-flex h-11 items-center px-4 rounded-xl text-sm font-semibold text-on-brand transition-colors bg-brand hover:bg-brand-500"
+                >
+                  {t('signIn')}
+                </Link>
+              </div>
+            ) : (
+              <div className="relative ms-0 sm:ms-2" ref={dropdownRef}>
+                <button
+                  type="button"
+                  onClick={() => setShowDropdown(!showDropdown)}
+                  aria-label={tSite('account')}
+                  aria-haspopup="menu"
+                  aria-expanded={showDropdown}
+                  className="flex min-h-11 min-w-11 items-center justify-center gap-2 sm:px-2 rounded-lg hover:bg-raised transition-colors cursor-pointer"
+                >
+                  <div className="w-9 h-9 rounded-full flex items-center justify-center bg-brand-soft text-brand-soft-ink">
+                    <span className="font-semibold text-sm">
+                      {user?.profile?.fullName?.charAt(0).toUpperCase() || user?.email?.charAt(0).toUpperCase() || 'U'}
                     </span>
                   </div>
-                  <p className="text-xs text-muted truncate mt-0.5" data-ltr>{user?.email}</p>
-                </div>
+                  <span className="hidden sm:block text-ink text-sm font-medium">
+                    {user?.profile?.fullName?.split(' ')[0] || user?.email?.split('@')[0] || t('user')}
+                  </span>
+                  <svg className="hidden sm:block w-4 h-4 text-muted" aria-hidden="true" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+            
+              {/* Dropdown Menu */}
+              {showDropdown && (
+                <div data-top-panel className={`${panel} sm:w-72 py-1`}>
+                  {isCustomer ? (
+                    <CustomerAccountMenu name={user?.profile?.fullName || user?.email || t('user')} email={user?.email} onSignOut={handleLogout} />
+                  ) : (
+                    <>
+                    <div className="px-4 py-3 border-b border-line">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-ink font-semibold truncate text-sm">{user?.profile?.fullName || user?.email || t('user')}</p>
+                        <span className="px-2 py-0.5 text-xs font-medium rounded-full shrink-0 bg-raised text-muted">
+                          {isSeller ? t('roleSeller') : isAdmin ? t('roleAdmin') : isRider ? t('roleRider') : t('roleHub')}
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted truncate mt-0.5" data-ltr>{user?.email}</p>
+                    </div>
 
-
-                <div className="py-1">
-                  {isSeller && (
-                    <Link href="/sellers/settings" className={menuRow}>
-                      <Settings className={menuIcon} aria-hidden="true" />
-                      {t('settings')}
-                    </Link>
-                  )}
-                  {isRider && (
-                    <>
-                      <Link href="/riders/settings" className={menuRow}>
-                        <Settings className={menuIcon} aria-hidden="true" />
-                        {t('settings')}
-                      </Link>
-                      <Link href="/support" className={menuRow}>
-                        <LifeBuoy className={menuIcon} aria-hidden="true" />
-                        {t('helpSupport')}
-                      </Link>
-                    </>
-                  )}
-                  {isCustomer && (
-                    <>
-                      <Link href="/profile" className={menuRow}>
-                        <User className={menuIcon} aria-hidden="true" />
-                        {t('myProfile')}
-                      </Link>
-                      <Link href="/orders" className={menuRow}>
-                        <ShoppingBag className={menuIcon} aria-hidden="true" />
-                        {t('myOrders')}
-                      </Link>
-                      <Link href="/profile/addresses" className={menuRow}>
-                        <MapPin className={menuIcon} aria-hidden="true" />
-                        {t('savedAddresses')}
-                      </Link>
-                      <Link href="/favorites" className={menuRow}>
-                        <Heart className={menuIcon} aria-hidden="true" />
-                        {t('favoriteKitchens')}
-                      </Link>
-                      <Link href="/support" className={menuRow}>
-                        <LifeBuoy className={menuIcon} aria-hidden="true" />
-                        {t('helpSupport')}
-                      </Link>
-                    </>
-                  )}
-                  {isAdmin && (
-                    <>
-                      <Link href="/admin/dashboard" className={menuRow}>
-                        <LayoutGrid className={menuIcon} aria-hidden="true" />
-                        {t('dashboard')}
-                      </Link>
-                      {user?.permissions?.includes('read.finance') && (
-                        <Link href="/admin/settings" className={menuRow}>
+                    <div className="py-1">
+                      {isSeller && (
+                        <Link href="/sellers/settings" className={menuRow}>
                           <Settings className={menuIcon} aria-hidden="true" />
                           {t('settings')}
                         </Link>
                       )}
-                    </>
-                  )}
-                </div>
-                {/* The kitchen, rider, hub and admin screens stay light whatever is chosen (lib/theme.ts) */}
-                {isCustomer && (
-                  <div className="px-4 py-3 border-t border-line">
-                    <p className="mb-2 text-xs font-medium text-muted">{tSite('appearance')}</p>
-                    <ThemeToggle className="[&>button]:min-h-11" />
-                  </div>
+                      {isRider && (
+                        <>
+                          <Link href="/riders/settings" className={menuRow}>
+                            <Settings className={menuIcon} aria-hidden="true" />
+                            {t('settings')}
+                          </Link>
+                          <Link href="/support" className={menuRow}>
+                            <LifeBuoy className={menuIcon} aria-hidden="true" />
+                            {t('helpSupport')}
+                          </Link>
+                        </>
+                      )}
+                      {isAdmin && (
+                        <>
+                          <Link href="/admin/dashboard" className={menuRow}>
+                            <LayoutGrid className={menuIcon} aria-hidden="true" />
+                            {t('dashboard')}
+                          </Link>
+                          {user?.permissions?.includes('read.finance') && (
+                            <Link href="/admin/settings" className={menuRow}>
+                              <Settings className={menuIcon} aria-hidden="true" />
+                              {t('settings')}
+                            </Link>
+                          )}
+                        </>
+                      )}
+                    </div>
+                    <div className="py-1 border-t border-line">
+                      <button type="button" onClick={handleLogout} className={`${menuRow} w-full font-medium text-red-700 hover:bg-red-50`}>
+                        <LogOut className="w-4 h-4" aria-hidden="true" />
+                        {tSite('signOut')}
+                      </button>
+                    </div>
+                  </>
                 )}
-                <div className="py-1 border-t border-line">
-                  <button type="button" onClick={handleLogout} className={`${menuRow} w-full font-medium text-red-700 hover:bg-red-50`}>
-                    <LogOut className="w-4 h-4" aria-hidden="true" />
-                    {tSite('signOut')}
-                  </button>
-                </div>
               </div>
             )}
           </div>

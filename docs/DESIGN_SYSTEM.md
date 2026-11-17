@@ -98,6 +98,9 @@ All of it is in `frontend-web/app/globals.css`: the values once for light (`:roo
   (`mobile/scripts/make-icons.mjs`).
 - `components/layout/SiteHeader.tsx`: the header of the customer pages (home, kitchens, dishes, a kitchen's menu).
   Every icon button in it is 44 by 44 and `shrink-0`, so a long area name never squeezes them.
+- `components/layout/CustomerAccountMenu.tsx`: a customer's account menu, the same in `SiteHeader` and `DashboardNavbar`.
+  Customer pages are named as in the side menu (`CUSTOMER_SIDEBAR_ITEMS`, `navMessages`) in every menu, the home page's
+  side drawer included, and a signed-in customer's help link is `/support` (`/help` is the public page).
 - `components/layout/PhoneTabBar.tsx`: the phone tab bar (Home, Orders, Tray, Profile for customers; Home, Orders, Menu, Earnings, Settings for kitchens; Deliveries, Earnings, Settings for riders); `lib/tab-bar.ts` decides which bar shows where.
   The current tab's icon sits on a `bg-brand-soft` pill and its label is bold. A bar floating at the bottom of a page sits
   `var(--tabbar-offset)` higher so the two do not overlap.
