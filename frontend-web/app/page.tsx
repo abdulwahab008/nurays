@@ -297,7 +297,6 @@ export default function Home() {
       />
 
       <SiteHeader
-        search
         onOpenNav={() => setIsSidebarOpen(true)}
         onOpenTray={() => setIsCartOpen(true)}
       />

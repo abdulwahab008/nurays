@@ -24,7 +24,6 @@ import CartConflictModal, { CartConflictInfo } from '@/components/cart/CartConfl
 import ClosedKitchenModal from '@/components/kitchen/ClosedKitchenModal';
 import {
   Heart,
-  Search,
   MapPin,
   Bike,
   Snowflake,
@@ -355,26 +354,23 @@ function ProductsContent() {
     businessType, maxDistanceKm, fastDeliveryOnly, customerLocation, selectedCommunity?.id, waitingForAddress,
   ]);
 
-  // Results follow the typing: the search runs a moment after the last key, no Search or Enter needed.
+  // The top bar's search box drives the results in place: a moment after the last key the words go into the address,
+  // and the effect above reads them from there (so a search also survives a reload or a shared link).
   const searchTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const typeSearch = (value: string) => {
     setSearchInput(value);
     clearTimeout(searchTimer.current);
     searchTimer.current = setTimeout(() => {
-      setPage(1);
-      setSearchQuery(value);
-      if (value && viewMode !== 'dishes') setViewMode('dishes');
+      const params = new URLSearchParams(window.location.search);
+      if (value.trim()) {
+        params.set('search', value.trim());
+        params.delete('view');
+      } else {
+        params.delete('search');
+      }
+      const query = params.toString();
+      router.replace(`/products${query ? `?${query}` : ''}`, { scroll: false });
     }, 300);
-  };
-
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    clearTimeout(searchTimer.current);
-    setPage(1);
-    setSearchQuery(searchInput);
-    if (searchInput) {
-      setViewMode('dishes');
-    }
   };
 
   const handleQuickAddToCart = async (e: React.MouseEvent, product: Product) => {
@@ -541,43 +537,8 @@ function ProductsContent() {
 
       {/* Unified Search & Filters Panel */}
       <div className="space-y-3">
-        {/* Top Row: Search Input + View Mode Switcher + Sort */}
+        {/* Top row: kitchens or dishes, and the sort */}
         <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-2.5">
-          {/* Clean Search Input */}
-          <form onSubmit={handleSearch} className="flex-1 relative flex items-center">
-            <Search className="w-4 h-4 text-muted absolute start-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-            <input
-              type="text"
-              placeholder={t('searchPlaceholder')}
-              value={searchInput}
-              onChange={(e) => typeSearch(e.target.value)}
-              aria-label={t('searchPlaceholder')}
-              className="w-full ps-10 pe-24 border border-transparent rounded-[14px] text-[15px] font-semibold text-ink placeholder:text-muted placeholder:font-medium focus:border-brand focus:ring-2 focus:ring-brand/20 outline-none bg-raised focus:bg-surface transition-colors h-12"
-            />
-            {searchInput && (
-              <button
-                type="button"
-                onClick={() => {
-                  clearTimeout(searchTimer.current);
-                  setSearchInput('');
-                  setSearchQuery('');
-                  setPage(1);
-                }}
-                className="absolute end-[4.5rem] top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center text-muted hover:text-ink hover:bg-line rounded-full cursor-pointer"
-                title={t('clearSearch')}
-                aria-label={t('clearSearch')}
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            )}
-            <button
-              type="submit"
-              className="absolute end-1.5 top-1/2 -translate-y-1/2 h-9 px-3.5 bg-brand hover:bg-brand-500 text-on-brand text-sm font-semibold rounded-[10px] transition-[color,background-color,border-color,opacity,transform] active:scale-95 cursor-pointer"
-            >
-              {tc('search')}
-            </button>
-          </form>
-
           {/* View Switcher: Kitchens vs Dishes */}
           <div className="grid grid-cols-2 gap-1 p-1 bg-raised rounded-xl h-12 shrink-0">
             <button
@@ -1255,7 +1216,7 @@ function ProductsContent() {
 
   return (
     <div className="min-h-screen bg-page text-ink">
-      <SiteHeader />
+      <SiteHeader search={{ value: searchInput, onChange: typeSearch }} />
 
       <div className="max-w-[1280px] mx-auto px-4 sm:px-8 py-6 md:py-8">
         <div className="space-y-6">

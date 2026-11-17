@@ -23,8 +23,8 @@ import { CustomerAccountMenu } from '@/components/layout/CustomerAccountMenu';
 import { cn, homeFor } from '@/lib/utils';
 
 export interface SiteHeaderProps {
-  /** Shows the dish and kitchen search (home); Enter opens the results on /products. Other pages have their own search. */
-  search?: boolean;
+  /** The dishes page's own search: its results follow the box in place. Without it, Enter opens the results on /products. */
+  search?: { value: string; onChange: (value: string) => void };
   /** Opens the tray drawer; without it the tray button goes to /cart. */
   onOpenTray?: () => void;
   /** Opens the side menu (home only). */
@@ -77,11 +77,13 @@ const iconButton =
 export function SiteHeader({ search, onOpenTray, onOpenNav }: SiteHeaderProps) {
   const t = useT(siteMessages);
   const router = useRouter();
-  const [query, setQuery] = useState('');
+  const [ownQuery, setOwnQuery] = useState('');
+  const query = search ? search.value : ownQuery;
+  const setQuery = search ? search.onChange : setOwnQuery;
   const submitSearch = (e: FormEvent) => {
     e.preventDefault();
     const q = query.trim();
-    if (q) router.push(`/products?search=${encodeURIComponent(q)}`);
+    if (q && !search) router.push(`/products?search=${encodeURIComponent(q)}`);
   };
   const { isAuthenticated, user, logout } = useAuthStore(
     useShallow((s) => ({ isAuthenticated: s.isAuthenticated, user: s.user, logout: s.logout })),
@@ -133,38 +135,34 @@ export function SiteHeader({ search, onOpenTray, onOpenNav }: SiteHeaderProps) {
           <CommunitySelector variant="navbar" />
         </div>
 
-        {/* Beside a search box, which finds kitchens and dishes itself (and the side menu has their links), the links step aside. */}
-        {!search && (
-          <nav aria-label={t('mainNav')} className="hidden items-center gap-1 lg:flex">
-            <Link href="/kitchens" className="rounded-lg px-3 py-2 text-sm font-semibold text-ink hover:bg-raised">
-              {t('kitchens')}
-            </Link>
-            <Link href="/products" className="rounded-lg px-3 py-2 text-sm font-semibold text-ink hover:bg-raised">
-              {t('dishes')}
-            </Link>
-          </nav>
-        )}
+        {/* Only the widest bar has room for the links beside the search box. */}
+        <nav aria-label={t('mainNav')} className="hidden items-center gap-1 xl:flex">
+          <Link href="/kitchens" className="rounded-lg px-3 py-2 text-sm font-semibold text-ink hover:bg-raised">
+            {t('kitchens')}
+          </Link>
+          <Link href="/products" className="rounded-lg px-3 py-2 text-sm font-semibold text-ink hover:bg-raised">
+            {t('dishes')}
+          </Link>
+        </nav>
 
-        {search ? (
-          <form role="search" onSubmit={submitSearch} className="relative ms-auto hidden max-w-md flex-1 items-center sm:flex">
-            <label htmlFor="site-search" className="sr-only">{t('searchLabel')}</label>
-            <Search className="pointer-events-none absolute start-3.5 h-[18px] w-[18px] text-muted" aria-hidden />
-            <input
-              id="site-search"
-              type="search"
-              enterKeyHint="search"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder={t('searchPlaceholder')}
-              className="h-11 w-full rounded-xl border border-line bg-raised ps-11 pe-10 text-sm font-medium text-ink outline-none transition-colors placeholder:text-muted focus:border-brand focus:bg-surface focus:ring-3 focus:ring-brand/30"
-            />
-            {query && (
-              <button type="button" onClick={() => setQuery('')} aria-label={t('clearSearch')} className="absolute end-1 flex h-9 w-9 items-center justify-center rounded-lg text-muted hover:text-ink">
-                <X className="h-4 w-4" aria-hidden />
-              </button>
-            )}
-          </form>
-        ) : null}
+        <form role="search" onSubmit={submitSearch} className="relative ms-auto hidden max-w-md flex-1 items-center sm:flex">
+          <label htmlFor="site-search" className="sr-only">{t('searchLabel')}</label>
+          <Search className="pointer-events-none absolute start-3.5 h-[18px] w-[18px] text-muted" aria-hidden />
+          <input
+            id="site-search"
+            type="search"
+            enterKeyHint="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={t('searchPlaceholder')}
+            className="h-11 w-full rounded-xl border border-line bg-raised ps-11 pe-10 text-sm font-medium text-ink outline-none transition-colors placeholder:text-muted [&::-webkit-search-cancel-button]:appearance-none focus:border-brand focus:bg-surface focus:ring-3 focus:ring-brand/30"
+          />
+          {query && (
+            <button type="button" onClick={() => setQuery('')} aria-label={t('clearSearch')} className="absolute end-1 flex h-9 w-9 items-center justify-center rounded-lg text-muted hover:text-ink">
+              <X className="h-4 w-4" aria-hidden />
+            </button>
+          )}
+        </form>
 
         <div className="ms-auto flex shrink-0 items-center gap-1 sm:gap-2">
           {/* A signed-in customer finds the language in the account menu. */}
@@ -233,22 +231,20 @@ export function SiteHeader({ search, onOpenTray, onOpenNav }: SiteHeaderProps) {
         </div>
       </div>
 
-      {search && (
-        <form role="search" onSubmit={submitSearch} className="px-4 pb-3 sm:hidden">
-          <label className="relative flex items-center">
-            <span className="sr-only">{t('searchLabel')}</span>
-            <Search className="pointer-events-none absolute start-3.5 h-[18px] w-[18px] text-muted" aria-hidden />
-            <input
-              type="search"
-              enterKeyHint="search"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder={t('searchPlaceholder')}
-              className="h-12 w-full rounded-xl border border-line bg-raised ps-11 pe-4 text-base font-medium text-ink outline-none placeholder:text-muted focus:border-brand focus:bg-surface focus:ring-3 focus:ring-brand/30"
-            />
-          </label>
-        </form>
-      )}
+      <form role="search" onSubmit={submitSearch} className="px-4 pb-3 sm:hidden">
+        <label className="relative flex items-center">
+          <span className="sr-only">{t('searchLabel')}</span>
+          <Search className="pointer-events-none absolute start-3.5 h-[18px] w-[18px] text-muted" aria-hidden />
+          <input
+            type="search"
+            enterKeyHint="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={t('searchPlaceholder')}
+            className="h-12 w-full rounded-xl border border-line bg-raised ps-11 pe-4 text-base font-medium text-ink outline-none placeholder:text-muted focus:border-brand focus:bg-surface focus:ring-3 focus:ring-brand/30"
+          />
+        </label>
+      </form>
     </header>
   );
 }
