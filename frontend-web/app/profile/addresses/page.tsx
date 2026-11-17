@@ -11,7 +11,7 @@ import { useToast } from '@/components/ui/toast';
 import { useDialogs } from '@/components/ui/Dialogs';
 import { apiErrorMessage } from '@/lib/api-client';
 import { useAuthStore, hasSession } from '@/lib/store/auth-store';
-import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
+import { DashboardLayout } from '@/components/layout/DashboardShell';
 import { useT } from '@/lib/i18n';
 import { commonMessages } from '@/lib/i18n/messages/common';
 import { accountMessages } from '@/lib/i18n/messages/account';
@@ -156,7 +156,6 @@ export default function AddressesPage() {
     longitude: '',
   });
 
-  const sidebarItems = CUSTOMER_SIDEBAR_ITEMS;
 
   const handleEditAddress = (address: Address) => {
     const typeId = addressTypes.find(a => a.label.toLowerCase() === address.label?.toLowerCase())?.id || 'other';
@@ -386,7 +385,7 @@ export default function AddressesPage() {
       <DashboardLayout
         title={t('myAddresses')}
         subtitle={t('manageDeliveryAddresses')}
-        sidebarItems={sidebarItems}
+       
         userType="customer"
       >
         <div className="flex items-center justify-center h-64">
@@ -403,7 +402,7 @@ export default function AddressesPage() {
     <DashboardLayout
       title={t('myAddresses')}
       subtitle={t('manageDeliveryLocations')}
-      sidebarItems={sidebarItems}
+     
       userType="customer"
     >
       {!showAddForm && addresses.length > 0 && (

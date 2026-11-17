@@ -7,7 +7,6 @@ import { useRouter } from 'next/navigation';
 import { Bell, Mail, MessageSquare, Smartphone } from 'lucide-react';
 import {
   DashboardLayout,
-  CUSTOMER_SIDEBAR_ITEMS,
   SELLER_SIDEBAR_ITEMS,
   RIDER_SIDEBAR_ITEMS,
   ADMIN_SIDEBAR_ITEMS,
@@ -134,7 +133,7 @@ export default function NotificationSettingsPage() {
           ? ADMIN_SIDEBAR_ITEMS
           : role === 'hub_manager'
             ? HUB_MANAGER_SIDEBAR_ITEMS
-            : CUSTOMER_SIDEBAR_ITEMS;
+            : undefined;
   const layoutRole = (['seller', 'rider', 'admin', 'hub_manager'].includes(role) ? role : 'customer') as 'customer' | 'seller' | 'rider' | 'admin' | 'hub_manager';
   const copy = CATEGORY_COPY[role] ?? CATEGORY_COPY.default;
 

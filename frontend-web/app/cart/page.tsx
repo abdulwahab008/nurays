@@ -29,7 +29,7 @@ import { Button } from '@/components/ui/button';
 import { LoadError } from '@/components/ui/LoadError';
 import { useAuthStore, hasSession } from '@/lib/store/auth-store';
 import { useCartStore, trayFromServer, CartItem as LocalCartItem } from '@/lib/store/cart-store';
-import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
+import { DashboardLayout } from '@/components/layout/DashboardShell';
 import { apiClient, apiErrorMessage } from '@/lib/api-client';
 import { useToast } from '@/components/ui/toast';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
@@ -112,7 +112,6 @@ export default function CartPage() {
   const [showClearModal, setShowClearModal] = useState(false);
   const [clearingCart, setClearingCart] = useState(false);
 
-  const sidebarItems = CUSTOMER_SIDEBAR_ITEMS;
 
   const handleApplyPromoInCart = async () => {
     const code = cartPromoInput.trim().toUpperCase();
@@ -391,7 +390,7 @@ export default function CartPage() {
       <DashboardLayout
         title={t('cartTitle')}
         subtitle={t('cartLoadingSubtitle')}
-        sidebarItems={sidebarItems}
+       
         userType="customer"
       >
         <div className="flex items-center justify-center min-h-[400px]">
@@ -408,7 +407,7 @@ export default function CartPage() {
   if (loadError && !hasItems) {
     return (
       // No subtitle: "Your dining cart is currently empty" would say what the page could not find out.
-      <DashboardLayout title={t('cartTitle')} sidebarItems={sidebarItems} userType="customer">
+      <DashboardLayout title={t('cartTitle')} userType="customer">
         <div className="max-w-xl mx-auto my-12">
           <LoadError error={loadError} onRetry={loadCart} title={t('loadFailed')} />
         </div>
@@ -422,7 +421,7 @@ export default function CartPage() {
       <DashboardLayout
         title={t('cartTitle')}
         subtitle=""
-        sidebarItems={sidebarItems}
+       
         userType="customer"
       >
         <div className="max-w-2xl mx-auto my-6">
@@ -513,7 +512,7 @@ export default function CartPage() {
           ? t(trayCount === 1 ? 'cartSubtitleOne' : 'cartSubtitleMany', { count: trayCount, kitchen: activeSeller.businessName })
           : t(trayCount === 1 ? 'itemsInTrayOne' : 'itemsInTrayMany', { count: trayCount })
       }
-      sidebarItems={sidebarItems}
+     
       userType="customer"
     >
       <div className="space-y-6 pb-12">

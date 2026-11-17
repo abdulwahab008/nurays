@@ -33,7 +33,7 @@ import { LoadError } from '@/components/ui/LoadError';
 import { useToast } from '@/components/ui/toast';
 import { useAuthStore, hasSession } from '@/lib/store/auth-store';
 import { useCartStore } from '@/lib/store/cart-store';
-import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
+import { DashboardLayout } from '@/components/layout/DashboardShell';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { apiClient, apiErrorMessage, apiErrorCode, apiErrorDetails, apiErrorStatus } from '@/lib/api-client';
 import { sellerService, type PublicSellerAvailability } from '@/lib/services/seller.service';
@@ -132,7 +132,6 @@ export default function CheckoutPage() {
   // The kitchen's hours as its storefront shows them; null until known, and nothing is blocked on a guess.
   const [kitchenAvailability, setKitchenAvailability] = useState<PublicSellerAvailability | null>(null);
 
-  const sidebarItems = CUSTOMER_SIDEBAR_ITEMS;
 
   // What delivery to the chosen address costs is the server's to say (the kitchen, the address and the order's amount
   // decide it); nothing is assumed while it is not known.
@@ -499,7 +498,7 @@ export default function CheckoutPage() {
 
   if (loading) {
     return (
-      <DashboardLayout title={t('checkoutTitle')} subtitle={t('checkoutSubtitle')} sidebarItems={sidebarItems} userType="customer">
+      <DashboardLayout title={t('checkoutTitle')} subtitle={t('checkoutSubtitle')} userType="customer">
         <div className="max-w-5xl mx-auto py-12 flex flex-col items-center justify-center gap-3">
           <div className="w-8 h-8 border-3 border-brand border-t-transparent rounded-full animate-spin" />
           <p className="text-xs font-semibold text-muted">{t('preparingSummary')}</p>
@@ -510,7 +509,7 @@ export default function CheckoutPage() {
 
   if (loadError && !cart) {
     return (
-      <DashboardLayout title={t('checkoutTitle')} subtitle={t('checkoutSubtitle')} sidebarItems={sidebarItems} userType="customer">
+      <DashboardLayout title={t('checkoutTitle')} subtitle={t('checkoutSubtitle')} userType="customer">
         <div className="max-w-xl mx-auto my-12">
           <LoadError error={loadError} onRetry={loadData} title={t('loadFailed')} />
         </div>
@@ -520,7 +519,7 @@ export default function CheckoutPage() {
 
   if (!cart || cart.items.length === 0) {
     return (
-      <DashboardLayout title={t('checkoutTitle')} subtitle={t('checkoutSubtitle')} sidebarItems={sidebarItems} userType="customer">
+      <DashboardLayout title={t('checkoutTitle')} subtitle={t('checkoutSubtitle')} userType="customer">
         <div className="max-w-md mx-auto my-12 bg-surface rounded-[24px] p-8 border border-line text-center">
           <div className="w-16 h-16 bg-brand-soft rounded-2xl flex items-center justify-center mx-auto mb-4 text-brand-soft-ink">
             <ShoppingBag className="w-8 h-8" />
@@ -582,7 +581,7 @@ export default function CheckoutPage() {
   );
 
   return (
-    <DashboardLayout title={t('checkoutTitle')} subtitle={t('reviewSubtitle')} sidebarItems={sidebarItems} userType="customer">
+    <DashboardLayout title={t('checkoutTitle')} subtitle={t('reviewSubtitle')} userType="customer">
       <div className="max-w-6xl mx-auto pb-28 lg:pb-16">
         {/* Kitchen Origin Header Banner */}
         <div className="mb-6 px-4 py-2 rounded-[20px] bg-surface border border-line flex items-center justify-between gap-3">

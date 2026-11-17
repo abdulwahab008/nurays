@@ -13,7 +13,7 @@ import { LoadError } from '@/components/ui/LoadError';
 import { useAuthStore, hasSession } from '@/lib/store/auth-store';
 import { useSocket, type DeliveryTrackingEvent } from '@/lib/hooks/use-socket';
 import { useLiveRefresh } from '@/lib/hooks/use-live-refresh';
-import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
+import { DashboardLayout } from '@/components/layout/DashboardShell';
 import { apiClient, apiErrorMessage } from '@/lib/api-client';
 import { newAudioContext } from '@/lib/audio';
 import ManualPaymentCard from '@/components/orders/ManualPaymentCard';
@@ -458,14 +458,13 @@ function OrderDetailContent() {
     }
   };
 
-  const customerSidebarItems = CUSTOMER_SIDEBAR_ITEMS;
 
   if (loading) {
     return (
       <DashboardLayout
         title={t('detail.title')}
         subtitle={t('detail.loadingSub')}
-        sidebarItems={customerSidebarItems}
+       
         userType="customer"
       >
         <div className="flex items-center justify-center py-16">
@@ -477,7 +476,7 @@ function OrderDetailContent() {
 
   if (!order && loadError) {
     return (
-      <DashboardLayout title={tc('loadFailedTitle')} subtitle="" sidebarItems={customerSidebarItems} userType="customer">
+      <DashboardLayout title={tc('loadFailedTitle')} subtitle="" userType="customer">
         <div className="max-w-xl mx-auto py-10 px-4">
           <LoadError error={loadError} onRetry={() => void loadOrder()} />
         </div>
@@ -490,7 +489,7 @@ function OrderDetailContent() {
       <DashboardLayout
         title={t('detail.notFound')}
         subtitle=""
-        sidebarItems={customerSidebarItems}
+       
         userType="customer"
       >
         <div className="max-w-xl mx-auto py-16 px-4 text-center">
@@ -582,7 +581,7 @@ function OrderDetailContent() {
     <DashboardLayout
       title={t('detail.pageTitle', { number: order.orderNumber })}
       subtitle={`\u2068${formatDateTime(order.createdAt)}\u2069`}
-      sidebarItems={customerSidebarItems}
+     
       userType="customer"
     >
       <div className="print-hide max-w-5xl mx-auto space-y-4 pb-8">

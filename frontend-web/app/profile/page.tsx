@@ -17,7 +17,7 @@ import { AppearanceSection } from '@/components/account/AppearanceSection';
 import { AccountSecuritySection } from '@/components/account/AccountSecuritySection';
 import { SignOutCard } from '@/components/account/SignOutCard';
 import { DangerZoneSection } from '@/components/account/DangerZoneSection';
-import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS, RIDER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
+import { DashboardLayout, RIDER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { useT } from '@/lib/i18n';
 import { accountMessages } from '@/lib/i18n/messages/account';
 import {
@@ -64,7 +64,7 @@ export default function ProfilePage() {
   const photoInputRef = useRef<HTMLInputElement>(null);
 
   const isRider = (user?.userType ?? user?.user_type) === 'rider';
-  const sidebarItems = isRider ? RIDER_SIDEBAR_ITEMS : CUSTOMER_SIDEBAR_ITEMS;
+  const sidebarItems = isRider ? RIDER_SIDEBAR_ITEMS : undefined;
   const layoutRole = isRider ? 'rider' : 'customer';
 
   // A new photo is uploaded (resized by the server), then set as the profile picture.

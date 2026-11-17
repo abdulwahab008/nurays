@@ -20,6 +20,7 @@ import { CommunitySelector } from '@/components/community/CommunitySelector';
 import { LanguageSwitcher } from '@/components/i18n/LanguageSwitcher';
 import { ThemeButton } from '@/components/layout/ThemeToggle';
 import { CustomerAccountMenu } from '@/components/layout/CustomerAccountMenu';
+import { NotificationBell } from '@/components/layout/NotificationBell';
 import { UberLeftSidebar } from '@/components/marketplace/UberLeftSidebar';
 import { cn, homeFor } from '@/lib/utils';
 
@@ -178,6 +179,8 @@ export function SiteHeader({ search, onOpenTray }: SiteHeaderProps) {
                 {trayInner}
               </Link>
             )}
+
+            {signedIn && isCustomer && <NotificationBell allHref="/notifications" />}
 
             {signedIn ? (
               <Popover

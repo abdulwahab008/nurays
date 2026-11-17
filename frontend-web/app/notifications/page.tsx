@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { loginUrlHere } from '@/lib/auth-redirect';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
+import { DashboardLayout } from '@/components/layout/DashboardShell';
 import { Button } from '@/components/ui/button';
 import { LoadError } from '@/components/ui/LoadError';
 import { useAuthStore, hasSession } from '@/lib/store/auth-store';
@@ -49,7 +49,6 @@ export default function NotificationsPage() {
   // Why the notifications could not be read; shown instead of "No notifications yet", which would be untrue.
   const [loadError, setLoadError] = useState<unknown>(null);
 
-  const sidebarItems = CUSTOMER_SIDEBAR_ITEMS;
 
   const loadNotifications = async () => {
     setLoadError(null);
@@ -211,7 +210,7 @@ export default function NotificationsPage() {
     <DashboardLayout
       title={t('notifications')}
       subtitle={couldNotRead ? undefined : t(unreadCount !== 1 ? 'unreadMany' : 'unreadOne', { count: unreadCount })}
-      sidebarItems={sidebarItems}
+     
       userType="customer"
     >
       {/* Header Actions */}

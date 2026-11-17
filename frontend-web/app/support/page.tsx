@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { loginUrlHere } from '@/lib/auth-redirect';
 import { useRouter } from 'next/navigation';
 import { Send } from 'lucide-react';
-import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
+import { DashboardLayout } from '@/components/layout/DashboardShell';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { useAuthStore, hasSession } from '@/lib/store/auth-store';
@@ -41,7 +41,6 @@ export default function SupportPage() {
   const needsOrder = (category: Category) => isCustomer && NEEDS_ORDER.includes(category);
   const orderNeeded = needsOrder(formData.category);
 
-  const sidebarItems = CUSTOMER_SIDEBAR_ITEMS;
 
   const validate = (data: typeof formData): FieldErrors => {
     const next: FieldErrors = {};
@@ -121,7 +120,7 @@ export default function SupportPage() {
     <DashboardLayout
       title={t('helpSupport')}
       subtitle={t('hereToHelp')}
-      sidebarItems={sidebarItems}
+     
       userType="customer"
     >
       <div id="support-tabs" role="tablist" className="flex gap-1 mb-6 border-b border-line overflow-x-auto scrollbar-none">
