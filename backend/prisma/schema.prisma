@@ -233,6 +233,11 @@ model Seller {
   preOrderOnly          Boolean  @default(false) @map("pre_order_only")
   advanceBookingMinDays Int?     @map("advance_booking_min_days")
   advanceBookingMaxDays Int?     @map("advance_booking_max_days")
+  // Orders are accepted for the kitchen as soon as they can be (at placement, or once an online payment is in).
+  autoAcceptOrders      Boolean  @default(false) @map("auto_accept_orders")
+  // Minutes before a pre-order's slot that the kitchen starts on it (null = 60): the rider is sent then,
+  // and an order still not accepted is cancelled (utils/preOrder.ts).
+  preOrderLeadMinutes   Int?     @map("pre_order_lead_minutes")
 
   communityId           String?   @map("community_id")
   allowCrossCommunity   Boolean   @default(true) @map("allow_cross_community")
@@ -1026,6 +1031,8 @@ model Promotion {
   discountValue     Decimal   @map("discount_value") @db.Decimal(10, 2)
   maxDiscountAmount Decimal?  @map("max_discount_amount") @db.Decimal(10, 2)
   minOrderAmount    Decimal   @default(0) @map("min_order_amount") @db.Decimal(10, 2)
+  // A kitchen's menu deal: 'per_dish' takes the discount off every dish it covers, 'per_order' takes it once off the order.
+  discountScope     String    @default("per_dish") @map("discount_scope")
   applicableTo         String   @default("all") @map("applicable_to")
   applicableProductIds String[] @map("applicable_product_ids") @default([])
   applicableCities     String[] @map("applicable_cities")

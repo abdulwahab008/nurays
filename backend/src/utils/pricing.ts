@@ -46,6 +46,15 @@ export interface CatalogDeal {
   minOrderAmount: number;
   /** The most the deal takes off one order (all its lines together); null or 0 when it has no cap. */
   maxDiscountAmount: number | null;
+  /** 'per_order': a fixed amount comes off the order once, not off every dish. A percentage is the same either way. */
+  discountScope?: string;
+}
+
+/** The most a deal takes off one order: its cap, and for a fixed amount taken once per order, that amount. */
+function orderCap(d: CatalogDeal): number | null {
+  const once = d.discountScope === 'per_order' && d.discountType === 'fixed' && d.discountValue > 0 ? d.discountValue : null;
+  if (once === null) return d.maxDiscountAmount || null;
+  return d.maxDiscountAmount ? Math.min(once, d.maxDiscountAmount) : once;
 }
 
 export interface CatalogDealLine {
@@ -71,8 +80,9 @@ function unitReductions(basePrice: number, deals: ReadonlyArray<{ discountType: 
 
 /**
  * The unit price of every line of an order after the kitchens' menu deals, and the deals that took something off each line.
- * A deal with a minimum order counts only when that kitchen's goods reach it; a deal with a cap takes at most the cap off
- * the whole order (each line's share is scaled down to whole rupees); a discounted unit never costs less than Rs 1.
+ * A deal with a minimum order counts only when that kitchen's goods reach it; a deal with a cap, or a fixed amount the
+ * kitchen gives once per order, takes at most that off the whole order (each line's share is scaled down to whole rupees,
+ * so the order can come out a few rupees short of it); a discounted unit never costs less than Rs 1.
  * frontend-web/lib/pricing.ts priceDealLines() is the same sum for the cart and checkout pages, so the price a customer
  * sees is the price charged. backend/tests/web-parity.test.ts fails when the two differ.
  */
@@ -89,16 +99,15 @@ export function priceDealLines(lines: ReadonlyArray<CatalogDealLine>): { unitPri
     inForce[i].forEach((d, j) => {
       // A capped deal is counted in the whole rupees it takes off a unit (a half goes down, as the unit price goes up),
       // so the cap is compared with what is charged, not with the sum before rounding.
-      if (d.maxDiscountAmount) reductions[i][j] = Math.max(0, Math.ceil(reductions[i][j] - 0.5));
+      if (orderCap(d)) reductions[i][j] = Math.max(0, Math.ceil(reductions[i][j] - 0.5));
       taken.set(d.id, (taken.get(d.id) ?? 0) + reductions[i][j] * line.quantity);
     });
   });
   lines.forEach((_, i) => {
     inForce[i].forEach((d, j) => {
       const total = taken.get(d.id) ?? 0;
-      if (d.maxDiscountAmount && total > d.maxDiscountAmount) {
-        reductions[i][j] = Math.floor((reductions[i][j] * d.maxDiscountAmount) / total);
-      }
+      const cap = orderCap(d);
+      if (cap && total > cap) reductions[i][j] = Math.floor((reductions[i][j] * cap) / total);
     });
   });
 

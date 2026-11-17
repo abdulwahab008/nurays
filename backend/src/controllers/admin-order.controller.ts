@@ -139,7 +139,7 @@ export const completeRefund = async (req: Request, res: Response) => {
     throw new AppError('Authentication required', 401, 'AUTH_REQUIRED');
   }
 
-  const refund = await completeRefundRecord(req.params.refundId, req.user.userId, req.body.reference);
+  const refund = await completeRefundRecord(req.params.refundId, req.user.userId, req.body.reference, req.body.toWallet === true);
 
   res.status(200).json({
     success: true,

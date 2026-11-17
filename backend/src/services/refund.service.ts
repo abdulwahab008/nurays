@@ -5,7 +5,9 @@ import { notify } from './notify.service';
 import { AppError } from '../middleware/errorHandler';
 import { parseBreakdown } from '../utils/deliveryEarnings';
 import { GST_RATE, priceOrder, roundMoney } from '../utils/pricing';
-import { logEvent } from '../utils/logger';
+import { logEvent, logger } from '../utils/logger';
+import { creditWallet } from './wallet.service';
+import { refreshOwing } from './kitchen-owing.service';
 import { notificationText } from '../utils/notificationText';
 
 type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
@@ -276,9 +278,14 @@ export async function refundForCancelledItems(
  * JazzCash / gateway). Once every refund on a fully-refunded order is
  * completed, the order's paymentStatus becomes 'refunded'.
  */
-export async function completeRefund(refundId: string, adminId: string, reference?: string) {
-  const refund = await completeRefundRecord(refundId, adminId, reference);
+export async function completeRefund(refundId: string, adminId: string, reference?: string, toWallet = false) {
+  const refund = await completeRefundRecord(refundId, adminId, reference, toWallet);
   logEvent('refund.completed', { orderId: refund.orderId, refundId, actor: 'admin', amountMinor: Math.round(Number(refund.amount) * 100) });
+  // A refund of money the kitchen holds is the kitchen's debt to Nuray from this moment: its limits apply at once.
+  const kitchens = await prisma.orderItem.findMany({ where: { orderId: refund.orderId }, select: { sellerId: true }, distinct: ['sellerId'] });
+  for (const k of kitchens) {
+    await refreshOwing(prisma, k.sellerId).catch((err) => logger.error({ err, sellerId: k.sellerId }, 'Could not bring a kitchen owing state up to date after a refund'));
+  }
   // After the commit: tell the customer the money is on its way.
   const order = await prisma.order.findUnique({ where: { id: refund.orderId }, select: { orderNumber: true, customerId: true } });
   if (order?.customerId) {
@@ -296,13 +303,15 @@ export async function completeRefund(refundId: string, adminId: string, referenc
   return refund;
 }
 
-async function completeRefundRecord(refundId: string, adminId: string, reference?: string) {
+/** `toWallet`: the money is put in the customer's Nuray Wallet here, instead of being sent by hand and recorded. */
+async function completeRefundRecord(refundId: string, adminId: string, reference: string | undefined, toWallet: boolean) {
   return prisma.$transaction(async (tx) => {
     const claimed = await tx.refund.updateMany({
       where: { id: refundId, status: 'pending' },
       data: {
         status: 'completed',
-        reference: reference?.trim() || null,
+        ...(toWallet ? { method: 'wallet' } : {}),
+        reference: toWallet ? 'Nuray Wallet' : reference?.trim() || null,
         processedBy: adminId,
         processedAt: new Date(),
       },
@@ -315,6 +324,17 @@ async function completeRefundRecord(refundId: string, adminId: string, reference
     const refund = await tx.refund.findUniqueOrThrow({ where: { id: refundId } });
 
     const order = await tx.order.findUniqueOrThrow({ where: { id: refund.orderId } });
+    if (toWallet) {
+      if (!refund.customerId) throw new AppError('Cannot refund to a wallet: the order has no customer', 400, 'NO_CUSTOMER');
+      await creditWallet(tx, {
+        userId: refund.customerId,
+        amount: Number(refund.amount),
+        type: 'credit',
+        description: `Refund for order ${order.orderNumber}`,
+        orderId: order.id,
+        referenceId: refund.id,
+      });
+    }
     if (order.paymentStatus === 'refund_pending') {
       const stillPending = await tx.refund.count({ where: { orderId: order.id, status: 'pending' } });
       if (stillPending === 0) {
@@ -327,7 +347,7 @@ async function completeRefundRecord(refundId: string, adminId: string, reference
         orderId: order.id,
         status: order.orderStatus,
         // The transfer reference is kept on the refund record; kitchens read this history.
-        notes: `Refund of ${Number(refund.amount)} sent to the customer`,
+        notes: `Refund of ${Number(refund.amount)} ${toWallet ? "added to the customer's Nuray Wallet" : 'sent to the customer'}`,
         changedBy: adminId,
       },
     });

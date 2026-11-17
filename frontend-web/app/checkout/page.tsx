@@ -12,7 +12,6 @@ import {
   Building2,
   Smartphone,
   Check,
-  Copy,
   ArrowRight,
   ShieldCheck,
   Tag,
@@ -48,7 +47,6 @@ import { useShallow } from 'zustand/react/shallow';
 import { SLOT_TIMES, openSlotsToday, pktDateString, slotDays, type SlotTime } from './delivery-slots';
 import { attemptMayExist, checkoutKeyFor, forgetCheckoutKey, sessionStore } from './checkout-key';
 
-type CopyField = 'iban' | 'jazzcash' | 'easypaisa';
 type PaymentMethod = 'cod' | 'safepay' | 'wallet' | 'bank' | 'jazzcash' | 'easypaisa';
 type Fulfilment = 'delivery' | 'pickup';
 
@@ -111,8 +109,7 @@ export default function CheckoutPage() {
   const [fulfilment, setFulfilment] = useState<Fulfilment>('delivery');
   const [onlineAvailable, setOnlineAvailable] = useState(false);
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
-  const [transactionRef, setTransactionRef] = useState<string>('');
-  // The kitchen owes Nuray and its cash orders are paused (CASH_UNAVAILABLE): cash comes off the list.
+  // The kitchen owes Nuray and takes no money itself for now (CASH_UNAVAILABLE): cash and transfers to it come off the list.
   const [cashUnavailable, setCashUnavailable] = useState(false);
   const [deliveryInstructions, setDeliveryInstructions] = useState<string>('');
   const [deliverySlot, setDeliverySlot] = useState<{ offset: number; time: SlotTime }>(() => {
@@ -127,7 +124,6 @@ export default function CheckoutPage() {
   const [loadError, setLoadError] = useState<unknown>(null);
   const [processing, setProcessing] = useState(false);
   const [updatingItemId, setUpdatingItemId] = useState<string | null>(null);
-  const [copiedField, setCopiedField] = useState<CopyField | null>(null);
   const [showClearModal, setShowClearModal] = useState(false);
   const [clearingCart, setClearingCart] = useState(false);
   // Bumped whenever the tray changed on the server, so the delivery estimate is asked for again.
@@ -217,15 +213,6 @@ export default function CheckoutPage() {
       .then((w) => setWalletBalance(w.isLocked ? 0 : w.balance))
       .catch(() => setWalletBalance(null));
   }, [isAuthenticated]);
-
-  const handleCopy = (text: string, field: CopyField) => {
-    if (typeof navigator !== 'undefined' && navigator.clipboard) {
-      navigator.clipboard.writeText(text);
-      setCopiedField(field);
-      showToast(t('copiedToClipboard', { label: t(`copyLabel.${field}`) }), 'success');
-      setTimeout(() => setCopiedField(null), 2500);
-    }
-  };
 
   const handleClearCart = async () => {
     setClearingCart(true);
@@ -325,12 +312,8 @@ export default function CheckoutPage() {
   const chosenDay = days.find((d) => d.offset === deliverySlot.offset) ?? days[0];
   const chosenTime = chosenDay ? (chosenDay.slots.includes(deliverySlot.time) ? deliverySlot.time : chosenDay.slots[0]) : undefined;
   // A transfer straight to the kitchen is offered only when the kitchen has given the account to send it to.
-  const transferAccount = {
-    bank: kitchen?.bankAccountNumber || null,
-    jazzcash: kitchen?.jazzcashNumber || null,
-    easypaisa: kitchen?.easypaisaNumber || null,
-  };
-  const methodUsable = (m: PaymentMethod) => (m === 'bank' || m === 'jazzcash' || m === 'easypaisa' ? !!transferAccount[m] : true);
+  const takesTransfer = (m: PaymentMethod) => !cashUnavailable && !!kitchen?.transferMethods?.includes(m);
+  const methodUsable = (m: PaymentMethod) => (m === 'bank' || m === 'jazzcash' || m === 'easypaisa' ? takesTransfer(m) : true);
 
   const dayLabel = (offset: number, date: string) => {
     if (offset === 0) return t('day.today');
@@ -404,12 +387,6 @@ export default function CheckoutPage() {
         hubId: item.hubId ?? undefined,
       }));
 
-      const finalInstructions = [
-        deliveryInstructions.trim(),
-        transactionRef.trim() ? `Payment Reference/TID: ${transactionRef.trim()}` : '',
-      ]
-        .filter(Boolean)
-        .join(' | ');
 
       const orderData = {
         items: orderItems,
@@ -420,7 +397,7 @@ export default function CheckoutPage() {
         deliverySlotTime: chosenTime,
         paymentMethod: paymentMethod,
         promotionCode: appliedPromo?.code || undefined,
-        deliveryInstructions: finalInstructions || undefined,
+        deliveryInstructions: deliveryInstructions.trim() || undefined,
         expectedTotal,
       };
 
@@ -496,10 +473,7 @@ export default function CheckoutPage() {
         }
         if (code === 'CASH_UNAVAILABLE') {
           setCashUnavailable(true);
-          const fallback = (['safepay', 'bank', 'jazzcash', 'easypaisa'] as const).find((m) =>
-            m === 'safepay' ? onlineAvailable : methodUsable(m)
-          );
-          if (fallback) setPaymentMethod(fallback);
+          if (onlineAvailable) setPaymentMethod('safepay');
         }
         showToast(
           code === 'GATEWAY_UNAVAILABLE'
@@ -564,13 +538,6 @@ export default function CheckoutPage() {
   }
 
   const sellerTitle = kitchen?.businessName || t('verifiedKitchen');
-  const sellerBankName = kitchen?.bankName;
-  const sellerAccountTitle = kitchen?.bankAccountName || kitchen?.businessName;
-  const sellerAccountNumber = transferAccount.bank;
-  const sellerJazzCash = transferAccount.jazzcash;
-  const sellerJazzCashTitle = kitchen?.jazzcashAccountTitle || kitchen?.businessName;
-  const sellerEasyPaisa = transferAccount.easypaisa;
-  const sellerEasyPaisaTitle = kitchen?.easypaisaAccountTitle || kitchen?.businessName;
   const kitchenArea = kitchen?.community?.name;
   const closedOpensText = kitchenClosed ? opensLabel(kitchenAvailability?.opensAt || kitchenAvailability?.nextOpenAt) : null;
 
@@ -999,7 +966,7 @@ export default function CheckoutPage() {
                 )}
 
                 {/* Method 2: Bank Transfer / Raast (IBFT) */}
-                {sellerAccountNumber && (
+                {takesTransfer('bank') && (
                 <label
                   className={`block p-4 rounded-2xl border-2 cursor-pointer transition-all ${
                     paymentMethod === 'bank'
@@ -1031,70 +998,13 @@ export default function CheckoutPage() {
                   </div>
 
                   {paymentMethod === 'bank' && (
-                    <div className="mt-3.5 ms-7 pt-3.5 border-t border-line space-y-3">
-                        <div className="bg-raised rounded-2xl p-4 space-y-2.5">
-                          {sellerBankName && (
-                            <div className="flex items-center justify-between text-xs border-b border-line pb-2">
-                              <span className="text-muted text-xs">{t('bankName')}</span>
-                              <span className="font-bold text-ink">{sellerBankName}</span>
-                            </div>
-                          )}
-                          <div className="flex items-center justify-between text-xs border-b border-line pb-2">
-                            <span className="text-muted text-xs">{t('accountTitle')}</span>
-                            <span className="font-bold text-ink">{sellerAccountTitle}</span>
-                          </div>
-                          <div className="flex items-center justify-between gap-2">
-                            <div>
-                              <span className="text-muted text-xs block">{t('accountIban')}</span>
-                              <span className="font-mono text-sm font-extrabold text-ink tracking-wide" data-ltr>
-                                {sellerAccountNumber}
-                              </span>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.preventDefault();
-                                handleCopy(sellerAccountNumber, 'iban');
-                              }}
-                              className="h-9 px-3 text-xs font-bold bg-surface hover:bg-line text-ink rounded-lg flex items-center gap-1.5 transition-colors border border-line cursor-pointer"
-                            >
-                              {copiedField === 'iban' ? (
-                                <>
-                                  <Check className="w-3 h-3 text-brand-ink" />
-                                  <span>{t('copied')}</span>
-                                </>
-                              ) : (
-                                <>
-                                  <Copy className="w-3 h-3" />
-                                  <span>{t('copy')}</span>
-                                </>
-                              )}
-                            </button>
-                          </div>
-                        </div>
-
-                      <div>
-                        <label className="text-[11px] font-semibold text-ink block mb-1">
-                          {t('txnRefLabel')}
-                        </label>
-                        <input
-                          type="text"
-                          value={transactionRef}
-                          onChange={(e) => setTransactionRef(e.target.value)}
-                          placeholder={t('txnRefPlaceholder')}
-                          className="w-full px-3 py-1.5 text-xs border border-line-strong rounded-xl outline-none focus:ring-2 focus:ring-brand bg-surface"
-                        />
-                        <p className="text-xs text-muted mt-1">
-                          {t('uploadLater')}
-                        </p>
-                      </div>
-                    </div>
+                    <p className="mt-3.5 ms-7 pt-3.5 border-t border-line text-xs text-muted">{t('payAfterAccept')}</p>
                   )}
                 </label>
                 )}
 
                 {/* Method 3: JazzCash Direct Transfer */}
-                {sellerJazzCash && (
+                {takesTransfer('jazzcash') && (
                 <label
                   className={`block p-4 rounded-2xl border-2 cursor-pointer transition-all ${
                     paymentMethod === 'jazzcash'
@@ -1121,66 +1031,13 @@ export default function CheckoutPage() {
                   </div>
 
                   {paymentMethod === 'jazzcash' && (
-                    <div className="mt-3.5 ms-7 pt-3.5 border-t border-line space-y-3">
-                        <div className="bg-raised rounded-2xl p-4 space-y-2.5">
-                          <div className="flex items-center justify-between text-xs border-b border-line pb-2">
-                            <span className="text-muted text-xs">{t('chefTitle')}</span>
-                            <span className="font-bold text-ink">{sellerTitle}</span>
-                          </div>
-                          <div className="flex items-center justify-between text-xs border-b border-line pb-2">
-                            <span className="text-muted text-xs">{t('accountTitle')}</span>
-                            <span className="font-bold text-ink">{sellerJazzCashTitle}</span>
-                          </div>
-                          <div className="flex items-center justify-between gap-2">
-                            <div>
-                              <span className="text-muted text-xs block">{t('jazzNumber')}</span>
-                              <span className="font-mono text-sm font-extrabold text-ink tracking-wide" data-ltr>
-                                {sellerJazzCash}
-                              </span>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.preventDefault();
-                                handleCopy(sellerJazzCash, 'jazzcash');
-                              }}
-                              className="h-9 px-3 text-xs font-bold bg-surface hover:bg-line text-ink rounded-lg flex items-center gap-1.5 transition-colors border border-line cursor-pointer"
-                            >
-                              {copiedField === 'jazzcash' ? (
-                                <>
-                                  <Check className="w-3 h-3 text-brand-ink" />
-                                  <span>{t('copied')}</span>
-                                </>
-                              ) : (
-                                <>
-                                  <Copy className="w-3 h-3" />
-                                  <span>{t('copy')}</span>
-                                </>
-                              )}
-                            </button>
-                          </div>
-                        </div>
-
-                      <div>
-                        <label className="text-[11px] font-semibold text-ink block mb-1">
-                          {t('jazzTidLabel')}
-                        </label>
-                        <input
-                          type="text"
-                          value={transactionRef}
-                          onChange={(e) => setTransactionRef(e.target.value)}
-                          placeholder={t('jazzTidPlaceholder')}
-                          dir="ltr"
-                          className="w-full px-3 py-1.5 text-xs border border-line-strong rounded-xl outline-none focus:ring-2 focus:ring-brand bg-surface"
-                        />
-                      </div>
-                    </div>
+                    <p className="mt-3.5 ms-7 pt-3.5 border-t border-line text-xs text-muted">{t('payAfterAccept')}</p>
                   )}
                 </label>
                 )}
 
                 {/* Method 4: EasyPaisa Direct Transfer */}
-                {sellerEasyPaisa && (
+                {takesTransfer('easypaisa') && (
                 <label
                   className={`block p-4 rounded-2xl border-2 cursor-pointer transition-all ${
                     paymentMethod === 'easypaisa'
@@ -1207,60 +1064,7 @@ export default function CheckoutPage() {
                   </div>
 
                   {paymentMethod === 'easypaisa' && (
-                    <div className="mt-3.5 ms-7 pt-3.5 border-t border-line space-y-3">
-                        <div className="bg-raised rounded-2xl p-4 space-y-2.5">
-                          <div className="flex items-center justify-between text-xs border-b border-line pb-2">
-                            <span className="text-muted text-xs">{t('chefTitle')}</span>
-                            <span className="font-bold text-ink">{sellerTitle}</span>
-                          </div>
-                          <div className="flex items-center justify-between text-xs border-b border-line pb-2">
-                            <span className="text-muted text-xs">{t('accountTitle')}</span>
-                            <span className="font-bold text-ink">{sellerEasyPaisaTitle}</span>
-                          </div>
-                          <div className="flex items-center justify-between gap-2">
-                            <div>
-                              <span className="text-muted text-xs block">{t('easyNumber')}</span>
-                              <span className="font-mono text-sm font-extrabold text-ink tracking-wide" data-ltr>
-                                {sellerEasyPaisa}
-                              </span>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.preventDefault();
-                                handleCopy(sellerEasyPaisa, 'easypaisa');
-                              }}
-                              className="h-9 px-3 text-xs font-bold bg-surface hover:bg-line text-ink rounded-lg flex items-center gap-1.5 transition-colors border border-line cursor-pointer"
-                            >
-                              {copiedField === 'easypaisa' ? (
-                                <>
-                                  <Check className="w-3 h-3 text-brand-ink" />
-                                  <span>{t('copied')}</span>
-                                </>
-                              ) : (
-                                <>
-                                  <Copy className="w-3 h-3" />
-                                  <span>{t('copy')}</span>
-                                </>
-                              )}
-                            </button>
-                          </div>
-                        </div>
-
-                      <div>
-                        <label className="text-[11px] font-semibold text-ink block mb-1">
-                          {t('easyTidLabel')}
-                        </label>
-                        <input
-                          type="text"
-                          value={transactionRef}
-                          onChange={(e) => setTransactionRef(e.target.value)}
-                          placeholder={t('easyTidPlaceholder')}
-                          dir="ltr"
-                          className="w-full px-3 py-1.5 text-xs border border-line-strong rounded-xl outline-none focus:ring-2 focus:ring-brand bg-surface"
-                        />
-                      </div>
-                    </div>
+                    <p className="mt-3.5 ms-7 pt-3.5 border-t border-line text-xs text-muted">{t('payAfterAccept')}</p>
                   )}
                 </label>
                 )}

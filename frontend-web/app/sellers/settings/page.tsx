@@ -90,6 +90,9 @@ function weekFromSaved(weekly: unknown, fallbackOpen: string, fallbackClose: str
   return week;
 }
 
+/** How long before a booked delivery window a kitchen may start on the order, in minutes (the server allows 15 to 480). */
+const PRE_ORDER_LEADS = [30, 60, 120, 180, 240, 480];
+
 const AVAILABILITY_OVERRIDES = [
   { value: '', label: 'override.none' },
   { value: 'open', label: 'override.open' },
@@ -190,6 +193,8 @@ export default function SellerSettingsPage() {
     preOrderOnly: false,
     advanceBookingMinDays: null as number | null,
     advanceBookingMaxDays: null as number | null,
+    autoAcceptOrders: false,
+    preOrderLeadMinutes: null as number | null,
   });
   // The form as the server holds it (as loaded, or as last saved): Save changes stays quiet until the form differs from it.
   const [savedForm, setSavedForm] = useState(formData);
@@ -271,6 +276,8 @@ export default function SellerSettingsPage() {
           preOrderOnly: seller.preOrderOnly ?? false,
           advanceBookingMinDays: seller.advanceBookingMinDays ?? null,
           advanceBookingMaxDays: seller.advanceBookingMaxDays ?? null,
+          autoAcceptOrders: seller.autoAcceptOrders ?? false,
+          preOrderLeadMinutes: seller.preOrderLeadMinutes ?? null,
         };
         setFormData(loaded);
         setSavedForm(loaded);
@@ -493,6 +500,8 @@ export default function SellerSettingsPage() {
         preOrderOnly,
         advanceBookingMinDays,
         advanceBookingMaxDays,
+        autoAcceptOrders,
+        preOrderLeadMinutes,
         ...rest
       } = formData;
 
@@ -617,6 +626,8 @@ export default function SellerSettingsPage() {
             preOrderOnly,
             advanceBookingMinDays: advanceBookingMinDays ?? undefined,
             advanceBookingMaxDays: advanceBookingMaxDays ?? undefined,
+            autoAcceptOrders,
+            preOrderLeadMinutes,
             ...(currentPassword ? { currentPassword } : {}),
           }),
         (wrongBefore) =>
@@ -903,6 +914,35 @@ export default function SellerSettingsPage() {
                   }
                   className={fieldClass}
                 />
+              </div>
+              <div>
+                <label htmlFor="pre-order-lead" className={labelClass}>{t('preOrderLead')}</label>
+                <select
+                  id="pre-order-lead"
+                  value={formData.preOrderLeadMinutes ?? 60}
+                  onChange={(e) => setFormData({ ...formData, preOrderLeadMinutes: parseInt(e.target.value, 10) })}
+                  aria-describedby="pre-order-lead-hint"
+                  className={fieldClass}
+                >
+                  {PRE_ORDER_LEADS.map((minutes) => (
+                    <option key={minutes} value={minutes}>{minutes < 60 ? t('leadShort', { minutes }) : t('leadMinutes', { hours: minutes / 60 })}</option>
+                  ))}
+                </select>
+                <p id="pre-order-lead-hint" className="text-sm text-muted mt-1.5">{t('preOrderLeadHint')}</p>
+              </div>
+              <div>
+                <span className={labelClass}>{t('autoAccept')}</span>
+                <label className="flex min-h-11 cursor-pointer items-center gap-2 text-sm text-ink">
+                  <input
+                    type="checkbox"
+                    checked={formData.autoAcceptOrders}
+                    onChange={(e) => setFormData({ ...formData, autoAcceptOrders: e.target.checked })}
+                    aria-describedby="auto-accept-hint"
+                    className="h-4 w-4 accent-brand-700"
+                  />
+                  {t('autoAcceptLabel')}
+                </label>
+                <p id="auto-accept-hint" className="text-sm text-muted mt-1.5">{t('autoAcceptHint')}</p>
               </div>
             </div>
           </div>

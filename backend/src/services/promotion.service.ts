@@ -16,6 +16,7 @@ type CatalogEligiblePromotion = {
   usageLimitPerUser: number;
   minOrderAmount: unknown;
   maxDiscountAmount: unknown;
+  discountScope: string;
 };
 
 const toCatalogDeal = (p: CatalogEligiblePromotion): CatalogDeal => ({
@@ -24,6 +25,7 @@ const toCatalogDeal = (p: CatalogEligiblePromotion): CatalogDeal => ({
   discountValue: Number(p.discountValue),
   minOrderAmount: Number(p.minOrderAmount),
   maxDiscountAmount: p.maxDiscountAmount ? Number(p.maxDiscountAmount) : null,
+  discountScope: p.discountScope,
 });
 
 export interface PromotionScopeItem {
@@ -365,6 +367,7 @@ export class PromotionService {
       discountType: 'percentage' | 'fixed';
       discountValue: number;
       maxDiscountAmount?: number | null;
+      discountScope?: 'per_dish' | 'per_order';
       minOrderAmount: number;
       usageLimitTotal?: number | null;
       usageLimitPerUser: number;
@@ -404,6 +407,8 @@ export class PromotionService {
         discountType: data.discountType,
         discountValue: data.discountValue,
         maxDiscountAmount: data.maxDiscountAmount ?? null,
+        // Only a kitchen's deal has a scope; a platform code is always taken once off the order.
+        ...(sellerId && data.discountScope ? { discountScope: data.discountScope } : {}),
         minOrderAmount: data.minOrderAmount,
         applicableTo: applyTo,
         applicableProductIds,
@@ -424,6 +429,7 @@ export class PromotionService {
       discountType: promotion.discountType,
       discountValue: Number(promotion.discountValue),
       maxDiscountAmount: promotion.maxDiscountAmount ? Number(promotion.maxDiscountAmount) : null,
+      discountScope: promotion.discountScope,
       minOrderAmount: Number(promotion.minOrderAmount),
       applicableTo: promotion.applicableTo,
       applicableProductIds: promotion.applicableProductIds ?? [],
@@ -448,6 +454,7 @@ export class PromotionService {
     discountValue: number;
     minOrderAmount: number;
     maxDiscountAmount: number | null;
+    discountScope: string;
   }>>> {
     if (!productIds?.length) return {};
 
@@ -478,6 +485,7 @@ export class PromotionService {
         sellerId: true,
         minOrderAmount: true,
         maxDiscountAmount: true,
+        discountScope: true,
       },
     });
 
@@ -508,6 +516,7 @@ export class PromotionService {
           discountValue: Number(p.discountValue),
           minOrderAmount: Number(p.minOrderAmount),
           maxDiscountAmount: p.maxDiscountAmount ? Number(p.maxDiscountAmount) : null,
+          discountScope: p.discountScope,
         }));
       }
     }
@@ -545,6 +554,7 @@ export class PromotionService {
         usageLimitTotal: p.usageLimitTotal,
         usageLimitPerUser: p.usageLimitPerUser,
         minOrderAmount: Number(p.minOrderAmount),
+        discountScope: p.discountScope,
         isActive: p.isActive,
         applicableTo: p.applicableTo,
         applicableProductIds: p.applicableProductIds ?? [],
@@ -586,6 +596,7 @@ export class PromotionService {
       usageLimitTotal: promotion.usageLimitTotal,
       usageLimitPerUser: promotion.usageLimitPerUser,
       minOrderAmount: Number(promotion.minOrderAmount),
+      discountScope: promotion.discountScope,
       applicableTo: promotion.applicableTo,
       applicableProductIds: promotion.applicableProductIds ?? [],
       isActive: promotion.isActive,
@@ -607,6 +618,7 @@ export class PromotionService {
       discountType?: 'percentage' | 'fixed';
       discountValue?: number;
       maxDiscountAmount?: number | null;
+      discountScope?: 'per_dish' | 'per_order';
       minOrderAmount?: number;
       usageLimitTotal?: number | null;
       usageLimitPerUser?: number;
@@ -661,6 +673,7 @@ export class PromotionService {
         ...(data.discountType != null && { discountType: data.discountType }),
         ...(data.discountValue != null && { discountValue: data.discountValue }),
         ...(data.maxDiscountAmount !== undefined && { maxDiscountAmount: data.maxDiscountAmount }),
+        ...(sellerId && data.discountScope != null && { discountScope: data.discountScope }),
         ...(data.minOrderAmount != null && { minOrderAmount: data.minOrderAmount }),
         ...(data.usageLimitTotal !== undefined && { usageLimitTotal: data.usageLimitTotal }),
         ...(data.usageLimitPerUser != null && { usageLimitPerUser: data.usageLimitPerUser }),

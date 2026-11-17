@@ -1,6 +1,6 @@
 /**
- * An order booked for a later day gets no rider job when the kitchen accepts it: the job is posted by the
- * one-minute sweep once that day has come in Pakistan.
+ * An order booked for a later delivery window gets no rider job when the kitchen accepts it: the job is posted by the
+ * one-minute sweep once the kitchen's start on it has come (its lead time before the window opens, Pakistan time).
  */
 const db = {
   order: { findUnique: jest.fn(), findMany: jest.fn(), updateMany: jest.fn() },
@@ -25,6 +25,7 @@ function order(deliverySlotDate: Date | null) {
     deliveryProvider: 'platform',
     orderStatus: 'preparing',
     deliverySlotDate,
+    deliverySlotTime: null,
     items: [{ status: 'preparing', fulfillmentType: 'seller', seller: { businessName: 'Kitchen', latitude: 31.5, longitude: 74.3, deliveryProvider: 'platform' } }],
     deliveryAddress: { addressLine1: 'House 1', area: 'Askari 11', city: 'Lahore', latitude: 31.4, longitude: 74.4 },
     deliveryAddressSnapshot: null,
@@ -66,26 +67,38 @@ describe('createDueDeliveries', () => {
   // 00:10 on 10 November in Pakistan.
   const now = new Date('2026-11-09T19:10:00Z');
 
-  it('looks for accepted platform orders placed before today whose day has come and that have no rider job', async () => {
+  it('looks for accepted platform orders whose day has come and that have no rider job', async () => {
     await riderService.createDueDeliveries(now);
     expect(db.order.findMany.mock.calls[0][0].where).toEqual({
       deliveryType: 'home_delivery',
       deliveryProvider: 'platform',
       orderStatus: { in: ['preparing', 'ready'] },
       deliverySlotDate: { lte: new Date('2026-11-10T00:00:00Z') },
-      createdAt: { lt: new Date('2026-11-09T19:00:00Z') },
       delivery: { is: null },
     });
   });
 
   it('posts the job for each one, and one failure does not stop the rest', async () => {
     db.order.findMany.mockResolvedValue([
-      { id: 'order-a', orderStatus: 'preparing' },
-      { id: 'order-b', orderStatus: 'ready' },
+      { id: 'order-a', orderStatus: 'preparing', deliverySlotDate: new Date('2026-11-10T00:00:00Z'), deliverySlotTime: null, items: [] },
+      { id: 'order-b', orderStatus: 'ready', deliverySlotDate: new Date('2026-11-09T00:00:00Z'), deliverySlotTime: 'evening', items: [] },
     ]);
     db.order.findUnique.mockRejectedValueOnce(new Error('connection lost')).mockResolvedValue({ ...order(slotDay(0)), id: 'order-b' });
     expect(await riderService.createDueDeliveries(now)).toBe(2);
     expect(db.delivery.create).toHaveBeenCalledTimes(1);
     expect(db.delivery.create.mock.calls[0][0].data.orderId).toBe('order-b');
+  });
+
+  it('leaves an order whose window is later today until the kitchen starts on it', async () => {
+    // 00:10 on the 10th: the evening window opens at 17:00, and this kitchen starts 90 minutes before.
+    const evening = { id: 'order-c', orderStatus: 'preparing', deliverySlotDate: new Date('2026-11-10T00:00:00Z'), deliverySlotTime: 'evening', items: [{ seller: { preOrderLeadMinutes: 90 } }] };
+    db.order.findMany.mockResolvedValue([evening]);
+    expect(await riderService.createDueDeliveries(now)).toBe(0);
+    expect(db.order.findUnique).not.toHaveBeenCalled();
+
+    db.order.findUnique.mockResolvedValue({ ...order(slotDay(-1)), id: 'order-c' });
+    // 15:30 on the 10th in Pakistan.
+    expect(await riderService.createDueDeliveries(new Date('2026-11-10T10:30:00Z'))).toBe(1);
+    expect(db.delivery.create).toHaveBeenCalledTimes(1);
   });
 });

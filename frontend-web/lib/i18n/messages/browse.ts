@@ -32,6 +32,7 @@ export const browseMessages = defineMessages({
     // Promotions
     percentOff: '{value}% off',
     amountOff: '{amount} off',
+    amountOffOrder: '{amount} off the order',
     deal: 'Deal',
     // Delivery
     etaMin: '{min}-{max} min',
@@ -269,6 +270,7 @@ export const browseMessages = defineMessages({
     'sort.popular': 'ابھی مقبول',
     percentOff: '{value}% رعایت',
     amountOff: '{amount} رعایت',
+    amountOffOrder: 'آرڈر پر {amount} رعایت',
     deal: 'ڈیل',
     etaMin: '{min}-{max} منٹ',
     deliveryNotHere: 'یہاں ڈیلیوری دستیاب نہیں',

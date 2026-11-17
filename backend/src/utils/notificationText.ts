@@ -125,6 +125,17 @@ const CATALOGUE = {
     (p) => ({ title: 'آرڈر دے دیا گیا', message: `آپ کا آرڈر ${no(p.orderNumber)} (${p.total}) دے دیا گیا ہے۔` })
   ),
 
+  'order.payNow': entry<Order & { total: string }>(
+    (p) => ({
+      title: 'Your order is accepted: please pay',
+      message: `The kitchen accepted order #${p.orderNumber}. Open the order to see its account and send ${p.total} within the hour.`,
+    }),
+    (p) => ({
+      title: 'آپ کا آرڈر قبول ہو گیا: براہِ کرم ادائیگی کریں',
+      message: `کچن نے آرڈر ${no(p.orderNumber)} قبول کر لیا ہے۔ آرڈر کھول کر اس کا اکاؤنٹ دیکھیں اور ایک گھنٹے کے اندر ${p.total} بھیج دیں۔`,
+    })
+  ),
+
   'kitchen.newOrder': entry<Order & { dishesTotal: string }>(
     (p) => ({ title: 'New order received', message: `New order #${p.orderNumber}: ${p.dishesTotal} of your dishes. Please accept it within 30 minutes.` }),
     (p) => ({ title: 'نیا آرڈر آیا ہے', message: `نیا آرڈر ${no(p.orderNumber)}: آپ کی ڈشز ${p.dishesTotal} کی۔ براہِ کرم 30 منٹ کے اندر قبول کریں۔` })
@@ -251,12 +262,12 @@ const CATALOGUE = {
   ),
   'owing.cashPaused': entry<{ owed: string }>(
     (p) => ({
-      title: 'Cash orders are paused',
-      message: `You owe Nuray ${p.owed}. New cash orders are paused until it is paid; online orders still come in and pay it off.`,
+      title: 'Cash and transfer orders are paused',
+      message: `You owe Nuray ${p.owed}. New orders paid to you in cash or by transfer to your account are paused until it is paid; online orders still come in and pay it off.`,
     }),
     (p) => ({
-      title: 'نقد آرڈر رک گئے ہیں',
-      message: `آپ پر Nuray کے ${p.owed} واجب ہیں۔ ادائیگی تک نئے نقد آرڈر رکے رہیں گے؛ آن لائن آرڈر آتے رہیں گے اور یہ رقم ادا کرتے رہیں گے۔`,
+      title: 'نقد اور ٹرانسفر والے آرڈر رک گئے ہیں',
+      message: `آپ پر Nuray کے ${p.owed} واجب ہیں۔ ادائیگی تک وہ نئے آرڈر رکے رہیں گے جن کی رقم آپ نقد یا اپنے اکاؤنٹ میں ٹرانسفر سے لیتے ہیں؛ آن لائن آرڈر آتے رہیں گے اور یہ رقم ادا کرتے رہیں گے۔`,
     })
   ),
   'owing.paid': entry<{ amount: string; stillOwed: string | null }>(
@@ -372,6 +383,10 @@ const CATALOGUE = {
   'admin.paymentUnconfirmed': englishOnly<Order & { hours: number }>((p) => ({
     title: `Order #${p.orderNumber}: payment not confirmed`,
     message: `The customer reported a transfer more than ${p.hours} hours ago and the kitchen hasn't confirmed or disputed it.`,
+  })),
+  'admin.kitchenPaused': englishOnly<{ kitchen: string; owed: string }>((p) => ({
+    title: `${p.kitchen} owes Nuray ${p.owed}`,
+    message: 'Its cash and direct-transfer orders are paused until it pays or its online orders cover the amount.',
   })),
   'admin.weeklyPayouts': englishOnly<{ count: number; total: string }>((p) => ({
     title: 'Weekly kitchen payouts to send',

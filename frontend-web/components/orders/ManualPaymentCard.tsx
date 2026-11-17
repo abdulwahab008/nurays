@@ -16,6 +16,8 @@ import { openExternal } from '@/lib/open-external';
 
 interface ManualPaymentCardProps {
   orderId: string;
+  /** The kitchen's account is shown from the moment it accepts: the card reads it again when this changes. */
+  orderStatus: string;
   totalAmount: number;
   paymentStatus: string;
   paymentReferenceNumber?: string | null;
@@ -27,6 +29,7 @@ interface ManualPaymentCardProps {
 
 export default function ManualPaymentCard({
   orderId,
+  orderStatus,
   totalAmount,
   paymentStatus,
   paymentReferenceNumber,
@@ -91,7 +94,7 @@ export default function ManualPaymentCard({
 
   useEffect(() => {
     loadDetails();
-  }, [orderId]);
+  }, [orderId, orderStatus]);
 
   const copyToClipboard = (text: string, key: string) => {
     navigator.clipboard.writeText(text);
@@ -304,6 +307,20 @@ export default function ManualPaymentCard({
               </div>
             </div>
           )}
+        </div>
+      </div>
+    );
+  }
+
+  if (details?.awaitingAcceptance) {
+    return (
+      <div className="bg-raised rounded-[20px] p-5 flex items-start gap-3.5">
+        <div className="w-10 h-10 rounded-2xl bg-surface text-ink flex items-center justify-center flex-shrink-0">
+          <Clock className="w-5 h-5" />
+        </div>
+        <div>
+          <h4 className="font-extrabold text-sm text-ink">{t('awaitingAcceptTitle', { name: details.sellerName || t('kitchen') })}</h4>
+          <p className="text-xs text-muted font-medium mt-0.5 leading-relaxed">{t('awaitingAcceptText', { amount: formatPrice(totalAmount) })}</p>
         </div>
       </div>
     );

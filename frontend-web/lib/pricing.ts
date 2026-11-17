@@ -7,6 +7,15 @@ export interface CatalogPromotionLike {
   minOrderAmount?: number;
   /** The most the deal takes off one order (all its lines together); null or 0 when it has no cap. */
   maxDiscountAmount?: number | null;
+  /** 'per_order': a fixed amount comes off the order once, not off every dish. A percentage is the same either way. */
+  discountScope?: string;
+}
+
+/** The most a deal takes off one order: its cap, and for a fixed amount taken once per order, that amount. */
+function orderCap(p: CatalogPromotionLike): number | null {
+  const once = p.discountScope === 'per_order' && p.type === 'fixed' && p.discountValue > 0 ? p.discountValue : null;
+  if (once === null) return p.maxDiscountAmount || null;
+  return p.maxDiscountAmount ? Math.min(once, p.maxDiscountAmount) : once;
 }
 
 /** One line of a tray, with the deals the API lists for its dish. */
@@ -17,13 +26,15 @@ export interface DealLine<P extends CatalogPromotionLike & { id: string }> {
   promos: P[];
 }
 
-/** A page's translator, narrowed to the three words a deal's label needs (every page that shows deals has them). */
-export type PromotionText = (key: 'percentOff' | 'amountOff' | 'deal', vars?: Record<string, string | number>) => string;
+/** A page's translator, narrowed to the words a deal's label needs (every page that shows deals has them). */
+export type PromotionText = (key: 'percentOff' | 'amountOff' | 'amountOffOrder' | 'deal', vars?: Record<string, string | number>) => string;
 
-/** What a deal is worth, in words: "10% off", "Rs 200 off", or the deal's own name (a bundle, buy-x-get-y) when it has no size to show. */
+/** What a deal is worth, in words: "10% off", "Rs 200 off", "Rs 200 off the order", or the deal's own name (a bundle, buy-x-get-y) when it has no size to show. */
 export function getPromotionLabel(p: CatalogPromotionLike, t: PromotionText, formatAmount: (amount: number) => string): string {
   if (p.type === 'percentage' && p.discountValue > 0) return t('percentOff', { value: p.discountValue });
-  if (p.type === 'fixed' && p.discountValue > 0) return t('amountOff', { amount: formatAmount(p.discountValue) });
+  if (p.type === 'fixed' && p.discountValue > 0) {
+    return t(p.discountScope === 'per_order' ? 'amountOffOrder' : 'amountOff', { amount: formatAmount(p.discountValue) });
+  }
   return p.name || t('deal');
 }
 
@@ -43,8 +54,9 @@ function unitReductions(basePrice: number, promos: ReadonlyArray<CatalogPromotio
 
 /**
  * The unit price of every line of a tray after the kitchens' menu deals, and the deals that took something off each line.
- * A deal with a minimum order counts only when that kitchen's goods reach it; a deal with a cap takes at most the cap off
- * the whole order (each line's share is scaled down to whole rupees); a discounted unit never costs less than Rs 1.
+ * A deal with a minimum order counts only when that kitchen's goods reach it; a deal with a cap, or a fixed amount the
+ * kitchen gives once per order, takes at most that off the whole order (each line's share is scaled down to whole rupees,
+ * so the order can come out a few rupees short of it); a discounted unit never costs less than Rs 1.
  * The server prices the order with the same sum (backend utils/pricing.ts priceDealLines), so what the cart and checkout
  * show is what the customer is charged. backend/tests/web-parity.test.ts fails when the two differ.
  */
@@ -63,16 +75,15 @@ export function priceDealLines<P extends CatalogPromotionLike & { id: string }>(
     inForce[i].forEach((p, j) => {
       // A capped deal is counted in the whole rupees it takes off a unit (a half goes down, as the unit price goes up),
       // so the cap is compared with what is charged, not with the sum before rounding.
-      if (p.maxDiscountAmount) reductions[i][j] = Math.max(0, Math.ceil(reductions[i][j] - 0.5));
+      if (orderCap(p)) reductions[i][j] = Math.max(0, Math.ceil(reductions[i][j] - 0.5));
       taken.set(p.id, (taken.get(p.id) ?? 0) + reductions[i][j] * line.quantity);
     });
   });
   lines.forEach((_, i) => {
     inForce[i].forEach((p, j) => {
       const total = taken.get(p.id) ?? 0;
-      if (p.maxDiscountAmount && total > p.maxDiscountAmount) {
-        reductions[i][j] = Math.floor((reductions[i][j] * p.maxDiscountAmount) / total);
-      }
+      const cap = orderCap(p);
+      if (cap && total > cap) reductions[i][j] = Math.floor((reductions[i][j] * cap) / total);
     });
   });
 

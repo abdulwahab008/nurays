@@ -25,11 +25,19 @@ test('an order that ended early has no tracker', () => {
   assert.equal(orderProgress('delivery_failed', 'home_delivery'), null);
 });
 
-test('only an unpaid online or transfer order waits for payment', () => {
+test('an unpaid online order waits for payment before the kitchen sees it', () => {
   assert.equal(awaitingPayment('pending', 'safepay', 'pending'), true);
-  assert.equal(awaitingPayment('pending', 'jazzcash', 'payment_submitted'), true);
   assert.equal(awaitingPayment('pending', 'cod', 'pending'), false);
   assert.equal(awaitingPayment('confirmed', 'safepay', 'paid'), false);
+});
+
+test('a transfer to the kitchen waits for payment only once the kitchen has accepted, until the customer reports it', () => {
+  assert.equal(awaitingPayment('pending', 'jazzcash', 'pending'), false);
+  assert.equal(awaitingPayment('preparing', 'jazzcash', 'pending'), true);
+  assert.equal(awaitingPayment('confirmed', 'bank', 'disputed'), true);
+  assert.equal(awaitingPayment('preparing', 'easypaisa', 'payment_submitted'), false);
+  assert.equal(awaitingPayment('preparing', 'bank', 'paid'), false);
+  assert.equal(awaitingPayment('ready', 'bank', 'pending'), false);
 });
 
 test('a cancelled order that was never paid is "not charged", never "payment pending"', () => {

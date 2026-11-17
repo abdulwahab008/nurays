@@ -148,6 +148,8 @@ export interface SellerPaymentAccount {
 export interface SellerPaymentDetails {
   sellerId: string;
   sellerName: string;
+  /** The kitchen has not accepted the order yet: its accounts are not given until it does. */
+  awaitingAcceptance?: boolean;
   accounts: SellerPaymentAccount[];
   instructions?: string;
 }

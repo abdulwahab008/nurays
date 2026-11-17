@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { readableDate } from './primitives';
 import { PAKISTAN_BOUNDS, PIN_OUTSIDE } from '../utils/geo';
+import { MAX_PRE_ORDER_LEAD_MINUTES } from '../utils/preOrder';
 import { BANK_ACCOUNT_HINT, WALLET_NUMBER_HINT, normalizeBankAccount, normalizePayoutDestination, normalizeWalletNumber } from '../utils/payoutAccount';
 
 /** What a kitchen can be: the sign-up form and the settings page offer exactly these. */
@@ -151,6 +152,8 @@ export const updateSellerSchema = z.object({
   preOrderOnly: z.boolean().optional(),
   advanceBookingMinDays: z.number().int().min(0).max(365).optional().nullable(),
   advanceBookingMaxDays: z.number().int().min(0).max(365).optional().nullable(),
+  autoAcceptOrders: z.boolean().optional(),
+  preOrderLeadMinutes: z.number().int().min(15).max(MAX_PRE_ORDER_LEAD_MINUTES).optional().nullable(),
 });
 
 export const setCommunityDeliverySchema = z.object({

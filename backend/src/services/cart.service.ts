@@ -85,13 +85,9 @@ export class CartService {
             isVerified: true,
             communityId: true,
             primaryCommunityName: true,
-            bankAccountName: true,
             bankAccountNumber: true,
-            bankName: true,
             jazzcashNumber: true,
-            jazzcashAccountTitle: true,
             easypaisaNumber: true,
-            easypaisaAccountTitle: true,
             deliveryModes: true,
             pickupAddress: true,
             pickupLandmark: true,
@@ -158,13 +154,6 @@ export class CartService {
           businessName: item.seller.businessName,
           businessNameUrdu: item.seller.businessNameUrdu,
           isVerified: item.seller.isVerified,
-          bankAccountName: item.seller.bankAccountName,
-          bankAccountNumber: item.seller.bankAccountNumber,
-          bankName: item.seller.bankName,
-          jazzcashNumber: item.seller.jazzcashNumber,
-          jazzcashAccountTitle: item.seller.jazzcashAccountTitle,
-          easypaisaNumber: item.seller.easypaisaNumber,
-          easypaisaAccountTitle: item.seller.easypaisaAccountTitle,
         },
         quantity: item.quantity,
         stockType: item.stockType,
@@ -191,13 +180,13 @@ export class CartService {
             id: items[0].seller.id,
             businessName: items[0].seller.businessName,
             businessNameUrdu: items[0].seller.businessNameUrdu,
-            bankAccountName: items[0].seller.bankAccountName,
-            bankAccountNumber: items[0].seller.bankAccountNumber,
-            bankName: items[0].seller.bankName,
-            jazzcashNumber: items[0].seller.jazzcashNumber,
-            jazzcashAccountTitle: items[0].seller.jazzcashAccountTitle,
-            easypaisaNumber: items[0].seller.easypaisaNumber,
-            easypaisaAccountTitle: items[0].seller.easypaisaAccountTitle,
+            // Which transfers the kitchen can take. The account numbers themselves are shown on the order, once the
+            // kitchen has accepted it (order-payment.service.ts), never to someone who only filled a tray.
+            transferMethods: [
+              items[0].seller.bankAccountNumber?.trim() ? 'bank' : null,
+              items[0].seller.jazzcashNumber?.trim() ? 'jazzcash' : null,
+              items[0].seller.easypaisaNumber?.trim() ? 'easypaisa' : null,
+            ].filter((m): m is string => m !== null),
             deliveryModes: items[0].seller.deliveryModes,
             // A home kitchen's street address: only once it says customers may collect from it.
             pickupAddress: offersPickup(items[0].seller.deliveryModes) ? items[0].seller.pickupAddress : null,
@@ -366,6 +355,12 @@ export class CartService {
     // Weekly and daily dishes can only be ordered on the days they are on the menu.
     if (!isOnMenu(product)) {
       throw new AppError(`${product.name} is not on the menu today`, 400, 'NOT_ON_MENU_TODAY');
+    }
+
+    // A dish kept only at a hub needs a hub (and hub stock is not kept per option). The order would be refused for
+    // this (order-placement.service.ts): say so now, before the tray is touched, not at checkout.
+    if (product.stockType === 'hub' && (data.variantId || !data.hubId)) {
+      throw new AppError(`${product.name} comes from a Nuray hub. Open the dish and choose a hub to order it.`, 400, 'HUB_REQUIRED');
     }
 
     // Rule 8: A cart belongs to one seller at a time.

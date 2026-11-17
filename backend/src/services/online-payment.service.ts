@@ -5,6 +5,7 @@ import { createSafepayCheckout, safepayGateway } from '../gateways/safepay.gatew
 import { issueRefund } from './refund.service';
 import { creditWallet } from './wallet.service';
 import realtimeOrderService from './realtime-order.service';
+import sellerOrderService from './seller-order.service';
 import { notify, notifyMany } from './notify.service';
 import { ONLINE_GATEWAY_METHODS, PAYABLE_STATUSES } from '../utils/paymentCustody';
 import { logEvent, logger } from '../utils/logger';
@@ -237,6 +238,7 @@ export async function settleAttempt(tracker: string, via: 'return' | 'webhook', 
         if (result.outcome === 'paid') {
           // Paid: now the kitchen should start (the new-order alert waited for this).
           await realtimeOrderService.emitKitchenNewOrder(result.orderId);
+          await sellerOrderService.autoAccept(result.orderId);
           await notifyMany(
             order.items.map((i) => i.seller.userId).filter(Boolean),
             (sellerUserId) => ({

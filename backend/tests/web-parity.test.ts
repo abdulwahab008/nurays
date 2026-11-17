@@ -80,6 +80,7 @@ describe('the price after the kitchen\'s deals', () => {
           discountValue: percentage ? Math.floor(next() * 100) + 1 : Math.floor(next() * 800) + 1,
           minOrderAmount: next() < 0.5 ? 0 : Math.floor(next() * 4000),
           maxDiscountAmount: next() < 0.5 ? null : Math.floor(next() * 600) + 1,
+          discountScope: next() < 0.4 ? 'per_order' : 'per_dish',
         };
       });
       const lines = Array.from({ length: Math.floor(next() * 4) + 1 }, () => {
@@ -100,17 +101,34 @@ describe('the price after the kitchen\'s deals', () => {
       if (JSON.stringify(shown) !== JSON.stringify(charged)) {
         throw new Error(`${JSON.stringify(lines)}: the tray shows ${JSON.stringify(shown)}, the server charges ${JSON.stringify(charged)}`);
       }
-      // What both sides promise the kitchen: a capped deal never takes more than its cap, and no discounted unit is free.
+      // What both sides promise the kitchen: a capped deal never takes more than its cap, a fixed amount given once per
+      // order never more than that amount, and no discounted unit is free.
       for (const deal of deals) {
-        if (!deal.maxDiscountAmount) continue;
+        const oncePerOrder = deal.discountScope === 'per_order' && deal.type === 'fixed';
+        const most = Math.min(deal.maxDiscountAmount ?? Infinity, oncePerOrder ? deal.discountValue : Infinity);
+        if (most === Infinity) continue;
         const alone = priceDealLines(
           lines.map((l) => ({ ...l, deals: l.promos.filter((p) => p.id === deal.id).map((p) => ({ ...p, discountType: p.type })) }))
         );
         const off = lines.reduce((sum, l, n) => sum + (l.unitPrice - alone.unitPrices[n]) * l.quantity, 0);
-        if (off > deal.maxDiscountAmount) throw new Error(`${JSON.stringify({ lines, deal })}: took ${off}, over the cap`);
+        if (off > most) throw new Error(`${JSON.stringify({ lines, deal })}: took ${off}, over ${most}`);
       }
       if (server.unitPrices.some((p) => p < 1)) throw new Error(`${JSON.stringify(lines)}: a unit under Rs 1`);
     }
+  });
+
+  it('takes a fixed amount once off the order when the kitchen chose that, and off every dish when it did not', () => {
+    const deal = (discountScope: string) => ({ id: 'd', type: 'fixed', discountValue: 200, minOrderAmount: 0, maxDiscountAmount: null, discountScope });
+    const tray = (discountScope: string) => [
+      { sellerId: 'k1', unitPrice: 600, quantity: 1, promos: [deal(discountScope)] },
+      { sellerId: 'k1', unitPrice: 400, quantity: 1, promos: [deal(discountScope)] },
+    ];
+    const server = (lines: ReturnType<typeof tray>) => priceDealLines(lines.map((l) => ({ ...l, deals: l.promos.map((p) => ({ ...p, discountType: p.type })) }))).unitPrices;
+    expect(server(tray('per_dish'))).toEqual([400, 200]);
+    expect(server(tray('per_order'))).toEqual([500, 300]);
+    expect(webPriceDealLines(tray('per_order')).unitPrices).toEqual([500, 300]);
+    // One dish alone gets the whole amount either way.
+    expect(server([tray('per_order')[0]])).toEqual([400]);
   });
 
   it('counts a capped deal in the whole rupees charged, so rounding each unit cannot carry it over the cap', () => {

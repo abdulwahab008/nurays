@@ -17,8 +17,9 @@ import { assertOnMenu } from '../utils/menu';
 import { createStockAlert } from './stock-alert.service';
 import promotionService from './promotion.service';
 import { isAcceptingOrders, validateOrderTiming } from './availability.service';
-import { ONLINE_GATEWAY_METHODS, codCollectorOf } from '../utils/paymentCustody';
+import { ONLINE_GATEWAY_METHODS, SELLER_DIRECT_METHODS, codCollectorOf } from '../utils/paymentCustody';
 import { assertKitchenTakesCash } from './kitchen-owing.service';
+import sellerOrderService from './seller-order.service';
 import { onlinePaymentsAvailable } from './online-payment.service';
 import { newHandoverCode } from './handover.service';
 import { debitWallet } from './wallet.service';
@@ -286,10 +287,15 @@ export class OrderPlacement {
       // Where the item is fulfilled from is decided by the product, not the request: a hub id on
       // an item the kitchen ships itself would otherwise re-price the delivery as Nuray's and
       // charge the kitchen for it.
+      // A dish kept only at a hub cannot be ordered without one: the kitchen has none to hand over, and an order
+      // without a hub would take no hub stock. A dish kept in both places comes from the kitchen when no hub is named.
       const fulfillmentType =
-        product.stockType === 'hub' || (product.stockType === 'both' && item.stockType === 'hub') ? 'hub' : 'direct';
+        product.stockType === 'hub' || (product.stockType === 'both' && item.stockType === 'hub' && item.hubId) ? 'hub' : 'direct';
       if (item.hubId && fulfillmentType !== 'hub') {
         throw new AppError(`${product.name} is not stocked at a hub`, 400, 'HUB_NOT_APPLICABLE');
+      }
+      if (fulfillmentType === 'hub' && !item.hubId) {
+        throw new AppError(`${product.name} comes from a Nuray hub. Open the dish and choose a hub to order it.`, 400, 'HUB_REQUIRED');
       }
 
       // List/catalog price — the seller-wide "deal" discount below is applied on top of this.
@@ -558,10 +564,11 @@ export class OrderPlacement {
           ? 'platform'
           : 'self';
 
-    // A kitchen that has owed Nuray for two weeks takes no new cash it would collect itself (kitchen-owing.service.ts).
-    if (data.paymentMethod === 'cod' && onlySeller && codCollectorOf({ deliveryType: data.deliveryType, deliveryProvider }) === 'seller') {
-      await assertKitchenTakesCash(onlySeller.id);
-    }
+    // A kitchen that has owed Nuray too long or too much takes no new money itself (kitchen-owing.service.ts).
+    const kitchenTakesTheMoney =
+      SELLER_DIRECT_METHODS.includes(data.paymentMethod) ||
+      (data.paymentMethod === 'cod' && codCollectorOf({ deliveryType: data.deliveryType, deliveryProvider }) === 'seller');
+    if (onlySeller && kitchenTakesTheMoney) await assertKitchenTakesCash(onlySeller.id);
 
     // 5% GST on the goods after discounts; the total in whole rupees (see priceOrder).
     const { taxAmount, totalAmount } = priceOrder(subtotal - discountAmount, deliveryFee);
@@ -822,6 +829,7 @@ export class OrderPlacement {
     } catch (err) {
       logger.error({ err, orderId: order.order.id }, 'New-order notification failed');
     }
+    await sellerOrderService.autoAccept(order.order.id);
 
     // Low-stock / out-of-stock alerts (may send email): in the background, never
     // holding up the customer's checkout.

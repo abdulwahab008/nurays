@@ -42,6 +42,8 @@ function formatBusinessOperationsFields(seller: {
   preOrderOnly: boolean;
   advanceBookingMinDays: number | null;
   advanceBookingMaxDays: number | null;
+  autoAcceptOrders: boolean;
+  preOrderLeadMinutes: number | null;
   status: string;
 }) {
   return {
@@ -66,6 +68,8 @@ function formatBusinessOperationsFields(seller: {
     preOrderOnly: seller.preOrderOnly,
     advanceBookingMinDays: seller.advanceBookingMinDays,
     advanceBookingMaxDays: seller.advanceBookingMaxDays,
+    autoAcceptOrders: seller.autoAcceptOrders,
+    preOrderLeadMinutes: seller.preOrderLeadMinutes,
     availability: computeSellerAvailability(seller),
   };
 }
@@ -387,6 +391,8 @@ export class SellerService {
       preOrderOnly?: boolean;
       advanceBookingMinDays?: number | null;
       advanceBookingMaxDays?: number | null;
+      autoAcceptOrders?: boolean;
+      preOrderLeadMinutes?: number | null;
     },
     ctx: { ip?: string | null } = {}
   ) {
@@ -466,6 +472,8 @@ export class SellerService {
     if (data.preOrderOnly !== undefined) updateData.preOrderOnly = data.preOrderOnly;
     if (data.advanceBookingMinDays !== undefined) updateData.advanceBookingMinDays = data.advanceBookingMinDays;
     if (data.advanceBookingMaxDays !== undefined) updateData.advanceBookingMaxDays = data.advanceBookingMaxDays;
+    if (data.autoAcceptOrders !== undefined) updateData.autoAcceptOrders = data.autoAcceptOrders;
+    if (data.preOrderLeadMinutes !== undefined) updateData.preOrderLeadMinutes = data.preOrderLeadMinutes;
 
     const updated = await prisma.seller.update({
       where: { id: seller.id },

@@ -24,6 +24,7 @@ import { logEvent, logger } from '../utils/logger';
 import { notificationText } from '../utils/notificationText';
 import { recordAudit } from '../middleware/audit';
 import { pktDate } from '../utils/payoutWeek';
+import { startsLater } from '../utils/preOrder';
 
 // The delivery status machine (which status follows which, and what the order must look like) is in utils/deliveryStatus.ts.
 
@@ -37,6 +38,7 @@ const PICKUP_SELLER_SELECT = {
   latitude: true,
   longitude: true,
   deliveryProvider: true,
+  preOrderLeadMinutes: true,
   user: { select: { phone: true } },
 } as const;
 
@@ -234,8 +236,8 @@ export class RiderService {
     });
     if (!order || order.deliveryType !== 'home_delivery') return;
     if (ORDER_CLOSED_FOR_DELIVERY.includes(order.orderStatus)) return;
-    // Booked for a later day (Pakistan time): no rider is sent before that day. createDueDeliveries posts the job then.
-    if (order.deliverySlotDate && order.deliverySlotDate > new Date(pktDate(new Date()))) return;
+    // Booked for a later window: no rider is sent before the kitchen starts on it. createDueDeliveries posts the job then.
+    if (startsLater(order, order.items[0]?.seller?.preOrderLeadMinutes)) return;
 
     // Sellers who deliver themselves don't post to the rider pool; they drive the
     // order to delivered / delivery_failed from their own dashboard. The provider is
@@ -299,24 +301,30 @@ export class RiderService {
   }
 
   /**
-   * Rider jobs for orders that were accepted ahead of their delivery day and so got none then, once that day
-   * (Pakistan time) has come. Run every minute.
+   * Rider jobs for orders that were accepted ahead of their delivery window and so got none then, once the kitchen's
+   * start on them has come (utils/preOrder.ts). Run every minute.
    */
   async createDueDeliveries(now: Date = new Date()): Promise<number> {
     const today = pktDate(now);
-    const due = await prisma.order.findMany({
+    const booked = await prisma.order.findMany({
       where: {
         deliveryType: 'home_delivery',
         deliveryProvider: 'platform',
         orderStatus: { in: ['preparing', 'ready'] },
         deliverySlotDate: { lte: new Date(today) },
-        createdAt: { lt: new Date(`${today}T00:00:00+05:00`) },
         delivery: { is: null },
       },
       orderBy: { createdAt: 'asc' },
-      take: 50,
-      select: { id: true, orderStatus: true },
+      take: 200,
+      select: {
+        id: true,
+        orderStatus: true,
+        deliverySlotDate: true,
+        deliverySlotTime: true,
+        items: { take: 1, select: { seller: { select: { preOrderLeadMinutes: true } } } },
+      },
     });
+    const due = booked.filter((o) => !startsLater(o, o.items[0]?.seller.preOrderLeadMinutes, now));
     for (const o of due) {
       try {
         if (o.orderStatus === 'ready') await this.ensureDeliveryForOrder(o.id, 0);

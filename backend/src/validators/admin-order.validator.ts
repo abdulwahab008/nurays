@@ -54,6 +54,7 @@ export const processRefundSchema = z.object({
 
 export const completeRefundSchema = z.object({
   reference: z.string().max(255).optional(),
+  toWallet: z.boolean().optional(),
 });
 
 export const dismissRefundSchema = z.object({

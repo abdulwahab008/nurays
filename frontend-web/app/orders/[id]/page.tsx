@@ -615,7 +615,9 @@ function OrderDetailContent() {
               <p className="text-sm">
                 {unpaid
                   ? t('detail.placedBodyPay', { amount: formatPrice(order.pricing.total) })
-                  : t('detail.placedBody', { kitchen: sellerName })}
+                  : effectiveStatus === 'pending'
+                    ? t('detail.placedBody', { kitchen: sellerName })
+                    : t('detail.placedBodyAccepted', { kitchen: sellerName })}
               </p>
               {!pickup && (
                 <p className="text-sm mt-1" data-testid="placed-delivery">
@@ -703,6 +705,7 @@ function OrderDetailContent() {
               ['pending', 'failed', 'disputed', 'payment_submitted'].includes(order.paymentStatus ?? 'pending') && (
               <ManualPaymentCard
                 orderId={order.id}
+                orderStatus={orderStatus}
                 totalAmount={order.pricing?.total ?? 0}
                 paymentStatus={order.paymentStatus ?? 'pending'}
                 paymentReferenceNumber={order.paymentReferenceNumber}
