@@ -28,3 +28,15 @@ export function storedWindowHours(key: string): string | null {
   if (!m) return null;
   return windowHours(Number(m[1]) * 60 + Number(m[2]), Number(m[3]) * 60 + Number(m[4]));
 }
+
+/** When the old named windows opened, in minutes after midnight (orders from before keep these names). */
+const NAMED_WINDOW_STARTS: Record<string, number> = { morning: 9 * 60, afternoon: 12 * 60, evening: 17 * 60 };
+
+/** When a booked window opens, as a time in ms: its day (today when none) and its start, Pakistan time; null without one. */
+export function windowStartsAt(date: string | undefined, key: string | undefined, now: Date): number | null {
+  if (!key) return null;
+  const m = /^(\d{2}):(\d{2})-/.exec(key);
+  const start = m ? Number(m[1]) * 60 + Number(m[2]) : NAMED_WINDOW_STARTS[key];
+  if (start === undefined) return null;
+  return Date.parse(`${date ?? pktDateString(now)}T00:00:00Z`) + (start - 5 * 60) * 60_000;
+}

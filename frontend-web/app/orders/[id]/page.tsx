@@ -32,7 +32,7 @@ import { ordersMessages } from '@/lib/i18n/messages/orders';
 import { checkoutMessages } from '@/lib/i18n/messages/checkout';
 import { useShallow } from 'zustand/react/shallow';
 import { useNow } from '@/components/sellers/order-timing';
-import { pktDateString, storedWindowHours } from '@/app/checkout/delivery-slots';
+import { storedWindowHours, windowStartsAt } from '@/app/checkout/delivery-slots';
 
 type OrdersT = ReturnType<typeof useT<typeof ordersMessages.en>>;
 
@@ -543,9 +543,14 @@ function OrderDetailContent() {
   const delivered = effectiveStatus === 'delivered' || effectiveStatus === 'completed';
   const active = !['delivered', 'completed', 'cancelled', 'refunded', 'delivery_failed'].includes(effectiveStatus);
   const method = (order.paymentMethod ?? '').toLowerCase();
+  // Accepted for a window that has not opened yet: the kitchen has not started, so it is "booked", not "being cooked".
+  const opensAt = windowStartsAt(order.delivery?.slotDate, order.delivery?.slotTime, new Date(now));
+  const waitsForWindow = (effectiveStatus === 'confirmed' || effectiveStatus === 'preparing') && opensAt !== null && opensAt > now;
   const headline = unpaid
     ? t('headline.awaitingPayment')
-    : effectiveStatus === 'ready' && pickup
+    : waitsForWindow
+      ? t('headline.booked')
+      : effectiveStatus === 'ready' && pickup
       ? t('headline.readyToCollect')
       : `headline.${effectiveStatus}` in ordersMessages.en
         ? t(`headline.${effectiveStatus}` as keyof typeof ordersMessages.en)
@@ -558,8 +563,6 @@ function OrderDetailContent() {
     if (!window) return null;
     return order.delivery?.slotDate ? t('detail.slotOn', { date: formatDate(order.delivery.slotDate), window }) : t('detail.slotToday', { window });
   })();
-  // Booked for a later day: the window it was booked for, not a cooking estimate worked out from now.
-  const bookedLater = !!order.delivery?.slotDate && order.delivery.slotDate > pktDateString(new Date(now));
   // An estimate that has already gone by says nothing useful; the slot and the tracker still show.
   const etaLine =
     active && !unpaid && order.delivery?.estimatedAt && new Date(order.delivery.estimatedAt).getTime() > now
@@ -620,7 +623,9 @@ function OrderDetailContent() {
                   ? t('detail.placedBodyPay', { amount: formatPrice(order.pricing.total) })
                   : effectiveStatus === 'pending'
                     ? t('detail.placedBody', { kitchen: sellerName })
-                    : t('detail.placedBodyAccepted', { kitchen: sellerName })}
+                    : waitsForWindow && slotLine
+                      ? t('detail.placedBodyBooked', { kitchen: sellerName, when: slotLine })
+                      : t('detail.placedBodyAccepted', { kitchen: sellerName })}
               </p>
               {!pickup && (
                 <p className="text-sm mt-1" data-testid="placed-delivery">
@@ -647,10 +652,11 @@ function OrderDetailContent() {
               <div>
                 <h2 className="text-xl font-bold text-ink" data-testid="order-headline">{headline}</h2>
                 {(etaLine || slotLine) && (
-                  <p className="text-sm text-muted mt-1">{bookedLater ? slotLine : (etaLine ?? slotLine)}</p>
+                  <p className="text-sm text-muted mt-1">{waitsForWindow ? slotLine : (etaLine ?? slotLine)}</p>
                 )}
               </div>
-              {!unpaid && <OrderProgress status={effectiveStatus} deliveryType={order.delivery?.type} />}
+              {/* Waiting for its window, an accepted order has not reached cooking yet */}
+              {!unpaid && <OrderProgress status={waitsForWindow ? 'confirmed' : effectiveStatus} deliveryType={order.delivery?.type} />}
               {effectiveStatus === 'cancelled' && notice && (
                 <div className="rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-700" role="status">
                   <p className="font-semibold">{t(`detail.cancelledBy.${notice.who}`)}</p>

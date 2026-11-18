@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { awaitingPayment, orderProgress, paymentNote } from '../../components/orders/order-progress.ts';
-import { clock, pktDateString, storedWindowHours } from '../../app/checkout/delivery-slots.ts';
+import { clock, pktDateString, storedWindowHours, windowStartsAt } from '../../app/checkout/delivery-slots.ts';
 
 test('a ready delivery order sits on its third step, which reads "Ready"', () => {
   const p = orderProgress('ready', 'home_delivery');
@@ -64,4 +64,11 @@ test('a window shows as clock times; an old named window has its own words', () 
   assert.equal(clock(24 * 60), '12 am');
   assert.equal(storedWindowHours('12:00-15:00'), '\u206612 pm – 3 pm\u2069');
   assert.equal(storedWindowHours('morning'), null);
+});
+
+test('a booked window opens at its start, Pakistan time; an old named window by its hours', () => {
+  // 19:00 on 7 Nov in Pakistan is 14:00 UTC; morning (9:00) today, 6 Nov, is 04:00 UTC.
+  assert.equal(new Date(windowStartsAt('2026-11-07', '19:00-22:00', LUNCHTIME)!).toISOString(), '2026-11-07T14:00:00.000Z');
+  assert.equal(new Date(windowStartsAt(undefined, 'morning', LUNCHTIME)!).toISOString(), '2026-11-06T04:00:00.000Z');
+  assert.equal(windowStartsAt('2026-11-07', undefined, LUNCHTIME), null);
 });
