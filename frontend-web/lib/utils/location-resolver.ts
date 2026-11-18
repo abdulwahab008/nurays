@@ -1,4 +1,4 @@
-import { Community } from '../services/community.service';
+import type { Community } from '../services/community.service';
 
 /**
  * Smart Community Synonyms & Geofence Boundaries
@@ -236,4 +236,10 @@ export function resolveLocationSmart(
 
   // Nothing to go on: no guess. The buyer chooses their area.
   return null;
+}
+
+/** The area a device's position is in, or null outside every area: the nearest one counts only when the position is inside it. */
+export function areaAtPosition(lat: number, lng: number, communities: Community[]): Community | null {
+  const nearest = resolveLocationSmart({ lat, lng }, communities);
+  return nearest?.matchedBy === 'gps_radius' ? nearest.community : null;
 }

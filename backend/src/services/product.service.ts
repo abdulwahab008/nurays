@@ -145,6 +145,8 @@ async function sellersPassingComputedFilters(
     customerLng?: number;
     /** Only kitchens that deliver to the customer (their area and/or address) for no charge to the customer. */
     freeDelivery?: boolean;
+    /** Only kitchens that deliver to the customer's area (or are in it): a Lahore area never lists Karachi kitchens. */
+    deliversHere?: boolean;
     customerCommunityId?: string;
   }
 ): Promise<string[]> {
@@ -167,14 +169,16 @@ async function sellersPassingComputedFilters(
     where: box.length > 0 ? { AND: [sellerWhere, ...box] } : sellerWhere,
     select: { ...SELLER_ORDERING_SELECT, ...SELLER_AVAILABILITY_SELECT },
   });
-  const pricing = opts.freeDelivery ? await getPlatformDeliveryPricing() : null;
+  const pricing = opts.freeDelivery || opts.deliversHere ? await getPlatformDeliveryPricing() : null;
 
   return sellers
     .filter((seller) => {
       if (opts.openNow && !computeSellerAvailability(seller).isOpen) return false;
       if (pricing) {
         const quote = customerDeliveryQuote(seller, opts.customerLat, opts.customerLng, opts.customerCommunityId, pricing);
-        if (!quote.deliverable || quote.fee > 0) return false;
+        if (opts.freeDelivery && (!quote.deliverable || quote.fee > 0)) return false;
+        // The area's own kitchens stay (one may only offer pick-up); others only when they deliver here.
+        if (opts.deliversHere && !quote.deliverable && seller.communityId !== opts.customerCommunityId) return false;
       }
       const distanceKm =
         hasLocation && seller.latitude != null && seller.longitude != null
@@ -199,6 +203,13 @@ async function sellersPassingComputedFilters(
  */
 /** The farthest a delivery can go: the most an admin can set as the Nuray rider range (admin.validator deliveryMaxKm). */
 export const MAX_PLAUSIBLE_TRIP_KM = 200;
+/** How far past an area's radius a customer's own address still counts as being in it (an address on its edge). */
+export const AREA_EDGE_KM = 2;
+
+/** Whether a point is in an area: within its radius, or just past its edge. */
+export function inArea(lat: number, lng: number, area: { centerLatitude: unknown; centerLongitude: unknown; radiusKm: number }): boolean {
+  return haversineKm(lat, lng, Number(area.centerLatitude), Number(area.centerLongitude)) <= area.radiusKm + AREA_EDGE_KM;
+}
 
 /**
  * The kitchen's delivery to this customer, with `fee` the amount the customer pays for it: the rule the order charges by
@@ -515,13 +526,18 @@ export class ProductService {
     }
     if (rankedIds) where.id = { in: rankedIds };
 
-    const hasCustomerLocation = filters.customerLat != null && filters.customerLng != null;
     const targetCommunity = filters.communityId
       ? await prisma.community.findFirst({
           where: { OR: [{ id: filters.communityId }, { slug: filters.communityId }] },
-          select: { id: true, neighborCommunityIds: true },
+          select: { id: true, neighborCommunityIds: true, centerLatitude: true, centerLongitude: true, radiusKm: true },
         })
       : null;
+    // A saved address in another area says nothing about delivering to the area chosen (a Karachi home while browsing
+    // Lahore): distances and fees are then worked out for the area itself.
+    if (targetCommunity && filters.customerLat != null && filters.customerLng != null && !inArea(filters.customerLat, filters.customerLng, targetCommunity)) {
+      filters = { ...filters, customerLat: undefined, customerLng: undefined };
+    }
+    const hasCustomerLocation = filters.customerLat != null && filters.customerLng != null;
 
     // "Open now", "within X km", "fast delivery" and free delivery to the customer depend on opening hours, distance,
     // the delivery-time estimate and the delivery fee, which are worked out in code. They are worked out over the
@@ -538,7 +554,7 @@ export class ProductService {
         { AND: [{ freeDeliveryAreas: { not: Prisma.AnyNull } }, { NOT: { freeDeliveryAreas: { equals: [] } } }] },
       ];
     }
-    if (filters.openNow || filters.fastDelivery || freeDeliveryHere || (filters.maxDistanceKm != null && hasCustomerLocation)) {
+    if (targetCommunity || filters.openNow || filters.fastDelivery || freeDeliveryHere || (filters.maxDistanceKm != null && hasCustomerLocation)) {
       where.sellerId = {
         in: await sellersPassingComputedFilters(
           { ...where.seller, ...(filters.sellerId ? { id: filters.sellerId } : {}) },
@@ -549,6 +565,7 @@ export class ProductService {
             customerLat: filters.customerLat,
             customerLng: filters.customerLng,
             freeDelivery: freeDeliveryHere,
+            deliversHere: !!targetCommunity,
             customerCommunityId: targetCommunity?.id,
           }
         ),

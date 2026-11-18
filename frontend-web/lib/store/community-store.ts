@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { Community, communityService } from '../services/community.service';
-import { resolveLocationSmart, SmartMatchResult } from '../utils/location-resolver';
+import { areaAtPosition, resolveLocationSmart, SmartMatchResult } from '../utils/location-resolver';
 import { errorMessage } from '../api-client';
 import { addressService, type Address } from '../services/address.service';
 import { findSavedArea, type AreaHint } from '../../components/community/saved-area';
@@ -119,13 +119,14 @@ export const useCommunityStore = create<CommunityState>()(
                 const list = get().communities;
 
                 // 1. Run local smart resolver
-                const localMatch = resolveLocationSmart({ lat: latitude, lng: longitude }, list);
+                // Only an area the device is inside: someone in another city is not "in" the nearest area far away.
+                const localMatch = areaAtPosition(latitude, longitude, list);
 
                 // 2. Also try backend detect endpoint
                 let backendMatch: Community | null = null;
                 try {
                   const result = await communityService.detectCommunity(latitude, longitude);
-                  if (result?.community) {
+                  if (result?.community && result.isInsideRadius) {
                     const full = list.find((c) => c.id === result.community.id || c.slug === result.community.slug);
                     // The answer carries fewer fields than a listed community; it is used as it is when the list lacks it.
                     backendMatch = (full ?? result.community) as Community;
@@ -135,7 +136,7 @@ export const useCommunityStore = create<CommunityState>()(
                 }
 
                 // Only a real match is chosen. A position outside every area picks nothing: the buyer chooses (FE-20).
-                const finalMatched = localMatch?.community || backendMatch;
+                const finalMatched = localMatch || backendMatch;
                 if (finalMatched) {
                   set({ selectedCommunity: finalMatched, isDetecting: false });
                   resolve({ community: finalMatched });
