@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { awaitingPayment, orderProgress, paymentNote } from '../../components/orders/order-progress.ts';
-import { openSlotsToday, pktDateString, slotDays } from '../../app/checkout/delivery-slots.ts';
+import { clock, pktDateString, storedWindowHours } from '../../app/checkout/delivery-slots.ts';
 
 test('a ready delivery order sits on its third step, which reads "Ready"', () => {
   const p = orderProgress('ready', 'home_delivery');
@@ -51,22 +51,17 @@ test('a cancelled order that was never paid is "not charged", never "payment pen
 // 12:40 in Pakistan is 07:40 UTC; 02:00 on the 7th in Pakistan is still the 6th in UTC.
 const LUNCHTIME = new Date('2026-11-06T07:40:00Z');
 const AFTER_MIDNIGHT = new Date('2026-11-06T21:00:00Z');
-const LATE_NIGHT = new Date('2026-11-06T17:00:00Z');
 
 test('checkout works out "today" in Pakistan time', () => {
   assert.equal(pktDateString(LUNCHTIME), '2026-11-06');
   assert.equal(pktDateString(AFTER_MIDNIGHT), '2026-11-07');
 });
 
-test('windows that have closed today are not offered', () => {
-  assert.deepEqual(openSlotsToday(LUNCHTIME), ['afternoon', 'evening']);
-  assert.deepEqual(openSlotsToday(AFTER_MIDNIGHT), ['morning', 'afternoon', 'evening']);
-});
-
-test('after the last window, the days start tomorrow; the kitchen limits bound them', () => {
-  const late = slotDays(LATE_NIGHT, 0, 6);
-  assert.equal(late[0].offset, 1);
-  assert.equal(late.at(-1)?.offset, 6);
-  const preorder = slotDays(LUNCHTIME, 1, 3);
-  assert.deepEqual(preorder.map((d) => d.date), ['2026-11-07', '2026-11-08', '2026-11-09']);
+test('a window shows as clock times; an old named window has its own words', () => {
+  assert.equal(clock(9 * 60), '9 am');
+  assert.equal(clock(12 * 60), '12 pm');
+  assert.equal(clock(21 * 60 + 30), '9:30 pm');
+  assert.equal(clock(24 * 60), '12 am');
+  assert.equal(storedWindowHours('12:00-15:00'), '\u206612 pm – 3 pm\u2069');
+  assert.equal(storedWindowHours('morning'), null);
 });

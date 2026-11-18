@@ -1,57 +1,30 @@
 /**
- * The delivery windows a customer can choose at checkout, worked out in Pakistan time (UTC+5, no daylight saving)
- * whatever the phone's own clock zone. The server checks the same windows (order-placement.service.ts).
+ * Delivery days and windows at checkout come from the kitchen's own hours, worked out by the server
+ * (backend utils/deliveryWindows.ts). This file keeps the Pakistan-time helpers the screens need to show them.
  */
-export type SlotTime = 'morning' | 'afternoon' | 'evening';
-
-export const SLOT_TIMES: SlotTime[] = ['morning', 'afternoon', 'evening'];
-
-/** When each window closes, in minutes after midnight PKT. */
-export const SLOT_END_MINUTES: Record<SlotTime, number> = {
-  morning: 12 * 60,
-  afternoon: 17 * 60,
-  evening: 21 * 60 + 30,
-};
-
 const PKT_OFFSET_MS = 5 * 60 * 60 * 1000;
-const DAY_MS = 24 * 60 * 60 * 1000;
-
-function pkt(now: Date): Date {
-  return new Date(now.getTime() + PKT_OFFSET_MS);
-}
 
 /** The calendar day in Pakistan, `daysAhead` days from now, as YYYY-MM-DD. */
 export function pktDateString(now: Date, daysAhead = 0): string {
-  return new Date(pkt(now).getTime() + daysAhead * DAY_MS).toISOString().slice(0, 10);
+  return new Date(now.getTime() + PKT_OFFSET_MS + daysAhead * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 }
 
-export function pktMinutesNow(now: Date): number {
-  const p = pkt(now);
-  return p.getUTCHours() * 60 + p.getUTCMinutes();
+/** A time of day from minutes after midnight: "9 am", "12 pm", "9:30 pm", "12 am" for midnight. */
+export function clock(minutes: number): string {
+  const h = Math.floor(minutes / 60) % 24;
+  const m = minutes % 60;
+  const hour12 = h % 12 === 0 ? 12 : h % 12;
+  return `${hour12}${m ? `:${String(m).padStart(2, '0')}` : ''} ${h < 12 ? 'am' : 'pm'}`;
 }
 
-/** The windows still open today. */
-export function openSlotsToday(now: Date): SlotTime[] {
-  const minutes = pktMinutesNow(now);
-  return SLOT_TIMES.filter((s) => SLOT_END_MINUTES[s] > minutes);
+/** "10 am – 12 pm", held left to right inside an Urdu line (as formatTime does). */
+export function windowHours(start: number, end: number): string {
+  return `\u2066${clock(start)} – ${clock(end)}\u2069`;
 }
 
-export interface SlotDay {
-  /** Days after today (PKT): 0 is today. */
-  offset: number;
-  /** YYYY-MM-DD in PKT. */
-  date: string;
-  slots: SlotTime[];
-}
-
-/**
- * The days that can be chosen, from `minDays` to `maxDays` ahead. Today is left out once all its windows have passed.
- */
-export function slotDays(now: Date, minDays: number, maxDays: number): SlotDay[] {
-  const days: SlotDay[] = [];
-  for (let offset = Math.max(0, minDays); offset <= Math.max(minDays, maxDays); offset++) {
-    const slots = offset === 0 ? openSlotsToday(now) : SLOT_TIMES;
-    if (slots.length) days.push({ offset, date: pktDateString(now, offset), slots });
-  }
-  return days;
+/** The hours of a stored window, "12:00-15:00"; null for an old named one ("morning"), which has its own words. */
+export function storedWindowHours(key: string): string | null {
+  const m = /^(\d{2}):(\d{2})-(\d{2}):(\d{2})$/.exec(key);
+  if (!m) return null;
+  return windowHours(Number(m[1]) * 60 + Number(m[2]), Number(m[3]) * 60 + Number(m[4]));
 }

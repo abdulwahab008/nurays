@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { loginUrlHere } from '@/lib/auth-redirect';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { X } from 'lucide-react';
+import { Plus, X } from 'lucide-react';
 import { DashboardLayout, SELLER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { Button } from '@/components/ui/button';
 import { LoadError } from '@/components/ui/LoadError';
@@ -60,8 +60,8 @@ const WEEK_DAYS = [
 ] as const;
 type WeekDay = (typeof WEEK_DAYS)[number]['key'];
 type Session = { name: string; open: string; close: string };
-// One row per day on the form. A day saved earlier with more than one session keeps the others as they were (`more`).
-type DayHours = { closed: boolean; open: string; close: string; more: Session[] };
+// A day on the form: one or more sessions (Lunch, Dinner). Customers book delivery in these, by their names.
+type DayHours = { closed: boolean; sessions: Session[] };
 type WeekHours = Record<WeekDay, DayHours>;
 
 const toMinutes = (hhmm: string) => {
@@ -83,9 +83,11 @@ function weekFromSaved(weekly: unknown, fallbackOpen: string, fallbackClose: str
   for (const { key } of WEEK_DAYS) {
     const day = saved[key];
     const sessions = Array.isArray(day?.sessions) ? day.sessions : [];
+    // "Open" is the name the form used to save for a day's only session: it shows as an empty name.
+    const named = sessions.map((s) => ({ name: s.name === 'Open' ? '' : s.name || '', open: s.open || '', close: s.close || '' }));
     week[key] = day
-      ? { closed: Boolean(day.closed) || sessions.length === 0, open: sessions[0]?.open ?? '', close: sessions[0]?.close ?? '', more: sessions.slice(1) }
-      : { closed: false, open: fallbackOpen, close: fallbackClose, more: [] };
+      ? { closed: Boolean(day.closed) || sessions.length === 0, sessions: named.length ? named : [{ name: '', open: '', close: '' }] }
+      : { closed: false, sessions: [{ name: '', open: fallbackOpen, close: fallbackClose }] };
   }
   return week;
 }
@@ -389,12 +391,16 @@ export default function SellerSettingsPage() {
       for (const { key } of WEEK_DAYS) {
         const day = weekly[key];
         if (day.closed) continue;
-        if (!day.open || !day.close) problems[key] = t('err.dayTimes');
-        else if (toMinutes(day.close) <= toMinutes(day.open)) problems[key] = t('err.dayOrder');
+        if (day.sessions.some((s) => !s.open || !s.close)) problems[key] = t('err.dayTimes');
+        else if (day.sessions.some((s) => toMinutes(s.close) <= toMinutes(s.open))) problems[key] = t('err.dayOrder');
+        else {
+          const sorted = [...day.sessions].sort((a, b) => toMinutes(a.open) - toMinutes(b.open));
+          if (sorted.some((s, i) => i > 0 && toMinutes(s.open) < toMinutes(sorted[i - 1].close))) problems[key] = t('err.sessionsOverlap');
+        }
       }
       if (WEEK_DAYS.every(({ key }) => weekly[key].closed)) problems[WEEK_DAYS[0].key] = t('err.noDays');
-      const openDays = WEEK_DAYS.map(({ key }) => weekly[key]).filter((d) => !d.closed && d.open && d.close);
-      if (orderCutoffTime && openDays.length > 0 && !openDays.some((d) => insideHours(orderCutoffTime, d.open, d.close))) {
+      const openSessions = WEEK_DAYS.flatMap(({ key }) => (weekly[key].closed ? [] : weekly[key].sessions)).filter((s) => s.open && s.close);
+      if (orderCutoffTime && openSessions.length > 0 && !openSessions.some((d) => insideHours(orderCutoffTime, d.open, d.close))) {
         problems['cutoff-time'] = t('err.cutoffOutside');
       }
     }
@@ -413,6 +419,7 @@ export default function SellerSettingsPage() {
     setFormData((prev) => ({ ...prev, weekly: { ...prev.weekly, [key]: { ...prev.weekly[key], ...change } } }));
     clearHoursError(key);
   };
+  const setSessions = (key: WeekDay, edit: (sessions: Session[]) => Session[]) => setDay(key, { sessions: edit(formData.weekly[key].sessions) });
 
   const chooseScheduleMode = (mode: ScheduleMode) => {
     setFormData((prev) => {
@@ -420,7 +427,10 @@ export default function SellerSettingsPage() {
       if (mode !== 'per_day' || !prev.fixedDailyOpen || !prev.fixedDailyClose) return { ...prev, scheduleMode: mode };
       const weekly = { ...prev.weekly };
       for (const { key } of WEEK_DAYS) {
-        if (!weekly[key].closed && !weekly[key].open && !weekly[key].close) weekly[key] = { ...weekly[key], open: prev.fixedDailyOpen, close: prev.fixedDailyClose };
+        const first = weekly[key].sessions[0];
+        if (!weekly[key].closed && weekly[key].sessions.length === 1 && !first.open && !first.close) {
+          weekly[key] = { ...weekly[key], sessions: [{ ...first, open: prev.fixedDailyOpen, close: prev.fixedDailyClose }] };
+        }
       }
       return { ...prev, scheduleMode: mode, weekly };
     });
@@ -519,7 +529,7 @@ export default function SellerSettingsPage() {
                       key,
                       day.closed
                         ? { closed: true, sessions: [] }
-                        : { closed: false, sessions: [{ name: 'Open', open: day.open, close: day.close }, ...day.more] },
+                        : { closed: false, sessions: day.sessions.map((s) => ({ name: s.name.trim(), open: s.open, close: s.close })) },
                     ];
                   })
                 ),
@@ -843,32 +853,65 @@ export default function SellerSettingsPage() {
                           />
                           {day.closed ? t('dayClosed') : t('dayOpen')}
                         </label>
-                        {!day.closed && (
-                          <div className="flex flex-1 items-center gap-2 min-w-[14rem]">
-                            <input
-                              id={`day-${key}-open`}
-                              type="time"
-                              aria-label={t('dayOpensAt', { day: t(label) })}
-                              value={day.open}
-                              onChange={(e) => setDay(key, { open: e.target.value })}
-                              aria-invalid={Boolean(problem)}
-                              aria-describedby={problem ? `day-${key}-error` : undefined}
-                              className={`${fieldClass} flex-1 min-w-0 ${problem ? 'border-red-700' : ''}`}
-                            />
-                            <span className="text-sm text-muted">{t('to')}</span>
-                            <input
-                              id={`day-${key}-close`}
-                              type="time"
-                              aria-label={t('dayClosesAt', { day: t(label) })}
-                              value={day.close}
-                              onChange={(e) => setDay(key, { close: e.target.value })}
-                              aria-invalid={Boolean(problem)}
-                              aria-describedby={problem ? `day-${key}-error` : undefined}
-                              className={`${fieldClass} flex-1 min-w-0 ${problem ? 'border-red-700' : ''}`}
-                            />
-                          </div>
-                        )}
                       </div>
+                      {!day.closed && (
+                        <div className="mt-2 space-y-2">
+                          {day.sessions.map((session, i) => (
+                            <div key={i} className="flex flex-wrap items-center gap-2">
+                              <input
+                                type="text"
+                                value={session.name}
+                                onChange={(e) => setSessions(key, (all) => all.map((s, j) => (j === i ? { ...s, name: e.target.value } : s)))}
+                                placeholder={t('sessionNamePlaceholder')}
+                                aria-label={t('sessionName', { day: t(label) })}
+                                maxLength={30}
+                                className={`${fieldClass} w-full sm:w-36`}
+                              />
+                              <div className="flex flex-1 items-center gap-2 min-w-[14rem]">
+                                <input
+                                  id={i === 0 ? `day-${key}-open` : undefined}
+                                  type="time"
+                                  aria-label={t('dayOpensAt', { day: t(label) })}
+                                  value={session.open}
+                                  onChange={(e) => setSessions(key, (all) => all.map((s, j) => (j === i ? { ...s, open: e.target.value } : s)))}
+                                  aria-invalid={Boolean(problem)}
+                                  aria-describedby={problem ? `day-${key}-error` : undefined}
+                                  className={`${fieldClass} flex-1 min-w-0 ${problem ? 'border-red-700' : ''}`}
+                                />
+                                <span className="text-sm text-muted">{t('to')}</span>
+                                <input
+                                  id={i === 0 ? `day-${key}-close` : undefined}
+                                  type="time"
+                                  aria-label={t('dayClosesAt', { day: t(label) })}
+                                  value={session.close}
+                                  onChange={(e) => setSessions(key, (all) => all.map((s, j) => (j === i ? { ...s, close: e.target.value } : s)))}
+                                  aria-invalid={Boolean(problem)}
+                                  aria-describedby={problem ? `day-${key}-error` : undefined}
+                                  className={`${fieldClass} flex-1 min-w-0 ${problem ? 'border-red-700' : ''}`}
+                                />
+                                {day.sessions.length > 1 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setSessions(key, (all) => all.filter((_, j) => j !== i))}
+                                    aria-label={t('removeSession')}
+                                    className="grid h-11 w-11 shrink-0 place-items-center rounded-xl text-muted hover:bg-raised hover:text-red-700"
+                                  >
+                                    <X className="h-4 w-4" aria-hidden />
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                          <button
+                            type="button"
+                            onClick={() => setSessions(key, (all) => [...all, { name: '', open: '', close: '' }])}
+                            className="inline-flex min-h-11 items-center gap-1.5 text-sm font-semibold text-brand-ink hover:underline"
+                          >
+                            <Plus className="h-4 w-4" aria-hidden />
+                            {t('addSession')}
+                          </button>
+                        </div>
+                      )}
                       {problem && <p id={`day-${key}-error`} role="alert" className="text-sm text-red-700 mt-1.5">{problem}</p>}
                     </li>
                   );

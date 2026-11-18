@@ -17,6 +17,7 @@ import { assertOnMenu } from '../utils/menu';
 import { createStockAlert } from './stock-alert.service';
 import promotionService from './promotion.service';
 import { isAcceptingOrders, validateOrderTiming } from './availability.service';
+import { windowProblem } from '../utils/deliveryWindows';
 import { ONLINE_GATEWAY_METHODS, SELLER_DIRECT_METHODS, codCollectorOf } from '../utils/paymentCustody';
 import { assertKitchenTakesCash } from './kitchen-owing.service';
 import sellerOrderService from './seller-order.service';
@@ -25,28 +26,6 @@ import { newHandoverCode } from './handover.service';
 import { debitWallet } from './wallet.service';
 import { logEvent, logger } from '../utils/logger';
 import { thrownMessage, thrown } from '../utils/thrown';
-
-/** When each delivery window closes, in minutes after midnight Pakistan time (the windows checkout offers). */
-export const SLOT_END_MINUTES = { morning: 12 * 60, afternoon: 17 * 60, evening: 21 * 60 + 30 } as const;
-export type SlotTime = keyof typeof SLOT_END_MINUTES;
-
-const PKT_OFFSET_MS = 5 * 60 * 60 * 1000;
-
-/**
- * Why a delivery slot can't be booked, or null when it can: a day before today, or today's window once it has closed
- * (all in Pakistan time). A slot with no date is today's.
- */
-export function slotProblem(slotTime: SlotTime | undefined, slotDate: string | undefined, now: Date = new Date()): string | null {
-  const pktNow = new Date(now.getTime() + PKT_OFFSET_MS);
-  const today = pktNow.toISOString().slice(0, 10);
-  const day = slotDate ? new Date(slotDate).toISOString().slice(0, 10) : today;
-  if (day < today) return 'The delivery day has already passed. Please choose another day.';
-  if (day === today && slotTime) {
-    const minutes = pktNow.getUTCHours() * 60 + pktNow.getUTCMinutes();
-    if (minutes >= SLOT_END_MINUTES[slotTime]) return 'That delivery window has already passed today. Please choose a later one.';
-  }
-  return null;
-}
 
 /** A transfer straight to the kitchen needs the kitchen's account for that method. */
 export function transferAccountMissing(
@@ -133,7 +112,7 @@ export class OrderPlacement {
       deliveryAddressId?: string;
       hubId?: string;
       deliverySlotDate?: string;
-      deliverySlotTime?: SlotTime;
+      deliverySlotTime?: string;
       paymentMethod: string;
       promotionCode?: string;
       deliveryInstructions?: string;
@@ -372,9 +351,12 @@ export class OrderPlacement {
       }
     }
 
-    const slotIssue = slotProblem(data.deliverySlotTime, data.deliverySlotDate);
-    if (slotIssue) {
-      throw new AppError(slotIssue, 400, 'DELIVERY_SLOT_PASSED');
+    // The window must be one the kitchen offers that day (from its opening hours), still ahead, with time to cook.
+    for (const seller of sellersInOrder.values()) {
+      const slotIssue = windowProblem(seller, data.deliverySlotTime, data.deliverySlotDate);
+      if (slotIssue) {
+        throw new AppError(slotIssue, 400, 'DELIVERY_SLOT_PASSED');
+      }
     }
 
     // Apply seller-wide catalog/deal promotions to the actual charged unit price —

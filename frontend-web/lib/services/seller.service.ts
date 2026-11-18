@@ -33,6 +33,23 @@ export interface PublicSellerAvailability {
   isManualOverride?: boolean;
 }
 
+/** A window a customer can book: `key` ("12:00-15:00") is what the order stores; times are minutes after midnight PKT. */
+export interface DeliveryWindow {
+  key: string;
+  start: number;
+  end: number;
+  /** A standard window (translated), else the kitchen's own session name, else null (shown as its hours). */
+  name: 'morning' | 'afternoon' | 'evening' | null;
+  label: string | null;
+}
+
+export interface DeliveryDay {
+  /** Days after today, Pakistan time. */
+  offset: number;
+  date: string;
+  windows: DeliveryWindow[];
+}
+
 export interface PublicSeller {
   id: string;
   businessName: string;
@@ -57,6 +74,8 @@ export interface PublicSeller {
   isVerified?: boolean;
   verificationStatus?: string;
   availability?: PublicSellerAvailability;
+  /** The days and windows checkout offers, from the kitchen's own hours (backend utils/deliveryWindows.ts). Only on one kitchen's details. */
+  deliveryDays?: DeliveryDay[];
   businessType?: string | null;
   mealCategories?: string[];
   allowCrossCommunity?: boolean;

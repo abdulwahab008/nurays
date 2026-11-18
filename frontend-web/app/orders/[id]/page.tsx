@@ -32,6 +32,7 @@ import { ordersMessages } from '@/lib/i18n/messages/orders';
 import { checkoutMessages } from '@/lib/i18n/messages/checkout';
 import { useShallow } from 'zustand/react/shallow';
 import { useNow } from '@/components/sellers/order-timing';
+import { storedWindowHours } from '@/app/checkout/delivery-slots';
 
 type OrdersT = ReturnType<typeof useT<typeof ordersMessages.en>>;
 
@@ -552,8 +553,9 @@ function OrderDetailContent() {
   // The window the customer chose: a day (today when none was given) and a part of it.
   const slotLine = (() => {
     const time = order.delivery?.slotTime;
-    if (!time || !SLOT_TIMES.includes(time)) return null;
-    const window = t(`slot.${time}` as keyof typeof ordersMessages.en);
+    // A window from the kitchen's hours ("12:00-15:00") shows as its hours; an older order's named window keeps its words.
+    const window = time ? (storedWindowHours(time) ?? (SLOT_TIMES.includes(time) ? t(`slot.${time}` as keyof typeof ordersMessages.en) : null)) : null;
+    if (!window) return null;
     return order.delivery?.slotDate ? t('detail.slotOn', { date: formatDate(order.delivery.slotDate), window }) : t('detail.slotToday', { window });
   })();
   // An estimate that has already gone by says nothing useful; the slot and the tracker still show.

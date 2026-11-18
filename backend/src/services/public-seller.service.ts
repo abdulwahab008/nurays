@@ -5,6 +5,7 @@ import { searchTerm } from '../utils/search';
 import { pageArgs } from '../utils/pagination';
 import { onMenuWhere } from '../utils/menu';
 import { computeSellerAvailability } from './availability.service';
+import { bookingRange, deliveryDays } from '../utils/deliveryWindows';
 import { computeCustomerFacingSellerInfo } from './product.service';
 import { SELLER_COMMUNITY_DELIVERY_SELECT } from '../utils/sellerDeliverySelect';
 
@@ -333,6 +334,11 @@ export async function getPublicSeller(id: string) {
     isVerified: seller.isVerified,
     verificationStatus: seller.verificationStatus,
     availability,
+    // The days and windows checkout offers, from the kitchen's own hours (utils/deliveryWindows.ts).
+    deliveryDays: (() => {
+      const { min, max } = bookingRange(seller, availability.status === 'preorder_only');
+      return deliveryDays(seller, min, max);
+    })(),
     community: seller.community,
     chef: {
       name: seller.user?.profile?.fullName || seller.businessName,

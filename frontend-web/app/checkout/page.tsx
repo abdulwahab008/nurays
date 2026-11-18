@@ -40,7 +40,8 @@ import { checkoutMessages, richText } from '@/lib/i18n/messages/checkout';
 import { ExternalLink } from '@/components/ExternalLink';
 import { useDeliveryEstimate } from '@/lib/hooks/use-delivery-estimate';
 import { useShallow } from 'zustand/react/shallow';
-import { SLOT_TIMES, openSlotsToday, pktDateString, slotDays, type SlotTime } from './delivery-slots';
+import { pktDateString, windowHours } from './delivery-slots';
+import type { DeliveryDay } from '@/lib/services/seller.service';
 import { attemptMayExist, checkoutKeyFor, forgetCheckoutKey, sessionStore } from './checkout-key';
 
 type PaymentMethod = 'cod' | 'safepay' | 'wallet' | 'bank' | 'jazzcash' | 'easypaisa';
@@ -65,7 +66,6 @@ const changedTotal = (details: unknown): number | null =>
   details && typeof details === 'object' && 'total' in details && typeof details.total === 'number' ? details.total : null;
 
 /** How far ahead a delivery day can be chosen when the kitchen sets no limit of its own. */
-const DEFAULT_MAX_DAYS_AHEAD = 6;
 
 /** Adding an address from checkout opens the form straight away and comes back here once it is saved. */
 const ADD_ADDRESS_HREF = `/profile/addresses?new=1&next=${encodeURIComponent('/checkout')}`;
@@ -108,10 +108,10 @@ export default function CheckoutPage() {
   // The kitchen owes Nuray and takes no money itself for now (CASH_UNAVAILABLE): cash and transfers to it come off the list.
   const [cashUnavailable, setCashUnavailable] = useState(false);
   const [deliveryInstructions, setDeliveryInstructions] = useState<string>('');
-  const [deliverySlot, setDeliverySlot] = useState<{ offset: number; time: SlotTime }>(() => {
-    const today = openSlotsToday(new Date());
-    return today.length ? { offset: 0, time: today[0] } : { offset: 1, time: 'morning' };
-  });
+  // The day and window chosen; until the person picks one, the first the kitchen offers.
+  const [deliverySlot, setDeliverySlot] = useState<{ offset: number; key: string } | null>(null);
+  // The days and windows this kitchen can be booked for, from its own hours (null until they have loaded).
+  const [kitchenDays, setKitchenDays] = useState<DeliveryDay[] | null>(null);
   const [promoCode, setPromoCode] = useState('');
   const [appliedPromo, setAppliedPromo] = useState<AppliedPromo | null>(null);
   const [promoValidating, setPromoValidating] = useState(false);
@@ -292,7 +292,9 @@ export default function CheckoutPage() {
     if (!kitchenId) return;
     let cancelled = false;
     sellerService.getPublicSeller(kitchenId).then((s) => {
-      if (!cancelled) setKitchenAvailability(s?.availability ?? null);
+      if (cancelled) return;
+      setKitchenAvailability(s?.availability ?? null);
+      setKitchenDays(s?.deliveryDays ?? []);
     });
     return () => {
       cancelled = true;
@@ -301,11 +303,9 @@ export default function CheckoutPage() {
   // The storefront's rule: a closed kitchen takes no order unless it takes pre-orders, and then only for a later day.
   const takesPreOrders = !!kitchen?.preOrderOnly || kitchenAvailability?.status === 'preorder_only';
   const kitchenClosed = !!kitchenAvailability && !kitchenAvailability.isOpen && !takesPreOrders;
-  const minDaysAhead = kitchen?.advanceBookingMinDays ?? (takesPreOrders ? 1 : 0);
-  const maxDaysAhead = kitchen?.advanceBookingMaxDays ?? Math.max(minDaysAhead, DEFAULT_MAX_DAYS_AHEAD);
-  const days = slotDays(new Date(), minDaysAhead, maxDaysAhead);
-  const chosenDay = days.find((d) => d.offset === deliverySlot.offset) ?? days[0];
-  const chosenTime = chosenDay ? (chosenDay.slots.includes(deliverySlot.time) ? deliverySlot.time : chosenDay.slots[0]) : undefined;
+  const days = kitchenDays ?? [];
+  const chosenDay = days.find((d) => d.offset === deliverySlot?.offset) ?? days[0];
+  const chosenTime = chosenDay ? (chosenDay.windows.find((w) => w.key === deliverySlot?.key) ?? chosenDay.windows[0])?.key : undefined;
   // A transfer straight to the kitchen is offered only when the kitchen has given the account to send it to.
   const takesTransfer = (m: PaymentMethod) => !cashUnavailable && !!kitchen?.transferMethods?.includes(m);
   const methodUsable = (m: PaymentMethod) => (m === 'bank' || m === 'jazzcash' || m === 'easypaisa' ? takesTransfer(m) : true);
@@ -744,7 +744,12 @@ export default function CheckoutPage() {
                 <h2 className="text-base font-semibold text-ink">{t(isPickup ? 'pickupSlotHeading' : 'slotHeading')}</h2>
               </div>
 
-              {days.length === 0 ? (
+              {kitchenDays === null ? (
+                <div className="space-y-2" aria-hidden>
+                  <div className="h-11 w-2/3 rounded-full bg-raised motion-safe:animate-pulse" />
+                  <div className="h-14 rounded-2xl bg-raised motion-safe:animate-pulse" />
+                </div>
+              ) : days.length === 0 ? (
                 <p className="text-sm text-muted">{t('noSlotLeft')}</p>
               ) : (
                 <>
@@ -757,7 +762,7 @@ export default function CheckoutPage() {
                           type="button"
                           role="radio"
                           aria-checked={active}
-                          onClick={() => setDeliverySlot({ offset: d.offset, time: d.slots.includes(deliverySlot.time) ? deliverySlot.time : d.slots[0] })}
+                          onClick={() => setDeliverySlot({ offset: d.offset, key: d.windows.some((w) => w.key === chosenTime) ? chosenTime! : d.windows[0].key })}
                           className={`shrink-0 min-h-11 px-4 rounded-full border text-sm font-semibold transition-colors ${
                             active ? 'border-brand bg-brand-soft text-brand-soft-ink' : 'border-line text-ink hover:border-line-strong'
                           }`}
@@ -767,31 +772,29 @@ export default function CheckoutPage() {
                       );
                     })}
                   </div>
-                  <div role="radiogroup" aria-label={t('timeWindow')} className="grid grid-cols-3 gap-2" data-testid="slot-times">
-                    {SLOT_TIMES.map((time) => {
-                      const open = !!chosenDay?.slots.includes(time);
-                      const active = open && time === chosenTime;
+                  {/* The kitchen's windows for that day: its sessions ("Lunch"), or morning, afternoon and evening cut to its hours */}
+                  <div role="radiogroup" aria-label={t('timeWindow')} className="grid grid-cols-2 sm:grid-cols-3 gap-2" data-testid="slot-times">
+                    {chosenDay?.windows.map((w) => {
+                      const active = w.key === chosenTime;
+                      const hours = windowHours(w.start, w.end);
+                      const name = w.name ? t(`slotName.${w.name}`) : w.label;
                       return (
                         <button
-                          key={time}
+                          key={w.key}
                           type="button"
                           role="radio"
                           aria-checked={active}
-                          disabled={!open}
-                          onClick={() => setDeliverySlot({ offset: chosenDay.offset, time })}
-                          className={`min-h-14 px-2 py-2 rounded-2xl border text-center transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+                          onClick={() => setDeliverySlot({ offset: chosenDay.offset, key: w.key })}
+                          className={`min-h-14 px-2 py-2 rounded-2xl border text-center transition-colors ${
                             active ? 'border-brand bg-brand-soft text-brand-soft-ink' : 'border-line text-ink hover:border-line-strong'
                           }`}
                         >
-                          <span className="block text-sm font-semibold">{t(`slotName.${time}`)}</span>
-                          <span className="block text-xs text-muted" data-ltr>{t(`slotHours.${time}`)}</span>
+                          <span className="block text-sm font-semibold">{name ?? hours}</span>
+                          {name && <span className="block text-xs text-muted">{hours}</span>}
                         </button>
                       );
                     })}
                   </div>
-                  {chosenDay?.offset === 0 && chosenDay.slots.length < SLOT_TIMES.length && (
-                    <p className="text-xs text-muted">{t('slotsPassed')}</p>
-                  )}
                 </>
               )}
 
