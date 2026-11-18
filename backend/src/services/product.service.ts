@@ -203,6 +203,14 @@ async function sellersPassingComputedFilters(
  */
 /** The farthest a delivery can go: the most an admin can set as the Nuray rider range (admin.validator deliveryMaxKm). */
 export const MAX_PLAUSIBLE_TRIP_KM = 200;
+/** Kitchens in other areas that deliver to this one, by the dish list's rule: their ids. */
+export function kitchensDeliveringTo(communityId: string): Promise<string[]> {
+  return sellersPassingComputedFilters(
+    { isVerified: true, status: 'active', verificationStatus: 'approved', OR: [{ communityId: null }, { communityId: { not: communityId } }] },
+    { openNow: false, fastDelivery: false, deliversHere: true, customerCommunityId: communityId }
+  );
+}
+
 /** How far past an area's radius a customer's own address still counts as being in it (an address on its edge). */
 export const AREA_EDGE_KM = 2;
 

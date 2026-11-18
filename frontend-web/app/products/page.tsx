@@ -559,7 +559,7 @@ function ProductsContent() {
                     viewMode === 'kitchens' ? 'bg-brand-soft text-brand-soft-ink' : 'bg-line text-muted'
                   }`}
                 >
-                  {(activeCommunityDetail.sellers || []).length}
+                  {(activeCommunityDetail.deliveringHere ?? activeCommunityDetail.sellers ?? []).length}
                 </span>
               )}
             </button>
@@ -718,7 +718,8 @@ function ProductsContent() {
         );
       }
 
-      const allKitchens = activeCommunityDetail?.sellers || [];
+      // The area's own kitchens and the ones that deliver here: the same list as the kitchens page.
+      const allKitchens = activeCommunityDetail?.deliveringHere ?? activeCommunityDetail?.sellers ?? [];
       const kitchens = openNow ? allKitchens.filter((k) => k.isOpen !== false) : allKitchens;
       const communityName = selectedCommunity.name || activeCommunityDetail?.name || t('yourArea');
 

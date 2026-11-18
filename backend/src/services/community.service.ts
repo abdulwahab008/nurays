@@ -3,6 +3,65 @@ import { logger } from '../utils/logger';
 import { AppError } from '../middleware/errorHandler';
 import { haversineKm } from '../utils/deliveryFee';
 import { onMenuWhere } from '../utils/menu';
+import type { Prisma } from '@prisma/client';
+
+/** What an area's kitchen list shows of each kitchen. */
+const SELLER_CARD_SELECT = {
+  id: true,
+  businessName: true,
+  businessType: true,
+  description: true,
+  ratingAverage: true,
+  totalReviews: true,
+  coverImageUrl: true,
+  allowCrossCommunity: true,
+  minPrepTimeMinutes: true,
+  primaryCommunityName: true,
+  mealCategories: true,
+  user: {
+    select: {
+      profile: {
+        select: {
+          fullName: true,
+          avatarUrl: true,
+        },
+      },
+    },
+  },
+  products: {
+    where: { isActive: true, approvalStatus: 'approved', ...onMenuWhere() },
+    select: {
+      id: true,
+      name: true,
+      price: true,
+      productType: true,
+    },
+    take: 3,
+  },
+  } satisfies Prisma.SellerSelect;
+
+function sellerCard(s: Prisma.SellerGetPayload<{ select: typeof SELLER_CARD_SELECT }>) {
+  return {
+    id: s.id,
+    businessName: s.businessName,
+    businessType: s.businessType,
+    description: s.description,
+    ratingAverage: Number(s.ratingAverage),
+    totalReviews: s.totalReviews || 0,
+    coverImageUrl: s.coverImageUrl,
+    allowCrossCommunity: s.allowCrossCommunity,
+    minPrepTimeMinutes: s.minPrepTimeMinutes || 20,
+    chefName: s.user?.profile?.fullName || s.businessName,
+    avatar: s.user?.profile?.avatarUrl,
+    cuisines: s.mealCategories || [],
+    products: s.products.map((p) => ({
+      id: p.id,
+      name: p.name,
+      price: Number(p.price),
+      productType: p.productType,
+    })),
+  };
+}
 
 export class CommunityService {
   /**
@@ -49,39 +108,7 @@ export class CommunityService {
       include: {
         sellers: {
           where: { isVerified: true, status: 'active' },
-          select: {
-            id: true,
-            businessName: true,
-            businessType: true,
-            description: true,
-            ratingAverage: true,
-            totalReviews: true,
-            coverImageUrl: true,
-            allowCrossCommunity: true,
-            minPrepTimeMinutes: true,
-            primaryCommunityName: true,
-            mealCategories: true,
-            user: {
-              select: {
-                profile: {
-                  select: {
-                    fullName: true,
-                    avatarUrl: true,
-                  },
-                },
-              },
-            },
-            products: {
-              where: { isActive: true, approvalStatus: 'approved', ...onMenuWhere() },
-              select: {
-                id: true,
-                name: true,
-                price: true,
-                productType: true,
-              },
-              take: 3,
-            },
-          },
+          select: SELLER_CARD_SELECT,
         },
       },
     });
@@ -123,27 +150,15 @@ export class CommunityService {
         deliveryBaseFee: Number(n.deliveryBaseFee),
         crossCommunityBaseFee: Number(n.crossCommunityBaseFee),
       })),
-      sellers: community.sellers.map((s) => ({
-        id: s.id,
-        businessName: s.businessName,
-        businessType: s.businessType,
-        description: s.description,
-        ratingAverage: Number(s.ratingAverage),
-        totalReviews: s.totalReviews || 0,
-        coverImageUrl: s.coverImageUrl,
-        allowCrossCommunity: s.allowCrossCommunity,
-        minPrepTimeMinutes: s.minPrepTimeMinutes || 20,
-        chefName: s.user?.profile?.fullName || s.businessName,
-        avatar: s.user?.profile?.avatarUrl,
-        cuisines: s.mealCategories || [],
-        products: s.products.map((p) => ({
-          id: p.id,
-          name: p.name,
-          price: Number(p.price),
-          productType: p.productType,
-        })),
-      })),
+      sellers: community.sellers.map(sellerCard),
     };
+  }
+
+  /** The list cards for these kitchens (kitchens from other areas that deliver to one, say). */
+  async sellerCards(ids: string[]) {
+    if (ids.length === 0) return [];
+    const sellers = await prisma.seller.findMany({ where: { id: { in: ids } }, select: SELLER_CARD_SELECT });
+    return sellers.map(sellerCard);
   }
 
   distanceToCommunityKm(c: { centerLatitude: unknown; centerLongitude: unknown }, lat: number, lng: number): number {
