@@ -35,3 +35,13 @@ export function startsLater(order: BookedOrder, leadMinutes: number | null | und
   const at = workStartsAt(order, leadMinutes);
   return at !== null && at > now;
 }
+
+/**
+ * When an accepted order should be ready: its prep time from now, or, for an order booked for a later window, the moment
+ * that window opens (an order for tomorrow's dinner is not ready by twenty minutes from now).
+ */
+export function readyBy(order: BookedOrder, prepMinutes: number, now: Date = new Date()): Date {
+  const cooked = new Date(now.getTime() + prepMinutes * 60_000);
+  const windowOpens = workStartsAt(order, 0);
+  return windowOpens && windowOpens > cooked ? windowOpens : cooked;
+}

@@ -3,6 +3,7 @@
  * (utils/deliveryWindows.ts). Times are Pakistan time (UTC+5).
  */
 import { deliveryDays, windowProblem, windowStartMinutes, windowsOnWeekday } from '../src/utils/deliveryWindows';
+import { readyBy } from '../src/utils/preOrder';
 
 // Friday 2026-11-06 12:40 in Pakistan is 07:40 UTC.
 const LUNCHTIME_PKT = new Date('2026-11-06T07:40:00Z');
@@ -74,5 +75,19 @@ describe('checking the window an order asks for', () => {
     expect(windowStartMinutes('19:00-22:00')).toBe(19 * 60);
     expect(windowStartMinutes('evening')).toBe(17 * 60);
     expect(windowStartMinutes(null)).toBeUndefined();
+  });
+});
+
+describe('when an accepted order should be ready', () => {
+  it('a booked order is ready when its window opens, not prep time from now', () => {
+    const tomorrowDinner = { deliverySlotDate: new Date('2026-11-07T00:00:00Z'), deliverySlotTime: '19:00-22:00' };
+    // 19:00 on the 7th in Pakistan is 14:00 UTC.
+    expect(readyBy(tomorrowDinner, 20, LUNCHTIME_PKT).toISOString()).toBe('2026-11-07T14:00:00.000Z');
+  });
+
+  it('an order for now, or a window already open, is ready after its prep time', () => {
+    expect(readyBy({ deliverySlotDate: null, deliverySlotTime: null }, 20, LUNCHTIME_PKT).toISOString()).toBe('2026-11-06T08:00:00.000Z');
+    const lunchToday = { deliverySlotDate: new Date('2026-11-06T00:00:00Z'), deliverySlotTime: '12:00-15:00' };
+    expect(readyBy(lunchToday, 20, LUNCHTIME_PKT).toISOString()).toBe('2026-11-06T08:00:00.000Z');
   });
 });

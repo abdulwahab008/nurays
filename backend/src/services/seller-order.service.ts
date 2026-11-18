@@ -4,6 +4,7 @@ import { assertMayHandOver, verifyHandoverCode } from './handover.service';
 import { presentFile } from '../storage';
 import { cancelOpenDelivery, notifyDeliveryCancelled, CancelledDelivery } from './delivery-lifecycle.service';
 import prisma from '../config/database';
+import { readyBy } from '../utils/preOrder';
 import { pageArgs } from '../utils/pagination';
 import { AppError } from '../middleware/errorHandler';
 import realtimeOrderService from './realtime-order.service';
@@ -795,7 +796,7 @@ export class SellerOrderService {
 
     // Determine prep time from items or seller default
     const maxPrepMinutes = preparationMinutes ?? prepMinutesFor(order.items.map((i) => i.product?.preparationTime), seller.minPrepTimeMinutes);
-    const estimatedReadyAt = new Date(Date.now() + maxPrepMinutes * 60 * 1000);
+    const estimatedReadyAt = readyBy(order, maxPrepMinutes);
 
     const result = await prisma.$transaction(async (tx) => {
       // Claim the transition first. The status check above ran before this

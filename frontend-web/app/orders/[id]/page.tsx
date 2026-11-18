@@ -32,7 +32,7 @@ import { ordersMessages } from '@/lib/i18n/messages/orders';
 import { checkoutMessages } from '@/lib/i18n/messages/checkout';
 import { useShallow } from 'zustand/react/shallow';
 import { useNow } from '@/components/sellers/order-timing';
-import { storedWindowHours } from '@/app/checkout/delivery-slots';
+import { pktDateString, storedWindowHours } from '@/app/checkout/delivery-slots';
 
 type OrdersT = ReturnType<typeof useT<typeof ordersMessages.en>>;
 
@@ -558,6 +558,8 @@ function OrderDetailContent() {
     if (!window) return null;
     return order.delivery?.slotDate ? t('detail.slotOn', { date: formatDate(order.delivery.slotDate), window }) : t('detail.slotToday', { window });
   })();
+  // Booked for a later day: the window it was booked for, not a cooking estimate worked out from now.
+  const bookedLater = !!order.delivery?.slotDate && order.delivery.slotDate > pktDateString(new Date(now));
   // An estimate that has already gone by says nothing useful; the slot and the tracker still show.
   const etaLine =
     active && !unpaid && order.delivery?.estimatedAt && new Date(order.delivery.estimatedAt).getTime() > now
@@ -645,7 +647,7 @@ function OrderDetailContent() {
               <div>
                 <h2 className="text-xl font-bold text-ink" data-testid="order-headline">{headline}</h2>
                 {(etaLine || slotLine) && (
-                  <p className="text-sm text-muted mt-1">{etaLine ?? slotLine}</p>
+                  <p className="text-sm text-muted mt-1">{bookedLater ? slotLine : (etaLine ?? slotLine)}</p>
                 )}
               </div>
               {!unpaid && <OrderProgress status={effectiveStatus} deliveryType={order.delivery?.type} />}
