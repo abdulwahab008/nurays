@@ -281,7 +281,6 @@ function OrdersContent() {
     <DashboardLayout
       title={t('list.title')}
       subtitle={t('list.subtitle')}
-     
       userType="customer"
     >
       <div className="max-w-6xl mx-auto space-y-6 pb-12">

@@ -390,7 +390,6 @@ export default function CartPage() {
       <DashboardLayout
         title={t('cartTitle')}
         subtitle={t('cartLoadingSubtitle')}
-       
         userType="customer"
       >
         <div className="flex items-center justify-center min-h-[400px]">
@@ -421,7 +420,6 @@ export default function CartPage() {
       <DashboardLayout
         title={t('cartTitle')}
         subtitle=""
-       
         userType="customer"
       >
         <div className="max-w-2xl mx-auto my-6">
@@ -512,7 +510,6 @@ export default function CartPage() {
           ? t(trayCount === 1 ? 'cartSubtitleOne' : 'cartSubtitleMany', { count: trayCount, kitchen: activeSeller.businessName })
           : t(trayCount === 1 ? 'itemsInTrayOne' : 'itemsInTrayMany', { count: trayCount })
       }
-     
       userType="customer"
     >
       <div className="space-y-6 pb-12">

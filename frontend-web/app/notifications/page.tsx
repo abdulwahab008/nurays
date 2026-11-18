@@ -210,7 +210,6 @@ export default function NotificationsPage() {
     <DashboardLayout
       title={t('notifications')}
       subtitle={couldNotRead ? undefined : t(unreadCount !== 1 ? 'unreadMany' : 'unreadOne', { count: unreadCount })}
-     
       userType="customer"
     >
       {/* Header Actions */}

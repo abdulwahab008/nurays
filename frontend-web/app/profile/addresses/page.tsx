@@ -385,7 +385,6 @@ export default function AddressesPage() {
       <DashboardLayout
         title={t('myAddresses')}
         subtitle={t('manageDeliveryAddresses')}
-       
         userType="customer"
       >
         <div className="flex items-center justify-center h-64">
@@ -402,7 +401,6 @@ export default function AddressesPage() {
     <DashboardLayout
       title={t('myAddresses')}
       subtitle={t('manageDeliveryLocations')}
-     
       userType="customer"
     >
       {!showAddForm && addresses.length > 0 && (

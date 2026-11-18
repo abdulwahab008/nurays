@@ -465,7 +465,6 @@ function OrderDetailContent() {
       <DashboardLayout
         title={t('detail.title')}
         subtitle={t('detail.loadingSub')}
-       
         userType="customer"
       >
         <div className="flex items-center justify-center py-16">
@@ -490,7 +489,6 @@ function OrderDetailContent() {
       <DashboardLayout
         title={t('detail.notFound')}
         subtitle=""
-       
         userType="customer"
       >
         <div className="max-w-xl mx-auto py-16 px-4 text-center">
@@ -588,7 +586,6 @@ function OrderDetailContent() {
     <DashboardLayout
       title={t('detail.pageTitle', { number: order.orderNumber })}
       subtitle={`\u2068${formatDateTime(order.createdAt)}\u2069`}
-     
       userType="customer"
     >
       <div className="print-hide max-w-5xl mx-auto space-y-4 pb-8">
