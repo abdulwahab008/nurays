@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { loginUrlHere } from '@/lib/auth-redirect';
 import { useRouter } from 'next/navigation';
 import { Send } from 'lucide-react';
-import { DashboardLayout } from '@/components/layout/DashboardShell';
+import { DashboardLayout, RIDER_SIDEBAR_ITEMS, SELLER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { useAuthStore, hasSession } from '@/lib/store/auth-store';
@@ -38,6 +38,9 @@ export default function SupportPage() {
   const [recentOrders, setRecentOrders] = useState<Order[]>([]);
   // Only customer orders can be picked here, so other accounts may raise these without one.
   const isCustomer = !userType || userType === 'customer';
+  // A rider or a kitchen asking for help keeps its own frame and menu (the rider's menu links here).
+  const layoutRole = userType === 'rider' ? 'rider' : userType === 'seller' ? 'seller' : 'customer';
+  const sidebarItems = userType === 'rider' ? RIDER_SIDEBAR_ITEMS : userType === 'seller' ? SELLER_SIDEBAR_ITEMS : undefined;
   const needsOrder = (category: Category) => isCustomer && NEEDS_ORDER.includes(category);
   const orderNeeded = needsOrder(formData.category);
 
@@ -120,8 +123,8 @@ export default function SupportPage() {
     <DashboardLayout
       title={t('helpSupport')}
       subtitle={t('hereToHelp')}
-     
-      userType="customer"
+      sidebarItems={sidebarItems}
+      userType={layoutRole}
     >
       <div id="support-tabs" role="tablist" className="flex gap-1 mb-6 border-b border-line overflow-x-auto scrollbar-none">
         {(['faq', 'contact', 'tickets'] as const).map((tab) => (
