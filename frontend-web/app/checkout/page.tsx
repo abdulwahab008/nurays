@@ -8,9 +8,6 @@ import Link from 'next/link';
 import {
   MapPin,
   Clock,
-  Banknote,
-  Building2,
-  Smartphone,
   Check,
   ArrowRight,
   ShieldCheck,
@@ -18,7 +15,6 @@ import {
   ShoppingBag,
   Plus,
   Minus,
-  Store,
   ChevronRight,
   Trash2,
   Truck,
@@ -520,14 +516,14 @@ export default function CheckoutPage() {
   if (!cart || cart.items.length === 0) {
     return (
       <DashboardLayout title={t('checkoutTitle')} subtitle={t('checkoutSubtitle')} userType="customer">
-        <div className="max-w-md mx-auto my-12 bg-surface rounded-[24px] p-8 border border-line text-center">
+        <div className="max-w-md mx-auto my-12 bg-surface rounded-2xl p-8 border border-line text-center">
           <div className="w-16 h-16 bg-brand-soft rounded-2xl flex items-center justify-center mx-auto mb-4 text-brand-soft-ink">
             <ShoppingBag className="w-8 h-8" />
           </div>
-          <h2 className="text-xl font-bold text-ink tracking-tight mb-1.5">{t('trayEmptyTitle')}</h2>
+          <h2 className="text-xl font-semibold text-ink tracking-tight mb-1.5">{t('trayEmptyTitle')}</h2>
           <p className="text-xs text-muted mb-6">{t('trayEmptyText')}</p>
           <Link href="/kitchens">
-            <Button className="w-full bg-brand hover:bg-brand-500 text-on-brand font-bold py-2.5 rounded-xl">
+            <Button className="w-full bg-brand hover:bg-brand-500 text-on-brand font-semibold py-2.5 rounded-xl">
               {t('browseKitchens')}
             </Button>
           </Link>
@@ -584,31 +580,24 @@ export default function CheckoutPage() {
     <DashboardLayout title={t('checkoutTitle')} subtitle={t('reviewSubtitle')} userType="customer">
       <div className="max-w-6xl mx-auto pb-28 lg:pb-16">
         {/* Kitchen Origin Header Banner */}
-        <div className="mb-6 px-4 py-2 rounded-[20px] bg-surface border border-line flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="w-10 h-10 shrink-0 rounded-xl bg-brand-soft flex items-center justify-center text-brand-soft-ink">
-              <Store className="w-5 h-5" aria-hidden />
-            </div>
-            <span className="min-w-0 break-words text-[15px] font-bold text-ink">{sellerTitle}</span>
-          </div>
+        <div className="mb-6 pb-4 border-b border-line flex items-center justify-between gap-3">
+          <span className="min-w-0 break-words font-semibold text-ink">{sellerTitle}</span>
           <div className="flex items-center gap-3 shrink-0">
             <Link
               href="/cart"
               className="min-h-11 text-sm font-semibold text-brand-ink hover:underline inline-flex items-center gap-1 whitespace-nowrap"
             >
               <span>{t('editTray')}</span>
-              <ChevronRight className="rtl:-scale-x-100 w-3.5 h-3.5" />
+              <ChevronRight className="rtl:-scale-x-100 w-4 h-4" aria-hidden />
             </Link>
           </div>
         </div>
 
         {kitchenClosed && (
-          <div role="status" className="mb-6 p-4 rounded-[20px] bg-accent-soft border border-accent/50 flex items-start gap-3" data-testid="kitchen-closed">
-            <div className="w-10 h-10 rounded-xl bg-surface text-ink flex items-center justify-center shrink-0">
-              <Clock className="w-5 h-5" aria-hidden />
-            </div>
+          <div role="status" className="mb-6 p-4 rounded-2xl bg-accent-soft flex items-start gap-3" data-testid="kitchen-closed">
+            <Clock className="w-5 h-5 mt-0.5 shrink-0 text-accent-soft-ink" aria-hidden />
             <div className="min-w-0">
-              <p className="text-[15px] font-bold text-accent-soft-ink">{t('kitchenClosedTitle', { kitchen: sellerTitle })}</p>
+              <p className="text-[15px] font-semibold text-accent-soft-ink">{t('kitchenClosedTitle', { kitchen: sellerTitle })}</p>
               <p className="text-sm text-accent-soft-ink mt-0.5">
                 {closedOpensText ? t('kitchenClosedOpens', { when: closedOpensText }) : t('kitchenClosedNoTime')}
               </p>
@@ -645,13 +634,10 @@ export default function CheckoutPage() {
 
             {/* 1. Where: the delivery address, or the kitchen to collect from */}
             {isPickup ? (
-              <div className="bg-surface rounded-[20px] p-4 sm:p-6 border border-line space-y-3" data-testid="pickup-card">
+              <div className="bg-surface rounded-2xl p-4 sm:p-6 border border-line space-y-3" data-testid="pickup-card">
                 <div className="flex items-center gap-2.5">
-                  <div className="w-9 h-9 rounded-xl bg-brand-soft text-brand-soft-ink flex items-center justify-center">
-                    <ShoppingBasket className="w-4 h-4" />
-                  </div>
                   <div>
-                    <h2 className="text-base font-bold text-ink">{t('pickupHeading')}</h2>
+                    <h2 className="text-base font-semibold text-ink">{t('pickupHeading')}</h2>
                     <p className="text-xs text-muted">{t('pickupHint')}</p>
                   </div>
                 </div>
@@ -663,13 +649,10 @@ export default function CheckoutPage() {
                 </div>
               </div>
             ) : (
-            <div className="bg-surface rounded-[20px] p-4 sm:p-6 border border-line space-y-4">
+            <div className="bg-surface rounded-2xl p-4 sm:p-6 border border-line space-y-4">
               <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
                 <div className="flex items-center gap-2.5 flex-1 min-w-[13rem]">
-                  <div className="w-9 h-9 rounded-xl bg-brand-soft text-brand-soft-ink flex items-center justify-center shrink-0">
-                    <MapPin className="w-4 h-4" />
-                  </div>
-                  <h2 className="min-w-0 text-base font-bold text-ink">{t('addressHeading')}</h2>
+                  <h2 className="min-w-0 text-base font-semibold text-ink">{t('addressHeading')}</h2>
                 </div>
                 {addresses.length > 0 && (
                   <Link
@@ -713,9 +696,9 @@ export default function CheckoutPage() {
                     return (
                       <label
                         key={address.id}
-                        className={`flex items-start gap-3 p-3.5 rounded-2xl border-2 cursor-pointer transition-colors ${
+                        className={`flex items-start gap-3 p-3.5 rounded-2xl border cursor-pointer transition-colors ${
                           isSelected
-                            ? 'border-brand bg-brand-soft/40'
+                            ? 'border-brand ring-1 ring-brand bg-brand-soft/40'
                             : 'border-line hover:border-line-strong bg-surface'
                         }`}
                       >
@@ -729,9 +712,9 @@ export default function CheckoutPage() {
                         />
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-0.5">
-                            <span className="text-[15px] font-bold text-ink">{address.label || t('addressHome')}</span>
+                            <span className="text-[15px] font-semibold text-ink">{address.label || t('addressHome')}</span>
                             {address.isDefault && (
-                              <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-raised text-muted border border-line">
+                              <span className="text-xs text-muted">
                                 {t('addressDefault')}
                               </span>
                             )}
@@ -756,12 +739,9 @@ export default function CheckoutPage() {
             )}
 
             {/* 2. When */}
-            <div className="bg-surface rounded-[20px] p-4 sm:p-6 border border-line space-y-4">
+            <div className="bg-surface rounded-2xl p-4 sm:p-6 border border-line space-y-4">
               <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-brand-soft text-brand-soft-ink flex items-center justify-center">
-                  <Clock className="w-4 h-4" />
-                </div>
-                <h2 className="text-base font-bold text-ink">{t(isPickup ? 'pickupSlotHeading' : 'slotHeading')}</h2>
+                <h2 className="text-base font-semibold text-ink">{t(isPickup ? 'pickupSlotHeading' : 'slotHeading')}</h2>
               </div>
 
               {days.length === 0 ? (
@@ -833,12 +813,9 @@ export default function CheckoutPage() {
             </div>
 
             {/* 3. Payment Method */}
-            <div className="bg-surface rounded-[20px] p-4 sm:p-6 border border-line space-y-4">
+            <div className="bg-surface rounded-2xl p-4 sm:p-6 border border-line space-y-4">
               <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-brand-soft text-brand-soft-ink flex items-center justify-center">
-                  <Banknote className="w-4 h-4" />
-                </div>
-                <h2 className="text-base font-bold text-ink">{t('paymentHeading')}</h2>
+                <h2 className="text-base font-semibold text-ink">{t('paymentHeading')}</h2>
               </div>
 
               <div className="space-y-3">
@@ -850,9 +827,9 @@ export default function CheckoutPage() {
                 {/* Method 1: Cash on Delivery */}
                 {!cashUnavailable && (
                 <label
-                  className={`block p-4 rounded-2xl border-2 cursor-pointer transition-colors ${
+                  className={`block p-4 rounded-2xl border cursor-pointer transition-colors ${
                     paymentMethod === 'cod'
-                      ? 'border-brand bg-brand-soft/40'
+                      ? 'border-brand ring-1 ring-brand bg-brand-soft/40'
                       : 'border-line hover:border-line-strong bg-surface'
                   }`}
                 >
@@ -865,15 +842,10 @@ export default function CheckoutPage() {
                       onChange={() => setPaymentMethod('cod')}
                       className="accent-brand w-4 h-4 cursor-pointer"
                     />
-                    <div className="w-8 h-8 rounded-xl bg-accent-soft text-accent-soft-ink flex items-center justify-center shrink-0">
-                      <Banknote className="w-4 h-4" />
-                    </div>
                     <div className="flex-1">
                       <div className="flex items-center gap-2">
-                        <span className="text-[15px] font-bold text-ink">{t('codTitle')}</span>
-                        <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-accent-soft text-accent-soft-ink">
-                          {t('recommended')}
-                        </span>
+                        <span className="text-[15px] font-semibold text-ink">{t('codTitle')}</span>
+                        <span className="text-xs text-muted">{t('recommended')}</span>
                       </div>
                       <p className="text-xs text-muted">{t(isPickup ? 'codHintPickup' : 'codHint')}</p>
                     </div>
@@ -890,9 +862,9 @@ export default function CheckoutPage() {
                 {/* Online: card / JazzCash / EasyPaisa through Safepay */}
                 {onlineAvailable && (
                   <label
-                    className={`block p-4 rounded-2xl border-2 cursor-pointer transition-colors ${
+                    className={`block p-4 rounded-2xl border cursor-pointer transition-colors ${
                       paymentMethod === 'safepay'
-                        ? 'border-brand bg-brand-soft/40'
+                        ? 'border-brand ring-1 ring-brand bg-brand-soft/40'
                         : 'border-line hover:border-line-strong bg-surface'
                     }`}
                   >
@@ -905,11 +877,8 @@ export default function CheckoutPage() {
                         onChange={() => setPaymentMethod('safepay')}
                         className="accent-brand w-4 h-4 cursor-pointer"
                       />
-                      <div className="w-8 h-8 rounded-xl bg-brand-soft text-brand-soft-ink flex items-center justify-center shrink-0">
-                        <Smartphone className="w-4 h-4" />
-                      </div>
                       <div className="flex-1">
-                        <span className="text-[15px] font-bold text-ink">{t('onlineTitle')}</span>
+                        <span className="text-[15px] font-semibold text-ink">{t('onlineTitle')}</span>
                         <p className="text-xs text-muted">{t('onlineHint')}</p>
                       </div>
                     </div>
@@ -925,11 +894,11 @@ export default function CheckoutPage() {
                 {/* Nuray Wallet */}
                 {walletBalance !== null && (
                   <label
-                    className={`block p-4 rounded-2xl border-2 transition-colors ${
+                    className={`block p-4 rounded-2xl border transition-colors ${
                       walletBalance < totalPayable
                         ? 'border-line bg-raised cursor-not-allowed opacity-70'
                         : paymentMethod === 'wallet'
-                        ? 'border-brand bg-brand-soft/40 cursor-pointer'
+                        ? 'border-brand ring-1 ring-brand bg-brand-soft/40 cursor-pointer'
                         : 'border-line hover:border-line-strong bg-surface cursor-pointer'
                     }`}
                   >
@@ -943,11 +912,8 @@ export default function CheckoutPage() {
                         onChange={() => setPaymentMethod('wallet')}
                         className="accent-brand w-4 h-4 cursor-pointer disabled:cursor-not-allowed"
                       />
-                      <div className="w-8 h-8 rounded-xl bg-raised text-ink flex items-center justify-center shrink-0">
-                        <Banknote className="w-4 h-4" />
-                      </div>
                       <div className="flex-1">
-                        <span className="text-[15px] font-bold text-ink">{t('walletTitle')}</span>
+                        <span className="text-[15px] font-semibold text-ink">{t('walletTitle')}</span>
                         <p className="text-xs text-muted">
                           {t('walletBalance', { amount: formatPrice(walletBalance) })}
                           {walletBalance < totalPayable && (
@@ -967,9 +933,9 @@ export default function CheckoutPage() {
                 {/* Method 2: Bank Transfer / Raast (IBFT) */}
                 {takesTransfer('bank') && (
                 <label
-                  className={`block p-4 rounded-2xl border-2 cursor-pointer transition-colors ${
+                  className={`block p-4 rounded-2xl border cursor-pointer transition-colors ${
                     paymentMethod === 'bank'
-                      ? 'border-brand bg-brand-soft/40'
+                      ? 'border-brand ring-1 ring-brand bg-brand-soft/40'
                       : 'border-line hover:border-line-strong bg-surface'
                   }`}
                 >
@@ -982,13 +948,10 @@ export default function CheckoutPage() {
                       onChange={() => setPaymentMethod('bank')}
                       className="accent-brand w-4 h-4 cursor-pointer"
                     />
-                    <div className="w-8 h-8 rounded-xl bg-raised text-ink flex items-center justify-center shrink-0">
-                      <Building2 className="w-4 h-4" />
-                    </div>
                     <div className="flex-1">
                       <div className="flex items-center gap-2">
-                        <span className="text-[15px] font-bold text-ink">{t('bankTitle')}</span>
-                        <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-raised text-muted">
+                        <span className="text-[15px] font-semibold text-ink">{t('bankTitle')}</span>
+                        <span className="text-xs text-muted">
                           {t('directToChef')}
                         </span>
                       </div>
@@ -1005,9 +968,9 @@ export default function CheckoutPage() {
                 {/* Method 3: JazzCash Direct Transfer */}
                 {takesTransfer('jazzcash') && (
                 <label
-                  className={`block p-4 rounded-2xl border-2 cursor-pointer transition-colors ${
+                  className={`block p-4 rounded-2xl border cursor-pointer transition-colors ${
                     paymentMethod === 'jazzcash'
-                      ? 'border-brand bg-brand-soft/40'
+                      ? 'border-brand ring-1 ring-brand bg-brand-soft/40'
                       : 'border-line hover:border-line-strong bg-surface'
                   }`}
                 >
@@ -1020,11 +983,8 @@ export default function CheckoutPage() {
                       onChange={() => setPaymentMethod('jazzcash')}
                       className="accent-brand w-4 h-4 cursor-pointer"
                     />
-                    <div className="w-8 h-8 rounded-xl bg-raised text-ink flex items-center justify-center shrink-0">
-                      <Smartphone className="w-4 h-4" />
-                    </div>
                     <div className="flex-1">
-                      <span className="text-[15px] font-bold text-ink">{t('jazzTitle')}</span>
+                      <span className="text-[15px] font-semibold text-ink">{t('jazzTitle')}</span>
                       <p className="text-xs text-muted">{t('jazzHint')}</p>
                     </div>
                   </div>
@@ -1038,9 +998,9 @@ export default function CheckoutPage() {
                 {/* Method 4: EasyPaisa Direct Transfer */}
                 {takesTransfer('easypaisa') && (
                 <label
-                  className={`block p-4 rounded-2xl border-2 cursor-pointer transition-colors ${
+                  className={`block p-4 rounded-2xl border cursor-pointer transition-colors ${
                     paymentMethod === 'easypaisa'
-                      ? 'border-brand bg-brand-soft/40'
+                      ? 'border-brand ring-1 ring-brand bg-brand-soft/40'
                       : 'border-line hover:border-line-strong bg-surface'
                   }`}
                 >
@@ -1053,11 +1013,8 @@ export default function CheckoutPage() {
                       onChange={() => setPaymentMethod('easypaisa')}
                       className="accent-brand w-4 h-4 cursor-pointer"
                     />
-                    <div className="w-8 h-8 rounded-xl bg-brand-soft text-brand-soft-ink flex items-center justify-center shrink-0">
-                      <Smartphone className="w-4 h-4" />
-                    </div>
                     <div className="flex-1">
-                      <span className="text-[15px] font-bold text-ink">{t('easyTitle')}</span>
+                      <span className="text-[15px] font-semibold text-ink">{t('easyTitle')}</span>
                       <p className="text-xs text-muted">{t('easyHint')}</p>
                     </div>
                   </div>
@@ -1073,9 +1030,9 @@ export default function CheckoutPage() {
 
           {/* Right Column: Sticky Order Summary & Portions (5 of 12) */}
           <div className="lg:col-span-5">
-            <div className="bg-surface rounded-[24px] p-5 sm:p-6 border border-line sticky top-[calc(5rem+var(--safe-top))] space-y-5">
+            <div className="bg-surface rounded-2xl p-5 sm:p-6 border border-line shadow-[var(--shadow-card)] sticky top-[calc(5rem+var(--safe-top))] space-y-5">
               <div className="flex items-center justify-between pb-3 border-b border-line">
-                <h3 className="text-base font-bold text-ink">{t('orderSummary')}</h3>
+                <h3 className="text-base font-semibold text-ink">{t('orderSummary')}</h3>
                 <div className="flex items-center gap-3">
                   <span className="text-xs font-semibold text-muted">
                     {t(cart.summary.totalItems === 1 ? 'itemsOne' : 'itemsMany', { count: cart.summary.totalItems })}
@@ -1083,7 +1040,7 @@ export default function CheckoutPage() {
                   <button
                     type="button"
                     onClick={() => setShowClearModal(true)}
-                    className="text-xs font-bold text-muted hover:text-red-600 hover:bg-raised h-11 px-2.5 rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
+                    className="text-xs font-semibold text-muted hover:text-red-600 hover:bg-raised h-11 px-2.5 rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
                     title={t('removeAllDishes')}
                   >
                     <Trash2 className="w-3 h-3" />
@@ -1093,7 +1050,7 @@ export default function CheckoutPage() {
               </div>
 
               {/* Items List with Quantity Controls */}
-              <div className="space-y-3 max-h-72 overflow-y-auto pe-1">
+              <div className="divide-y divide-line max-h-80 overflow-y-auto pe-1">
                 {cart.items.map((item, itemIndex) => {
                   const base = item.variant?.price ?? item.product.price;
                   const promos = trayDeals.applied[itemIndex];
@@ -1102,22 +1059,22 @@ export default function CheckoutPage() {
                   const label = promos.length > 0 ? promos.map((p) => getPromotionLabel(p, t, formatPrice)).join(' + ') : null;
 
                   return (
-                    <div key={item.id} className="p-3 rounded-2xl bg-raised space-y-2">
+                    <div key={item.id} className="py-3 space-y-2">
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex-1 min-w-0">
-                          <p className="text-[15px] font-bold text-ink truncate">{item.product.name}</p>
+                          <p className="text-[15px] font-semibold text-ink truncate">{item.product.name}</p>
                           {item.variant && (
                             <p className="text-xs text-muted truncate">{item.variant.name}</p>
                           )}
                           {label && (
-                            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-brand-soft-ink bg-brand-soft px-1.5 py-0.2 rounded mt-0.5">
-                              <Tag className="w-2.5 h-2.5" />
+                            <span className="inline-flex items-center gap-1 text-xs font-medium text-accent-soft-ink bg-accent-soft px-1.5 py-0.5 rounded-md mt-1">
+                              <Tag className="w-3 h-3" aria-hidden />
                               {label}
                             </span>
                           )}
                         </div>
                         <div className="text-end shrink-0">
-                          <span className="text-sm font-semibold text-ink">{formatPrice(lineTotal)}</span>
+                          <span className="text-sm font-semibold text-ink tabular-nums">{formatPrice(lineTotal)}</span>
                           {promos.length > 0 && base > unitPrice && (
                             <p className="text-xs text-muted line-through">
                               {formatPrice(base * item.quantity)}
@@ -1127,33 +1084,33 @@ export default function CheckoutPage() {
                       </div>
 
                       {/* Quantity Stepper */}
-                      <div className="flex items-center justify-between pt-1 border-t border-line">
-                        <span className="text-xs text-muted font-medium">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-muted">
                           {t('perPiece', { price: formatPrice(unitPrice) })}
                         </span>
-                        <div className="flex items-center h-11 bg-surface rounded-xl border border-line">
+                        <div className="flex items-center h-11 rounded-xl border border-line">
                           <button
                             type="button"
                             disabled={updatingItemId === item.id}
                             onClick={() => handleUpdateItemQuantity(item.id, item.quantity - 1)}
-                            className="w-11 h-11 rounded-s-xl hover:bg-raised text-ink flex items-center justify-center transition-colors disabled:opacity-50"
-                            title={t('decreasePortion')}
-                            aria-label={t('decreasePortion')}
+                            className={`w-11 h-11 rounded-s-xl hover:bg-raised flex items-center justify-center transition-colors disabled:opacity-50 ${item.quantity <= 1 ? 'text-muted hover:text-red-700' : 'text-ink'}`}
+                            title={t(item.quantity <= 1 ? 'removeDish' : 'decreasePortion')}
+                            aria-label={t(item.quantity <= 1 ? 'removeDish' : 'decreasePortion')}
                           >
-                            <Minus className="w-4 h-4" strokeWidth={2.5} />
+                            {item.quantity <= 1 ? <Trash2 className="w-4 h-4" aria-hidden /> : <Minus className="w-4 h-4" aria-hidden />}
                           </button>
-                          <span className="min-w-6 text-center text-sm font-semibold text-ink" aria-live="polite">
+                          <span className="min-w-6 text-center text-sm font-semibold text-ink tabular-nums" aria-live="polite">
                             {item.quantity}
                           </span>
                           <button
                             type="button"
                             disabled={updatingItemId === item.id}
                             onClick={() => handleUpdateItemQuantity(item.id, item.quantity + 1)}
-                            className="w-11 h-11 rounded-e-xl hover:bg-raised text-brand-ink flex items-center justify-center transition-colors disabled:opacity-50"
+                            className="w-11 h-11 rounded-e-xl hover:bg-raised text-ink flex items-center justify-center transition-colors disabled:opacity-50"
                             title={t('increasePortion')}
                             aria-label={t('increasePortion')}
                           >
-                            <Plus className="w-4 h-4" strokeWidth={2.5} />
+                            <Plus className="w-4 h-4" aria-hidden />
                           </button>
                         </div>
                       </div>
@@ -1176,7 +1133,7 @@ export default function CheckoutPage() {
                     dir="ltr"
                     disabled={!!appliedPromo}
                     aria-label={t('voucherPlaceholder')}
-                    className="flex-1 min-w-0 h-11 px-3 text-sm font-semibold uppercase tracking-wider placeholder:normal-case placeholder:tracking-normal text-ink border border-line rounded-xl outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand bg-surface"
+                    className="flex-1 min-w-0 h-11 px-3 text-sm font-medium font-mono uppercase placeholder:font-sans placeholder:normal-case text-ink border border-line rounded-xl outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand bg-surface"
                   />
                   {appliedPromo ? (
                     <Button
@@ -1189,7 +1146,7 @@ export default function CheckoutPage() {
                         useCartStore.getState().setAppliedPromoCode(null);
                         showToast(t('promoRemoved'), 'info');
                       }}
-                      className="h-11 text-sm font-bold text-red-600 rounded-xl px-3"
+                      className="h-11 text-sm font-semibold text-red-600 rounded-xl px-3"
                     >
                       {tc('remove')}
                     </Button>
@@ -1214,7 +1171,7 @@ export default function CheckoutPage() {
                           setPromoValidating(false);
                         }
                       }}
-                      className="h-11 text-sm font-bold px-4 rounded-xl"
+                      className="h-11 text-sm font-semibold px-4 rounded-xl"
                     >
                       {promoValidating ? t('checking') : t('apply')}
                     </Button>
@@ -1259,11 +1216,11 @@ export default function CheckoutPage() {
                     ) : !selectedAddress ? (
                       <span className="font-medium text-muted">{t('deliveryChooseAddress')}</span>
                     ) : notDeliverable ? (
-                      <span className="font-bold text-red-600">{t('deliveryNotAvailable')}</span>
+                      <span className="font-semibold text-red-600">{t('deliveryNotAvailable')}</span>
                     ) : !deliveryEstimate ? (
                       <span className="font-medium text-muted">{estimatePending ? t('deliveryWorkingOut') : t('deliveryAtPlacing')}</span>
                     ) : deliveryEstimate.isFree ? (
-                      <span className="font-bold text-brand-soft-ink">{t('freeCaps')}</span>
+                      <span className="font-semibold text-brand-soft-ink">{t('freeCaps')}</span>
                     ) : (
                       <span className="font-semibold text-ink">{formatPrice(effectiveDeliveryFee)}</span>
                     )}
@@ -1294,7 +1251,7 @@ export default function CheckoutPage() {
                 type="button"
                 disabled={!canPlaceOrder}
                 onClick={() => handleCreateOrder(deliveryKnown ? totalPayable : undefined)}
-                className="hidden lg:flex w-full h-14 bg-brand hover:bg-brand-500 text-on-brand font-semibold text-base rounded-2xl transition-[color,background-color,border-color,opacity,transform] active:scale-[0.99] items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                className="hidden lg:flex w-full h-12 bg-brand hover:bg-brand-500 text-on-brand font-semibold text-[15px] rounded-xl transition-[background-color,transform] active:scale-[0.98] items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
               >
                 {placeOrderLabel}
               </Button>
