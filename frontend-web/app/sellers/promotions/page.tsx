@@ -34,6 +34,8 @@ interface Promotion {
   products: string[];
   code?: string;
   minOrderAmount?: number;
+  /** A fixed amount comes off every dish ('per_dish') or once off the order ('per_order'). */
+  discountScope?: string;
   usageLimitTotal?: number | null;
   applicableProductIds?: string[];
 }
@@ -65,6 +67,7 @@ interface PromotionFormValues {
   code: string;
   minOrderValue: string;
   maxUsage: string;
+  scope: DealScope;
 }
 
 /** What the form sends: its values and the dishes the deal applies to. */
@@ -73,6 +76,8 @@ type PromotionPayload = PromotionFormValues & { applyTo: 'selected'; selectedPro
 type Tab = 'all' | 'active' | 'scheduled' | 'expired';
 
 const TYPE_OPTIONS = ['percentage', 'fixed', 'buy_x_get_y', 'bundle'] as const;
+const SCOPE_OPTIONS = ['per_dish', 'per_order'] as const;
+type DealScope = (typeof SCOPE_OPTIONS)[number];
 
 const FIELD =
   'w-full min-h-11 px-3.5 rounded-xl bg-surface border border-line-strong text-[15px] text-ink placeholder:text-muted focus:outline-none focus:border-brand-600 focus:ring-3 focus:ring-brand/30';
@@ -113,6 +118,7 @@ function promotionFormFor(initialData?: Promotion | null): PromotionFormValues {
       code: initialData.code || '',
       minOrderValue: initialData.minOrderAmount != null ? String(initialData.minOrderAmount) : '',
       maxUsage: initialData.usageLimitTotal != null ? String(initialData.usageLimitTotal) : '',
+      scope: initialData.discountScope === 'per_order' ? 'per_order' : 'per_dish',
     };
   }
   return {
@@ -124,6 +130,7 @@ function promotionFormFor(initialData?: Promotion | null): PromotionFormValues {
     code: '',
     minOrderValue: '',
     maxUsage: '',
+    scope: 'per_dish',
   };
 }
 
@@ -294,6 +301,31 @@ function PromotionForm({
                 ))}
               </div>
             </fieldset>
+
+            {formData.type === 'fixed' && (
+              <fieldset>
+                <legend className={LABEL}>{t('scope')}</legend>
+                <div className="grid grid-cols-2 gap-2">
+                  {SCOPE_OPTIONS.map((scope) => (
+                    <label
+                      key={scope}
+                      className="min-h-11 rounded-xl border border-line-strong px-3.5 py-2.5 cursor-pointer hover:bg-raised has-[:checked]:border-brand-600 has-[:checked]:bg-brand-soft has-[:focus-visible]:ring-3 has-[:focus-visible]:ring-brand/40"
+                    >
+                      <input
+                        type="radio"
+                        name="promo-scope"
+                        value={scope}
+                        checked={formData.scope === scope}
+                        onChange={() => setFormData({ ...formData, scope })}
+                        className="sr-only"
+                      />
+                      <span className="block text-sm font-medium text-ink">{t(`scope.${scope}`)}</span>
+                      <span className="block text-xs text-muted">{t(`scope.${scope}.hint`)}</span>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+            )}
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
@@ -613,6 +645,7 @@ export default function SellerPromotionsPage() {
           status: string;
           usageCount: number;
           minOrderAmount?: number;
+          discountScope?: string;
           usageLimitTotal?: number | null;
           applicableTo?: string;
           applicableProductIds?: string[];
@@ -630,6 +663,7 @@ export default function SellerPromotionsPage() {
             products: p.applicableProductIds ?? [],
             code: p.code,
             minOrderAmount: p.minOrderAmount,
+            discountScope: p.discountScope,
             usageLimitTotal: p.usageLimitTotal,
             applicableProductIds: p.applicableProductIds,
           }))
@@ -676,6 +710,7 @@ export default function SellerPromotionsPage() {
       discountType,
       discountValue: Number.isFinite(discountValue) && discountValue >= 0 ? discountValue : 0,
       maxDiscountAmount: null,
+      discountScope: data.scope,
       minOrderAmount: minOrderAmount >= 0 ? minOrderAmount : 0,
       usageLimitTotal,
       usageLimitPerUser: 1,
@@ -722,6 +757,7 @@ export default function SellerPromotionsPage() {
       discountType,
       discountValue: Number.isFinite(discountValue) && discountValue >= 0 ? discountValue : 0,
       maxDiscountAmount: null,
+      discountScope: data.scope,
       minOrderAmount: minOrderAmount >= 0 ? minOrderAmount : 0,
       usageLimitTotal,
       usageLimitPerUser: 1,

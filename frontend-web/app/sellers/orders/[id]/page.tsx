@@ -171,7 +171,7 @@ export default function SellerOrderDetailPage() {
             <ArrowLeft className="w-4 h-4 rtl:-scale-x-100" aria-hidden="true" />
             {t('detail.allOrders')}
           </Link>
-          <h1 className="text-2xl sm:text-[28px] lg:text-[32px] leading-tight font-extrabold text-ink tracking-tight break-words">
+          <h1 className="text-2xl sm:text-[28px] lg:text-[32px] leading-tight font-semibold text-ink tracking-tight break-words">
             {order ? <>{t('orderLabel')} <span data-ltr>#{order.orderNumber}</span></> : t('detail.title')}
           </h1>
           {order && <p className="mt-1.5 text-sm sm:text-[15px] text-muted">{dateClock(order.createdAt, locale)}</p>}

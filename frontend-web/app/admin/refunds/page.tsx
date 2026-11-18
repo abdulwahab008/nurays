@@ -55,7 +55,7 @@ export default function AdminRefundsPage() {
   const [loadError, setLoadError] = useState<unknown>(null);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
-  const [acting, setActing] = useState<{ id: string; kind: 'complete' | 'dismiss' } | null>(null);
+  const [acting, setActing] = useState<{ id: string; kind: 'complete' | 'wallet' | 'dismiss' } | null>(null);
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -86,6 +86,9 @@ export default function AdminRefundsPage() {
       if (acting.kind === 'complete') {
         await apiClient.post(`/admin/refunds/${acting.id}/complete`, { reference: text.trim() || undefined });
         showToast('Refund recorded as sent', 'success');
+      } else if (acting.kind === 'wallet') {
+        await apiClient.post(`/admin/refunds/${acting.id}/complete`, { toWallet: true });
+        showToast("Refund added to the customer's Nuray Wallet", 'success');
       } else {
         await apiClient.post(`/admin/refunds/${acting.id}/dismiss`, { reason: text.trim() });
         showToast('Refund dismissed', 'success');
@@ -103,7 +106,7 @@ export default function AdminRefundsPage() {
   return (
     <AdminShell>
       <div className="max-w-5xl space-y-5">
-        <PageHeader title="Refunds" subtitle="Money owed back to customers that has to be sent by hand. Wallet refunds happen instantly and don't appear here." />
+        <PageHeader title="Refunds" subtitle="Money owed back to customers. Add it to the customer's Nuray Wallet, or send it by hand and record it. Refunds of wallet payments happen instantly and don't appear here." />
 
         <AdminFilterTabs
           label="Refunds"
@@ -155,6 +158,18 @@ export default function AdminRefundsPage() {
                     {r.status === 'completed' ? 'Sent' : 'Not owed'} {r.processedAt ? formatDateTime(r.processedAt) : ''}
                     {r.reference ? ` · ${r.status === 'completed' ? 'Ref' : 'Reason'}: ${r.reference}` : ''}
                   </p>
+                ) : acting?.id === r.id && acting.kind === 'wallet' ? (
+                  <div className="mt-4 flex flex-wrap gap-2 items-center">
+                    <p className="flex-1 min-w-0 basis-60 text-sm text-ink">
+                      The customer gets this as Nuray Wallet balance at once, to spend on any order. Nothing is sent to their bank.
+                    </p>
+                    <Button disabled={busy} onClick={submit}>
+                      {busy ? 'Saving…' : 'Add to wallet'}
+                    </Button>
+                    <Button variant="outline" onClick={() => setActing(null)}>
+                      Cancel
+                    </Button>
+                  </div>
                 ) : acting?.id === r.id ? (
                   <div className="mt-4 flex flex-wrap gap-2 items-center">
                     <input
@@ -173,8 +188,13 @@ export default function AdminRefundsPage() {
                     </Button>
                   </div>
                 ) : (
-                  <div className="mt-4 flex gap-2">
-                    <Button onClick={() => { setActing({ id: r.id, kind: 'complete' }); setText(''); }}>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {r.customer && (
+                      <Button onClick={() => setActing({ id: r.id, kind: 'wallet' })}>
+                        Refund to wallet
+                      </Button>
+                    )}
+                    <Button variant={r.customer ? 'outline' : 'default'} onClick={() => { setActing({ id: r.id, kind: 'complete' }); setText(''); }}>
                       I&apos;ve sent it
                     </Button>
                     <Button variant="outline" onClick={() => { setActing({ id: r.id, kind: 'dismiss' }); setText(''); }}>

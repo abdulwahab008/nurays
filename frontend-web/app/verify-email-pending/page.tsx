@@ -10,6 +10,7 @@ import { apiErrorMessage } from '@/lib/api-client';
 import { useT } from '@/lib/i18n';
 import { authMessages } from '@/lib/i18n/messages/auth';
 import { useShallow } from 'zustand/react/shallow';
+import { accountTypeFor, safeNextPath } from '@/lib/auth-redirect';
 import { AuthLogo, authColumn, authHeading, authLede, authLink, authLinkButton, authShell } from '@/components/auth/AuthLayout';
 
 function VerifyEmailPendingContent() {
@@ -26,6 +27,9 @@ function VerifyEmailPendingContent() {
   const nextUrl = searchParams.get('next');
   const isRider = user?.userType === 'rider' || user?.user_type === 'rider' || nextUrl === '/riders/dashboard';
   const isSeller = user?.userType === 'seller' || user?.user_type === 'seller' || nextUrl === '/sellers/register';
+  // The page a customer was on their way to when they signed up (checkout, usually): they go on to it from here.
+  const safeNext = safeNextPath(nextUrl);
+  const customerNext = safeNext && safeNext !== '/' && (accountTypeFor(safeNext) ?? 'customer') === 'customer' ? safeNext : null;
 
   useEffect(() => {
     // The first render still sees the signed-out state the server drew: a stored token means the person is signed in and the store
@@ -94,6 +98,10 @@ function VerifyEmailPendingContent() {
           ) : isSeller ? (
             <Link href="/sellers/register" className={authLinkButton}>
               {t('continueKitchenRegistration')}
+            </Link>
+          ) : customerNext ? (
+            <Link href={customerNext} className={authLinkButton}>
+              {t('continueToNuray')}
             </Link>
           ) : (
             <Link href="/products" className={authLinkButton}>

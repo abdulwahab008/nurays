@@ -4,6 +4,7 @@ import { StackedTables } from './StackedTables';
 import { ReactNode, useState, useEffect } from 'react';
 import { DashboardSidebar } from './DashboardSidebar';
 import { DashboardNavbar } from './DashboardNavbar';
+import { SiteHeader } from './SiteHeader';
 
 export interface SubItem {
   name: string;
@@ -142,7 +143,8 @@ interface DashboardShellProps {
   children: ReactNode;
   title: string;
   subtitle?: string;
-  sidebarItems: SidebarItem[];
+  /** The staff side menu; customers have the top bar's menu instead. */
+  sidebarItems?: SidebarItem[];
   userType: 'customer' | 'seller' | 'admin' | 'rider' | 'hub_manager';
 }
 
@@ -163,6 +165,30 @@ export function DashboardShell({
       };
     }
   }, [open]);
+
+  const heading = title && (
+    <div className="mb-5 sm:mb-6">
+      <h1 className="text-2xl lg:text-[28px] leading-tight font-semibold text-ink tracking-tight">{title}</h1>
+      {subtitle && <p className="mt-1 text-sm text-muted">{subtitle}</p>}
+    </div>
+  );
+
+  // Customers get the same top bar and side menu on every page, browsing or their own (orders, tray, profile); the fixed
+  // side menu below is for the staff screens, used all day.
+  if (userType === 'customer') {
+    return (
+      <div className="min-h-screen bg-page text-ink">
+        <SiteHeader />
+        <StackedTables />
+        <main className="px-4 sm:px-8 py-5 lg:py-8 bg-page">
+          <div className="max-w-[1120px] mx-auto">
+            {heading}
+            {children}
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-page text-ink">
@@ -185,7 +211,7 @@ export function DashboardShell({
           data-open={open ? 'true' : 'false'}
           onClick={() => setOpen(false)}
         >
-          <DashboardSidebar items={sidebarItems} userType={userType} />
+          <DashboardSidebar items={sidebarItems ?? []} userType={userType} />
         </div>
 
         <StackedTables />
@@ -193,21 +219,10 @@ export function DashboardShell({
         <main
           className="lg:ms-64 px-4 sm:px-6 lg:px-10 py-5 lg:py-8 min-h-[calc(100vh-var(--header-offset))] bg-page"
         >
-          {/* Customers read one column; the staff screens use the whole width for their tables. The admin pages are English
-              only (see AdminShell): left to right in either language. */}
-          <div
-            className={userType === 'customer' ? 'max-w-[1120px] mx-auto' : undefined}
-            dir={userType === 'admin' ? 'ltr' : undefined}
-            lang={userType === 'admin' ? 'en' : undefined}
-          >
-            {title && (
-              <div className="mb-5 sm:mb-6">
-                <h1 className="text-2xl lg:text-[28px] leading-tight font-extrabold text-ink tracking-tight">
-                  {title}
-                </h1>
-                {subtitle && <p className="mt-1 text-sm text-muted">{subtitle}</p>}
-              </div>
-            )}
+          {/* The staff screens use the whole width for their tables. The admin pages are English only (see AdminShell):
+              left to right in either language. */}
+          <div dir={userType === 'admin' ? 'ltr' : undefined} lang={userType === 'admin' ? 'en' : undefined}>
+            {heading}
             {children}
           </div>
         </main>

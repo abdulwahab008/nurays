@@ -476,7 +476,7 @@ export const riderMessages = defineMessages({
     routeMatchTitle: 'آپ کے راستے والے آرڈرز (1 / 2 آرڈرز جاری)',
     routeMatchBody1: 'آپ کے موجودہ راستے پر آنے والے آرڈرز نیچے نمایاں ہیں، ان پر ',
     routeMatchBonus: '+Rs 100 اضافی بونس',
-    routeMatchBody2: ' ملے گا!',
+    routeMatchBody2: ' ملے گا',
     slotAvailable: '1 جگہ خالی',
     scanningBody: 'ابھی کوئی نیا آرڈر نہیں۔ جیسے ہی کوئی کچن کھانا تیار کرے گا، آرڈر یہاں آ جائے گا۔',
     offDutyBody: 'آپ ڈیوٹی آف ہیں۔ نئی جابز کے لیے ڈیوٹی پر آئیں۔',

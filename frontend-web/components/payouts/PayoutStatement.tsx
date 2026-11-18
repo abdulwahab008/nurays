@@ -65,7 +65,7 @@ export function PayoutStatement({ basePath, payoutId, onClose }: { basePath: str
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" aria-labelledby="statement-title" data-testid="payout-statement">
-      <div className="w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white p-5 sm:p-6 shadow-xl">
+      <div className="w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white p-5 sm:p-6 shadow-[var(--shadow-hover)]">
         <div className="flex items-start justify-between gap-3 mb-4">
           <div className="min-w-0">
             <h2 id="statement-title" className="text-lg font-bold text-gray-900">{t('statementTitle')}</h2>

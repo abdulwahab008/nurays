@@ -180,7 +180,7 @@ export function CommunitySelector({ variant = 'navbar' }: CommunitySelectorProps
               role="dialog"
               aria-modal="true"
               aria-labelledby="area-picker-title"
-              className="relative flex max-h-[88vh] w-full max-w-lg flex-col rounded-t-3xl sm:rounded-3xl border border-line bg-surface shadow-xl pb-(--safe-bottom) sm:pb-0"
+              className="relative flex max-h-[88vh] w-full max-w-lg flex-col rounded-t-2xl sm:rounded-2xl border border-line bg-surface shadow-[var(--shadow-hover)] pb-(--safe-bottom) sm:pb-0"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-start justify-between gap-3 px-4 pt-4 sm:px-6 sm:pt-6">

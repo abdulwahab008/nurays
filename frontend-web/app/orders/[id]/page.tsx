@@ -13,7 +13,7 @@ import { LoadError } from '@/components/ui/LoadError';
 import { useAuthStore, hasSession } from '@/lib/store/auth-store';
 import { useSocket, type DeliveryTrackingEvent } from '@/lib/hooks/use-socket';
 import { useLiveRefresh } from '@/lib/hooks/use-live-refresh';
-import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
+import { DashboardLayout } from '@/components/layout/DashboardShell';
 import { apiClient, apiErrorMessage } from '@/lib/api-client';
 import { newAudioContext } from '@/lib/audio';
 import ManualPaymentCard from '@/components/orders/ManualPaymentCard';
@@ -32,6 +32,7 @@ import { ordersMessages } from '@/lib/i18n/messages/orders';
 import { checkoutMessages } from '@/lib/i18n/messages/checkout';
 import { useShallow } from 'zustand/react/shallow';
 import { useNow } from '@/components/sellers/order-timing';
+import { storedWindowHours, windowStartsAt } from '@/app/checkout/delivery-slots';
 
 type OrdersT = ReturnType<typeof useT<typeof ordersMessages.en>>;
 
@@ -458,14 +459,12 @@ function OrderDetailContent() {
     }
   };
 
-  const customerSidebarItems = CUSTOMER_SIDEBAR_ITEMS;
 
   if (loading) {
     return (
       <DashboardLayout
         title={t('detail.title')}
         subtitle={t('detail.loadingSub')}
-        sidebarItems={customerSidebarItems}
         userType="customer"
       >
         <div className="flex items-center justify-center py-16">
@@ -477,7 +476,7 @@ function OrderDetailContent() {
 
   if (!order && loadError) {
     return (
-      <DashboardLayout title={tc('loadFailedTitle')} subtitle="" sidebarItems={customerSidebarItems} userType="customer">
+      <DashboardLayout title={tc('loadFailedTitle')} subtitle="" userType="customer">
         <div className="max-w-xl mx-auto py-10 px-4">
           <LoadError error={loadError} onRetry={() => void loadOrder()} />
         </div>
@@ -490,7 +489,6 @@ function OrderDetailContent() {
       <DashboardLayout
         title={t('detail.notFound')}
         subtitle=""
-        sidebarItems={customerSidebarItems}
         userType="customer"
       >
         <div className="max-w-xl mx-auto py-16 px-4 text-center">
@@ -543,9 +541,14 @@ function OrderDetailContent() {
   const delivered = effectiveStatus === 'delivered' || effectiveStatus === 'completed';
   const active = !['delivered', 'completed', 'cancelled', 'refunded', 'delivery_failed'].includes(effectiveStatus);
   const method = (order.paymentMethod ?? '').toLowerCase();
+  // Accepted for a window that has not opened yet: the kitchen has not started, so it is "booked", not "being cooked".
+  const opensAt = windowStartsAt(order.delivery?.slotDate, order.delivery?.slotTime, new Date(now));
+  const waitsForWindow = (effectiveStatus === 'confirmed' || effectiveStatus === 'preparing') && opensAt !== null && opensAt > now;
   const headline = unpaid
     ? t('headline.awaitingPayment')
-    : effectiveStatus === 'ready' && pickup
+    : waitsForWindow
+      ? t('headline.booked')
+      : effectiveStatus === 'ready' && pickup
       ? t('headline.readyToCollect')
       : `headline.${effectiveStatus}` in ordersMessages.en
         ? t(`headline.${effectiveStatus}` as keyof typeof ordersMessages.en)
@@ -553,8 +556,9 @@ function OrderDetailContent() {
   // The window the customer chose: a day (today when none was given) and a part of it.
   const slotLine = (() => {
     const time = order.delivery?.slotTime;
-    if (!time || !SLOT_TIMES.includes(time)) return null;
-    const window = t(`slot.${time}` as keyof typeof ordersMessages.en);
+    // A window from the kitchen's hours ("12:00-15:00") shows as its hours; an older order's named window keeps its words.
+    const window = time ? (storedWindowHours(time) ?? (SLOT_TIMES.includes(time) ? t(`slot.${time}` as keyof typeof ordersMessages.en) : null)) : null;
+    if (!window) return null;
     return order.delivery?.slotDate ? t('detail.slotOn', { date: formatDate(order.delivery.slotDate), window }) : t('detail.slotToday', { window });
   })();
   // An estimate that has already gone by says nothing useful; the slot and the tracker still show.
@@ -582,7 +586,6 @@ function OrderDetailContent() {
     <DashboardLayout
       title={t('detail.pageTitle', { number: order.orderNumber })}
       subtitle={`\u2068${formatDateTime(order.createdAt)}\u2069`}
-      sidebarItems={customerSidebarItems}
       userType="customer"
     >
       <div className="print-hide max-w-5xl mx-auto space-y-4 pb-8">
@@ -615,7 +618,11 @@ function OrderDetailContent() {
               <p className="text-sm">
                 {unpaid
                   ? t('detail.placedBodyPay', { amount: formatPrice(order.pricing.total) })
-                  : t('detail.placedBody', { kitchen: sellerName })}
+                  : effectiveStatus === 'pending'
+                    ? t('detail.placedBody', { kitchen: sellerName })
+                    : waitsForWindow && slotLine
+                      ? t('detail.placedBodyBooked', { kitchen: sellerName, when: slotLine })
+                      : t('detail.placedBodyAccepted', { kitchen: sellerName })}
               </p>
               {!pickup && (
                 <p className="text-sm mt-1" data-testid="placed-delivery">
@@ -642,10 +649,11 @@ function OrderDetailContent() {
               <div>
                 <h2 className="text-xl font-bold text-ink" data-testid="order-headline">{headline}</h2>
                 {(etaLine || slotLine) && (
-                  <p className="text-sm text-muted mt-1">{etaLine ?? slotLine}</p>
+                  <p className="text-sm text-muted mt-1">{waitsForWindow ? slotLine : (etaLine ?? slotLine)}</p>
                 )}
               </div>
-              {!unpaid && <OrderProgress status={effectiveStatus} deliveryType={order.delivery?.type} />}
+              {/* Waiting for its window, an accepted order has not reached cooking yet */}
+              {!unpaid && <OrderProgress status={waitsForWindow ? 'confirmed' : effectiveStatus} deliveryType={order.delivery?.type} />}
               {effectiveStatus === 'cancelled' && notice && (
                 <div className="rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-700" role="status">
                   <p className="font-semibold">{t(`detail.cancelledBy.${notice.who}`)}</p>
@@ -703,6 +711,7 @@ function OrderDetailContent() {
               ['pending', 'failed', 'disputed', 'payment_submitted'].includes(order.paymentStatus ?? 'pending') && (
               <ManualPaymentCard
                 orderId={order.id}
+                orderStatus={orderStatus}
                 totalAmount={order.pricing?.total ?? 0}
                 paymentStatus={order.paymentStatus ?? 'pending'}
                 paymentReferenceNumber={order.paymentReferenceNumber}
@@ -910,7 +919,7 @@ function OrderDetailContent() {
           className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-4"
           onClick={(e) => { if (e.target === e.currentTarget) { setShowReportModal(false); setReportDetails(''); } }}
         >
-          <div role="dialog" aria-modal="true" aria-labelledby="report-title" className="bg-surface rounded-2xl shadow-2xl w-full max-w-md p-5 space-y-4">
+          <div role="dialog" aria-modal="true" aria-labelledby="report-title" className="bg-surface rounded-2xl shadow-[var(--shadow-hover)] w-full max-w-md p-5 space-y-4">
             <h2 id="report-title" className="text-lg font-semibold text-ink">{t('detail.reportTitle')}</h2>
             <p className="text-sm text-muted">{t('detail.reportBody')}</p>
             <textarea
@@ -938,7 +947,7 @@ function OrderDetailContent() {
           className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-4"
           onClick={(e) => { if (e.target === e.currentTarget) closeCancelModal(); }}
         >
-          <div role="dialog" aria-modal="true" aria-labelledby="cancel-title" className="bg-surface rounded-2xl shadow-2xl w-full max-w-md p-5 space-y-4" data-testid="cancel-dialog">
+          <div role="dialog" aria-modal="true" aria-labelledby="cancel-title" className="bg-surface rounded-2xl shadow-[var(--shadow-hover)] w-full max-w-md p-5 space-y-4" data-testid="cancel-dialog">
             <div>
               <h2 id="cancel-title" className="text-lg font-semibold text-ink">{t('detail.cancelTitle', { number: order.orderNumber })}</h2>
               <p className="text-sm text-muted mt-1">{t('detail.cancelBody')}</p>
@@ -1090,13 +1099,13 @@ function OrderDetailContent() {
             <div className="bg-raised p-3.5 rounded-xl border border-line space-y-1.5">
               <div className="flex items-center justify-between">
                 <span className="font-bold text-ink">{t('receipt.paymentChannel')}</span>
-                <span className="font-extrabold text-ink">
+                <span className="font-semibold text-ink">
                   {paymentChannelLabel(t, order.paymentMethod, order.paymentSenderAccount)}
                 </span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="font-bold text-ink">{t('receipt.verificationStatus')}</span>
-                <span className="font-extrabold text-brand-soft-ink">
+                <span className="font-semibold text-brand-soft-ink">
                   {paymentStatusLabel(t, order.paymentMethod, order.paymentStatus)}
                 </span>
               </div>
@@ -1161,7 +1170,7 @@ function OrderDetailContent() {
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-3 sm:p-4 animate-in fade-in duration-200"
           onClick={(e) => { if (e.target === e.currentTarget) setShowReceiptPreview(false); }}
         >
-          <div role="dialog" aria-modal="true" aria-labelledby="receipt-title" className="relative w-full max-w-2xl bg-surface rounded-3xl shadow-2xl border border-line overflow-hidden flex flex-col max-h-[92vh]">
+          <div role="dialog" aria-modal="true" aria-labelledby="receipt-title" className="relative w-full max-w-2xl bg-surface rounded-2xl shadow-[var(--shadow-hover)] border border-line overflow-hidden flex flex-col max-h-[92vh]">
             <div className="px-4 py-3 flex items-center justify-between gap-2 border-b border-line">
               <h3 id="receipt-title" className="font-semibold text-ink">{t('receipt.preview')}</h3>
               <div className="flex items-center gap-1">
@@ -1230,13 +1239,13 @@ function OrderDetailContent() {
                 <div className="bg-raised p-4 rounded-xl border border-line space-y-2 text-xs">
                   <div className="flex justify-between">
                     <span className="font-bold text-ink">{t('receipt.paymentChannel')}</span>
-                    <span className="font-extrabold text-ink">
+                    <span className="font-semibold text-ink">
                       {paymentChannelLabel(t, order.paymentMethod, order.paymentSenderAccount)}
                     </span>
                   </div>
                   <div className="flex justify-between">
                     <span className="font-bold text-ink">{t('receipt.paymentStatus')}</span>
-                    <span className="font-extrabold text-brand-soft-ink">
+                    <span className="font-semibold text-brand-soft-ink">
                       {paymentStatusLabel(t, order.paymentMethod, order.paymentStatus)}
                     </span>
                   </div>

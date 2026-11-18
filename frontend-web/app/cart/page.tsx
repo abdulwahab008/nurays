@@ -7,16 +7,16 @@ import {
   Trash2,
   Truck,
   Tag,
-  ShoppingBag,
   Check,
-  ChevronLeft,
   ChevronRight,
-  ChefHat,
   MapPin,
-  X,
   Flame,
   Snowflake,
   ArrowRight,
+  Minus,
+  ShoppingBag,
+  ChefHat,
+  Plus,
 } from 'lucide-react';
 import { cartService, CartResponse, type CartItem } from '@/lib/services/cart.service';
 import { productService } from '@/lib/services/product.service';
@@ -29,13 +29,13 @@ import { Button } from '@/components/ui/button';
 import { LoadError } from '@/components/ui/LoadError';
 import { useAuthStore, hasSession } from '@/lib/store/auth-store';
 import { useCartStore, trayFromServer, CartItem as LocalCartItem } from '@/lib/store/cart-store';
-import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
+import { DashboardLayout } from '@/components/layout/DashboardShell';
 import { apiClient, apiErrorMessage } from '@/lib/api-client';
 import { useToast } from '@/components/ui/toast';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { DEFAULT_ADDRESS, useDeliveryEstimate } from '@/lib/hooks/use-delivery-estimate';
 import { useT } from '@/lib/i18n';
-import { getPromotionLabel, getStackedDiscountedPrice } from '@/lib/pricing';
+import { getPromotionLabel, priceTray } from '@/lib/pricing';
 import { commonMessages } from '@/lib/i18n/messages/common';
 import { checkoutMessages, richText } from '@/lib/i18n/messages/checkout';
 import { useShallow } from 'zustand/react/shallow';
@@ -45,6 +45,8 @@ interface CatalogPromotion {
   name: string;
   type: string;
   discountValue: number;
+  minOrderAmount?: number;
+  maxDiscountAmount?: number | null;
 }
 
 function localItemsToCartResponse(localItems: LocalCartItem[]): CartResponse {
@@ -110,7 +112,6 @@ export default function CartPage() {
   const [showClearModal, setShowClearModal] = useState(false);
   const [clearingCart, setClearingCart] = useState(false);
 
-  const sidebarItems = CUSTOMER_SIDEBAR_ITEMS;
 
   const handleApplyPromoInCart = async () => {
     const code = cartPromoInput.trim().toUpperCase();
@@ -317,12 +318,9 @@ export default function CartPage() {
   const hasItems = cart && cart.items && cart.items.length > 0;
 
   // A sum over the few lines of one cart: cheap enough to work out on every render.
-  const discountedSubtotal = (cart?.items ?? []).reduce((sum, item) => {
-    const basePrice = item.variant?.price ?? item.product.price;
-    const promos = promotionsByProductId[item.product.id] || [];
-    const unitPrice = promos.length > 0 ? getStackedDiscountedPrice(basePrice, promos) : basePrice;
-    return sum + unitPrice * item.quantity;
-  }, 0);
+  const trayItems = cart?.items ?? [];
+  const trayDeals = priceTray(trayItems, promotionsByProductId);
+  const discountedSubtotal = trayDeals.unitPrices.reduce((sum, unitPrice, i) => sum + unitPrice * trayItems[i].quantity, 0);
 
   const promotionSavings = hasItems ? Math.max(0, cart.summary.subtotal - discountedSubtotal) : 0;
 
@@ -392,11 +390,10 @@ export default function CartPage() {
       <DashboardLayout
         title={t('cartTitle')}
         subtitle={t('cartLoadingSubtitle')}
-        sidebarItems={sidebarItems}
         userType="customer"
       >
         <div className="flex items-center justify-center min-h-[400px]">
-          <div className="text-center p-8 bg-surface rounded-3xl border border-line shadow-xs max-w-sm">
+          <div className="text-center p-8 bg-surface rounded-2xl border border-line shadow-xs max-w-sm">
             <div className="w-10 h-10 border-3 border-brand border-t-transparent rounded-full animate-spin mx-auto mb-3" />
             <p className="text-sm font-bold text-ink">{t('loadingTray')}</p>
             <p className="text-xs text-muted mt-1">{t('loadingTrayHint')}</p>
@@ -409,7 +406,7 @@ export default function CartPage() {
   if (loadError && !hasItems) {
     return (
       // No subtitle: "Your dining cart is currently empty" would say what the page could not find out.
-      <DashboardLayout title={t('cartTitle')} sidebarItems={sidebarItems} userType="customer">
+      <DashboardLayout title={t('cartTitle')} userType="customer">
         <div className="max-w-xl mx-auto my-12">
           <LoadError error={loadError} onRetry={loadCart} title={t('loadFailed')} />
         </div>
@@ -423,7 +420,6 @@ export default function CartPage() {
       <DashboardLayout
         title={t('cartTitle')}
         subtitle=""
-        sidebarItems={sidebarItems}
         userType="customer"
       >
         <div className="max-w-2xl mx-auto my-6">
@@ -434,7 +430,7 @@ export default function CartPage() {
               <ShoppingBag className="w-8 h-8 text-brand-soft-ink" aria-hidden />
             </div>
 
-            <h2 className="text-2xl sm:text-[28px] font-extrabold text-ink tracking-tight mb-2">
+            <h2 className="text-2xl sm:text-[28px] font-semibold text-ink tracking-tight mb-2">
               {t('emptyTitle')}
             </h2>
             <p className="text-sm text-muted max-w-md mx-auto leading-relaxed mb-6">
@@ -483,7 +479,7 @@ export default function CartPage() {
             {/* Primary Action Button */}
             <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
               <Link href="/products" className="w-full sm:w-auto">
-                <span className="w-full sm:w-auto inline-flex items-center justify-center gap-2 h-12 px-6 rounded-xl bg-brand hover:bg-brand-500 text-on-brand text-[15px] font-extrabold transition-colors active:scale-95 cursor-pointer">
+                <span className="w-full sm:w-auto inline-flex items-center justify-center gap-2 h-12 px-6 rounded-xl bg-brand hover:bg-brand-500 text-on-brand text-[15px] font-semibold transition-colors active:scale-95 cursor-pointer">
                   <span>{t('discoverDishes')}</span>
                   <ArrowRight className="rtl:-scale-x-100 w-4 h-4" />
                 </span>
@@ -514,33 +510,27 @@ export default function CartPage() {
           ? t(trayCount === 1 ? 'cartSubtitleOne' : 'cartSubtitleMany', { count: trayCount, kitchen: activeSeller.businessName })
           : t(trayCount === 1 ? 'itemsInTrayOne' : 'itemsInTrayMany', { count: trayCount })
       }
-      sidebarItems={sidebarItems}
       userType="customer"
     >
       <div className="space-y-6 pb-12">
-        {/* Single Kitchen Context Banner */}
+        {/* The kitchen the tray is from, said once, with the way back to its menu */}
         {activeSeller && (
-          <div className="bg-surface rounded-[20px] border border-line px-4 py-3 sm:px-5 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="w-10 h-10 rounded-xl bg-brand-soft text-brand-soft-ink flex items-center justify-center shrink-0">
-                <ChefHat className="w-5 h-5" aria-hidden />
-              </div>
-              <div className="min-w-0">
-                <h3 className="font-extrabold text-ink text-base break-words">{activeSeller.businessName}</h3>
-                {activeSeller.community?.name && (
-                  <p className="flex items-center gap-1 text-xs text-muted truncate">
-                    <MapPin className="w-3 h-3 shrink-0" aria-hidden />
-                    <span>{activeSeller.community.name}</span>
-                  </p>
-                )}
-              </div>
+          <div className="flex items-center justify-between gap-3 border-b border-line pb-4">
+            <div className="min-w-0">
+              <p className="font-semibold text-ink break-words">{activeSeller.businessName}</p>
+              {activeSeller.community?.name && (
+                <p className="flex items-center gap-1 text-sm text-muted truncate">
+                  <MapPin className="w-3.5 h-3.5 shrink-0" aria-hidden />
+                  <span>{activeSeller.community.name}</span>
+                </p>
+              )}
             </div>
             <Link
               href={`/kitchens/${activeSeller.id}`}
-              className="shrink-0 inline-flex items-center gap-1 min-h-11 text-sm font-bold text-brand-ink hover:underline whitespace-nowrap"
+              className="shrink-0 inline-flex items-center gap-1 min-h-11 text-sm font-semibold text-brand-ink hover:underline whitespace-nowrap"
             >
               <span>{t('addMoreDishes')}</span>
-              <ChevronRight className="rtl:-scale-x-100 w-3.5 h-3.5" aria-hidden />
+              <ChevronRight className="rtl:-scale-x-100 w-4 h-4" aria-hidden />
             </Link>
           </div>
         )}
@@ -548,28 +538,28 @@ export default function CartPage() {
         {/* Free Delivery Unlocker Progress Bar: only for a kitchen that has an order amount which waives its delivery fee */}
         {freeDeliveryThreshold != null && (
           <div
-            className={`bg-surface rounded-[20px] p-4 border border-line transition-opacity ${estimatePending ? 'opacity-60' : ''}`}
+            className={`transition-opacity ${estimatePending ? 'opacity-60' : ''}`}
             aria-busy={estimatePending}
           >
             <div className="flex items-center justify-between gap-3 text-xs mb-2">
-              <span className="font-bold text-ink flex items-center gap-1.5">
-                <Truck className="w-4 h-4 text-brand-ink" />
+              <span className="text-sm text-ink flex items-center gap-1.5">
+                <Truck className="w-4 h-4 text-muted" aria-hidden />
                 {isFreeDelivery ? (
-                  <span className="text-brand-soft-ink font-extrabold">{t('unlockedFree')}</span>
+                  <span className="text-brand-soft-ink font-semibold">{t('unlockedFree')}</span>
                 ) : (
                   <span>
                     {richText(t('addMoreForFree'), {
-                      amount: <strong className="text-ink font-black">{formatPrice(freeDeliveryRemaining)}</strong>,
-                      free: <span className="text-brand-ink font-bold">{t('freeDelivery')}</span>,
+                      amount: <strong className="text-ink font-semibold">{formatPrice(freeDeliveryRemaining)}</strong>,
+                      free: <span className="text-brand-ink font-semibold">{t('freeDelivery')}</span>,
                     })}
                   </span>
                 )}
               </span>
-              <span className="font-extrabold text-muted">{freeDeliveryProgress}%</span>
+              <span className="text-sm text-muted tabular-nums">{freeDeliveryProgress}%</span>
             </div>
-            <div className="w-full h-2 rounded-full bg-raised overflow-hidden">
+            <div className="w-full h-1.5 rounded-full bg-raised overflow-hidden">
               <div
-                className={`h-full rounded-full transition-all duration-500 ${
+                className={`h-full rounded-full transition-colors duration-500 ${
                   isFreeDelivery ? 'bg-brand' : 'bg-accent'
                 }`}
                 style={{ width: `${freeDeliveryProgress}%` }}
@@ -582,39 +572,36 @@ export default function CartPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
           {/* ── LEFT: DISH ITEMS ── */}
           <div className="lg:col-span-2 space-y-4">
-            <div className="flex items-center justify-between px-1">
-              <h2 className="text-base font-extrabold text-ink">{t('selectedDishes')}</h2>
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-ink">{t('selectedDishes')}</h2>
 
               <button
                 type="button"
                 onClick={() => setShowClearModal(true)}
-                className="text-sm font-bold text-muted hover:text-red-600 h-11 px-3 rounded-xl hover:bg-raised transition-colors flex items-center gap-1.5 cursor-pointer"
+                className="text-sm text-muted hover:text-red-700 h-11 px-3 -me-3 rounded-xl hover:bg-raised transition-colors flex items-center gap-1.5 cursor-pointer"
               >
-                <Trash2 className="w-3.5 h-3.5" />
+                <Trash2 className="w-4 h-4" aria-hidden />
                 <span>{t('clearTray')}</span>
               </button>
             </div>
 
             {/* Dish Item Cards */}
-            <div className="space-y-3">
-              {cart.items.map((item) => {
-                const promos = promotionsByProductId[item.product.id] || [];
+            <div className="bg-surface rounded-2xl border border-line divide-y divide-line">
+              {cart.items.map((item, itemIndex) => {
+                const promos = trayDeals.applied[itemIndex];
                 const originalPrice = item.variant?.price ?? item.product.price;
-                const unitPrice = promos.length > 0 ? getStackedDiscountedPrice(originalPrice, promos) : originalPrice;
+                const unitPrice = trayDeals.unitPrices[itemIndex];
                 const lineTotal = unitPrice * item.quantity;
                 const promotionLabel = promos.length > 0 ? promos.map((p) => getPromotionLabel(p, t, formatPrice)).join(' + ') : null;
                 const isItemUpdating = updatingItem === item.id;
 
                 return (
-                  <div
-                    key={item.id}
-                    className="bg-surface rounded-[20px] border border-line p-3.5 sm:p-4"
-                  >
+                  <div key={item.id} className="p-4">
                     <div className="flex gap-4 items-start">
                       {/* Dish Thumbnail */}
                       <Link
                         href={`/products/${item.product.id}`}
-                        className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-raised overflow-hidden shrink-0 relative block group"
+                        className="w-16 h-16 sm:w-20 sm:h-20 rounded-xl bg-raised overflow-hidden shrink-0 relative block"
                       >
                         {item.product.image ? (
                           <img
@@ -628,7 +615,7 @@ export default function CartPage() {
                           <CoverImage alt={item.product.name} label={item.product.name} size="sm" className="w-full h-full" />
                         )}
                         <span
-                          className={`absolute bottom-1.5 start-1.5 px-2 py-0.5 rounded-full text-[11px] font-extrabold flex items-center gap-1 ${
+                          className={`absolute bottom-1 start-1 px-1.5 py-0.5 rounded-md text-[11px] font-medium flex items-center gap-1 ${
                             isFrozenItem(item) ? 'bg-frozen-soft text-frozen-ink' : 'bg-surface/95 text-ink'
                           }`}
                         >
@@ -648,29 +635,13 @@ export default function CartPage() {
 
                       {/* Dish Info */}
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-start justify-between gap-2">
-                          <div>
-                            <Link href={`/products/${item.product.id}`}>
-                              <h3 className="text-[15px] sm:text-base font-extrabold text-ink hover:underline leading-snug">
-                                {item.product.name}
-                              </h3>
-                            </Link>
-                          </div>
-
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveItem(item.id)}
-                            className="w-11 h-11 rounded-xl text-muted hover:text-red-600 hover:bg-raised flex items-center justify-center transition-colors shrink-0"
-                            title={t('removeDish')}
-                            aria-label={t('removeDish')}
-                          >
-                            <X className="w-4 h-4" />
-                          </button>
-                        </div>
+                        <Link href={`/products/${item.product.id}`}>
+                          <h3 className="text-[15px] font-semibold text-ink hover:underline leading-snug">{item.product.name}</h3>
+                        </Link>
 
                         {promotionLabel && (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent text-on-accent text-[11px] font-extrabold mt-1.5">
-                            <Tag className="w-2.5 h-2.5" />
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-accent-soft text-accent-soft-ink text-xs font-medium mt-1.5">
+                            <Tag className="w-3 h-3" aria-hidden />
                             <span>{promotionLabel}</span>
                           </span>
                         )}
@@ -678,35 +649,36 @@ export default function CartPage() {
                         {/* Quantity and Price Row */}
                         <div className="mt-3 flex items-center justify-between gap-3">
                           <div className="flex items-center h-11 rounded-xl border border-line">
+                            {/* At one portion the minus is a bin, so the tap that takes the dish out says so before it happens */}
                             <button
                               type="button"
-                              onClick={() => handleUpdateQuantity(item.id, item.quantity - 1)}
-                              className="w-11 h-11 rounded-s-xl text-ink font-extrabold hover:bg-raised flex items-center justify-center text-lg transition-colors"
-                              title={t('decrease')}
-                              aria-label={t('decrease')}
+                              onClick={() => (item.quantity <= 1 ? handleRemoveItem(item.id) : handleUpdateQuantity(item.id, item.quantity - 1))}
+                              className={`w-11 h-11 rounded-s-xl flex items-center justify-center transition-colors hover:bg-raised ${item.quantity <= 1 ? 'text-muted hover:text-red-700' : 'text-ink'}`}
+                              title={t(item.quantity <= 1 ? 'removeDish' : 'decrease')}
+                              aria-label={t(item.quantity <= 1 ? 'removeDish' : 'decrease')}
                             >
-                              −
+                              {item.quantity <= 1 ? <Trash2 className="w-4 h-4" aria-hidden /> : <Minus className="w-4 h-4" aria-hidden />}
                             </button>
-                            <span className="min-w-6 text-center text-sm font-extrabold text-ink" aria-live="polite">
+                            <span className="min-w-6 text-center text-sm font-semibold text-ink tabular-nums" aria-live="polite">
                               {item.quantity}
                             </span>
                             <button
                               type="button"
                               onClick={() => handleUpdateQuantity(item.id, item.quantity + 1)}
-                              className="w-11 h-11 rounded-e-xl text-brand-ink font-extrabold hover:bg-raised flex items-center justify-center text-lg transition-colors"
+                              className="w-11 h-11 rounded-e-xl text-ink hover:bg-raised flex items-center justify-center transition-colors"
                               title={t('increase')}
                               aria-label={t('increase')}
                             >
-                              +
+                              <Plus className="w-4 h-4" aria-hidden />
                             </button>
                           </div>
 
                           <div className="text-end">
-                            <span className="text-base font-extrabold text-ink block">
+                            <span className="text-[15px] font-semibold text-ink block tabular-nums">
                               {formatPrice(lineTotal)}
                             </span>
                             {originalPrice > unitPrice && (
-                              <span className="text-[11px] text-muted line-through">
+                              <span className="text-xs text-muted line-through tabular-nums">
                                 {formatPrice(originalPrice * item.quantity)}
                               </span>
                             )}
@@ -722,23 +694,23 @@ export default function CartPage() {
 
           {/* ── RIGHT: ORDER SUMMARY ── */}
           <div className="lg:col-span-1 sticky top-[calc(5rem+var(--safe-top))]">
-            <div className="bg-surface rounded-[24px] border border-line p-5 sm:p-6 space-y-4">
-              <h3 className="text-base font-extrabold text-ink pb-3 border-b border-line flex items-center justify-between">
+            <div className="bg-surface rounded-2xl border border-line shadow-[var(--shadow-card)] p-5 sm:p-6 space-y-4">
+              <h3 className="text-base font-semibold text-ink flex items-center justify-between">
                 <span>{t('orderSummary')}</span>
-                <span className="text-xs font-semibold text-muted">
+                <span className="text-sm font-normal text-muted">
                   {t(trayCount === 1 ? 'itemsOne' : 'itemsMany', { count: trayCount })}
                 </span>
               </h3>
 
               {/* Cost Rows */}
               <div className="space-y-2.5 text-sm">
-                <div className="flex justify-between text-muted font-medium">
+                <div className="flex justify-between text-muted">
                   <span>{t('dishesSubtotal')}</span>
-                  <bdi dir="ltr" className="font-bold text-ink">{formatPrice(discountedSubtotal + promotionSavings)}</bdi>
+                  <bdi dir="ltr" className="text-ink tabular-nums">{formatPrice(discountedSubtotal + promotionSavings)}</bdi>
                 </div>
 
                 {promotionSavings > 0 && (
-                  <div className="flex justify-between text-brand-soft-ink font-semibold">
+                  <div className="flex justify-between text-brand-ink">
                     <span className="flex items-center gap-1">
                       <Tag className="w-3.5 h-3.5" />
                       <span>{t('promotionsSavings')}</span>
@@ -747,22 +719,21 @@ export default function CartPage() {
                   </div>
                 )}
 
-                <div className={`flex justify-between text-muted font-medium transition-opacity ${estimatePending ? 'opacity-60' : ''}`}>
-                  <span className="flex items-center gap-1.5">
-                    <Truck className="w-3.5 h-3.5 text-muted" />
+                <div className={`flex justify-between gap-3 text-muted transition-opacity ${estimatePending ? 'opacity-60' : ''}`}>
+                  <span>
                     <span>{areaQuote && selectedCommunity ? tk('trayDeliveryToArea', { area: selectedCommunity.name }) : t('estimatedDelivery')}</span>
                   </span>
                   {!deliveryEstimate && areaQuote ? (
                     areaQuoteKnown ? (
-                      <span className="font-bold text-ink">
+                      <span className="text-ink tabular-nums">
                         {areaQuote.fee === 0 ? t('freeCaps') : tk('trayAbout', { amount: formatPrice(areaQuote.fee) })}
                       </span>
                     ) : (
-                      <span className="font-bold text-red-600">{t('deliveryNotAvailable')}</span>
+                      <span className="text-red-700">{t('deliveryNotAvailable')}</span>
                     )
                   ) : !deliveryEstimate ? (
                     selectedCommunity ? (
-                      <span className="font-semibold text-muted">{t('deliveryAtCheckout')}</span>
+                      <span className="text-muted">{t('deliveryAtCheckout')}</span>
                     ) : (
                       <button
                         type="button"
@@ -773,9 +744,9 @@ export default function CartPage() {
                       </button>
                     )
                   ) : !deliveryKnown ? (
-                    <span className="font-bold text-red-600">{t('deliveryNotAvailable')}</span>
+                    <span className="text-red-700">{t('deliveryNotAvailable')}</span>
                   ) : (
-                    <span className={`font-bold ${isFreeDelivery ? 'text-brand-ink' : 'text-ink'}`}>
+                    <span className={`tabular-nums ${isFreeDelivery ? 'text-brand-ink font-semibold' : 'text-ink'}`}>
                       {isFreeDelivery ? t('freeCaps') : formatPrice(deliveryFee)}
                     </span>
                   )}
@@ -785,23 +756,23 @@ export default function CartPage() {
                 )}
                 {areaQuote && !areaQuoteKnown && areaQuote.reason && <p className="text-xs text-red-600 -mt-1">{areaQuote.reason}</p>}
 
-                <div className="flex justify-between text-muted font-medium">
+                <div className="flex justify-between text-muted">
                   <span>{t('salesTax5')}</span>
-                  <span className="font-bold text-ink">{formatPrice(gst)}</span>
+                  <span className="text-ink tabular-nums">{formatPrice(gst)}</span>
                 </div>
               </div>
 
               {/* Promo Code Box */}
-              <div className="pt-2">
-                <div className="p-3 rounded-2xl bg-raised">
-                  <span className="text-xs font-bold text-muted block mb-1.5">
+              <div className="pt-4 border-t border-line">
+                <div>
+                  <span className="text-sm font-medium text-ink block mb-1.5">
                     {t('voucherCode')}
                   </span>
                   {appliedPromoCode ? (
-                    <div className="flex items-center justify-between bg-surface px-3 py-2 rounded-xl border border-brand/40">
+                    <div className="flex items-center justify-between min-h-11 px-3 rounded-xl bg-brand-soft">
                       <div className="flex items-center gap-1.5">
                         <Check className="w-3.5 h-3.5 text-brand-soft-ink stroke-[3]" />
-                        <span className="text-xs font-bold text-ink font-mono" data-ltr>{appliedPromoCode}</span>
+                        <span className="text-sm font-medium text-brand-soft-ink font-mono" data-ltr>{appliedPromoCode}</span>
                       </div>
                       <button
                         type="button"
@@ -809,7 +780,7 @@ export default function CartPage() {
                           setAppliedPromoCode(null);
                           showToast(t('voucherRemoved'), 'info');
                         }}
-                        className="text-xs font-bold text-red-600 hover:underline"
+                        className="min-h-11 text-sm text-red-700 hover:underline"
                       >
                         {tc('remove')}
                       </button>
@@ -830,7 +801,7 @@ export default function CartPage() {
                         variant="outline"
                         disabled={!cartPromoInput.trim() || promoValidating}
                         onClick={handleApplyPromoInCart}
-                        className="h-11 text-sm font-bold px-4 rounded-xl"
+                        className="px-4"
                       >
                         {promoValidating ? t('checking') : t('apply')}
                       </Button>
@@ -842,10 +813,10 @@ export default function CartPage() {
               {/* Total Row */}
               <div className="pt-3 border-t border-line">
                 <div className="flex items-baseline justify-between">
-                  <span className="text-sm font-bold text-ink">
+                  <span className="text-sm font-semibold text-ink">
                     {deliveryKnown ? t('totalPayable') : areaQuoteKnown ? tk('trayEstimatedTotal') : t('totalBeforeDelivery')}
                   </span>
-                  <span className="text-2xl font-extrabold text-ink">{formatPrice(displayTotal)}</span>
+                  <span className="text-2xl font-semibold text-ink tabular-nums">{formatPrice(displayTotal)}</span>
                 </div>
                 <span className="text-xs text-muted block mt-0.5">
                   {deliveryKnown ? t('includesAll') : areaQuoteKnown ? tk('trayAreaNote') : t('deliveryAddedAtCheckout')}
@@ -856,16 +827,15 @@ export default function CartPage() {
               {isAuthenticated ? (
                 <Link
                   href="/checkout"
-                  className="w-full h-14 rounded-2xl bg-brand hover:bg-brand-500 text-on-brand text-base font-extrabold transition-colors active:scale-98 flex items-center justify-center gap-2"
+                  className="w-full h-12 rounded-xl bg-brand hover:bg-brand-500 text-on-brand text-[15px] font-semibold transition-[background-color,transform] active:scale-[0.98] flex items-center justify-center gap-2"
                 >
-                  <ShoppingBag className="w-5 h-5" aria-hidden />
                   <span>{t('proceedCheckout')}</span>
                   <ArrowRight className="rtl:-scale-x-100 w-4 h-4 ms-1" aria-hidden />
                 </Link>
               ) : (
                 <Link
                   href={loginUrlFor('/checkout')}
-                  className="w-full h-14 rounded-2xl bg-brand hover:bg-brand-500 text-on-brand text-base font-extrabold transition-colors active:scale-98 flex items-center justify-center gap-2"
+                  className="w-full h-12 rounded-xl bg-brand hover:bg-brand-500 text-on-brand text-[15px] font-semibold transition-[background-color,transform] active:scale-[0.98] flex items-center justify-center gap-2"
                 >
                   <span>{t('signInToComplete')}</span>
                   <ArrowRight className="rtl:-scale-x-100 w-4 h-4 ms-1" aria-hidden />
@@ -874,9 +844,8 @@ export default function CartPage() {
 
               <Link
                 href="/products"
-                className="w-full h-11 rounded-xl hover:bg-raised text-ink text-sm font-bold border border-line-strong transition-colors flex items-center justify-center gap-1.5"
+                className="w-full min-h-11 rounded-xl hover:bg-raised text-brand-ink text-sm font-semibold transition-colors flex items-center justify-center"
               >
-                <ChevronLeft className="rtl:-scale-x-100 w-3.5 h-3.5" aria-hidden />
                 <span>{t('continueExploring')}</span>
               </Link>
 

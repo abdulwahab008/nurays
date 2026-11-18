@@ -53,7 +53,9 @@ export interface SellerBalance {
  *  - seller collected (they hold the full total T): the seller owes T - E. That
  *    covers commission, the platform delivery fee and tax, and also any refund the
  *    platform sent the customer, so the platform is never out of pocket for money
- *    the seller kept. A refund the admin dismissed (not owed) stays with the seller.
+ *    the seller kept. A refund the admin dismissed (not owed) cancels that debt, but only on an
+ *    order that earns nothing and only for money no other refund covers: on an order that
+ *    still earns, the seller owes T - E whatever was dismissed.
  *
  * Orders can only have one seller now; for older multi-seller orders the money
  * went to the first item's seller, who therefore owes the others' share.
@@ -116,6 +118,8 @@ export interface BalanceOrder {
   firstSellerId: string | null;
   refundsFailed: number;
   refundsCompleted: number;
+  /** Refunds that stand: sent, or still waiting to be sent. */
+  refundsActive: number;
 }
 
 /**
@@ -142,6 +146,7 @@ async function balanceOrders(client: Client, sellerId: string): Promise<BalanceO
       first_seller_id: string | null;
       refunds_failed: number;
       refunds_completed: number;
+      refunds_active: number;
     }>
   >`
     WITH mine AS (
@@ -167,11 +172,13 @@ async function balanceOrders(client: Client, sellerId: string): Promise<BalanceO
       mine.live_payout,
       (SELECT f.seller_id FROM order_items f WHERE f.order_id = o.id ORDER BY f.created_at ASC, f.id ASC LIMIT 1) AS first_seller_id,
       COALESCE(r.failed, 0)::float8 AS refunds_failed,
-      COALESCE(r.completed, 0)::float8 AS refunds_completed
+      COALESCE(r.completed, 0)::float8 AS refunds_completed,
+      COALESCE(r.active, 0)::float8 AS refunds_active
     FROM mine
     JOIN orders o ON o.id = mine.order_id
     LEFT JOIN LATERAL (
-      SELECT SUM(x.amount) FILTER (WHERE x.status = 'failed') AS failed, SUM(x.amount) FILTER (WHERE x.status = 'completed') AS completed
+      SELECT SUM(x.amount) FILTER (WHERE x.status = 'failed') AS failed, SUM(x.amount) FILTER (WHERE x.status = 'completed') AS completed,
+             SUM(x.amount) FILTER (WHERE x.status <> 'failed') AS active
       FROM refunds x
       WHERE x.order_id = o.id
     ) r ON true
@@ -197,6 +204,7 @@ async function balanceOrders(client: Client, sellerId: string): Promise<BalanceO
     firstSellerId: r.first_seller_id,
     refundsFailed: Number(r.refunds_failed),
     refundsCompleted: Number(r.refunds_completed),
+    refundsActive: Number(r.refunds_active),
   }));
 }
 
@@ -274,7 +282,9 @@ export async function sellerBalanceLines(client: Client, sellerId: string) {
     if (isPayee) {
       if (o.paidAt) {
         collected = o.totalAmount;
-        keptRefunds = o.refundsFailed;
+        // A dismissed refund only cancels a debt that exists: an order that still earns was never charged for it,
+        // and money another refund has returned (or is about to) is still owed back.
+        keptRefunds = earned ? 0 : Math.max(0, Math.min(o.refundsFailed, collected - o.refundsActive));
       } else {
         // Never confirmed by the seller, yet the platform refunded the customer
         // after checking the transfer had arrived: recover what it paid out.

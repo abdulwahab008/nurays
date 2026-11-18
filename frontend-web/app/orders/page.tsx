@@ -10,7 +10,7 @@ import { formatPrice, formatDateTime } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { LoadError } from '@/components/ui/LoadError';
 import { useAuthStore, hasSession } from '@/lib/store/auth-store';
-import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
+import { DashboardLayout } from '@/components/layout/DashboardShell';
 import { useSocket } from '@/lib/hooks/use-socket';
 import { useToast } from '@/components/ui/toast';
 import { cartService } from '@/lib/services/cart.service';
@@ -70,7 +70,6 @@ function OrdersContent() {
   const t = useT(ordersMessages);
   const tc = useT(commonMessages);
 
-  const sidebarItems = CUSTOMER_SIDEBAR_ITEMS;
 
   // Live status updates via socket — no manual page refresh required
   useEffect(() => {
@@ -282,7 +281,6 @@ function OrdersContent() {
     <DashboardLayout
       title={t('list.title')}
       subtitle={t('list.subtitle')}
-      sidebarItems={sidebarItems}
       userType="customer"
     >
       <div className="max-w-6xl mx-auto space-y-6 pb-12">
@@ -343,7 +341,7 @@ function OrdersContent() {
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder={t('list.searchPlaceholder')}
               aria-label={t('list.searchPlaceholder')}
-              className="w-full h-11 ps-9 pe-11 rounded-xl text-sm bg-raised border border-transparent text-ink placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand focus:bg-surface transition-all"
+              className="w-full h-11 ps-9 pe-11 rounded-xl text-sm bg-raised border border-transparent text-ink placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand focus:bg-surface transition-colors"
             />
             {searchQuery && (
               <button

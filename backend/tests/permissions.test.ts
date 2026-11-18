@@ -61,3 +61,24 @@ describe('defaults are closed', () => {
     expect(allowed('nonsense', 'GET', '/orders')).toBe(false);
   });
 });
+
+describe('a path written the way the router still accepts it', () => {
+  it('needs the same permission whatever its letter case, trailing slash or repeated slashes', () => {
+    for (const path of ['/STAFF', '/staff/', '/Staff/abc/two-factor', '//staff', '/%73taff']) {
+      expect(permissionForRequest('POST', path)).toBe('staff.manage');
+      expect(allowed('admin', 'GET', path)).toBe(false);
+    }
+    expect(permissionForRequest('GET', '/audit-logs/export/')).toBe('audit.export');
+    expect(permissionForRequest('GET', '/Audit-Logs/Export')).toBe('audit.export');
+    expect(permissionForRequest('PATCH', '/Settings')).toBe('settings.write');
+    expect(permissionForRequest('POST', '/riders/r1/adjustments/')).toBe('money.adjust');
+    expect(permissionForRequest('POST', '/Refunds/x/Complete/')).toBe('money.write');
+    expect(permissionForRequest('GET', '/pending-sellers/')).toBe('read.approvals');
+    expect(allowed('support', 'POST', '/ORDERS/o1/refund/')).toBe(false);
+  });
+
+  it('survives a path that is not valid percent-encoding', () => {
+    expect(permissionForRequest('GET', '/%E0%A4%A')).toBe('read.core');
+    expect(permissionForRequest('POST', '/%')).toBe('ops.write');
+  });
+});

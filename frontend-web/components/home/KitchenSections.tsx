@@ -20,7 +20,7 @@ export function TrendingKitchens({ kitchens: trendingKitchens }: { kitchens: Hom
   return (
     <section className="max-w-[1280px] mx-auto px-4 sm:px-8 pt-6" data-testid="trending-kitchens">
       <div className="mb-3">
-        <h3 className="text-lg sm:text-[22px] font-extrabold text-ink tracking-tight flex items-center gap-1.5">
+        <h3 className="text-lg sm:text-[22px] font-semibold text-ink tracking-tight flex items-center gap-1.5">
           <Flame className="w-5 h-5 text-brand-ink" />
           {t('trendingKitchens')}
         </h3>
@@ -33,7 +33,7 @@ export function TrendingKitchens({ kitchens: trendingKitchens }: { kitchens: Hom
             href={k.href}
             className="flex-shrink-0 w-56 flex items-center gap-3 p-2.5 rounded-2xl bg-surface border border-line hover:border-line-strong transition-colors group"
           >
-            <span className="w-6 text-center text-lg font-black text-brand-ink">{i + 1}</span>
+            <span className="w-6 text-center text-lg font-semibold text-brand-ink">{i + 1}</span>
             <div className="relative w-12 h-12 rounded-full overflow-hidden border border-line flex-shrink-0">
               <CoverImage src={k.avatar || k.coverPhoto} alt={k.name} label={k.name} size="sm" className="w-full h-full" />
             </div>
@@ -61,7 +61,7 @@ export function KitchenCard({
 }) {
   const t = useT(homeMessages);
   return (
-    <div className="group relative flex flex-col bg-surface rounded-[20px] border border-line hover:border-line-strong hover:shadow-[var(--shadow-card)] transition-all duration-200 overflow-hidden">
+    <div className="group relative flex flex-col bg-surface rounded-[20px] border border-line hover:border-line-strong transition-colors duration-200 overflow-hidden">
       {/* The kitchen's own cover photo, nothing laid over it but the deal and the heart */}
       <div className="relative aspect-[2/1] sm:aspect-[16/10] w-full overflow-hidden bg-raised">
         <CoverImage
@@ -69,12 +69,12 @@ export function KitchenCard({
           alt={kitchen.name}
           label={kitchen.name}
           size="md"
-          className="w-full h-full transition-transform duration-500 group-hover:scale-[1.03]"
+          className="w-full h-full"
         />
 
         {/* Deal: only when one of its dishes is really discounted */}
         {kitchen.deal && (
-          <span className="absolute top-3 start-3 px-2.5 py-1 rounded-full bg-accent text-on-accent text-[11px] font-extrabold">
+          <span className="absolute top-3 start-3 px-2.5 py-1 rounded-full bg-accent text-on-accent text-[11px] font-semibold">
             {kitchen.deal}
           </span>
         )}
@@ -96,7 +96,7 @@ export function KitchenCard({
       <div className="p-4 flex-1 flex flex-col gap-2">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <h3 className="text-base font-extrabold text-ink flex items-center gap-1 min-w-0">
+            <h3 className="text-base font-semibold text-ink flex items-center gap-1 min-w-0">
               <Link
                 href={kitchen.href}
                 className="truncate after:absolute after:inset-0 after:rounded-[20px] focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-inset focus-visible:after:ring-brand"
@@ -123,7 +123,7 @@ export function KitchenCard({
           {/* The real rating, or "New" before any reviews */}
           {kitchen.rating ? (
             <span
-              className="flex-shrink-0 flex items-center gap-1 text-sm font-extrabold text-ink"
+              className="flex-shrink-0 flex items-center gap-1 text-sm font-semibold text-ink"
               title={countLabel(t, kitchen.reviewsCount, 'reviewsOne', 'reviewsMany')}
             >
               <Star className="w-4 h-4 fill-accent text-accent" aria-hidden />
@@ -131,7 +131,7 @@ export function KitchenCard({
               <span className="text-xs font-semibold text-muted">({formatCount(kitchen.reviewsCount)})</span>
             </span>
           ) : (
-            <span className="flex-shrink-0 px-2 py-0.5 rounded-full bg-accent-soft text-accent-soft-ink text-[11px] font-extrabold">
+            <span className="flex-shrink-0 px-2 py-0.5 rounded-full bg-accent-soft text-accent-soft-ink text-[11px] font-semibold">
               {t('newBadge')}
             </span>
           )}
@@ -145,7 +145,7 @@ export function KitchenCard({
           {kitchen.statusLabel && (
             <span className="flex items-center gap-1.5">
               <span
-                className={`px-2 py-0.5 rounded-full font-extrabold ${
+                className={`px-2 py-0.5 rounded-full font-semibold ${
                   kitchen.isOpen ? 'bg-brand-soft text-brand-soft-ink' : 'bg-raised text-muted'
                 }`}
               >
@@ -208,7 +208,7 @@ export function KitchenGrid({
   return (
     <section id="kitchens" className="max-w-[1280px] mx-auto px-4 sm:px-8 py-6 scroll-mt-[calc(var(--header-offset)+4.5rem)]">
       <div className="flex items-end justify-between gap-3 mb-4">
-        <h2 className="text-[22px] sm:text-[28px] font-extrabold text-ink tracking-tight">{title ?? t('browseHomeKitchens')}</h2>
+        <h2 className="text-[22px] sm:text-[28px] font-semibold text-ink tracking-tight">{title ?? t('browseHomeKitchens')}</h2>
         <Link href="/kitchens" className="shrink-0 min-h-11 text-sm font-bold text-brand-ink hover:underline flex items-center gap-1">
           <span>{t('viewAll')}</span>
           <ChevronRight className="rtl:-scale-x-100 w-4 h-4" aria-hidden />

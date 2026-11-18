@@ -741,7 +741,12 @@ async function main() {
   await prisma.order.update({ where: { id: staleO.id }, data: { createdAt: old } });
   const unpaidT: any = (await order(swCust.id, [{ productId: swProd.id, quantity: 1 }], { paymentMethod: 'bank' })).order;
   await sellerOrderService.acceptOrder(unpaidT.id, platUser);
+  // A transfer's hour to pay starts when the kitchen accepts (the customer sees its account only then).
   await prisma.order.update({ where: { id: unpaidT.id }, data: { createdAt: new Date(Date.now() - 61 * 60 * 1000) } });
+  await prisma.orderStatusHistory.updateMany({ where: { orderId: unpaidT.id }, data: { createdAt: new Date(Date.now() - 61 * 60 * 1000) } });
+  const lateAccept: any = (await order(swCust.id, [{ productId: swProd.id, quantity: 1 }], { paymentMethod: 'bank' })).order;
+  await prisma.order.update({ where: { id: lateAccept.id }, data: { createdAt: new Date(Date.now() - 61 * 60 * 1000) } });
+  await sellerOrderService.acceptOrder(lateAccept.id, platUser);
   const freshO = await homeO();
   const sub6: any = (await order(swCust.id, [{ productId: swProd.id, quantity: 1 }], { paymentMethod: 'bank' })).order;
   await orderService.submitManualPayment(sub6.id, swCust.id, { referenceNumber: 'TID-' + uniq() });
@@ -751,10 +756,11 @@ async function main() {
   const st = async (id: string) => (await prisma.order.findUnique({ where: { id } }))!;
   ok('an order the kitchen never accepted is cancelled automatically', (await st(staleO.id)).orderStatus === 'cancelled' && (await st(staleO.id)).cancelledBy === 'system');
   ok('an accepted transfer order that was never paid is cancelled', (await st(unpaidT.id)).orderStatus === 'cancelled');
+  ok('a transfer order accepted a moment ago still has its hour, however long ago it was placed', (await st(lateAccept.id)).orderStatus === 'preparing');
   ok('a fresh order is left alone', (await st(freshO.id)).orderStatus === 'pending');
-  // four orders were placed after stockBefore; the two swept ones gave their unit back
+  // five orders were placed after stockBefore; the two swept ones gave their unit back
   const stockAfterSweep = (await prisma.product.findUnique({ where: { id: swProd.id } }))!.stockQuantity;
-  ok('stock comes back for the swept orders', stockAfterSweep === stockBefore - 2, `before=${stockBefore} after=${stockAfterSweep}`);
+  ok('stock comes back for the swept orders', stockAfterSweep === stockBefore - 3, `before=${stockBefore} after=${stockAfterSweep}`);
   const esc = await prisma.orderStatusHistory.count({ where: { orderId: sub6.id, notes: { contains: 'Escalated to admins' } } });
   const adminNotes = await prisma.notification.count({ where: { userId: admin.id, type: 'payment_unconfirmed' } });
   await sweepStaleOrders();
@@ -1915,14 +1921,17 @@ async function main() {
     // (that order is not delivered yet, so it owes nothing more)
     await prisma.seller.update({ where: { id: ck.id }, data: { owesSince: new Date(Date.now() - 15 * 24 * 3600e3) } });
     ok('owing for more than two weeks, a new cash order it would collect itself is refused with CASH_UNAVAILABLE', (await cod()) === 'CASH_UNAVAILABLE');
-    ok('paying another way still works', (await code(order(oCust.id, [{ productId: cprod.id, quantity: 1 }], { paymentMethod: 'bank' }))) === 'OK');
+    ok('and so is a transfer into its own account', (await code(order(oCust.id, [{ productId: cprod.id, quantity: 1 }], { paymentMethod: 'bank' }))) === 'CASH_UNAVAILABLE');
     const dash: any = await sellerService.getSellerDashboard(ck.id);
     ok("the kitchen's dashboard says what it owes and that cash is paused", dash.overview.owing.amount === s0.owed && dash.overview.owing.cashPaused === true && !!dash.overview.owing.cashPausesAt, JSON.stringify(dash.overview.owing));
 
     // netting: an online order's earnings pay the commission off by themselves, and cash opens again
     const net: any = (await order(oCust.id, [{ productId: cprod.id, quantity: 1 }], { paymentMethod: 'cod' }).catch(() => null));
     ok('(the refused order was not placed)', net === null);
+    // An order paid to Nuray (made one below): placed as a transfer with the pause lifted for the moment, since no gateway runs here.
+    await prisma.seller.update({ where: { id: ck.id }, data: { owesSince: null } });
     const online: any = (await order(oCust.id, [{ productId: cprod.id, quantity: 1 }], { paymentMethod: 'bank' })).order;
+    await prisma.seller.update({ where: { id: ck.id }, data: { owesSince: new Date(Date.now() - 15 * 24 * 3600e3) } });
     await prisma.order.update({ where: { id: online.id }, data: { orderStatus: 'delivered', deliveredAt: new Date(), paymentMethod: 'wallet', paymentCollectedBy: 'platform', paymentStatus: 'paid', paidAt: new Date() } });
     const b1 = await computeBalanceFor(ck.id);
     ok('online earnings are netted against the commission owed', Math.abs(b1.available - (b0.available + Number((await prisma.orderItem.findFirst({ where: { orderId: online.id } }))!.sellerPayout))) < 0.01 && b1.available >= 0, `${b0.available} -> ${b1.available}`);

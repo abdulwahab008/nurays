@@ -15,7 +15,8 @@ export const createOrderSchema = z.object({
   deliveryAddressId: z.string().uuid().optional(),
   hubId: z.string().uuid().optional(),
   deliverySlotDate: calendarDay.optional(),
-  deliverySlotTime: z.enum(['morning', 'afternoon', 'evening']).optional(),
+  // A window from the kitchen's hours ("12:00-15:00"), or a named one from an app that has not reloaded since.
+  deliverySlotTime: z.union([z.enum(['morning', 'afternoon', 'evening']), z.string().regex(/^([01]\d|2[0-4]):[0-5]\d-([01]\d|2[0-4]):[0-5]\d$/)]).optional(),
   paymentMethod: z.enum(['jazzcash', 'easypaisa', 'bank', 'cod', 'wallet', 'card', 'safepay']),
   promotionCode: z.string().trim().max(50).optional(),
   deliveryInstructions: z.string().max(500).optional(),

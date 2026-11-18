@@ -1,3 +1,4 @@
+import type { Prisma } from '@prisma/client';
 import prisma from '../config/database';
 import { logger } from '../utils/logger';
 import { AppError } from '../middleware/errorHandler';
@@ -9,10 +10,11 @@ import { calculateDeliveryFeeCorridor } from '../utils/deliveryFee';
 import { getPlatformDeliveryPricing } from './delivery-pricing.service';
 import { cashToCollect, dropoffAreaOf, endsOf, routeMatch } from '../utils/riderJobs';
 import { cashAtDoor, isCashAtDoor } from '../utils/paymentCustody';
-import { ACTIVE_DELIVERY_STATUSES } from '../utils/deliveryStatus';
+import { ACTIVE_DELIVERY_STATUSES, BEFORE_PICKUP_STATUSES } from '../utils/deliveryStatus';
 import { chooseRider, DispatchCandidate, JobEnds, MAX_ACTIVE_JOBS } from '../utils/dispatch';
 import { ON_DUTY_RIDER } from '../utils/riderDuty';
 import { notificationText } from '../utils/notificationText';
+import { reopenDeliveryData } from './delivery-lifecycle.service';
 
 /**
  * Automatic assignment of delivery jobs to Nuray's own riders (see utils/dispatch.ts for the rules).
@@ -241,4 +243,80 @@ export async function postDelivery(
 /** Fire and forget: posting a job must never fail what triggered it. */
 export function postDeliverySoon(deliveryId: string, orderId: string, opts: { releasedByUserId?: string } = {}) {
   void postDelivery(deliveryId, orderId, opts).catch((err) => logger.error({ err, deliveryId }, 'Posting a delivery failed'));
+}
+
+/**
+ * Take a job back from a rider who has not picked the food up (an admin, or the assignment timeout). It rejoins
+ * the pool exactly as when the rider hands it back themselves, and the rider is told. `only` narrows the
+ * compare-and-set, so a rider who did something with the job in the meantime keeps it. False when there was
+ * nothing to take back.
+ */
+export async function takeBackDelivery(deliveryId: string, only: Prisma.DeliveryWhereInput = {}): Promise<boolean> {
+  const job = await prisma.delivery.findUnique({
+    where: { id: deliveryId },
+    select: { orderId: true, riderId: true, rider: { select: { userId: true } }, order: { select: { orderNumber: true } } },
+  });
+  if (!job?.riderId || !job.rider) return false;
+  const released = await prisma.delivery.updateMany({
+    where: { status: { in: BEFORE_PICKUP_STATUSES }, ...only, id: deliveryId, riderId: job.riderId },
+    data: reopenDeliveryData(job.riderId),
+  });
+  if (released.count === 0) return false;
+
+  const riderUserId = job.rider.userId;
+  socketManager.removeUserFromOrder(riderUserId, job.orderId);
+  // The rider's screen reloads its jobs on this event.
+  socketManager.emitToUser(riderUserId, 'delivery:cancelled', { deliveryId, orderId: job.orderId });
+  await notify({
+    userId: riderUserId,
+    category: 'deliveries',
+    type: 'delivery',
+    text: notificationText('delivery.takenBack', { orderNumber: job.order.orderNumber }),
+    actionUrl: '/riders/dashboard',
+    data: { deliveryId, orderId: job.orderId },
+    channels: ['push'],
+    dedupeKey: `delivery-taken-back:${deliveryId}:${riderUserId}`,
+  });
+  postDeliverySoon(deliveryId, job.orderId, { releasedByUserId: riderUserId });
+  return true;
+}
+
+export function riderAssignTimeoutMinutes(env: NodeJS.ProcessEnv = process.env): number {
+  const minutes = Number(env.RIDER_ASSIGN_TIMEOUT_MINUTES);
+  return Number.isFinite(minutes) && minutes > 0 ? minutes : 20;
+}
+
+/**
+ * Jobs the system gave to a rider who then did nothing with them go back to the pool: assigned for the whole
+ * timeout (the job row has no assignment time, but the assignment moves updatedAt), no position ever reported
+ * for it, and the food ready for that long too. A rider whose phone reports nothing while it is locked, or who
+ * is waiting out a long preparation, keeps the job until then. Run every minute.
+ */
+export async function reclaimIdleAssignments(now: Date = new Date(), limit = 50): Promise<number> {
+  const cutoff = new Date(now.getTime() - riderAssignTimeoutMinutes() * 60_000);
+  const idle = {
+    status: 'assigned',
+    assignmentMode: 'auto',
+    riderLocationAt: null,
+    updatedAt: { lt: cutoff },
+    OR: [{ estimatedReadyAt: null }, { estimatedReadyAt: { lt: cutoff } }],
+  };
+  const stuck = await prisma.delivery.findMany({
+    where: { ...idle, riderId: { not: null }, order: { orderStatus: { notIn: LIVE_ORDER_NOT } } },
+    orderBy: { updatedAt: 'asc' },
+    take: limit,
+    select: { id: true },
+  });
+  let reclaimed = 0;
+  for (const { id } of stuck) {
+    try {
+      if (await takeBackDelivery(id, idle)) {
+        reclaimed++;
+        logger.warn({ deliveryId: id }, 'Idle auto-assigned delivery returned to the pool');
+      }
+    } catch (err) {
+      logger.error({ err, deliveryId: id }, 'Could not take back an idle delivery');
+    }
+  }
+  return reclaimed;
 }

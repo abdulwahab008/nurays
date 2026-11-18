@@ -4,16 +4,21 @@ import { notify } from './notify.service';
 import { logger } from '../utils/logger';
 import { thrown } from '../utils/thrown';
 import { notificationText } from '../utils/notificationText';
-import { ONLINE_GATEWAY_METHODS } from '../utils/paymentCustody';
+import { ONLINE_GATEWAY_METHODS, SELLER_DIRECT_METHODS } from '../utils/paymentCustody';
+import { pktDate } from '../utils/payoutWeek';
+import { startsLater } from '../utils/preOrder';
 
 /**
  * Orders that nobody is moving forward release their stock and the customer's money.
  *
  *  - Not accepted by the kitchen within ORDER_ACCEPT_TIMEOUT_MINUTES (default 30) of
  *    placement, or of payment for an online checkout: cancelled, stock returned, any
- *    payment refunded.
- *  - Paid online / by transfer but the payment never completed within
- *    ORDER_PAYMENT_TIMEOUT_MINUTES (default 60): cancelled.
+ *    payment refunded. An order booked for a delivery window is not timed before the
+ *    kitchen starts on it (utils/preOrder.ts).
+ *  - Paid online but the payment never completed within ORDER_PAYMENT_TIMEOUT_MINUTES
+ *    (default 60) of placement: cancelled. A transfer to the kitchen can only be sent
+ *    once the kitchen has accepted (the customer sees its account then), so its hour
+ *    starts at acceptance.
  *  - A transfer the customer reported but the kitchen hasn't confirmed (or disputed)
  *    within PAYMENT_CONFIRM_ESCALATE_HOURS (default 6): admins are alerted once, since
  *    real money may be involved.
@@ -53,12 +58,22 @@ export async function sweepStaleOrders(now: Date = new Date()) {
     }
   };
 
+  const payBefore = new Date(now.getTime() - minutes(rules.paymentMinutes));
   const unpaid = await prisma.order.findMany({
     where: {
-      paymentMethod: { not: 'cod' },
       paymentStatus: { in: ['pending', 'failed'] },
-      orderStatus: { in: ['pending', 'confirmed', 'preparing'] },
-      createdAt: { lt: new Date(now.getTime() - minutes(rules.paymentMinutes)) },
+      OR: [
+        {
+          paymentMethod: { notIn: ['cod', ...SELLER_DIRECT_METHODS] },
+          orderStatus: { in: ['pending', 'confirmed', 'preparing'] },
+          createdAt: { lt: payBefore },
+        },
+        {
+          paymentMethod: { in: SELLER_DIRECT_METHODS },
+          orderStatus: { in: ['confirmed', 'preparing'] },
+          statusHistory: { none: { status: { in: ['confirmed', 'preparing'] }, createdAt: { gte: payBefore } } },
+        },
+      ],
     },
     select: { id: true },
     take: 200,
@@ -69,19 +84,29 @@ export async function sweepStaleOrders(now: Date = new Date()) {
   // checkout once it is paid (the kitchen is told "accept within 30 minutes" at that moment). An online
   // checkout still unpaid is the payment rule's to cancel, after its own longer wait.
   const acceptBefore = new Date(now.getTime() - minutes(rules.acceptMinutes));
+  // An order booked for a later day is not due yet. Within the day, the kitchen's own lead time decides (below).
+  const slotDayBegan = { OR: [{ deliverySlotDate: null }, { deliverySlotDate: { lte: new Date(pktDate(acceptBefore)) } }] };
   const unaccepted = await prisma.order.findMany({
     where: {
       orderStatus: 'pending',
+      AND: [slotDayBegan],
       OR: [
         { paymentMethod: { notIn: ONLINE_GATEWAY_METHODS }, createdAt: { lt: acceptBefore } },
         { paymentMethod: { in: ONLINE_GATEWAY_METHODS }, paymentStatus: 'paid', paidAt: { lt: acceptBefore } },
         { paymentMethod: { in: ONLINE_GATEWAY_METHODS }, paymentStatus: 'paid', paidAt: null, createdAt: { lt: acceptBefore } },
       ],
     },
-    select: { id: true },
+    select: {
+      id: true,
+      deliverySlotDate: true,
+      deliverySlotTime: true,
+      items: { take: 1, select: { seller: { select: { preOrderLeadMinutes: true } } } },
+    },
+    // ponytail: orders booked for later today are read and skipped; sort by the start time if 200 of them ever wait at once.
     take: 200,
   });
-  for (const o of unaccepted) await cancel(o.id, "The kitchen didn't confirm the order in time.", 'cancelledUnaccepted');
+  const due = unaccepted.filter((o) => !startsLater(o, o.items[0]?.seller.preOrderLeadMinutes, acceptBefore));
+  for (const o of due) await cancel(o.id, "The kitchen didn't confirm the order in time.", 'cancelledUnaccepted');
 
   const unconfirmed = await prisma.order.findMany({
     where: {

@@ -51,6 +51,8 @@ export interface CommunityDetail extends Community {
     crossCommunityBaseFee: number;
   }>;
   sellers: CommunityKitchen[];
+  /** The kitchens a customer here can order from: the area's own, then other areas' that deliver here. */
+  deliveringHere?: CommunityKitchen[];
 }
 
 export interface DetectCommunityResult {

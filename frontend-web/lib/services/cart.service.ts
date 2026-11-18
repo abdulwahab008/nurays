@@ -15,13 +15,6 @@ export interface CartItem {
     id: string;
     businessName: string;
     businessNameUrdu?: string | null;
-    bankAccountName?: string | null;
-    bankAccountNumber?: string | null;
-    bankName?: string | null;
-    jazzcashNumber?: string | null;
-    jazzcashAccountTitle?: string | null;
-    easypaisaNumber?: string | null;
-    easypaisaAccountTitle?: string | null;
     community?: { id?: string; name: string; slug?: string } | null;
   };
   quantity: number;
@@ -42,13 +35,8 @@ export interface CartResponse {
     id: string;
     businessName: string;
     businessNameUrdu?: string | null;
-    bankAccountName?: string | null;
-    bankAccountNumber?: string | null;
-    bankName?: string | null;
-    jazzcashNumber?: string | null;
-    jazzcashAccountTitle?: string | null;
-    easypaisaNumber?: string | null;
-    easypaisaAccountTitle?: string | null;
+    /** Which transfers straight to the kitchen it can take: 'bank', 'jazzcash', 'easypaisa'. The account itself is shown on the order once the kitchen accepts it. */
+    transferMethods?: string[];
     deliveryModes?: string[] | null;
     pickupAddress?: string | null;
     pickupLandmark?: string | null;

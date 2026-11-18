@@ -11,7 +11,7 @@ import { useToast } from '@/components/ui/toast';
 import { useDialogs } from '@/components/ui/Dialogs';
 import { apiErrorMessage } from '@/lib/api-client';
 import { useAuthStore, hasSession } from '@/lib/store/auth-store';
-import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
+import { DashboardLayout } from '@/components/layout/DashboardShell';
 import { useT } from '@/lib/i18n';
 import { commonMessages } from '@/lib/i18n/messages/common';
 import { accountMessages } from '@/lib/i18n/messages/account';
@@ -156,7 +156,6 @@ export default function AddressesPage() {
     longitude: '',
   });
 
-  const sidebarItems = CUSTOMER_SIDEBAR_ITEMS;
 
   const handleEditAddress = (address: Address) => {
     const typeId = addressTypes.find(a => a.label.toLowerCase() === address.label?.toLowerCase())?.id || 'other';
@@ -386,7 +385,6 @@ export default function AddressesPage() {
       <DashboardLayout
         title={t('myAddresses')}
         subtitle={t('manageDeliveryAddresses')}
-        sidebarItems={sidebarItems}
         userType="customer"
       >
         <div className="flex items-center justify-center h-64">
@@ -403,7 +401,6 @@ export default function AddressesPage() {
     <DashboardLayout
       title={t('myAddresses')}
       subtitle={t('manageDeliveryLocations')}
-      sidebarItems={sidebarItems}
       userType="customer"
     >
       {!showAddForm && addresses.length > 0 && (
@@ -426,14 +423,14 @@ export default function AddressesPage() {
                   {editingAddress ? <Pencil className="w-5 h-5" /> : <MapPin className="w-5 h-5" />}
                 </div>
                 <div>
-                  <h2 className="font-extrabold text-lg text-ink">{editingAddress ? t('editAddress') : t('addNewAddress')}</h2>
+                  <h2 className="font-semibold text-lg text-ink">{editingAddress ? t('editAddress') : t('addNewAddress')}</h2>
                   <p className="text-sm text-muted">{t('fillLocationDetails')}</p>
                 </div>
               </div>
               <button
                 onClick={resetForm}
                 aria-label={tc('close')}
-                className="w-10 h-10 bg-raised hover:bg-line text-ink rounded-xl flex items-center justify-center transition-all"
+                className="w-10 h-10 bg-raised hover:bg-line text-ink rounded-xl flex items-center justify-center transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -460,7 +457,7 @@ export default function AddressesPage() {
                   type="button"
                   onClick={detectCurrentLocation}
                   disabled={detectingLocation}
-                  className="flex items-center gap-3 p-4 bg-surface border border-line rounded-2xl hover:border-brand hover:bg-brand-soft/40 transition-all group"
+                  className="flex items-center gap-3 p-4 bg-surface border border-line rounded-2xl hover:border-brand hover:bg-brand-soft/40 transition-colors group"
                 >
                   <div className="w-10 h-10 bg-brand text-on-brand rounded-xl flex items-center justify-center">
                     {detectingLocation ? (
@@ -478,7 +475,7 @@ export default function AddressesPage() {
                 <button
                   type="button"
                   onClick={() => setShowMap(!showMap)}
-                  className="flex items-center gap-3 p-4 bg-surface border border-line rounded-2xl hover:border-brand hover:bg-brand-soft/40 transition-all group"
+                  className="flex items-center gap-3 p-4 bg-surface border border-line rounded-2xl hover:border-brand hover:bg-brand-soft/40 transition-colors group"
                 >
                   <div className="w-10 h-10 bg-brand-soft text-brand-soft-ink rounded-xl flex items-center justify-center">
                     <MapIcon className="w-5 h-5" />
@@ -546,7 +543,7 @@ export default function AddressesPage() {
                       key={type.id}
                       type="button"
                       onClick={() => setFormData({ ...formData, label: type.id })}
-                      className={`flex-1 p-4 rounded-xl border-2 transition-all ${
+                      className={`flex-1 p-4 rounded-xl border-2 transition-colors ${
                         formData.label === type.id
                           ? `border-brand bg-brand-50`
                           : 'border-line hover:border-line-strong bg-surface'
@@ -579,7 +576,7 @@ export default function AddressesPage() {
                     value={formData.city}
                     onChange={(e) => setFormData({ ...formData, city: e.target.value })}
                     placeholder={t('cityPlaceholder')}
-                    className="w-full px-4 py-3 border border-line rounded-xl focus:ring-2 focus:ring-brand focus:border-brand transition-all bg-surface"
+                    className="w-full px-4 py-3 border border-line rounded-xl focus:ring-2 focus:ring-brand focus:border-brand transition-colors bg-surface"
                   />
                   <datalist id="address-cities">
                     {CITIES.map(city => (
@@ -600,11 +597,11 @@ export default function AddressesPage() {
                     onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
                     placeholder={t('areaLocalityPlaceholder')}
                     required
-                    className="w-full px-4 py-3 border border-line rounded-xl focus:ring-2 focus:ring-brand focus:border-brand transition-all"
+                    className="w-full px-4 py-3 border border-line rounded-xl focus:ring-2 focus:ring-brand focus:border-brand transition-colors"
                   />
                   {/* Area Suggestions Dropdown */}
                   {showSuggestions && (
-                    <div className="absolute z-10 w-full mt-1 bg-surface border border-line rounded-xl shadow-lg max-h-48 overflow-auto">
+                    <div className="absolute z-10 w-full mt-1 bg-surface border border-line rounded-xl shadow-[var(--shadow-hover)] max-h-48 overflow-auto">
                       {searchSuggestions.map((area) => (
                         <button
                           key={area}
@@ -632,7 +629,7 @@ export default function AddressesPage() {
                   onChange={(e) => setFormData({ ...formData, addressLine1: e.target.value })}
                   placeholder={t('streetAddressPlaceholder')}
                   required
-                  className="w-full px-4 py-3 border border-line rounded-xl focus:ring-2 focus:ring-brand focus:border-brand transition-all"
+                  className="w-full px-4 py-3 border border-line rounded-xl focus:ring-2 focus:ring-brand focus:border-brand transition-colors"
                 />
               </div>
 
@@ -648,7 +645,7 @@ export default function AddressesPage() {
                     onChange={(e) => setFormData({ ...formData, houseNumber: e.target.value })}
                     placeholder={t('houseNumberPlaceholder')}
                     maxLength={50}
-                    className="w-full px-4 py-3 border border-line rounded-xl focus:ring-2 focus:ring-brand focus:border-brand transition-all"
+                    className="w-full px-4 py-3 border border-line rounded-xl focus:ring-2 focus:ring-brand focus:border-brand transition-colors"
                   />
                 </div>
                 <div>
@@ -660,7 +657,7 @@ export default function AddressesPage() {
                     value={formData.addressLine2}
                     onChange={(e) => setFormData({ ...formData, addressLine2: e.target.value })}
                     placeholder={t('flatFloorPlaceholder')}
-                    className="w-full px-4 py-3 border border-line rounded-xl focus:ring-2 focus:ring-brand focus:border-brand transition-all"
+                    className="w-full px-4 py-3 border border-line rounded-xl focus:ring-2 focus:ring-brand focus:border-brand transition-colors"
                   />
                 </div>
               </div>
@@ -676,7 +673,7 @@ export default function AddressesPage() {
                     value={formData.landmark}
                     onChange={(e) => setFormData({ ...formData, landmark: e.target.value })}
                     placeholder={t('landmarkPlaceholder')}
-                    className="w-full px-4 py-3 border border-line rounded-xl focus:ring-2 focus:ring-brand focus:border-brand transition-all"
+                    className="w-full px-4 py-3 border border-line rounded-xl focus:ring-2 focus:ring-brand focus:border-brand transition-colors"
                   />
                 </div>
                 <div>
@@ -688,7 +685,7 @@ export default function AddressesPage() {
                     value={formData.postalCode}
                     onChange={(e) => setFormData({ ...formData, postalCode: e.target.value })}
                     placeholder={t('postalCodePlaceholder')}
-                    className="w-full px-4 py-3 border border-line rounded-xl focus:ring-2 focus:ring-brand focus:border-brand transition-all"
+                    className="w-full px-4 py-3 border border-line rounded-xl focus:ring-2 focus:ring-brand focus:border-brand transition-colors"
                   />
                 </div>
               </div>
@@ -719,7 +716,7 @@ export default function AddressesPage() {
                 </Button>
                 <Button 
                   type="submit" 
-                  className="flex-1 bg-brand hover:bg-brand-500 text-on-brand h-12 font-extrabold flex items-center justify-center gap-2"
+                  className="flex-1 bg-brand hover:bg-brand-500 text-on-brand h-12 font-semibold flex items-center justify-center gap-2"
                 >
                   {editingAddress ? <Check className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
                   {editingAddress ? t('updateAddress') : t('saveAddress')}
@@ -736,16 +733,16 @@ export default function AddressesPage() {
       ) : addresses.length === 0 ? (
         showAddForm ? null : (
         <div className="bg-surface rounded-[24px] border border-dashed border-line-strong p-10 sm:p-12 text-center">
-          <div className="w-20 h-20 bg-brand-soft rounded-3xl flex items-center justify-center mx-auto mb-5 text-brand-soft-ink">
+          <div className="w-20 h-20 bg-brand-soft rounded-2xl flex items-center justify-center mx-auto mb-5 text-brand-soft-ink">
             <MapPin className="w-10 h-10" />
           </div>
-          <h2 className="text-2xl font-extrabold text-ink mb-2">{t('noAddresses')}</h2>
+          <h2 className="text-2xl font-semibold text-ink mb-2">{t('noAddresses')}</h2>
           <p className="text-muted mb-6 max-w-md mx-auto">
             {t('noAddressesDesc')}
           </p>
           <Button 
             onClick={() => openNewForm()}
-            className="bg-brand hover:bg-brand-500 text-on-brand h-12 px-6 font-extrabold flex items-center gap-2 mx-auto"
+            className="bg-brand hover:bg-brand-500 text-on-brand h-12 px-6 font-semibold flex items-center gap-2 mx-auto"
           >
             <Plus className="w-4 h-4" /> {t('addFirstAddress')}
           </Button>
@@ -852,7 +849,7 @@ export default function AddressesPage() {
 
       {/* Tips Section */}
       <div className="mt-8 bg-surface rounded-[20px] p-5 sm:p-6 border border-line">
-        <h3 className="font-extrabold text-ink mb-4 flex items-center gap-2">
+        <h3 className="font-semibold text-ink mb-4 flex items-center gap-2">
           <Lightbulb className="w-5 h-5 text-accent" /> {t('tipsTitle')}
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

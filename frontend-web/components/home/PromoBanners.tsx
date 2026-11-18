@@ -79,10 +79,10 @@ export default function PromoBanners() {
                 <Icon className="w-3.5 h-3.5" aria-hidden />
                 <span>{tag}</span>
               </span>
-              <h2 className="text-xl sm:text-[22px] font-extrabold tracking-tight leading-tight">{title}</h2>
+              <h2 className="text-xl sm:text-[22px] font-semibold tracking-tight leading-tight">{title}</h2>
               <p className={`text-sm mt-1.5 max-w-[300px] leading-relaxed ${bodyText}`}>{body}</p>
             </div>
-            <Link href={href} className={`self-start inline-flex items-center gap-1.5 h-11 px-4 rounded-xl text-sm font-extrabold transition-colors ${button}`}>
+            <Link href={href} className={`self-start inline-flex items-center gap-1.5 h-11 px-4 rounded-xl text-sm font-semibold transition-colors ${button}`}>
               <span>{cta}</span>
               <ChevronRight className="rtl:-scale-x-100 w-4 h-4" aria-hidden />
             </Link>

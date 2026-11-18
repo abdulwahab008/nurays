@@ -6,13 +6,14 @@ import {
   ChefHat,
   UtensilsCrossed,
   Tag,
-  Package,
+  ReceiptText,
+  LayoutGrid,
+  UserRound,
   Heart,
   Wallet,
   MapPin,
   Bell,
   LifeBuoy,
-  Settings,
   Languages,
   Bike,
   LogOut,
@@ -22,30 +23,26 @@ import {
 import { useAuthStore } from '@/lib/store/auth-store';
 import { BrandLockup } from '@/components/ui/Mark';
 import { LOCALE_NAMES, useLocale, useT } from '@/lib/i18n';
-import { homeMessages, type HomeKey } from '@/lib/i18n/messages/home';
+import { homeMessages } from '@/lib/i18n/messages/home';
+import { navMessages } from '@/lib/i18n/messages/nav';
 import { useShallow } from 'zustand/react/shallow';
 
 interface UberLeftSidebarProps {
   isOpen: boolean;
   onClose: () => void;
-  activeFilter?: string;
-  onSelectFilter?: (filter: string) => void;
 }
 
-type NavItem = { label: HomeKey; href: string; icon: typeof ChefHat; mobileTabBar?: boolean };
+type NavName = keyof typeof navMessages.en;
+type NavItem = { label: string; href: string; icon: typeof ChefHat; mobileTabBar?: boolean };
 
-const ACCOUNT_ITEMS: NavItem[] = [
-  { label: 'myOrders', href: '/orders', icon: Package, mobileTabBar: true },
-  { label: 'favourites', href: '/favorites', icon: Heart },
-  { label: 'wallet', href: '/wallet', icon: Wallet },
-  { label: 'savedAddresses', href: '/profile/addresses', icon: MapPin },
-  { label: 'notifications', href: '/notifications', icon: Bell },
-];
-
-const BROWSE_ITEMS: NavItem[] = [
-  { label: 'nav.kitchens', href: '/kitchens', icon: ChefHat },
-  { label: 'nav.products', href: '/products', icon: UtensilsCrossed },
-  { label: 'nav.offers', href: '/products?offers=true', icon: Tag },
+// Named as in the signed-in side menu (CUSTOMER_SIDEBAR_ITEMS) and the account menu, so a page has one name everywhere.
+const ACCOUNT_ITEMS: { name: NavName; href: string; icon: typeof ChefHat; mobileTabBar?: boolean }[] = [
+  { name: 'Dashboard', href: '/dashboard', icon: LayoutGrid },
+  { name: 'My orders', href: '/orders', icon: ReceiptText, mobileTabBar: true },
+  { name: 'Saved kitchens', href: '/favorites', icon: Heart },
+  { name: 'Nuray wallet', href: '/wallet', icon: Wallet },
+  { name: 'Saved addresses', href: '/profile/addresses', icon: MapPin },
+  { name: 'Notifications', href: '/notifications', icon: Bell },
 ];
 
 const rowClass = 'flex items-center gap-3 min-h-12 px-3 rounded-xl text-[15px] font-medium transition-colors';
@@ -54,6 +51,7 @@ const headingClass = 'px-3 pb-1 text-[13px] font-semibold text-muted';
 export function UberLeftSidebar({ isOpen, onClose }: UberLeftSidebarProps) {
   const pathname = usePathname();
   const t = useT(homeMessages);
+  const tNav = useT(navMessages);
   const { locale, setLocale } = useLocale();
   const { isAuthenticated, user, logout } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated, user: s.user, logout: s.logout })));
 
@@ -77,7 +75,7 @@ export function UberLeftSidebar({ isOpen, onClose }: UberLeftSidebarProps) {
         className={`${rowClass} ${item.mobileTabBar ? 'max-md:hidden ' : ''}${active ? 'bg-brand-soft text-brand-soft-ink' : 'text-ink hover:bg-raised'}`}
       >
         <Icon className="w-5 h-5 flex-shrink-0 text-muted" />
-        <span>{t(item.label)}</span>
+        <span>{item.label}</span>
       </Link>
     );
   };
@@ -91,7 +89,7 @@ export function UberLeftSidebar({ isOpen, onClose }: UberLeftSidebarProps) {
       />
 
       <div className="fixed inset-y-0 start-0 max-w-full flex pe-10">
-        <aside className="w-80 max-w-full pt-(--safe-top) pb-(--safe-bottom) ps-(--safe-start) bg-surface shadow-2xl flex flex-col animate-in slide-in-from-left duration-300">
+        <aside className="w-80 max-w-full pt-(--safe-top) pb-(--safe-bottom) ps-(--safe-start) bg-surface shadow-[var(--shadow-hover)] flex flex-col animate-in slide-in-from-left duration-300">
           <div className="px-4 h-16 flex items-center justify-between">
             <Link href="/" onClick={onClose} className="flex items-center">
               <BrandLockup markSize={28} wordSize={18} />
@@ -146,19 +144,21 @@ export function UberLeftSidebar({ isOpen, onClose }: UberLeftSidebarProps) {
             {isCustomer && (
               <nav aria-label={t('yourAccount')}>
                 <p className={headingClass}>{t('yourAccount')}</p>
-                {ACCOUNT_ITEMS.map(renderItem)}
+                {ACCOUNT_ITEMS.map(({ name, ...item }) => renderItem({ ...item, label: tNav(name) }))}
               </nav>
             )}
 
             <nav aria-label={t('browse')}>
               <p className={headingClass}>{t('browse')}</p>
-              {BROWSE_ITEMS.map(renderItem)}
+              {renderItem({ label: tNav('Verified kitchens'), href: '/kitchens', icon: ChefHat })}
+              {renderItem({ label: tNav('Dishes & menus'), href: '/products', icon: UtensilsCrossed })}
+              {renderItem({ label: t('nav.offers'), href: '/products?offers=true', icon: Tag })}
             </nav>
 
             <div>
               <p className={headingClass}>{t('helpAndSettings')}</p>
-              {renderItem({ label: 'helpSupport', href: '/help', icon: LifeBuoy })}
-              {signedIn && renderItem({ label: 'settings', href: '/profile', icon: Settings })}
+              {renderItem({ label: tNav('Help and support'), href: signedIn ? '/support' : '/help', icon: LifeBuoy })}
+              {signedIn && renderItem({ label: tNav('My profile'), href: '/profile', icon: UserRound })}
               <button
                 type="button"
                 onClick={() => setLocale(otherLocale)}
@@ -172,8 +172,8 @@ export function UberLeftSidebar({ isOpen, onClose }: UberLeftSidebarProps) {
 
             {(!signedIn || isCustomer) && (
               <div className="pt-4 border-t border-line">
-                {renderItem({ label: 'cookWithNuray', href: '/sellers/register', icon: ChefHat })}
-                {renderItem({ label: 'deliverWithNuray', href: '/register?user_type=rider', icon: Bike })}
+                {renderItem({ label: t('cookWithNuray'), href: '/sellers/register', icon: ChefHat })}
+                {renderItem({ label: t('deliverWithNuray'), href: '/register?user_type=rider', icon: Bike })}
               </div>
             )}
           </div>

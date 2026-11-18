@@ -8,6 +8,7 @@ export const getProducts = async (req: Request, res: Response) => {
     page: req.query.page as number | undefined,
     limit: req.query.limit as number | undefined,
     categoryId: req.query.categoryId as string | undefined,
+    productType: req.query.productType as string | undefined,
     sellerId: req.query.sellerId as string | undefined,
     city: req.query.city as string | undefined,
     area: req.query.area as string | undefined,

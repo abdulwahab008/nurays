@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { loginUrlHere } from '@/lib/auth-redirect';
-import { getPromotionLabel, getStackedDiscountedPrice } from '@/lib/pricing';
+import { dealsOnOneUnit, getPromotionLabel, getStackedDiscountedPrice } from '@/lib/pricing';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { productService } from '@/lib/services/product.service';
@@ -31,6 +31,8 @@ interface CatalogPromotion {
   name: string;
   type: string;
   discountValue: number;
+  minOrderAmount?: number;
+  maxDiscountAmount?: number | null;
 }
 
 /**
@@ -240,11 +242,8 @@ export default function ProductDetailPage({ initial }: { initial?: RawProduct })
         const promRes = await apiClient.get<{ success: boolean; data: Record<string, CatalogPromotion[]> }>(
           `/promotions/catalog?productIds=${encodeURIComponent(data.id)}`
         );
-        if (promRes.data?.success && promRes.data?.data?.[data.id]?.length) {
-          setCatalogPromotions(promRes.data.data[data.id]);
-        } else {
-          setCatalogPromotions([]);
-        }
+        // The page shows one dish by itself, so it shows only the deals one unit gets (a deal with a minimum order appears in the tray once the tray reaches it).
+        setCatalogPromotions(promRes.data?.success ? dealsOnOneUnit(data.price, promRes.data.data?.[data.id]) : []);
       } catch {
         setCatalogPromotions([]);
       }
@@ -556,7 +555,7 @@ export default function ProductDetailPage({ initial }: { initial?: RawProduct })
                   onClick={() => setSelectedImage(index)}
                   aria-label={t('showPhoto', { n: index + 1 })}
                   aria-pressed={selectedImage === index}
-                  className={`flex-shrink-0 w-16 h-16 rounded-xl overflow-hidden transition-all ${
+                  className={`flex-shrink-0 w-16 h-16 rounded-xl overflow-hidden transition-colors ${
                     selectedImage === index ? 'ring-[3px] ring-brand ring-offset-2 ring-offset-surface' : 'opacity-80 hover:opacity-100'
                   }`}
                 >
@@ -585,7 +584,7 @@ export default function ProductDetailPage({ initial }: { initial?: RawProduct })
 
         {/* Title & meta */}
         <div>
-          <h1 className="text-[28px] sm:text-[36px] leading-tight font-extrabold text-ink tracking-tight mb-1">
+          <h1 className="text-[28px] sm:text-[36px] leading-tight font-semibold text-ink tracking-tight mb-1">
             {product.name}
           </h1>
           {product.nameUrdu && (
@@ -606,9 +605,9 @@ export default function ProductDetailPage({ initial }: { initial?: RawProduct })
         </div>
 
         {/* Price block - clear hierarchy */}
-        <div className="rounded-[20px] bg-raised p-5 sm:p-6">
+        <div>
           <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
-            <span className="text-3xl sm:text-4xl font-extrabold text-ink">
+            <span className="text-3xl sm:text-4xl font-semibold text-ink">
               {formatPrice(catalogPromotions.length > 0 ? unitPrice : Math.round(product.price))}
             </span>
             {(catalogPromotions.length > 0 || (product.originalPrice != null && product.originalPrice > product.price)) && (
@@ -619,7 +618,7 @@ export default function ProductDetailPage({ initial }: { initial?: RawProduct })
           </div>
           <div className="mt-2 flex flex-wrap items-center gap-2">
             {catalogPromotions.length > 0 && (
-              <span className="text-sm font-extrabold bg-accent text-on-accent px-2.5 py-1 rounded-full">
+              <span className="text-sm font-semibold bg-accent text-on-accent px-2.5 py-1 rounded-full">
                 {catalogPromotions.length === 1
                   ? getPromotionLabel(catalogPromotions[0], t, formatPrice)
                   : catalogPromotions.map((p) => getPromotionLabel(p, t, formatPrice)).join(' + ')}
@@ -628,7 +627,7 @@ export default function ProductDetailPage({ initial }: { initial?: RawProduct })
             {catalogPromotions.length === 0 &&
               product.originalPrice != null &&
               Math.round(product.originalPrice) > Math.round(product.price) && (
-                <span className="text-sm font-extrabold bg-accent text-on-accent px-2.5 py-1 rounded-full">
+                <span className="text-sm font-semibold bg-accent text-on-accent px-2.5 py-1 rounded-full">
                   {t('percentOff', { value: Math.round((1 - product.price / product.originalPrice) * 100) })}
                 </span>
               )}
@@ -639,7 +638,7 @@ export default function ProductDetailPage({ initial }: { initial?: RawProduct })
         {/* Description */}
         {product.description && (
           <div>
-            <h2 className="text-base font-extrabold text-ink mb-2">
+            <h2 className="text-base font-semibold text-ink mb-2">
               {t('description')}
             </h2>
             <p className="text-ink leading-relaxed">{product.description}</p>
@@ -655,7 +654,7 @@ export default function ProductDetailPage({ initial }: { initial?: RawProduct })
           <div className="space-y-3 rounded-[20px] bg-accent-soft p-4 sm:p-5">
             {product.allergens && (
               <div>
-                <h3 className="text-xs font-extrabold text-accent-soft-ink mb-1">
+                <h3 className="text-xs font-semibold text-accent-soft-ink mb-1">
                   {t('allergens')}
                 </h3>
                 <p className="text-sm text-accent-soft-ink">{product.allergens}</p>
@@ -675,7 +674,7 @@ export default function ProductDetailPage({ initial }: { initial?: RawProduct })
             )}
             {product.ingredients && (
               <div>
-                <h3 className="text-xs font-extrabold text-accent-soft-ink mb-1">
+                <h3 className="text-xs font-semibold text-accent-soft-ink mb-1">
                   {t('ingredients')}
                 </h3>
                 <p className="text-sm text-accent-soft-ink">{product.ingredients}</p>
@@ -683,7 +682,7 @@ export default function ProductDetailPage({ initial }: { initial?: RawProduct })
             )}
             {product.heatingInstructions && (
               <div>
-                <h3 className="text-xs font-extrabold text-accent-soft-ink mb-1">
+                <h3 className="text-xs font-semibold text-accent-soft-ink mb-1">
                   {t('heating')}
                 </h3>
                 <p className="text-sm text-accent-soft-ink">{product.heatingInstructions}</p>
@@ -743,9 +742,7 @@ export default function ProductDetailPage({ initial }: { initial?: RawProduct })
 
         {/* Availability */}
         {product.seller?.availability && (
-          <div className={`flex items-center justify-between py-3 px-4 rounded-2xl ${
-            product.seller.availability.isOpen ? 'bg-brand-soft' : 'bg-raised'
-          }`}>
+          <div className="flex items-center justify-between pt-4 border-t border-line">
             <div>
               <p className={`text-sm font-semibold ${product.seller.availability.isOpen ? 'text-brand-soft-ink' : 'text-muted'}`}>
                 {product.seller.availability.isOpen
@@ -795,7 +792,7 @@ export default function ProductDetailPage({ initial }: { initial?: RawProduct })
         )}
 
         {/* Delivery to you: the real fee and time once the address or area is known, else a way to tell us */}
-        <div className="rounded-2xl bg-raised px-4 py-3">
+        <div className="pt-4 border-t border-line">
           <h3 className="text-sm font-semibold text-muted mb-1">{t('deliveryToYou')}</h3>
           {product.delivery ? (
             <>
@@ -834,7 +831,7 @@ export default function ProductDetailPage({ initial }: { initial?: RawProduct })
                   type="button"
                   onClick={() => setSelectedVariantId(null)}
                   disabled={product.stockQuantity !== undefined && product.stockQuantity <= 0}
-                  className={`px-4 py-2 rounded-xl border-2 text-sm font-medium transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
+                  className={`px-4 py-2 rounded-xl border-2 text-sm font-medium transition-[color,background-color,border-color,opacity,transform] disabled:opacity-40 disabled:cursor-not-allowed ${
                     selectedVariantId === null
                       ? 'border-brand bg-brand-soft text-brand-soft-ink'
                       : 'border-line text-ink hover:border-line-strong'
@@ -849,7 +846,7 @@ export default function ProductDetailPage({ initial }: { initial?: RawProduct })
                     type="button"
                     onClick={() => setSelectedVariantId(v.id)}
                     disabled={v.stockQuantity <= 0}
-                    className={`px-4 py-2 rounded-xl border-2 text-sm font-medium transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
+                    className={`px-4 py-2 rounded-xl border-2 text-sm font-medium transition-[color,background-color,border-color,opacity,transform] disabled:opacity-40 disabled:cursor-not-allowed ${
                       selectedVariantId === v.id
                         ? 'border-brand bg-brand-soft text-brand-soft-ink'
                         : 'border-line text-ink hover:border-line-strong'
@@ -863,7 +860,7 @@ export default function ProductDetailPage({ initial }: { initial?: RawProduct })
             </div>
           )}
 
-          <h2 className="text-lg font-extrabold text-ink">{t('deliveryQty')}</h2>
+          <h2 className="text-lg font-semibold text-ink">{t('deliveryQty')}</h2>
 
           {/* Delivery type */}
           <div>
@@ -872,7 +869,7 @@ export default function ProductDetailPage({ initial }: { initial?: RawProduct })
               <button
                 type="button"
                 onClick={() => setStockType('hub')}
-                className={`p-4 rounded-xl border-2 text-start transition-all ${
+                className={`p-4 rounded-xl border-2 text-start transition-colors ${
                   stockType === 'hub'
                     ? 'border-brand bg-brand-soft'
                     : 'border-line hover:border-line-strong hover:bg-raised/50'
@@ -891,7 +888,7 @@ export default function ProductDetailPage({ initial }: { initial?: RawProduct })
               <button
                 type="button"
                 onClick={() => setStockType('direct')}
-                className={`p-4 rounded-xl border-2 text-start transition-all ${
+                className={`p-4 rounded-xl border-2 text-start transition-colors ${
                   stockType === 'direct'
                     ? 'border-brand bg-brand-soft'
                     : 'border-line hover:border-line-strong hover:bg-raised/50'
@@ -918,7 +915,7 @@ export default function ProductDetailPage({ initial }: { initial?: RawProduct })
                   −
                 </button>
                 <span
-                  className="min-w-10 h-11 flex items-center justify-center font-extrabold text-ink text-lg"
+                  className="min-w-10 h-11 flex items-center justify-center font-semibold text-ink text-lg"
                   aria-live="polite"
                 >
                   {quantity}
@@ -948,7 +945,7 @@ export default function ProductDetailPage({ initial }: { initial?: RawProduct })
               value={specialInstructions}
               onChange={(e) => setSpecialInstructions(e.target.value)}
               placeholder={t('specialPlaceholder')}
-              className="w-full text-sm p-3 rounded-xl border border-line focus:border-brand focus:ring-2 focus:ring-brand/20 outline-none transition-all resize-none bg-surface text-ink placeholder:text-muted"
+              className="w-full text-sm p-3 rounded-xl border border-line focus:border-brand focus:ring-2 focus:ring-brand/20 outline-none transition-colors resize-none bg-surface text-ink placeholder:text-muted"
             />
           </div>
 
@@ -962,7 +959,7 @@ export default function ProductDetailPage({ initial }: { initial?: RawProduct })
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Button
                 onClick={handleAddToCart}
-                className="w-full h-12 text-[15px] font-extrabold bg-brand text-on-brand hover:bg-brand-500 rounded-xl"
+                className="w-full h-12 text-[15px] font-semibold bg-brand text-on-brand hover:bg-brand-500 rounded-xl"
                 disabled={maxQty < quantity || addToCartLoading || product.availableToday === false}
               >
                 {addToCartLoading ? t('adding') : t('addToBag', { amount: formatPrice(unitPrice * quantity) })}
@@ -970,7 +967,7 @@ export default function ProductDetailPage({ initial }: { initial?: RawProduct })
               <Button
                 onClick={handleBuyNow}
                 variant="outline"
-                className="w-full h-12 text-[15px] font-extrabold rounded-xl"
+                className="w-full h-12 text-[15px] font-semibold rounded-xl"
                 disabled={maxQty < quantity || addToCartLoading || product.availableToday === false}
               >
                 {t('buyNow')}
@@ -990,7 +987,7 @@ export default function ProductDetailPage({ initial }: { initial?: RawProduct })
     </div>
 
     <div className="mt-10">
-      <h2 className="text-[22px] sm:text-[28px] font-extrabold tracking-tight text-ink mb-4">{t('reviews')}</h2>
+      <h2 className="text-[22px] sm:text-[28px] font-semibold tracking-tight text-ink mb-4">{t('reviews')}</h2>
       <ProductReviews productId={product.id} />
     </div>
     </>

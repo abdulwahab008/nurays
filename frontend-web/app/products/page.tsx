@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useRef, useState } from 'react';
 import { loginUrlHere } from '@/lib/auth-redirect';
-import { getStackedDiscountedPrice } from '@/lib/pricing';
+import { dealsOnOneUnit, getStackedDiscountedPrice } from '@/lib/pricing';
 import { useCartStore, type CartItem } from '@/lib/store/cart-store';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
@@ -24,7 +24,6 @@ import CartConflictModal, { CartConflictInfo } from '@/components/cart/CartConfl
 import ClosedKitchenModal from '@/components/kitchen/ClosedKitchenModal';
 import {
   Heart,
-  Search,
   MapPin,
   Bike,
   Snowflake,
@@ -43,6 +42,7 @@ import {
   HelpCircle,
   X,
   Plus,
+  Check,
 } from 'lucide-react';
 import { useT } from '@/lib/i18n';
 import { commonMessages } from '@/lib/i18n/messages/common';
@@ -56,6 +56,8 @@ interface CatalogPromotion {
   name: string;
   type: string;
   discountValue: number;
+  minOrderAmount?: number;
+  maxDiscountAmount?: number | null;
 }
 
 interface Category {
@@ -276,8 +278,9 @@ function ProductsContent() {
     const paramSearch = searchParams.get('search') || '';
     setSearchQuery(paramSearch);
     setSearchInput(paramSearch);
-    if (paramSearch) setViewModeState('dishes');
-    else if (searchParams.get('view') === 'kitchens') setViewModeState('kitchens');
+    // A chosen tab wins over the search, which opens on dishes only until Kitchens is picked (typing clears the choice).
+    if (searchParams.get('view') === 'kitchens') setViewModeState('kitchens');
+    else if (paramSearch) setViewModeState('dishes');
     setPage(1);
   }, [searchParams.toString()]);
 
@@ -322,7 +325,9 @@ function ProductsContent() {
             `/promotions/catalog?productIds=${encodeURIComponent(ids)}`
           );
           if (!isCurrent()) return;
-          if (promRes.data.success && promRes.data.data) setPromotionsByProductId(promRes.data.data);
+          const deals = promRes.data.success ? promRes.data.data : null;
+          // A card shows one dish by itself, so it shows only the deals one unit gets (a deal with a minimum order appears in the tray once the tray reaches it).
+          if (deals) setPromotionsByProductId(Object.fromEntries(list.map((p: Product) => [p.id, dealsOnOneUnit(p.price, deals[p.id])])));
           else setPromotionsByProductId({});
         } catch {
           if (isCurrent()) setPromotionsByProductId({});
@@ -351,13 +356,23 @@ function ProductsContent() {
     businessType, maxDistanceKm, fastDeliveryOnly, customerLocation, selectedCommunity?.id, waitingForAddress,
   ]);
 
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    setPage(1);
-    setSearchQuery(searchInput);
-    if (searchInput) {
-      setViewMode('dishes');
-    }
+  // The top bar's search box drives the results in place: a moment after the last key the words go into the address,
+  // and the effect above reads them from there (so a search also survives a reload or a shared link).
+  const searchTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const typeSearch = (value: string) => {
+    setSearchInput(value);
+    clearTimeout(searchTimer.current);
+    searchTimer.current = setTimeout(() => {
+      const params = new URLSearchParams(window.location.search);
+      if (value.trim()) {
+        params.set('search', value.trim());
+        params.delete('view');
+      } else {
+        params.delete('search');
+      }
+      const query = params.toString();
+      router.replace(`/products${query ? `?${query}` : ''}`, { scroll: false });
+    }, 300);
   };
 
   const handleQuickAddToCart = async (e: React.MouseEvent, product: Product) => {
@@ -499,7 +514,7 @@ function ProductsContent() {
       {/* Clean Marketplace Header */}
       <div className="flex items-center justify-between flex-wrap gap-2 pt-1">
         <div>
-          <h1 className="text-[22px] sm:text-[28px] leading-tight font-extrabold text-ink tracking-tight">
+          <h1 className="text-[22px] sm:text-[28px] leading-tight font-semibold text-ink tracking-tight">
             {viewMode === 'kitchens' ? t('titleKitchens') : t('titleDishes')}
           </h1>
           <p className="text-sm text-muted mt-1 flex items-center gap-1.5 flex-wrap">
@@ -524,61 +539,27 @@ function ProductsContent() {
 
       {/* Unified Search & Filters Panel */}
       <div className="space-y-3">
-        {/* Top Row: Search Input + View Mode Switcher + Sort */}
+        {/* Top row: kitchens or dishes, and the sort */}
         <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-2.5">
-          {/* Clean Search Input */}
-          <form onSubmit={handleSearch} className="flex-1 relative flex items-center">
-            <Search className="w-4 h-4 text-muted absolute start-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-            <input
-              type="text"
-              placeholder={t('searchPlaceholder')}
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              aria-label={t('searchPlaceholder')}
-              className="w-full ps-10 pe-24 border border-transparent rounded-[14px] text-[15px] font-semibold text-ink placeholder:text-muted placeholder:font-medium focus:border-brand focus:ring-2 focus:ring-brand/20 outline-none bg-raised focus:bg-surface transition-all h-12"
-            />
-            {searchInput && (
-              <button
-                type="button"
-                onClick={() => {
-                  setSearchInput('');
-                  setSearchQuery('');
-                  setPage(1);
-                }}
-                className="absolute end-[4.5rem] top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center text-muted hover:text-ink hover:bg-line rounded-full cursor-pointer"
-                title={t('clearSearch')}
-                aria-label={t('clearSearch')}
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            )}
-            <button
-              type="submit"
-              className="absolute end-1.5 top-1/2 -translate-y-1/2 h-9 px-3.5 bg-brand hover:bg-brand-500 text-on-brand text-sm font-extrabold rounded-[10px] transition-all active:scale-95 cursor-pointer"
-            >
-              {tc('search')}
-            </button>
-          </form>
-
           {/* View Switcher: Kitchens vs Dishes */}
           <div className="grid grid-cols-2 gap-1 p-1 bg-raised rounded-xl h-12 shrink-0">
             <button
               type="button"
               onClick={() => setViewMode('kitchens')}
               aria-pressed={viewMode === 'kitchens'}
-              className={`flex items-center justify-center gap-1.5 px-4 rounded-[9px] text-sm transition-all h-full cursor-pointer ${
-                viewMode === 'kitchens' ? 'bg-surface text-ink font-extrabold shadow-xs' : 'text-muted font-bold hover:text-ink'
+              className={`flex items-center justify-center gap-1.5 px-4 rounded-[9px] text-sm transition-colors h-full cursor-pointer ${
+                viewMode === 'kitchens' ? 'bg-surface text-ink font-semibold shadow-xs' : 'text-muted font-bold hover:text-ink'
               }`}
             >
               <ChefHat className="w-3.5 h-3.5" />
               <span>{t('viewKitchens')}</span>
               {activeCommunityDetail && (
                 <span
-                  className={`px-1.5 rounded-full text-[11px] font-extrabold ${
+                  className={`px-1.5 rounded-full text-[11px] font-semibold ${
                     viewMode === 'kitchens' ? 'bg-brand-soft text-brand-soft-ink' : 'bg-line text-muted'
                   }`}
                 >
-                  {(activeCommunityDetail.sellers || []).length}
+                  {(activeCommunityDetail.deliveringHere ?? activeCommunityDetail.sellers ?? []).length}
                 </span>
               )}
             </button>
@@ -586,15 +567,15 @@ function ProductsContent() {
               type="button"
               onClick={() => setViewMode('dishes')}
               aria-pressed={viewMode === 'dishes'}
-              className={`flex items-center justify-center gap-1.5 px-4 rounded-[9px] text-sm transition-all h-full cursor-pointer ${
-                viewMode === 'dishes' ? 'bg-surface text-ink font-extrabold shadow-xs' : 'text-muted font-bold hover:text-ink'
+              className={`flex items-center justify-center gap-1.5 px-4 rounded-[9px] text-sm transition-colors h-full cursor-pointer ${
+                viewMode === 'dishes' ? 'bg-surface text-ink font-semibold shadow-xs' : 'text-muted font-bold hover:text-ink'
               }`}
             >
               <UtensilsCrossed className="w-3.5 h-3.5" />
               <span>{t('viewDishes')}</span>
               {!loading && !error && (
                 <span
-                  className={`px-1.5 rounded-full text-[11px] font-extrabold ${
+                  className={`px-1.5 rounded-full text-[11px] font-semibold ${
                     viewMode === 'dishes' ? 'bg-brand-soft text-brand-soft-ink' : 'bg-line text-muted'
                   }`}
                 >
@@ -624,75 +605,69 @@ function ProductsContent() {
           </div>
         </div>
 
-        {/* Filter Chips inside Search Panel */}
-        <div className="flex items-center justify-between gap-2 flex-wrap">
-          <div className="flex items-center gap-2 overflow-x-auto scrollbar-none py-0.5 -mx-4 px-4 sm:mx-0 sm:px-0">
-            {productTypeOptions.map((type) => {
-              const isSelected = selectedProductType === type.value;
-              return (
+        {/* Two kinds of filter, drawn differently so they are not read as one row: the dish type is a single choice (a joined
+            control, like Kitchens / Dishes above), the rest are switches that add up (pills with a tick when on). */}
+        <div className="flex flex-col xl:flex-row xl:items-end gap-3 xl:gap-6">
+          <div className="min-w-0">
+            <p id="filter-type-label" className="mb-1.5 text-xs font-medium text-muted">{t('filterTypeLabel')}</p>
+            <div className="overflow-x-auto scrollbar-none -mx-4 px-4 sm:mx-0 sm:px-0">
+              <div role="radiogroup" aria-labelledby="filter-type-label" className="inline-flex gap-1 p-1 bg-raised rounded-xl h-12">
+                {productTypeOptions.map((type) => {
+                  const isSelected = selectedProductType === type.value;
+                  return (
+                    <button
+                      key={type.value}
+                      type="button"
+                      role="radio"
+                      aria-checked={isSelected}
+                      onClick={() => {
+                        setSelectedProductType(type.value);
+                        setPage(1);
+                      }}
+                      className={`px-3 sm:px-4 rounded-[9px] text-sm whitespace-nowrap transition-colors cursor-pointer ${
+                        isSelected ? 'bg-surface text-ink font-semibold shadow-xs' : 'text-muted font-medium hover:text-ink'
+                      }`}
+                    >
+                      {t(type.labelKey)}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          <div className="min-w-0">
+            <p id="filter-only-label" className="mb-1.5 text-xs font-medium text-muted">{t('filterOnlyLabel')}</p>
+            <div role="group" aria-labelledby="filter-only-label" className="flex gap-2 overflow-x-auto scrollbar-none -mx-4 px-4 sm:mx-0 sm:px-0">
+              {[
+                { on: openNow, toggle: () => setOpenNow(!openNow), label: t('openNow') },
+                { on: freeDelivery, toggle: () => setFreeDelivery(!freeDelivery), label: t('freeDeliveryChip') },
+                { on: fastDeliveryOnly, toggle: () => setFastDeliveryOnly(!fastDeliveryOnly), label: t('under45') },
+              ].map(({ on, toggle, label }) => (
                 <button
-                  key={type.value}
+                  key={label}
+                  type="button"
                   onClick={() => {
-                    setSelectedProductType(type.value);
+                    toggle();
                     setPage(1);
                   }}
-                  aria-pressed={isSelected}
-                  className={`h-11 px-4 rounded-full text-sm font-bold transition-colors shrink-0 cursor-pointer ${
-                    isSelected ? 'bg-brand-soft text-brand-soft-ink border border-brand' : 'bg-surface text-ink border border-line hover:bg-raised'
+                  aria-pressed={on}
+                  className={`h-12 inline-flex items-center gap-1.5 px-3.5 rounded-full border text-sm whitespace-nowrap shrink-0 transition-colors cursor-pointer ${
+                    on ? 'bg-brand-soft text-brand-soft-ink border-brand font-semibold' : 'bg-surface text-ink border-line hover:bg-raised font-medium'
                   }`}
                 >
-                  {t(type.labelKey)}
+                  {on ? <Check className="w-4 h-4" aria-hidden /> : <Plus className="w-4 h-4 text-muted" aria-hidden />}
+                  {label}
                 </button>
-              );
-            })}
-
-            <div className="h-6 w-px bg-line mx-1 shrink-0" />
-
-            <button
-              onClick={() => {
-                setOpenNow(!openNow);
-                setPage(1);
-              }}
-              aria-pressed={openNow}
-              className={`h-11 px-4 rounded-full text-sm font-bold transition-colors shrink-0 flex items-center gap-1.5 cursor-pointer ${
-                openNow ? 'bg-brand-soft text-brand-soft-ink border border-brand' : 'bg-surface text-ink border border-line hover:bg-raised'
-              }`}
-            >
-              <span className="w-2 h-2 rounded-full bg-brand" />
-              <span>{t('openNow')}</span>
-            </button>
-
-            <button
-              onClick={() => {
-                setFreeDelivery(!freeDelivery);
-                setPage(1);
-              }}
-              aria-pressed={freeDelivery}
-              className={`h-11 px-4 rounded-full text-sm font-bold transition-colors shrink-0 cursor-pointer ${
-                freeDelivery ? 'bg-brand-soft text-brand-soft-ink border border-brand' : 'bg-surface text-ink border border-line hover:bg-raised'
-              }`}
-            >
-              {t('freeDeliveryChip')}
-            </button>
-
-            <button
-              onClick={() => {
-                setFastDeliveryOnly(!fastDeliveryOnly);
-                setPage(1);
-              }}
-              aria-pressed={fastDeliveryOnly}
-              className={`h-11 px-4 rounded-full text-sm font-bold transition-colors shrink-0 cursor-pointer ${
-                fastDeliveryOnly ? 'bg-brand-soft text-brand-soft-ink border border-brand' : 'bg-surface text-ink border border-line hover:bg-raised'
-              }`}
-            >
-              {t('under45')}
-            </button>
+              ))}
+            </div>
           </div>
 
           {isAnyFilterActive && (
             <button
+              type="button"
               onClick={handleClearAllFilters}
-              className="text-sm font-bold text-brand-ink hover:underline flex items-center gap-1 transition-colors cursor-pointer h-10 px-2"
+              className="self-start xl:self-auto xl:ms-auto whitespace-nowrap text-sm font-semibold text-brand-ink hover:underline flex items-center gap-1 transition-colors cursor-pointer h-12 px-2"
             >
               <X className="w-3.5 h-3.5" />
               <span>{t('resetFilters')}</span>
@@ -743,7 +718,8 @@ function ProductsContent() {
         );
       }
 
-      const allKitchens = activeCommunityDetail?.sellers || [];
+      // The area's own kitchens and the ones that deliver here: the same list as the kitchens page.
+      const allKitchens = activeCommunityDetail?.deliveringHere ?? activeCommunityDetail?.sellers ?? [];
       const kitchens = openNow ? allKitchens.filter((k) => k.isOpen !== false) : allKitchens;
       const communityName = selectedCommunity.name || activeCommunityDetail?.name || t('yourArea');
 
@@ -787,7 +763,7 @@ function ProductsContent() {
 
               {activeCommunityDetail?.neighbors && activeCommunityDetail.neighbors.length > 0 && (
                 <div className="flex flex-col items-center gap-2 mb-5">
-                  <span className="text-xs font-bold text-muted uppercase tracking-wider">
+                  <span className="text-xs font-bold text-muted">
                     {t('nearbyCommunities')}
                   </span>
                   <div className="flex items-center justify-center gap-2 flex-wrap">
@@ -835,10 +811,10 @@ function ProductsContent() {
                         setClosedKitchenModalData(k);
                       }
                     }}
-                    className={`group flex flex-col justify-between rounded-[20px] border bg-surface transition-all duration-200 overflow-hidden ${
+                    className={`group flex flex-col justify-between rounded-[20px] border bg-surface transition-colors duration-200 overflow-hidden ${
                       isClosed
                         ? 'border-line opacity-80 hover:opacity-100 hover:border-line-strong'
-                        : 'border-line hover:border-line-strong hover:shadow-[var(--shadow-card)]'
+                        : 'border-line hover:border-line-strong'
                     }`}
                   >
                     {/* Cover Image with Modern Aspect Ratio & Subtle Overlays */}
@@ -848,12 +824,12 @@ function ProductsContent() {
                         alt={k.businessName}
                         label={k.businessName}
                         size="md"
-                        className="w-full h-full group-hover:scale-105 transition-transform duration-500"
+                        className="w-full h-full"
                       />
 
                       {/* Clean Top Status */}
                       {isClosed ? (
-                        <span className="absolute top-3 start-3 px-2.5 py-1 rounded-full text-ink text-[11px] font-extrabold bg-surface/95 inline-flex items-center gap-1.5 shadow-xs">
+                        <span className="absolute top-3 start-3 px-2.5 py-1 rounded-full text-ink text-[11px] font-semibold bg-surface/95 inline-flex items-center gap-1.5 shadow-xs">
                           <span className="w-2 h-2 rounded-full bg-accent" />
                           <span>
                             {k.acceptsPreOrders
@@ -866,7 +842,7 @@ function ProductsContent() {
                           </span>
                         </span>
                       ) : (
-                        <span className="absolute top-3 start-3 px-2.5 py-1 rounded-full text-ink text-[11px] font-extrabold bg-surface/95 inline-flex items-center gap-1 shadow-xs">
+                        <span className="absolute top-3 start-3 px-2.5 py-1 rounded-full text-ink text-[11px] font-semibold bg-surface/95 inline-flex items-center gap-1 shadow-xs">
                           <ChefHat className="w-3 h-3 text-brand-ink" />
                           <span>{t('homeKitchen')}</span>
                         </span>
@@ -875,7 +851,7 @@ function ProductsContent() {
                       {/* Favorite Button */}
                       <button
                         onClick={(e) => handleToggleFavorite(e, k.id, k.businessName)}
-                        className="absolute top-3 end-3 w-9 h-9 rounded-full bg-surface/95 hover:bg-surface flex items-center justify-center text-ink transition-all active:scale-90 shadow-xs z-10"
+                        className="absolute top-3 end-3 w-9 h-9 rounded-full bg-surface/95 hover:bg-surface flex items-center justify-center text-ink transition-[color,background-color,border-color,opacity,transform] active:scale-90 shadow-xs z-10"
                         title={t('saveFavKitchens')}
                         aria-label={t('saveFavKitchens')}
                       >
@@ -901,7 +877,7 @@ function ProductsContent() {
                       ) : null}
 
                       {/* Bottom Right: Star Rating (or "New" until the kitchen has reviews) */}
-                      <span className="absolute bottom-3 end-3 px-2.5 py-1 rounded-full bg-surface/95 text-ink text-xs font-extrabold flex items-center gap-1 shadow-xs">
+                      <span className="absolute bottom-3 end-3 px-2.5 py-1 rounded-full bg-surface/95 text-ink text-xs font-semibold flex items-center gap-1 shadow-xs">
                         {rating ? (
                           <>
                             <Star className="w-3 h-3 fill-accent text-accent" />
@@ -911,7 +887,7 @@ function ProductsContent() {
                             ) : null}
                           </>
                         ) : (
-                          <span>{t('new')}</span>
+                          <span className="text-muted font-medium">{t('new')}</span>
                         )}
                       </span>
                     </div>
@@ -923,7 +899,7 @@ function ProductsContent() {
                         <div className="flex items-start justify-between gap-2.5 mb-1.5">
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-1.5">
-                              <h3 className="font-extrabold text-ink text-base leading-tight truncate">
+                              <h3 className="font-semibold text-ink text-base leading-tight truncate">
                                 {k.businessName}
                               </h3>
                               <CheckCircle2 className="w-4 h-4 text-brand-ink shrink-0" />
@@ -955,12 +931,12 @@ function ProductsContent() {
                         {k.products && k.products.length > 0 && (
                           <div className="mt-3 pt-2.5 border-t border-line flex items-center justify-between text-xs">
                             <div className="flex items-center gap-1.5 text-muted truncate min-w-0">
-                              <span className="px-2 py-0.5 rounded-full bg-accent-soft text-accent-soft-ink font-extrabold text-[11px] shrink-0">
+                              <span className="px-2 py-0.5 rounded-full bg-accent-soft text-accent-soft-ink font-semibold text-[11px] shrink-0">
                                 {t('onTheMenu')}
                               </span>
                               <span className="font-semibold text-ink truncate">{k.products[0].name}</span>
                             </div>
-                            <span className="font-black text-ink shrink-0 ms-2">Rs {k.products[0].price}</span>
+                            <span className="font-semibold text-ink shrink-0 ms-2">Rs {k.products[0].price}</span>
                           </div>
                         )}
                       </div>
@@ -968,7 +944,7 @@ function ProductsContent() {
                       {/* Footer CTA */}
                       <div className="pt-2 border-t border-line flex items-center justify-between text-xs">
                         <span
-                          className={`text-[11px] font-extrabold px-2 py-0.5 rounded-full ${
+                          className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${
                             isClosed
                               ? 'text-accent-soft-ink bg-accent-soft'
                               : 'text-brand-soft-ink bg-brand-soft'
@@ -976,7 +952,7 @@ function ProductsContent() {
                         >
                           {isClosed ? (k.acceptsPreOrders ? t('preOrderSlot') : t('kitchenClosed')) : t('domesticKitchen')}
                         </span>
-                        <span className="font-bold text-brand-ink inline-flex items-center gap-1 group-hover:translate-x-1 transition-transform">
+                        <span className="font-bold text-brand-ink inline-flex items-center gap-1 transition-transform">
                           <span>{isClosed ? (k.acceptsPreOrders ? t('checkPreOrder') : t('viewSchedule')) : t('viewMenu')}</span>
                           <ChevronRight className="rtl:-scale-x-100 w-3.5 h-3.5" />
                         </span>
@@ -1019,7 +995,7 @@ function ProductsContent() {
       const hasFilters = isAnyFilterActive || selectedCategory !== 'all';
       return (
         <div className="bg-surface rounded-[20px] border border-dashed border-line-strong p-10 text-center">
-          <h2 className="text-xl font-extrabold text-ink mb-1.5">
+          <h2 className="text-xl font-semibold text-ink mb-1.5">
             {hasFilters
               ? t('noDishesMatch')
               : selectedCommunity
@@ -1071,7 +1047,7 @@ function ProductsContent() {
               <Link
                 key={product.id}
                 href={`/products/${product.id}`}
-                className="group flex flex-col justify-between bg-surface rounded-[20px] border border-line hover:border-line-strong hover:shadow-[var(--shadow-card)] transition-all duration-200 overflow-hidden"
+                className="group flex flex-col justify-between bg-surface rounded-[20px] border border-line hover:border-line-strong transition-colors duration-200 overflow-hidden"
               >
                 <div className="aspect-[16/11] bg-raised relative overflow-hidden">
                   <CoverImage
@@ -1079,13 +1055,13 @@ function ProductsContent() {
                     alt={product.name}
                     label={product.name}
                     size="md"
-                    className="w-full h-full group-hover:scale-[1.03] transition-transform duration-500"
+                    className="w-full h-full"
                   />
 
                   {/* Product type tag (Fresh Cook / Frozen / Ready to Eat / Ready to Cook), from the API */}
                   {typeBadge && TypeIcon && typeLabelKey && (
                     <span
-                      className={`absolute top-2.5 start-2.5 px-2.5 py-1 rounded-full text-[11px] font-extrabold ${typeBadge.className} shadow-xs z-10 flex items-center gap-1`}
+                      className={`absolute top-2.5 start-2.5 px-2.5 py-1 rounded-full text-[11px] font-semibold ${typeBadge.className} shadow-xs z-10 flex items-center gap-1`}
                     >
                       <TypeIcon className="w-3 h-3" />
                       <span>{t(typeLabelKey)}</span>
@@ -1124,7 +1100,7 @@ function ProductsContent() {
                 <div className="p-3 sm:p-3.5 flex-1 flex flex-col justify-between">
                   <div>
                     {/* Clean Chef & Community Row */}
-                    <h3 className="font-extrabold text-ink text-sm sm:text-[15px] leading-snug line-clamp-2">
+                    <h3 className="font-semibold text-ink text-sm sm:text-[15px] leading-snug line-clamp-2">
                       {product.name}
                     </h3>
                     <div className="flex items-center justify-between gap-1.5 mt-1 flex-wrap">
@@ -1160,7 +1136,7 @@ function ProductsContent() {
                     <div>
                       {promotionsByProductId[product.id]?.length ? (
                         <div className="flex items-baseline gap-1.5">
-                          <span className="text-[15px] font-extrabold text-ink">
+                          <span className="text-[15px] font-semibold text-ink">
                             {formatPrice(getStackedDiscountedPrice(product.price, promotionsByProductId[product.id]))}
                           </span>
                           <span className="text-xs text-muted line-through">
@@ -1168,12 +1144,12 @@ function ProductsContent() {
                           </span>
                         </div>
                       ) : (
-                        <span className="text-[15px] font-extrabold text-ink">
+                        <span className="text-[15px] font-semibold text-ink">
                           {formatPrice(product.price)}
                         </span>
                       )}
                       {rating && (
-                        <div className="flex items-center gap-1 mt-0.5 text-xs text-ink font-extrabold">
+                        <div className="flex items-center gap-1 mt-0.5 text-xs text-ink font-semibold">
                           <Star className="w-3 h-3 fill-accent text-accent" aria-hidden />
                           <span>{rating}</span>
                           {product.totalReviews ? <span className="text-muted font-normal">({product.totalReviews})</span> : null}
@@ -1187,7 +1163,7 @@ function ProductsContent() {
                       disabled={addingProductId === product.id}
                       title={t('addToCart')}
                       aria-label={t('addNameToTray', { name: product.name })}
-                      className="flex items-center justify-center gap-1 h-11 min-w-11 px-2.5 sm:px-3 rounded-[10px] bg-brand hover:bg-brand-500 text-on-brand font-extrabold text-sm transition-all active:scale-95 cursor-pointer"
+                      className="flex items-center justify-center gap-1 h-11 min-w-11 px-2.5 sm:px-3 rounded-[10px] bg-brand hover:bg-brand-500 text-on-brand font-semibold text-sm transition-[color,background-color,border-color,opacity,transform] active:scale-95 cursor-pointer"
                     >
                       {addingProductId === product.id ? (
                         <div className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
@@ -1237,7 +1213,7 @@ function ProductsContent() {
 
   return (
     <div className="min-h-screen bg-page text-ink">
-      <SiteHeader />
+      <SiteHeader search={{ value: searchInput, onChange: typeSearch }} />
 
       <div className="max-w-[1280px] mx-auto px-4 sm:px-8 py-6 md:py-8">
         <div className="space-y-6">

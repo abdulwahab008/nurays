@@ -1,7 +1,7 @@
-import { applyStackedDiscount, priceOrder } from '../src/utils/pricing';
+import { priceDealLines, priceOrder } from '../src/utils/pricing';
 // The web app's side of the same sums. Both files import nothing, so a test can read them as they are.
 import { orderTotals } from '../../frontend-web/lib/order-totals';
-import { getStackedDiscountedPrice } from '../../frontend-web/lib/pricing';
+import { getStackedDiscountedPrice, priceDealLines as webPriceDealLines } from '../../frontend-web/lib/pricing';
 
 // What checkout shows has to be what the server charges. The two sides write these sums separately, the web in
 // frontend-web/lib/ and the server in utils/pricing.ts, so these tests fail when one is changed without the other.
@@ -61,9 +61,87 @@ describe('the price after the kitchen\'s deals', () => {
           : Math.floor(next() * 2000) - (next() < 0.1 ? 50 : 0);
         return { type: percentage ? 'percentage' : 'fixed', discountValue };
       });
-      const server = applyStackedDiscount(price, promos.map((p) => ({ discountType: p.type, discountValue: p.discountValue })));
+      const deals = promos.map((p, n) => ({ id: String(n), discountType: p.type, discountValue: p.discountValue, minOrderAmount: 0, maxDiscountAmount: null }));
+      const server = priceDealLines([{ sellerId: '', unitPrice: price, quantity: 1, deals }]).unitPrices[0];
       const web = getStackedDiscountedPrice(price, promos);
       if (web !== server) throw new Error(`${JSON.stringify({ price, promos })}: the page shows ${web}, the server charges ${server}`);
     }
+  });
+
+  it('is the same on every line of a tray, for deals with a minimum order and a cap', () => {
+    const next = stream(23);
+    for (let i = 0; i < 5000; i++) {
+      const deals = Array.from({ length: Math.floor(next() * 4) }, (_, n) => {
+        const percentage = next() < 0.5;
+        return {
+          id: `deal-${n}`,
+          sellerId: next() < 0.7 ? 'k1' : 'k2',
+          type: percentage ? 'percentage' : 'fixed',
+          discountValue: percentage ? Math.floor(next() * 100) + 1 : Math.floor(next() * 800) + 1,
+          minOrderAmount: next() < 0.5 ? 0 : Math.floor(next() * 4000),
+          maxDiscountAmount: next() < 0.5 ? null : Math.floor(next() * 600) + 1,
+          discountScope: next() < 0.4 ? 'per_order' : 'per_dish',
+        };
+      });
+      const lines = Array.from({ length: Math.floor(next() * 4) + 1 }, () => {
+        const sellerId = next() < 0.7 ? 'k1' : 'k2';
+        return {
+          sellerId,
+          unitPrice: Math.floor(next() * 1500) + 1,
+          quantity: Math.floor(next() * 5) + 1,
+          promos: deals.filter((d) => d.sellerId === sellerId && next() < 0.8),
+        };
+      });
+      const web = webPriceDealLines(lines);
+      const server = priceDealLines(
+        lines.map((l) => ({ ...l, deals: l.promos.map((p) => ({ ...p, discountType: p.type })) }))
+      );
+      const shown = { unitPrices: web.unitPrices, applied: web.applied.map((a) => a.map((p) => p.id)) };
+      const charged = { unitPrices: server.unitPrices, applied: server.applied.map((a) => a.map((p) => p.id)) };
+      if (JSON.stringify(shown) !== JSON.stringify(charged)) {
+        throw new Error(`${JSON.stringify(lines)}: the tray shows ${JSON.stringify(shown)}, the server charges ${JSON.stringify(charged)}`);
+      }
+      // What both sides promise the kitchen: a capped deal never takes more than its cap, a fixed amount given once per
+      // order never more than that amount, and no discounted unit is free.
+      for (const deal of deals) {
+        const oncePerOrder = deal.discountScope === 'per_order' && deal.type === 'fixed';
+        const most = Math.min(deal.maxDiscountAmount ?? Infinity, oncePerOrder ? deal.discountValue : Infinity);
+        if (most === Infinity) continue;
+        const alone = priceDealLines(
+          lines.map((l) => ({ ...l, deals: l.promos.filter((p) => p.id === deal.id).map((p) => ({ ...p, discountType: p.type })) }))
+        );
+        const off = lines.reduce((sum, l, n) => sum + (l.unitPrice - alone.unitPrices[n]) * l.quantity, 0);
+        if (off > most) throw new Error(`${JSON.stringify({ lines, deal })}: took ${off}, over ${most}`);
+      }
+      if (server.unitPrices.some((p) => p < 1)) throw new Error(`${JSON.stringify(lines)}: a unit under Rs 1`);
+    }
+  });
+
+  it('takes a fixed amount once off the order when the kitchen chose that, and off every dish when it did not', () => {
+    const deal = (discountScope: string) => ({ id: 'd', type: 'fixed', discountValue: 200, minOrderAmount: 0, maxDiscountAmount: null, discountScope });
+    const tray = (discountScope: string) => [
+      { sellerId: 'k1', unitPrice: 600, quantity: 1, promos: [deal(discountScope)] },
+      { sellerId: 'k1', unitPrice: 400, quantity: 1, promos: [deal(discountScope)] },
+    ];
+    const server = (lines: ReturnType<typeof tray>) => priceDealLines(lines.map((l) => ({ ...l, deals: l.promos.map((p) => ({ ...p, discountType: p.type })) }))).unitPrices;
+    expect(server(tray('per_dish'))).toEqual([400, 200]);
+    expect(server(tray('per_order'))).toEqual([500, 300]);
+    expect(webPriceDealLines(tray('per_order')).unitPrices).toEqual([500, 300]);
+    // One dish alone gets the whole amount either way.
+    expect(server([tray('per_order')[0]])).toEqual([400]);
+  });
+
+  it('counts a capped deal in the whole rupees charged, so rounding each unit cannot carry it over the cap', () => {
+    // 10% of Rs 107 is 10.70 a unit: 53.50 on five, under the cap of 54, but each unit is charged Rs 11 less.
+    const capped = { id: 'c', type: 'percentage', discountValue: 10, minOrderAmount: 0, maxDiscountAmount: 54 };
+    const lines = [{ sellerId: 'k1', unitPrice: 107, quantity: 5, promos: [capped] }];
+    const web = webPriceDealLines(lines);
+    const server = priceDealLines(lines.map((l) => ({ ...l, deals: l.promos.map((p) => ({ ...p, discountType: p.type })) })));
+    expect(server.unitPrices).toEqual(web.unitPrices);
+    const off = (107 - server.unitPrices[0]) * 5;
+    expect(off).toBeLessThanOrEqual(54);
+    expect(off).toBe(50);
+    // Under the cap after rounding, nothing is scaled.
+    expect(priceDealLines([{ sellerId: 'k1', unitPrice: 107, quantity: 4, deals: [{ ...capped, discountType: 'percentage' }] }]).unitPrices).toEqual([96]);
   });
 });

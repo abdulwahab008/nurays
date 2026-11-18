@@ -71,7 +71,7 @@ export function LegalPage({
           <span aria-hidden className="inline-block rtl:-scale-x-100">←</span>
           <span>Nuray</span>
         </Link>
-        <h1 className="mt-2 text-[28px] sm:text-[36px] leading-tight font-extrabold tracking-tight text-ink">{title}</h1>
+        <h1 className="mt-2 text-[28px] sm:text-[36px] leading-tight font-semibold tracking-tight text-ink">{title}</h1>
         <p className="mt-1 text-sm text-muted">{labels.lastUpdated} <bdi>{updated}</bdi></p>
         {legalText && !LEGAL.reviewed && (
           <p className="mt-4 rounded-2xl bg-accent-soft p-3 text-sm text-accent-soft-ink">
@@ -79,7 +79,7 @@ export function LegalPage({
             unclear, contact us before you order.
           </p>
         )}
-        <div className="mt-6 space-y-6 text-[15px] leading-7 text-ink [&_h2]:text-xl [&_h2]:font-extrabold [&_h2]:text-ink [&_h2]:mt-8 [&_ul]:list-disc [&_ul]:ps-6 [&_ul]:space-y-1">
+        <div className="mt-6 space-y-6 text-[15px] leading-7 text-ink [&_h2]:text-xl [&_h2]:font-semibold [&_h2]:text-ink [&_h2]:mt-8 [&_ul]:list-disc [&_ul]:ps-6 [&_ul]:space-y-1">
           {children}
         </div>
         <nav className="mt-10 pt-4 border-t border-line flex flex-wrap gap-x-4 text-sm font-semibold text-brand-ink">

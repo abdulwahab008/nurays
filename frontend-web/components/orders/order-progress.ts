@@ -4,7 +4,8 @@
  */
 export type ProgressStep = 'placed' | 'accepted' | 'cooking' | 'ready' | 'onTheWay' | 'readyToCollect' | 'delivered' | 'collected';
 
-const ONLINE_OR_TRANSFER = ['safepay', 'card', 'jazzcash', 'easypaisa', 'bank'];
+const TRANSFER = ['jazzcash', 'easypaisa', 'bank'];
+const ONLINE_OR_TRANSFER = ['safepay', 'card', ...TRANSFER];
 const UNPAID = ['pending', 'failed', 'disputed', 'payment_submitted'];
 const ENDED = ['cancelled', 'refunded', 'delivery_failed'];
 
@@ -12,13 +13,17 @@ export function isPickupOrder(deliveryType?: string | null): boolean {
   return deliveryType === 'self_pickup' || deliveryType === 'hub_pickup';
 }
 
-/** An order paid online or by transfer that is not paid yet: the kitchen does not start on it until it is. */
+/**
+ * An order that is waiting for the customer to pay. An online payment comes first: the kitchen does not see the order
+ * until it is in. A transfer to the kitchen comes after the kitchen accepts (its account is shown only then), and stops
+ * waiting once the customer has reported it.
+ */
 export function awaitingPayment(status: string, paymentMethod?: string | null, paymentStatus?: string | null): boolean {
-  return (
-    status === 'pending' &&
-    ONLINE_OR_TRANSFER.includes((paymentMethod ?? '').toLowerCase()) &&
-    UNPAID.includes(paymentStatus ?? 'pending')
-  );
+  const method = (paymentMethod ?? '').toLowerCase();
+  const payment = paymentStatus ?? 'pending';
+  if (!ONLINE_OR_TRANSFER.includes(method) || !UNPAID.includes(payment)) return false;
+  if (TRANSFER.includes(method)) return ['confirmed', 'preparing'].includes(status) && payment !== 'payment_submitted';
+  return status === 'pending';
 }
 
 /**

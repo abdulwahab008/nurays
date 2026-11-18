@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { qstr } from '../utils/query';
 import { communityService } from '../services/community.service';
+import { kitchensDeliveringTo } from '../services/product.service';
 import { currentUserId } from '../middleware/auth.middleware';
 
 export async function getCommunities(_req: Request, res: Response): Promise<void> {
@@ -11,7 +12,9 @@ export async function getCommunities(_req: Request, res: Response): Promise<void
 export async function getCommunity(req: Request, res: Response): Promise<void> {
   const { identifier } = req.params;
   const data = await communityService.getCommunity(identifier);
-  res.json({ success: true, data });
+  // The kitchens a customer here can order from: the area's own, then other areas' that deliver here (as the dish list).
+  const deliveringHere = [...data.sellers, ...(await communityService.sellerCards(await kitchensDeliveringTo(data.id)))];
+  res.json({ success: true, data: { ...data, deliveringHere } });
 }
 
 export async function detectCommunity(req: Request, res: Response): Promise<void> {

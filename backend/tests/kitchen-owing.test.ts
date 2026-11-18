@@ -1,5 +1,5 @@
 jest.mock('../src/config/database', () => ({ __esModule: true, default: {} }));
-import { owingState, CASH_PAUSE_AFTER_DAYS } from '../src/services/kitchen-owing.service';
+import { owingState, owingLimit, CASH_PAUSE_AFTER_DAYS } from '../src/services/kitchen-owing.service';
 import { payoutDestination } from '../src/services/weekly-payout.service';
 
 const DAY = 24 * 3600e3;
@@ -8,13 +8,21 @@ const none = { bankAccountNumber: null, bankAccountName: null, bankName: null, j
 describe('what a kitchen owes, and the cash pause', () => {
   const since = new Date('2026-10-01T00:00:00Z');
   it('owes nothing at a zero or positive balance, whatever owes_since says', () => {
-    expect(owingState(0, since)).toEqual({ owed: 0, owesSince: null, cashPausesAt: null, cashPaused: false });
+    expect(owingState(0, since)).toEqual({ owed: 0, owesSince: null, cashPausesAt: null, cashPaused: false, overLimit: false });
     expect(owingState(250, since).cashPaused).toBe(false);
   });
   it(`cash pauses ${CASH_PAUSE_AFTER_DAYS} days after it started owing, not before`, () => {
     const pausesAt = new Date(since.getTime() + CASH_PAUSE_AFTER_DAYS * DAY);
-    expect(owingState(-300, since, new Date(pausesAt.getTime() - 1))).toEqual({ owed: 300, owesSince: since, cashPausesAt: pausesAt, cashPaused: false });
+    expect(owingState(-300, since, new Date(pausesAt.getTime() - 1))).toEqual({ owed: 300, owesSince: since, cashPausesAt: pausesAt, cashPaused: false, overLimit: false });
     expect(owingState(-300, since, pausesAt).cashPaused).toBe(true);
+  });
+  it('pauses at once when it owes more than the limit, and not at the limit itself', () => {
+    const dayOne = new Date(since.getTime() + DAY);
+    expect(owingLimit({})).toBe(5000);
+    expect(owingLimit({ KITCHEN_OWING_LIMIT: '8000' })).toBe(8000);
+    expect(owingState(-5000, since, dayOne)).toMatchObject({ cashPaused: false, overLimit: false });
+    expect(owingState(-5001, since, dayOne)).toMatchObject({ owed: 5001, cashPaused: true, overLimit: true });
+    expect(owingState(-5001, null, dayOne)).toMatchObject({ cashPaused: true, overLimit: true });
   });
 });
 

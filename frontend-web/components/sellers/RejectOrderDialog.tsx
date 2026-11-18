@@ -94,7 +94,7 @@ export function RejectOrderDialog({
         role="dialog"
         aria-modal="true"
         aria-labelledby="reject-order-title"
-        className="bg-surface text-ink rounded-[20px] max-w-md w-full max-h-full overflow-y-auto p-5 sm:p-6 shadow-xl border border-line space-y-5"
+        className="bg-surface text-ink rounded-2xl max-w-md w-full max-h-full overflow-y-auto p-5 sm:p-6 shadow-[var(--shadow-hover)] border border-line space-y-5"
       >
         <div className="flex items-start justify-between gap-4">
           <div>

@@ -1,9 +1,10 @@
 import { Prisma } from '@prisma/client';
-import { codCollectorOf, deliveryProviderOf, isCashAtDoor, ONLINE_GATEWAY_METHODS } from '../utils/paymentCustody';
+import { codCollectorOf, deliveryProviderOf, isCashAtDoor, ONLINE_GATEWAY_METHODS, SELLER_DIRECT_METHODS } from '../utils/paymentCustody';
 import { assertMayHandOver, verifyHandoverCode } from './handover.service';
 import { presentFile } from '../storage';
 import { cancelOpenDelivery, notifyDeliveryCancelled, CancelledDelivery } from './delivery-lifecycle.service';
 import prisma from '../config/database';
+import { readyBy } from '../utils/preOrder';
 import { pageArgs } from '../utils/pagination';
 import { AppError } from '../middleware/errorHandler';
 import realtimeOrderService from './realtime-order.service';
@@ -16,6 +17,8 @@ import { firstName, kitchenContactRule, kitchenOrderSelect, presentKitchenOrder,
 import { logEvent, logger } from '../utils/logger';
 import { selfDeliveryFeeFor, sellerPaidDeliveryFor } from '../utils/deliveryEarnings';
 import { roundMoney } from '../utils/pricing';
+import { notify } from './notify.service';
+import { notificationText } from '../utils/notificationText';
 
 // A card or Safepay checkout the customer hasn't finished is not the kitchen's to start: if it is never paid the food
 // is wasted. Cash and bank-transfer orders are confirmed by the kitchen itself, so they can be accepted as before.
@@ -793,7 +796,7 @@ export class SellerOrderService {
 
     // Determine prep time from items or seller default
     const maxPrepMinutes = preparationMinutes ?? prepMinutesFor(order.items.map((i) => i.product?.preparationTime), seller.minPrepTimeMinutes);
-    const estimatedReadyAt = new Date(Date.now() + maxPrepMinutes * 60 * 1000);
+    const estimatedReadyAt = readyBy(order, maxPrepMinutes);
 
     const result = await prisma.$transaction(async (tx) => {
       // Claim the transition first. The status check above ran before this
@@ -846,6 +849,20 @@ export class SellerOrderService {
 
     await realtimeOrderService.emitOrderStatusUpdate(order.id, 'preparing', sellerUserId);
 
+    // A transfer to the kitchen can be sent only now: its account is shown to the customer from acceptance.
+    if (order.customerId && SELLER_DIRECT_METHODS.includes(order.paymentMethod) && order.paymentStatus === 'pending') {
+      await notify({
+        userId: order.customerId,
+        category: 'orders',
+        type: 'order',
+        text: notificationText('order.payNow', { orderNumber: order.orderNumber, total: `Rs ${Number(order.totalAmount).toLocaleString()}` }),
+        actionUrl: `/orders/${order.id}`,
+        data: { orderId: order.id, orderNumber: order.orderNumber },
+        channels: ['push'],
+        dedupeKey: `order:${order.id}:pay-now`,
+      }).catch((err) => logger.warn({ err, orderId: order.id }, 'Could not tell the customer to pay'));
+    }
+
     return {
       orderId: result.id,
       orderStatus: result.orderStatus,
@@ -853,6 +870,30 @@ export class SellerOrderService {
       preparationMinutes: maxPrepMinutes,
       message: 'Order accepted and kitchen preparation started',
     };
+  }
+
+  /**
+   * Accept an order for a kitchen that has its orders accepted automatically. Called once the order can be accepted
+   * (placed, or its online payment in); an order that cannot be accepted after all is left for the kitchen.
+   */
+  async autoAccept(orderId: string): Promise<void> {
+    try {
+      const order = await prisma.order.findUnique({
+        where: { id: orderId },
+        select: {
+          orderStatus: true,
+          paymentMethod: true,
+          paymentStatus: true,
+          items: { take: 1, select: { seller: { select: { userId: true, autoAcceptOrders: true } } } },
+        },
+      });
+      const seller = order?.items[0]?.seller;
+      if (!order || !seller?.autoAcceptOrders || order.orderStatus !== 'pending') return;
+      if (ONLINE_GATEWAY_METHODS.includes(order.paymentMethod) && order.paymentStatus !== 'paid') return;
+      await this.acceptOrder(orderId, seller.userId);
+    } catch (err) {
+      logger.warn({ err, orderId }, 'Could not accept an order automatically');
+    }
   }
 
   /**

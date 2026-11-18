@@ -1215,7 +1215,7 @@ export default function RiderDashboardPage() {
       {/* Handing over at the door: the customer's 4-digit code */}
       {pinModalDelivery && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-ink/40 p-0 sm:p-4">
-          <div role="dialog" aria-modal="true" aria-labelledby="pin-title" className="w-full sm:max-w-md bg-surface rounded-t-3xl sm:rounded-3xl p-6 pb-[calc(1.5rem+var(--safe-bottom))] sm:pb-6 shadow-2xl">
+          <div role="dialog" aria-modal="true" aria-labelledby="pin-title" className="w-full sm:max-w-md bg-surface rounded-t-2xl sm:rounded-2xl p-6 pb-[calc(1.5rem+var(--safe-bottom))] sm:pb-6 shadow-[var(--shadow-hover)]">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <h3 id="pin-title" className="text-xl font-semibold text-ink">{t('pinTitle')}</h3>
@@ -1286,7 +1286,7 @@ export default function RiderDashboardPage() {
       {/* Reporting a delivery that cannot be completed */}
       {reportModalDelivery && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-ink/40 p-0 sm:p-4">
-          <div role="dialog" aria-modal="true" aria-labelledby="report-title" className="w-full sm:max-w-md max-h-[92dvh] overflow-y-auto bg-surface rounded-t-3xl sm:rounded-3xl p-6 pb-[calc(1.5rem+var(--safe-bottom))] sm:pb-6 shadow-2xl">
+          <div role="dialog" aria-modal="true" aria-labelledby="report-title" className="w-full sm:max-w-md max-h-[92dvh] overflow-y-auto bg-surface rounded-t-2xl sm:rounded-2xl p-6 pb-[calc(1.5rem+var(--safe-bottom))] sm:pb-6 shadow-[var(--shadow-hover)]">
             <h3 id="report-title" className="text-xl font-semibold text-ink">{t('reportTitle')}</h3>
             <p className="text-sm text-muted mt-1">{t('orderNo', { number: reportModalDelivery.orderNumber })}</p>
 

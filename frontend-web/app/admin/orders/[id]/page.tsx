@@ -51,6 +51,7 @@ interface OrderDetail {
     seller?: { businessName: string };
   }>;
   statusHistory?: Array<{ status: string; notes?: string; createdAt: string; changedByName?: string | null }>;
+  delivery?: { status: string; riderId: string | null } | null;
   investigation?: {
     rider: { name: string | null; phone: string | null; email: string | null; vehicle: string } | null;
     paymentAttempts: Array<{ id: string; gateway: string; tracker: string; amount: number; status: string; settledVia: string | null; createdAt: string }>;
@@ -295,6 +296,21 @@ export default function AdminOrderDetailPage() {
       loadOrder();
     } catch (error) {
       showToast(apiErrorMessage(error, 'Failed to retry delivery'), 'error');
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  const handleUnassignRider = async () => {
+    if (!order) return;
+    if (!(await confirmDialog({ title: 'Take the job back?', message: 'The rider loses this job and it is offered to other riders. Use it when the rider is not coming.', confirmText: 'Take job back', variant: 'warning' }))) return;
+    try {
+      setUpdating(true);
+      await apiClient.post(`/admin/orders/${order.id}/unassign-rider`, {});
+      showToast('Job taken back and offered to other riders', 'success');
+      loadOrder();
+    } catch (error) {
+      showToast(apiErrorMessage(error, 'Could not take the job back'), 'error');
     } finally {
       setUpdating(false);
     }
@@ -753,6 +769,11 @@ export default function AdminOrderDetailPage() {
                         </>
                       )}
                     </dl>
+                  )}
+                  {order.delivery?.riderId && ['assigned', 'arrived_at_pickup'].includes(order.delivery.status) && (
+                    <Button variant="outline" size="sm" onClick={handleUnassignRider} disabled={updating} data-testid="unassign-rider">
+                      Take job back from rider
+                    </Button>
                   )}
                   {order.investigation.supportTickets.length > 0 && (
                     <div data-testid="inv-tickets">

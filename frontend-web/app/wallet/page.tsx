@@ -5,7 +5,7 @@ import { loginUrlHere } from '@/lib/auth-redirect';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Wallet, ArrowDownLeft, ArrowUpRight, Plus, Lock } from 'lucide-react';
-import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
+import { DashboardLayout } from '@/components/layout/DashboardShell';
 import { useToast } from '@/components/ui/toast';
 import { apiErrorMessage } from '@/lib/api-client';
 import { useAuthStore, hasSession } from '@/lib/store/auth-store';
@@ -105,7 +105,7 @@ function WalletContent() {
   const topupResult = TOPUP_MESSAGES[searchParams.get('topup') ?? ''];
 
   return (
-    <DashboardLayout title={t('nurayWallet')} subtitle={t('walletSubtitle')} sidebarItems={CUSTOMER_SIDEBAR_ITEMS} userType="customer">
+    <DashboardLayout title={t('nurayWallet')} subtitle={t('walletSubtitle')} userType="customer">
       <div className="max-w-3xl mx-auto space-y-5 pb-16">
         {topupResult && (
           <div
@@ -137,7 +137,7 @@ function WalletContent() {
               <div className="flex items-center gap-2 text-[#A3BCB7] text-sm font-semibold">
                 <Wallet className="w-4 h-4" /> {t('balance')}
               </div>
-              <div className="mt-2 text-4xl font-extrabold">{formatPrice(wallet.balance)}</div>
+              <div className="mt-2 text-4xl font-semibold">{formatPrice(wallet.balance)}</div>
               {wallet.isLocked && (
                 <p className="mt-3 flex items-center gap-2 text-sm text-accent">
                   <Lock className="w-4 h-4" /> {t('walletLocked')}

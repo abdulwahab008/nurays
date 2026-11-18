@@ -2,7 +2,7 @@ import type { Prisma } from '@prisma/client';
 import prisma from '../config/database';
 import { AppError } from '../middleware/errorHandler';
 import { codeDiscount } from '../utils/orderPricing';
-import { applyStackedDiscount } from '../utils/pricing';
+import { priceDealLines, type CatalogDeal } from '../utils/pricing';
 
 type CatalogEligiblePromotion = {
   id: string;
@@ -14,7 +14,19 @@ type CatalogEligiblePromotion = {
   usageLimitTotal: number | null;
   usedCount: number;
   usageLimitPerUser: number;
+  minOrderAmount: unknown;
+  maxDiscountAmount: unknown;
+  discountScope: string;
 };
+
+const toCatalogDeal = (p: CatalogEligiblePromotion): CatalogDeal => ({
+  id: p.id,
+  discountType: p.discountType,
+  discountValue: Number(p.discountValue),
+  minOrderAmount: Number(p.minOrderAmount),
+  maxDiscountAmount: p.maxDiscountAmount ? Number(p.maxDiscountAmount) : null,
+  discountScope: p.discountScope,
+});
 
 export interface PromotionScopeItem {
   productId: string | null;
@@ -138,34 +150,29 @@ export class PromotionService {
     });
     const userUsageCount = new Map(userUsageRows.map((r) => [r.promotionId, r._count._all]));
 
+    const { unitPrices: discountedUnitPrices, applied } = priceDealLines(
+      items.map((item) => ({
+        sellerId: item.sellerId,
+        unitPrice: item.unitPrice,
+        quantity: item.quantity,
+        deals: promotions
+          .filter((p) => this.isCatalogEligibleForCharge(p, item.productId, item.sellerId, userUsageCount))
+          .map(toCatalogDeal),
+      }))
+    );
+
     const discountByPromotion = new Map<string, number>();
-    const discountedUnitPrices: number[] = [];
-
-    for (const item of items) {
-      const eligible = promotions.filter((p) =>
-        this.isCatalogEligibleForCharge(p, item.productId, item.sellerId, userUsageCount)
-      );
-      if (!eligible.length) {
-        discountedUnitPrices.push(item.unitPrice);
-        continue;
+    items.forEach((item, i) => {
+      const itemDiscountTotal = (item.unitPrice - discountedUnitPrices[i]) * item.quantity;
+      if (itemDiscountTotal <= 0) return;
+      // Two simultaneous seller-wide promos stacking on the same product is a rare
+      // edge case; attribute the full item discount to each touching promotion rather
+      // than splitting it exactly. What the customer is charged is unaffected either
+      // way — this only shades the per-promotion "discountApplied" ledger value.
+      for (const p of applied[i]) {
+        discountByPromotion.set(p.id, (discountByPromotion.get(p.id) ?? 0) + itemDiscountTotal);
       }
-      const finalUnitPrice = applyStackedDiscount(
-        item.unitPrice,
-        eligible.map((p) => ({ discountType: p.discountType, discountValue: Number(p.discountValue) }))
-      );
-      discountedUnitPrices.push(finalUnitPrice);
-
-      const itemDiscountTotal = (item.unitPrice - finalUnitPrice) * item.quantity;
-      if (itemDiscountTotal > 0) {
-        // Two simultaneous seller-wide promos stacking on the same product is a rare
-        // edge case; attribute the full item discount to each touching promotion rather
-        // than splitting it exactly. What the customer is charged is unaffected either
-        // way — this only shades the per-promotion "discountApplied" ledger value.
-        for (const p of eligible) {
-          discountByPromotion.set(p.id, (discountByPromotion.get(p.id) ?? 0) + itemDiscountTotal);
-        }
-      }
-    }
+    });
 
     const usagesToRecord = [...discountByPromotion.entries()].map(([promotionId, discountApplied]) => ({
       promotionId,
@@ -360,6 +367,7 @@ export class PromotionService {
       discountType: 'percentage' | 'fixed';
       discountValue: number;
       maxDiscountAmount?: number | null;
+      discountScope?: 'per_dish' | 'per_order';
       minOrderAmount: number;
       usageLimitTotal?: number | null;
       usageLimitPerUser: number;
@@ -399,6 +407,8 @@ export class PromotionService {
         discountType: data.discountType,
         discountValue: data.discountValue,
         maxDiscountAmount: data.maxDiscountAmount ?? null,
+        // Only a kitchen's deal has a scope; a platform code is always taken once off the order.
+        ...(sellerId && data.discountScope ? { discountScope: data.discountScope } : {}),
         minOrderAmount: data.minOrderAmount,
         applicableTo: applyTo,
         applicableProductIds,
@@ -419,6 +429,7 @@ export class PromotionService {
       discountType: promotion.discountType,
       discountValue: Number(promotion.discountValue),
       maxDiscountAmount: promotion.maxDiscountAmount ? Number(promotion.maxDiscountAmount) : null,
+      discountScope: promotion.discountScope,
       minOrderAmount: Number(promotion.minOrderAmount),
       applicableTo: promotion.applicableTo,
       applicableProductIds: promotion.applicableProductIds ?? [],
@@ -441,6 +452,9 @@ export class PromotionService {
     name: string;
     type: string;
     discountValue: number;
+    minOrderAmount: number;
+    maxDiscountAmount: number | null;
+    discountScope: string;
   }>>> {
     if (!productIds?.length) return {};
 
@@ -469,6 +483,9 @@ export class PromotionService {
         usageLimitPerUser: true,
         applicableProductIds: true,
         sellerId: true,
+        minOrderAmount: true,
+        maxDiscountAmount: true,
+        discountScope: true,
       },
     });
 
@@ -484,7 +501,9 @@ export class PromotionService {
       for (const r of rows) userUsageCount.set(r.promotionId, r._count._all);
     }
 
-    const result: Record<string, Array<{ id: string; name: string; type: string; discountValue: number }>> = {};
+    // The minimum order and the cap go with each deal: the cart and checkout pages apply them to the whole tray
+    // (frontend-web/lib/pricing.ts priceDealLines), the same way the order does.
+    const result: Awaited<ReturnType<PromotionService['getPromotionsForCatalog']>> = {};
     for (const product of products) {
       const applicable = promotions.filter((p) =>
         this.isCatalogEligibleForCharge(p, product.id, product.sellerId, userUsageCount)
@@ -495,6 +514,9 @@ export class PromotionService {
           name: p.name,
           type: p.discountType,
           discountValue: Number(p.discountValue),
+          minOrderAmount: Number(p.minOrderAmount),
+          maxDiscountAmount: p.maxDiscountAmount ? Number(p.maxDiscountAmount) : null,
+          discountScope: p.discountScope,
         }));
       }
     }
@@ -532,6 +554,7 @@ export class PromotionService {
         usageLimitTotal: p.usageLimitTotal,
         usageLimitPerUser: p.usageLimitPerUser,
         minOrderAmount: Number(p.minOrderAmount),
+        discountScope: p.discountScope,
         isActive: p.isActive,
         applicableTo: p.applicableTo,
         applicableProductIds: p.applicableProductIds ?? [],
@@ -573,6 +596,7 @@ export class PromotionService {
       usageLimitTotal: promotion.usageLimitTotal,
       usageLimitPerUser: promotion.usageLimitPerUser,
       minOrderAmount: Number(promotion.minOrderAmount),
+      discountScope: promotion.discountScope,
       applicableTo: promotion.applicableTo,
       applicableProductIds: promotion.applicableProductIds ?? [],
       isActive: promotion.isActive,
@@ -594,6 +618,7 @@ export class PromotionService {
       discountType?: 'percentage' | 'fixed';
       discountValue?: number;
       maxDiscountAmount?: number | null;
+      discountScope?: 'per_dish' | 'per_order';
       minOrderAmount?: number;
       usageLimitTotal?: number | null;
       usageLimitPerUser?: number;
@@ -648,6 +673,7 @@ export class PromotionService {
         ...(data.discountType != null && { discountType: data.discountType }),
         ...(data.discountValue != null && { discountValue: data.discountValue }),
         ...(data.maxDiscountAmount !== undefined && { maxDiscountAmount: data.maxDiscountAmount }),
+        ...(sellerId && data.discountScope != null && { discountScope: data.discountScope }),
         ...(data.minOrderAmount != null && { minOrderAmount: data.minOrderAmount }),
         ...(data.usageLimitTotal !== undefined && { usageLimitTotal: data.usageLimitTotal }),
         ...(data.usageLimitPerUser != null && { usageLimitPerUser: data.usageLimitPerUser }),

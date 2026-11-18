@@ -61,7 +61,7 @@ export function HelpFaq({ headingClassName = '' }: { headingClassName?: string }
     <div className="space-y-6">
       {SECTIONS.map(({ title, icon: Icon, questions }) => (
         <section key={title} aria-label={t(title)}>
-          <h2 className={`flex items-center gap-2 text-lg font-extrabold text-ink mb-2 ${headingClassName}`}>
+          <h2 className={`flex items-center gap-2 text-lg font-semibold text-ink mb-2 ${headingClassName}`}>
             <Icon className="w-5 h-5 shrink-0 text-brand-ink" aria-hidden />
             <span>{t(title)}</span>
           </h2>

@@ -13,7 +13,7 @@ export default function RouteError({ error, reset }: { error: Error & { digest?:
   return (
     <div className="min-h-[60vh] flex items-center justify-center px-4">
       <div className="max-w-md w-full text-center bg-surface border border-line rounded-[24px] p-8 sm:p-10">
-        <h1 className="text-2xl leading-tight font-extrabold tracking-tight text-ink">Something went wrong on this page</h1>
+        <h1 className="text-2xl leading-tight font-semibold tracking-tight text-ink">Something went wrong on this page</h1>
         <p className="mt-2 text-sm text-muted">
           It has been reported. You can try again, or go back to the home page.
         </p>
@@ -22,7 +22,7 @@ export default function RouteError({ error, reset }: { error: Error & { digest?:
           <button
             type="button"
             onClick={reset}
-            className="inline-flex items-center h-11 px-5 rounded-xl bg-brand text-on-brand text-sm font-extrabold hover:bg-brand-500"
+            className="inline-flex items-center h-11 px-5 rounded-xl bg-brand text-on-brand text-sm font-semibold hover:bg-brand-500"
           >
             Try again
           </button>

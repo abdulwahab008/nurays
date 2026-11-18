@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
+import { DashboardLayout } from '@/components/layout/DashboardShell';
 import { favoriteService, FavoriteSellerItem } from '@/lib/services/favorite.service';
 import { useCommunityStore } from '@/lib/store/community-store';
 import { useToast } from '@/components/ui/toast';
@@ -83,7 +83,7 @@ export default function FavoritesPage() {
   };
 
   return (
-    <DashboardLayout title={t('favTitle')} subtitle={t('favSubtitle')} sidebarItems={CUSTOMER_SIDEBAR_ITEMS} userType="customer">
+    <DashboardLayout title={t('favTitle')} subtitle={t('favSubtitle')} userType="customer">
       <div className="max-w-6xl mx-auto">
         {loading ? (
           <div role="status" className="flex items-center justify-center gap-2 py-16 text-sm text-muted">

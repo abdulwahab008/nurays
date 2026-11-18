@@ -5,6 +5,7 @@ import {
   updateOrderStatus,
   cancelOrder,
   retryDelivery,
+  unassignRider,
   processRefund,
   listRefunds,
   completeRefund,
@@ -58,6 +59,9 @@ router.post('/orders/:id/cancel', validate(cancelOrderSchema), cancelOrder);
 
 // Retry a failed delivery — send it back out instead of cancelling
 router.post('/orders/:id/retry-delivery', retryDelivery);
+
+// Take the job back from a rider who is not working it (before pickup only)
+router.post('/orders/:id/unassign-rider', unassignRider);
 
 // Process refund
 router.post('/orders/:id/refund', validate(processRefundSchema), processRefund);

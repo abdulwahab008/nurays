@@ -7,6 +7,11 @@ import { Button } from '@/components/ui/button';
 import type { SocialProof } from '@/lib/native-shell';
 import { GoogleSignInButton } from '@/components/GoogleSignInButton';
 import { useToast } from '@/components/ui/toast';
+import { ConfirmModal } from '@/components/ui/ConfirmModal';
+import { carryNextTo, landingAfterLogin } from '@/lib/auth-redirect';
+import { homeFor } from '@/lib/utils';
+import { mergeGuestTray, type GuestTrayMerge } from '@/lib/store/cart-store';
+import { shellMessages } from '@/lib/i18n/messages/shell';
 import { authService } from '@/lib/services/auth.service';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient, apiErrorCode, apiErrorDetails } from '@/lib/api-client';
@@ -37,6 +42,39 @@ function RegisterForm() {
   const { showToast } = useToast();
   const t = useT(authMessages);
   const requestError = useRequestErrorMessage();
+  const ts = useT(shellMessages);
+  // As on the sign-in page: a tray filled before signing up that clashes with the account's tray (an existing account
+  // reached through Google) is the customer's to choose between.
+  const [trayChoice, setTrayChoice] = useState<(Extract<GuestTrayMerge, { kind: 'conflict' }> & { dest: string }) | null>(null);
+  const [trayBusy, setTrayBusy] = useState(false);
+
+  // A customer's dishes added before signing up go into the new account's tray before they move on; without this the
+  // next read of the (empty) account tray would replace them.
+  const goAfterSignUp = async (dest: string, userType?: string) => {
+    if (!userType || userType === 'customer') {
+      const merge = await mergeGuestTray();
+      if (merge.kind === 'conflict') {
+        setTrayChoice({ ...merge, dest });
+        return;
+      }
+      if (merge.skipped > 0) showToast(ts('trayMergeSkipped', { count: merge.skipped }), 'error');
+    }
+    router.push(dest);
+  };
+  const chooseTray = async (keepGuest: boolean) => {
+    if (!trayChoice) return;
+    setTrayBusy(true);
+    if (keepGuest) {
+      const { skipped } = await trayChoice.keepGuest();
+      if (skipped > 0) showToast(ts('trayMergeSkipped', { count: skipped }), 'error');
+    } else {
+      trayChoice.keepAccount();
+    }
+    setTrayBusy(false);
+    router.push(trayChoice.dest);
+  };
+  // Where a customer goes once the e-mail is confirmed: the page they were sent to sign in for, when there is one.
+  const pendingUrl = (next: string) => `/verify-email-pending?next=${encodeURIComponent(next)}`;
   const [formData, setFormData] = useState({
     email: '',
     password: '',
@@ -95,19 +133,12 @@ function RegisterForm() {
         
         // Google OAuth users are always email verified, so skip email verification page
         // Only redirect to email verification if explicitly required AND not a Google OAuth user
+        const uType = response.data.user?.userType || response.data.user?.user_type;
+        const landing = landingAfterLogin(homeFor(uType));
         if (response.data.requiresEmailVerification && !response.data.user?.emailVerified) {
-          router.push('/verify-email-pending');
+          await goAfterSignUp(landing === homeFor(uType) ? '/verify-email-pending' : pendingUrl(landing), uType);
         } else {
-          const uType = response.data.user?.userType || response.data.user?.user_type;
-          if (uType === 'seller') {
-            router.push('/sellers/dashboard');
-          } else if (uType === 'rider') {
-            router.push('/riders/dashboard');
-          } else if (uType === 'admin') {
-            router.push('/admin/dashboard');
-          } else {
-            router.push('/');
-          }
+          await goAfterSignUp(landing, uType);
         }
       }
     } catch (err) {
@@ -181,7 +212,7 @@ function RegisterForm() {
 
         // Redirect based on user type
         const dashboardByType: Record<string, string> = {
-          customer: '/',
+          customer: landingAfterLogin('/'),
           seller: '/sellers/register',
           rider: '/riders/dashboard',
         };
@@ -190,9 +221,9 @@ function RegisterForm() {
           const redirectUrl = dashboardByType[formData.user_type]
             ? `/verify-email-pending?next=${encodeURIComponent(dashboardByType[formData.user_type])}`
             : '/verify-email-pending';
-          router.push(redirectUrl);
+          await goAfterSignUp(redirectUrl, formData.user_type);
         } else if (dashboardByType[formData.user_type]) {
-          router.push(dashboardByType[formData.user_type]);
+          await goAfterSignUp(dashboardByType[formData.user_type], formData.user_type);
         } else {
           router.push('/');
         }
@@ -542,11 +573,32 @@ function RegisterForm() {
 
         <p className="mt-8 text-sm text-muted">
           {t('haveAccount')}{' '}
-          <Link href="/login" className={authLink}>
+          <Link
+            href="/login"
+            onClick={(e) => {
+              // The page asked for (?next=) is only known in the browser, so it is added on the way out.
+              const withNext = carryNextTo('/login');
+              if (withNext === '/login') return;
+              e.preventDefault();
+              router.push(withNext);
+            }}
+            className={authLink}
+          >
             {t('signInLink')}
           </Link>
         </p>
       </div>
+      <ConfirmModal
+        isOpen={!!trayChoice}
+        title={ts('trayMergeTitle')}
+        message={trayChoice ? ts('trayMergeBody', { guest: trayChoice.guestKitchen, account: trayChoice.accountKitchen }) : ''}
+        confirmText={trayChoice ? ts('trayMergeUseNew', { guest: trayChoice.guestKitchen }) : ''}
+        cancelText={trayChoice ? ts('trayMergeKeepOld', { account: trayChoice.accountKitchen }) : ''}
+        variant="info"
+        loading={trayBusy}
+        onConfirm={() => void chooseTray(true)}
+        onCancel={() => void chooseTray(false)}
+      />
     </main>
   );
 }

@@ -81,37 +81,12 @@ function playCustomerNotificationSound() {
 }
 
 // labelKey: the toast's heading, from ordersMessages.
-const STATUS_CONFIG: Record<string, { labelKey: keyof typeof ordersMessages.en; emoji: string; headerClass: string; dotClass: string }> = {
-  confirmed: {
-    labelKey: 'notif.confirmed',
-    emoji: '✓',
-    headerClass: 'from-blue-500 to-blue-600',
-    dotClass: 'bg-white',
-  },
-  preparing: {
-    labelKey: 'notif.preparing',
-    emoji: '🍳',
-    headerClass: 'from-amber-500 to-brand',
-    dotClass: 'bg-white',
-  },
-  ready: {
-    labelKey: 'notif.ready',
-    emoji: '✔',
-    headerClass: 'from-emerald-500 to-emerald-600',
-    dotClass: 'bg-white',
-  },
-  dispatched: {
-    labelKey: 'notif.dispatched',
-    emoji: '🚚',
-    headerClass: 'from-violet-500 to-purple-600',
-    dotClass: 'bg-white',
-  },
-  delivered: {
-    labelKey: 'notif.delivered',
-    emoji: '🎉',
-    headerClass: 'from-teal-500 to-cyan-600',
-    dotClass: 'bg-white',
-  },
+const STATUS_LABEL: Record<string, keyof typeof ordersMessages.en> = {
+  confirmed: 'notif.confirmed',
+  preparing: 'notif.preparing',
+  ready: 'notif.ready',
+  dispatched: 'notif.dispatched',
+  delivered: 'notif.delivered',
 };
 
 // Only notify customers about these positive status changes
@@ -162,38 +137,28 @@ export function CustomerOrderNotification() {
   return (
     <div className="fixed top-[calc(1rem+var(--safe-top))] end-[calc(1rem+var(--safe-end))] z-[9998] flex flex-col gap-3 pointer-events-none">
       {notifications.map((n) => {
-        const known = STATUS_CONFIG[n.status];
-        const cfg = known
-          ? { ...known, label: t(known.labelKey) }
-          : {
-              label:
-                statusKey(n.status) in commonMessages.en
-                  ? tc(statusKey(n.status))
-                  : n.status.charAt(0).toUpperCase() + n.status.slice(1),
-              emoji: '•',
-              headerClass: 'from-gray-500 to-gray-600',
-              dotClass: 'bg-white',
-            };
+        const known = STATUS_LABEL[n.status];
+        const label = known
+          ? t(known)
+          : statusKey(n.status) in commonMessages.en
+            ? tc(statusKey(n.status))
+            : n.status.charAt(0).toUpperCase() + n.status.slice(1);
 
         return (
           <div
             key={n.id}
-            className="pointer-events-auto w-[320px] bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden"
-            style={{ animation: 'slideInRight 0.32s cubic-bezier(0.34,1.56,0.64,1)' }}
+            className="pointer-events-auto w-[320px] bg-surface rounded-2xl shadow-[var(--shadow-hover)] border border-line overflow-hidden"
+            style={{ animation: 'notifIn 0.3s cubic-bezier(0.22,1,0.36,1)' }}
           >
-            {/* Coloured header */}
-            <div className={`bg-gradient-to-r ${cfg.headerClass} px-4 py-2.5 flex items-center justify-between`}>
+            <div className="px-4 pt-3 flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <span className="relative flex h-2.5 w-2.5">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-70"></span>
-                  <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${cfg.dotClass}`}></span>
-                </span>
-                <span className="text-white font-bold text-sm tracking-wide">{cfg.label}</span>
+                <span className="h-2 w-2 rounded-full bg-brand" aria-hidden />
+                <span className="text-ink font-semibold text-sm">{label}</span>
               </div>
               <button
                 onClick={() => dismiss(n.id)}
                 aria-label={t('notif.dismiss')}
-                className="text-white/70 hover:text-white transition-colors"
+                className="text-muted hover:text-ink transition-colors"
               >
                 <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -203,19 +168,19 @@ export function CustomerOrderNotification() {
 
             {/* Body */}
             <div className="px-4 py-3">
-              <p className="text-gray-500 text-xs mb-1">{t('notif.yourOrder')}</p>
-              <p className="text-gray-900 font-bold text-sm mb-3"><span data-ltr>#{n.orderNumber}</span></p>
+              <p className="text-muted text-xs mb-1">{t('notif.yourOrder')}</p>
+              <p className="text-ink font-semibold text-sm mb-3"><span data-ltr>#{n.orderNumber}</span></p>
 
               <div className="flex gap-2">
                 <button
                   onClick={() => { router.push(`/orders/${n.orderId}`); dismiss(n.id); }}
-                  className="flex-1 bg-gray-900 hover:bg-gray-800 active:scale-95 text-white text-xs font-semibold py-2 rounded-xl transition-all"
+                  className="flex-1 bg-brand hover:bg-brand-500 active:scale-[0.98] text-on-brand text-xs font-semibold py-2 rounded-xl transition-[color,background-color,border-color,opacity,transform]"
                 >
                   {t('notif.viewOrder')}
                 </button>
                 <button
                   onClick={() => dismiss(n.id)}
-                  className="px-3 bg-gray-100 hover:bg-gray-200 active:scale-95 text-gray-500 text-xs font-medium py-2 rounded-xl transition-all"
+                  className="px-3 bg-raised hover:bg-line active:scale-[0.98] text-muted text-xs font-medium py-2 rounded-xl transition-[color,background-color,border-color,opacity,transform]"
                 >
                   {t('notif.ok')}
                 </button>
@@ -226,9 +191,9 @@ export function CustomerOrderNotification() {
       })}
 
       <style>{`
-        @keyframes slideInRight {
-          from { opacity: 0; transform: translateX(110%); }
-          to   { opacity: 1; transform: translateX(0);    }
+        @keyframes notifIn {
+          from { opacity: 0; transform: translateY(-8px); }
+          to   { opacity: 1; transform: translateY(0); }
         }
       `}</style>
     </div>

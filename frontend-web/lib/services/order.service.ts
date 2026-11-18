@@ -11,7 +11,8 @@ export interface CreateOrderRequest {
   deliveryAddressId?: string;
   hubId?: string;
   deliverySlotDate?: string;
-  deliverySlotTime?: 'morning' | 'afternoon' | 'evening';
+  /** A window the kitchen offers ("12:00-15:00"), from the checkout's delivery days. */
+  deliverySlotTime?: string;
   paymentMethod: 'jazzcash' | 'easypaisa' | 'card' | 'safepay' | 'bank' | 'cod' | 'wallet';
   promotionCode?: string;
   deliveryInstructions?: string;
@@ -148,6 +149,8 @@ export interface SellerPaymentAccount {
 export interface SellerPaymentDetails {
   sellerId: string;
   sellerName: string;
+  /** The kitchen has not accepted the order yet: its accounts are not given until it does. */
+  awaitingAcceptance?: boolean;
   accounts: SellerPaymentAccount[];
   instructions?: string;
 }

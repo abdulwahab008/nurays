@@ -17,35 +17,15 @@ import { assertOnMenu } from '../utils/menu';
 import { createStockAlert } from './stock-alert.service';
 import promotionService from './promotion.service';
 import { isAcceptingOrders, validateOrderTiming } from './availability.service';
-import { ONLINE_GATEWAY_METHODS, codCollectorOf } from '../utils/paymentCustody';
+import { windowProblem } from '../utils/deliveryWindows';
+import { ONLINE_GATEWAY_METHODS, SELLER_DIRECT_METHODS, codCollectorOf } from '../utils/paymentCustody';
 import { assertKitchenTakesCash } from './kitchen-owing.service';
+import sellerOrderService from './seller-order.service';
 import { onlinePaymentsAvailable } from './online-payment.service';
 import { newHandoverCode } from './handover.service';
 import { debitWallet } from './wallet.service';
 import { logEvent, logger } from '../utils/logger';
 import { thrownMessage, thrown } from '../utils/thrown';
-
-/** When each delivery window closes, in minutes after midnight Pakistan time (the windows checkout offers). */
-export const SLOT_END_MINUTES = { morning: 12 * 60, afternoon: 17 * 60, evening: 21 * 60 + 30 } as const;
-export type SlotTime = keyof typeof SLOT_END_MINUTES;
-
-const PKT_OFFSET_MS = 5 * 60 * 60 * 1000;
-
-/**
- * Why a delivery slot can't be booked, or null when it can: a day before today, or today's window once it has closed
- * (all in Pakistan time). A slot with no date is today's.
- */
-export function slotProblem(slotTime: SlotTime | undefined, slotDate: string | undefined, now: Date = new Date()): string | null {
-  const pktNow = new Date(now.getTime() + PKT_OFFSET_MS);
-  const today = pktNow.toISOString().slice(0, 10);
-  const day = slotDate ? new Date(slotDate).toISOString().slice(0, 10) : today;
-  if (day < today) return 'The delivery day has already passed. Please choose another day.';
-  if (day === today && slotTime) {
-    const minutes = pktNow.getUTCHours() * 60 + pktNow.getUTCMinutes();
-    if (minutes >= SLOT_END_MINUTES[slotTime]) return 'That delivery window has already passed today. Please choose a later one.';
-  }
-  return null;
-}
 
 /** A transfer straight to the kitchen needs the kitchen's account for that method. */
 export function transferAccountMissing(
@@ -132,7 +112,7 @@ export class OrderPlacement {
       deliveryAddressId?: string;
       hubId?: string;
       deliverySlotDate?: string;
-      deliverySlotTime?: SlotTime;
+      deliverySlotTime?: string;
       paymentMethod: string;
       promotionCode?: string;
       deliveryInstructions?: string;
@@ -286,10 +266,15 @@ export class OrderPlacement {
       // Where the item is fulfilled from is decided by the product, not the request: a hub id on
       // an item the kitchen ships itself would otherwise re-price the delivery as Nuray's and
       // charge the kitchen for it.
+      // A dish kept only at a hub cannot be ordered without one: the kitchen has none to hand over, and an order
+      // without a hub would take no hub stock. A dish kept in both places comes from the kitchen when no hub is named.
       const fulfillmentType =
-        product.stockType === 'hub' || (product.stockType === 'both' && item.stockType === 'hub') ? 'hub' : 'direct';
+        product.stockType === 'hub' || (product.stockType === 'both' && item.stockType === 'hub' && item.hubId) ? 'hub' : 'direct';
       if (item.hubId && fulfillmentType !== 'hub') {
         throw new AppError(`${product.name} is not stocked at a hub`, 400, 'HUB_NOT_APPLICABLE');
+      }
+      if (fulfillmentType === 'hub' && !item.hubId) {
+        throw new AppError(`${product.name} comes from a Nuray hub. Open the dish and choose a hub to order it.`, 400, 'HUB_REQUIRED');
       }
 
       // List/catalog price — the seller-wide "deal" discount below is applied on top of this.
@@ -366,9 +351,12 @@ export class OrderPlacement {
       }
     }
 
-    const slotIssue = slotProblem(data.deliverySlotTime, data.deliverySlotDate);
-    if (slotIssue) {
-      throw new AppError(slotIssue, 400, 'DELIVERY_SLOT_PASSED');
+    // The window must be one the kitchen offers that day (from its opening hours), still ahead, with time to cook.
+    for (const seller of sellersInOrder.values()) {
+      const slotIssue = windowProblem(seller, data.deliverySlotTime, data.deliverySlotDate);
+      if (slotIssue) {
+        throw new AppError(slotIssue, 400, 'DELIVERY_SLOT_PASSED');
+      }
     }
 
     // Apply seller-wide catalog/deal promotions to the actual charged unit price —
@@ -558,10 +546,11 @@ export class OrderPlacement {
           ? 'platform'
           : 'self';
 
-    // A kitchen that has owed Nuray for two weeks takes no new cash it would collect itself (kitchen-owing.service.ts).
-    if (data.paymentMethod === 'cod' && onlySeller && codCollectorOf({ deliveryType: data.deliveryType, deliveryProvider }) === 'seller') {
-      await assertKitchenTakesCash(onlySeller.id);
-    }
+    // A kitchen that has owed Nuray too long or too much takes no new money itself (kitchen-owing.service.ts).
+    const kitchenTakesTheMoney =
+      SELLER_DIRECT_METHODS.includes(data.paymentMethod) ||
+      (data.paymentMethod === 'cod' && codCollectorOf({ deliveryType: data.deliveryType, deliveryProvider }) === 'seller');
+    if (onlySeller && kitchenTakesTheMoney) await assertKitchenTakesCash(onlySeller.id);
 
     // 5% GST on the goods after discounts; the total in whole rupees (see priceOrder).
     const { taxAmount, totalAmount } = priceOrder(subtotal - discountAmount, deliveryFee);
@@ -822,6 +811,7 @@ export class OrderPlacement {
     } catch (err) {
       logger.error({ err, orderId: order.order.id }, 'New-order notification failed');
     }
+    await sellerOrderService.autoAccept(order.order.id);
 
     // Low-stock / out-of-stock alerts (may send email): in the background, never
     // holding up the customer's checkout.

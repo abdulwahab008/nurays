@@ -3,7 +3,7 @@ import { realPhoneOrNull } from '../utils/otp';
 import { codCollectorOf, isCashAtDoor } from '../utils/paymentCustody';
 import { presentFile } from '../storage';
 import { cancelOpenDelivery, notifyDeliveryCancelled, reopenDeliveryData, CancelledDelivery } from './delivery-lifecycle.service';
-import { postDeliverySoon } from './dispatch.service';
+import { postDeliverySoon, takeBackDelivery } from './dispatch.service';
 import prisma from '../config/database';
 import { pageArgs } from '../utils/pagination';
 import { AppError } from '../middleware/errorHandler';
@@ -661,6 +661,22 @@ export class AdminOrderService {
     // Offer it to a rider now rather than on the next sweep (never the one it failed with).
     if (reopened?.id) postDeliverySoon(reopened.id, orderId);
     return { orderId, status: 'ready' };
+  }
+
+  /**
+   * Take an order's job back from a rider who is not working it (admin). Only before the food is picked up;
+   * the job goes back to the pool for other riders, as when the rider hands it back themselves.
+   */
+  async unassignRider(orderId: string, adminId: string) {
+    const delivery = await prisma.delivery.findUnique({ where: { orderId }, select: { id: true, riderId: true } });
+    if (!delivery) {
+      throw new AppError('This order has no rider job', 404, 'DELIVERY_NOT_FOUND');
+    }
+    if (!(await takeBackDelivery(delivery.id))) {
+      throw new AppError('A job can only be taken back from a rider before the food is picked up', 409, 'CANNOT_UNASSIGN');
+    }
+    logEvent('order.rider_unassigned', { orderId, actor: 'admin', adminId, deliveryId: delivery.id, previousRiderId: delivery.riderId });
+    return { orderId, deliveryId: delivery.id, unassigned: true };
   }
 
   /**

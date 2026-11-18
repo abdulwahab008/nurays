@@ -56,7 +56,10 @@ export class OrderPayments {
       throw new AppError('Order not found', 404, 'ORDER_NOT_FOUND');
     }
 
-    const seller = order.items[0]?.seller;
+    // The kitchen's account numbers are for a customer whose order the kitchen has taken, and only while there is
+    // something to pay: not for anyone who places an order to read them, nor once the order is called off.
+    const awaitingAcceptance = order.orderStatus === 'pending';
+    const seller = awaitingAcceptance || ['cancelled', 'refunded'].includes(order.orderStatus) ? null : order.items[0]?.seller;
 
     // Only accounts the seller has actually configured. The customer sends real
     // money to whatever is listed here, so there are no placeholder fallbacks —
@@ -92,8 +95,9 @@ export class OrderPayments {
       paymentStatus: order.paymentStatus,
       paymentSubmittedAt: order.paymentSubmittedAt,
       paymentReferenceNumber: order.paymentReferenceNumber,
-      sellerId: seller?.id ?? null,
-      sellerName: seller?.businessName ?? null,
+      sellerId: order.items[0]?.seller.id ?? null,
+      sellerName: order.items[0]?.seller.businessName ?? null,
+      awaitingAcceptance,
       accounts,
     };
   }

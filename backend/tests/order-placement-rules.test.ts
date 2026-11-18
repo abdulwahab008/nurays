@@ -1,33 +1,5 @@
-import { slotProblem, transferAccountMissing } from '../src/services/order-placement.service';
+import { transferAccountMissing } from '../src/services/order-placement.service';
 import { createOrderSchema } from '../src/validators/order.validator';
-
-// 2026-11-06 12:40 in Pakistan (UTC+5) is 07:40 UTC.
-const LUNCHTIME_PKT = new Date('2026-11-06T07:40:00Z');
-// 2026-11-07 02:00 in Pakistan is still 2026-11-06 in UTC.
-const AFTER_MIDNIGHT_PKT = new Date('2026-11-06T21:00:00Z');
-
-describe('slotProblem', () => {
-  it("refuses today's morning window once it has closed", () => {
-    expect(slotProblem('morning', undefined, LUNCHTIME_PKT)).toMatch(/already passed/);
-    expect(slotProblem('morning', '2026-11-06', LUNCHTIME_PKT)).toMatch(/already passed/);
-  });
-
-  it("accepts today's windows that are still open, and any window on a later day", () => {
-    expect(slotProblem('afternoon', undefined, LUNCHTIME_PKT)).toBeNull();
-    expect(slotProblem('evening', undefined, LUNCHTIME_PKT)).toBeNull();
-    expect(slotProblem('morning', '2026-11-07', LUNCHTIME_PKT)).toBeNull();
-  });
-
-  it('works out today in Pakistan time, not UTC', () => {
-    expect(slotProblem('morning', '2026-11-06', AFTER_MIDNIGHT_PKT)).toMatch(/day has already passed/);
-    expect(slotProblem('morning', '2026-11-07', AFTER_MIDNIGHT_PKT)).toBeNull();
-    expect(slotProblem('morning', undefined, AFTER_MIDNIGHT_PKT)).toBeNull();
-  });
-
-  it('accepts an order with no window', () => {
-    expect(slotProblem(undefined, undefined, LUNCHTIME_PKT)).toBeNull();
-  });
-});
 
 describe('transferAccountMissing', () => {
   const none = { bankAccountNumber: null, jazzcashNumber: null, easypaisaNumber: '  ' };
@@ -56,6 +28,8 @@ describe('createOrderSchema delivery slot', () => {
 
   it('takes only the three windows checkout offers', () => {
     expect(createOrderSchema.safeParse({ ...base, deliverySlotTime: 'evening' }).success).toBe(true);
+    expect(createOrderSchema.safeParse({ ...base, deliverySlotTime: '12:00-15:00' }).success).toBe(true);
+    expect(createOrderSchema.safeParse({ ...base, deliverySlotTime: '12:00-99:00' }).success).toBe(false);
     expect(createOrderSchema.safeParse({ ...base, deliverySlotTime: 'midnight' }).success).toBe(false);
   });
 

@@ -2,24 +2,19 @@
 
 import { useEffect, useState } from 'react';
 import { loginUrlHere } from '@/lib/auth-redirect';
-import { getPromotionLabel, getStackedDiscountedPrice } from '@/lib/pricing';
+import { getPromotionLabel, priceTray } from '@/lib/pricing';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
   MapPin,
   Clock,
-  Banknote,
-  Building2,
-  Smartphone,
   Check,
-  Copy,
   ArrowRight,
   ShieldCheck,
   Tag,
   ShoppingBag,
   Plus,
   Minus,
-  Store,
   ChevronRight,
   Trash2,
   Truck,
@@ -34,7 +29,7 @@ import { LoadError } from '@/components/ui/LoadError';
 import { useToast } from '@/components/ui/toast';
 import { useAuthStore, hasSession } from '@/lib/store/auth-store';
 import { useCartStore } from '@/lib/store/cart-store';
-import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
+import { DashboardLayout } from '@/components/layout/DashboardShell';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { apiClient, apiErrorMessage, apiErrorCode, apiErrorDetails, apiErrorStatus } from '@/lib/api-client';
 import { sellerService, type PublicSellerAvailability } from '@/lib/services/seller.service';
@@ -45,10 +40,10 @@ import { checkoutMessages, richText } from '@/lib/i18n/messages/checkout';
 import { ExternalLink } from '@/components/ExternalLink';
 import { useDeliveryEstimate } from '@/lib/hooks/use-delivery-estimate';
 import { useShallow } from 'zustand/react/shallow';
-import { SLOT_TIMES, openSlotsToday, pktDateString, slotDays, type SlotTime } from './delivery-slots';
+import { pktDateString, windowHours } from './delivery-slots';
+import type { DeliveryDay } from '@/lib/services/seller.service';
 import { attemptMayExist, checkoutKeyFor, forgetCheckoutKey, sessionStore } from './checkout-key';
 
-type CopyField = 'iban' | 'jazzcash' | 'easypaisa';
 type PaymentMethod = 'cod' | 'safepay' | 'wallet' | 'bank' | 'jazzcash' | 'easypaisa';
 type Fulfilment = 'delivery' | 'pickup';
 
@@ -71,7 +66,6 @@ const changedTotal = (details: unknown): number | null =>
   details && typeof details === 'object' && 'total' in details && typeof details.total === 'number' ? details.total : null;
 
 /** How far ahead a delivery day can be chosen when the kitchen sets no limit of its own. */
-const DEFAULT_MAX_DAYS_AHEAD = 6;
 
 /** Adding an address from checkout opens the form straight away and comes back here once it is saved. */
 const ADD_ADDRESS_HREF = `/profile/addresses?new=1&next=${encodeURIComponent('/checkout')}`;
@@ -81,17 +75,15 @@ interface CatalogPromotion {
   name: string;
   type: string;
   discountValue: number;
+  minOrderAmount?: number;
+  maxDiscountAmount?: number | null;
 }
 
 type AppliedPromo = { code: string; discountAmount: number };
 
 /** The tray's goods at the prices the order charges: each dish after its kitchen's menu deals. */
 const dealSubtotal = (items: CartResponse['items'], promotions: Record<string, CatalogPromotion[]>) =>
-  items.reduce((sum, item) => {
-    const base = item.variant?.price ?? item.product.price;
-    const promos = promotions[item.product.id] || [];
-    return sum + (promos.length > 0 ? getStackedDiscountedPrice(base, promos) : base) * item.quantity;
-  }, 0);
+  priceTray(items, promotions).unitPrices.reduce((sum, unitPrice, i) => sum + unitPrice * items[i].quantity, 0);
 
 const validatePromo = async (code: string, cartTotal: number): Promise<AppliedPromo | null> => {
   const res = await apiClient.post<{ success: boolean; data: AppliedPromo }>('/promotions/validate', { code: code.trim(), cartTotal });
@@ -113,14 +105,13 @@ export default function CheckoutPage() {
   const [fulfilment, setFulfilment] = useState<Fulfilment>('delivery');
   const [onlineAvailable, setOnlineAvailable] = useState(false);
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
-  const [transactionRef, setTransactionRef] = useState<string>('');
-  // The kitchen owes Nuray and its cash orders are paused (CASH_UNAVAILABLE): cash comes off the list.
+  // The kitchen owes Nuray and takes no money itself for now (CASH_UNAVAILABLE): cash and transfers to it come off the list.
   const [cashUnavailable, setCashUnavailable] = useState(false);
   const [deliveryInstructions, setDeliveryInstructions] = useState<string>('');
-  const [deliverySlot, setDeliverySlot] = useState<{ offset: number; time: SlotTime }>(() => {
-    const today = openSlotsToday(new Date());
-    return today.length ? { offset: 0, time: today[0] } : { offset: 1, time: 'morning' };
-  });
+  // The day and window chosen; until the person picks one, the first the kitchen offers.
+  const [deliverySlot, setDeliverySlot] = useState<{ offset: number; key: string } | null>(null);
+  // The days and windows this kitchen can be booked for, from its own hours (null until they have loaded).
+  const [kitchenDays, setKitchenDays] = useState<DeliveryDay[] | null>(null);
   const [promoCode, setPromoCode] = useState('');
   const [appliedPromo, setAppliedPromo] = useState<AppliedPromo | null>(null);
   const [promoValidating, setPromoValidating] = useState(false);
@@ -129,7 +120,6 @@ export default function CheckoutPage() {
   const [loadError, setLoadError] = useState<unknown>(null);
   const [processing, setProcessing] = useState(false);
   const [updatingItemId, setUpdatingItemId] = useState<string | null>(null);
-  const [copiedField, setCopiedField] = useState<CopyField | null>(null);
   const [showClearModal, setShowClearModal] = useState(false);
   const [clearingCart, setClearingCart] = useState(false);
   // Bumped whenever the tray changed on the server, so the delivery estimate is asked for again.
@@ -138,7 +128,6 @@ export default function CheckoutPage() {
   // The kitchen's hours as its storefront shows them; null until known, and nothing is blocked on a guess.
   const [kitchenAvailability, setKitchenAvailability] = useState<PublicSellerAvailability | null>(null);
 
-  const sidebarItems = CUSTOMER_SIDEBAR_ITEMS;
 
   // What delivery to the chosen address costs is the server's to say (the kitchen, the address and the order's amount
   // decide it); nothing is assumed while it is not known.
@@ -219,15 +208,6 @@ export default function CheckoutPage() {
       .then((w) => setWalletBalance(w.isLocked ? 0 : w.balance))
       .catch(() => setWalletBalance(null));
   }, [isAuthenticated]);
-
-  const handleCopy = (text: string, field: CopyField) => {
-    if (typeof navigator !== 'undefined' && navigator.clipboard) {
-      navigator.clipboard.writeText(text);
-      setCopiedField(field);
-      showToast(t('copiedToClipboard', { label: t(`copyLabel.${field}`) }), 'success');
-      setTimeout(() => setCopiedField(null), 2500);
-    }
-  };
 
   const handleClearCart = async () => {
     setClearingCart(true);
@@ -312,7 +292,9 @@ export default function CheckoutPage() {
     if (!kitchenId) return;
     let cancelled = false;
     sellerService.getPublicSeller(kitchenId).then((s) => {
-      if (!cancelled) setKitchenAvailability(s?.availability ?? null);
+      if (cancelled) return;
+      setKitchenAvailability(s?.availability ?? null);
+      setKitchenDays(s?.deliveryDays ?? []);
     });
     return () => {
       cancelled = true;
@@ -321,18 +303,12 @@ export default function CheckoutPage() {
   // The storefront's rule: a closed kitchen takes no order unless it takes pre-orders, and then only for a later day.
   const takesPreOrders = !!kitchen?.preOrderOnly || kitchenAvailability?.status === 'preorder_only';
   const kitchenClosed = !!kitchenAvailability && !kitchenAvailability.isOpen && !takesPreOrders;
-  const minDaysAhead = kitchen?.advanceBookingMinDays ?? (takesPreOrders ? 1 : 0);
-  const maxDaysAhead = kitchen?.advanceBookingMaxDays ?? Math.max(minDaysAhead, DEFAULT_MAX_DAYS_AHEAD);
-  const days = slotDays(new Date(), minDaysAhead, maxDaysAhead);
-  const chosenDay = days.find((d) => d.offset === deliverySlot.offset) ?? days[0];
-  const chosenTime = chosenDay ? (chosenDay.slots.includes(deliverySlot.time) ? deliverySlot.time : chosenDay.slots[0]) : undefined;
+  const days = kitchenDays ?? [];
+  const chosenDay = days.find((d) => d.offset === deliverySlot?.offset) ?? days[0];
+  const chosenTime = chosenDay ? (chosenDay.windows.find((w) => w.key === deliverySlot?.key) ?? chosenDay.windows[0])?.key : undefined;
   // A transfer straight to the kitchen is offered only when the kitchen has given the account to send it to.
-  const transferAccount = {
-    bank: kitchen?.bankAccountNumber || null,
-    jazzcash: kitchen?.jazzcashNumber || null,
-    easypaisa: kitchen?.easypaisaNumber || null,
-  };
-  const methodUsable = (m: PaymentMethod) => (m === 'bank' || m === 'jazzcash' || m === 'easypaisa' ? !!transferAccount[m] : true);
+  const takesTransfer = (m: PaymentMethod) => !cashUnavailable && !!kitchen?.transferMethods?.includes(m);
+  const methodUsable = (m: PaymentMethod) => (m === 'bank' || m === 'jazzcash' || m === 'easypaisa' ? takesTransfer(m) : true);
 
   const dayLabel = (offset: number, date: string) => {
     if (offset === 0) return t('day.today');
@@ -406,12 +382,6 @@ export default function CheckoutPage() {
         hubId: item.hubId ?? undefined,
       }));
 
-      const finalInstructions = [
-        deliveryInstructions.trim(),
-        transactionRef.trim() ? `Payment Reference/TID: ${transactionRef.trim()}` : '',
-      ]
-        .filter(Boolean)
-        .join(' | ');
 
       const orderData = {
         items: orderItems,
@@ -422,7 +392,7 @@ export default function CheckoutPage() {
         deliverySlotTime: chosenTime,
         paymentMethod: paymentMethod,
         promotionCode: appliedPromo?.code || undefined,
-        deliveryInstructions: finalInstructions || undefined,
+        deliveryInstructions: deliveryInstructions.trim() || undefined,
         expectedTotal,
       };
 
@@ -498,10 +468,7 @@ export default function CheckoutPage() {
         }
         if (code === 'CASH_UNAVAILABLE') {
           setCashUnavailable(true);
-          const fallback = (['safepay', 'bank', 'jazzcash', 'easypaisa'] as const).find((m) =>
-            m === 'safepay' ? onlineAvailable : methodUsable(m)
-          );
-          if (fallback) setPaymentMethod(fallback);
+          if (onlineAvailable) setPaymentMethod('safepay');
         }
         showToast(
           code === 'GATEWAY_UNAVAILABLE'
@@ -527,7 +494,7 @@ export default function CheckoutPage() {
 
   if (loading) {
     return (
-      <DashboardLayout title={t('checkoutTitle')} subtitle={t('checkoutSubtitle')} sidebarItems={sidebarItems} userType="customer">
+      <DashboardLayout title={t('checkoutTitle')} subtitle={t('checkoutSubtitle')} userType="customer">
         <div className="max-w-5xl mx-auto py-12 flex flex-col items-center justify-center gap-3">
           <div className="w-8 h-8 border-3 border-brand border-t-transparent rounded-full animate-spin" />
           <p className="text-xs font-semibold text-muted">{t('preparingSummary')}</p>
@@ -538,7 +505,7 @@ export default function CheckoutPage() {
 
   if (loadError && !cart) {
     return (
-      <DashboardLayout title={t('checkoutTitle')} subtitle={t('checkoutSubtitle')} sidebarItems={sidebarItems} userType="customer">
+      <DashboardLayout title={t('checkoutTitle')} subtitle={t('checkoutSubtitle')} userType="customer">
         <div className="max-w-xl mx-auto my-12">
           <LoadError error={loadError} onRetry={loadData} title={t('loadFailed')} />
         </div>
@@ -548,15 +515,15 @@ export default function CheckoutPage() {
 
   if (!cart || cart.items.length === 0) {
     return (
-      <DashboardLayout title={t('checkoutTitle')} subtitle={t('checkoutSubtitle')} sidebarItems={sidebarItems} userType="customer">
-        <div className="max-w-md mx-auto my-12 bg-surface rounded-[24px] p-8 border border-line text-center">
+      <DashboardLayout title={t('checkoutTitle')} subtitle={t('checkoutSubtitle')} userType="customer">
+        <div className="max-w-md mx-auto my-12 bg-surface rounded-2xl p-8 border border-line text-center">
           <div className="w-16 h-16 bg-brand-soft rounded-2xl flex items-center justify-center mx-auto mb-4 text-brand-soft-ink">
             <ShoppingBag className="w-8 h-8" />
           </div>
-          <h2 className="text-xl font-bold text-ink tracking-tight mb-1.5">{t('trayEmptyTitle')}</h2>
+          <h2 className="text-xl font-semibold text-ink tracking-tight mb-1.5">{t('trayEmptyTitle')}</h2>
           <p className="text-xs text-muted mb-6">{t('trayEmptyText')}</p>
           <Link href="/kitchens">
-            <Button className="w-full bg-brand hover:bg-brand-500 text-on-brand font-bold py-2.5 rounded-xl">
+            <Button className="w-full bg-brand hover:bg-brand-500 text-on-brand font-semibold py-2.5 rounded-xl">
               {t('browseKitchens')}
             </Button>
           </Link>
@@ -566,18 +533,12 @@ export default function CheckoutPage() {
   }
 
   const sellerTitle = kitchen?.businessName || t('verifiedKitchen');
-  const sellerBankName = kitchen?.bankName;
-  const sellerAccountTitle = kitchen?.bankAccountName || kitchen?.businessName;
-  const sellerAccountNumber = transferAccount.bank;
-  const sellerJazzCash = transferAccount.jazzcash;
-  const sellerJazzCashTitle = kitchen?.jazzcashAccountTitle || kitchen?.businessName;
-  const sellerEasyPaisa = transferAccount.easypaisa;
-  const sellerEasyPaisaTitle = kitchen?.easypaisaAccountTitle || kitchen?.businessName;
   const kitchenArea = kitchen?.community?.name;
   const closedOpensText = kitchenClosed ? opensLabel(kitchenAvailability?.opensAt || kitchenAvailability?.nextOpenAt) : null;
 
   // Subtotals with promotions
-  const discountedSubtotal = dealSubtotal(cart.items, promotionsByProductId);
+  const trayDeals = priceTray(cart.items, promotionsByProductId);
+  const discountedSubtotal = trayDeals.unitPrices.reduce((sum, unitPrice, i) => sum + unitPrice * cart.items[i].quantity, 0);
   const promotionSavings = Math.max(0, cart.summary.subtotal - discountedSubtotal);
   // Delivery is added to the total only once the server has said what it costs to the chosen address.
   // Collecting from the kitchen costs nothing to deliver, so the total is known straight away.
@@ -616,34 +577,27 @@ export default function CheckoutPage() {
   );
 
   return (
-    <DashboardLayout title={t('checkoutTitle')} subtitle={t('reviewSubtitle')} sidebarItems={sidebarItems} userType="customer">
+    <DashboardLayout title={t('checkoutTitle')} subtitle={t('reviewSubtitle')} userType="customer">
       <div className="max-w-6xl mx-auto pb-28 lg:pb-16">
         {/* Kitchen Origin Header Banner */}
-        <div className="mb-6 px-4 py-2 rounded-[20px] bg-surface border border-line flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="w-10 h-10 shrink-0 rounded-xl bg-brand-soft flex items-center justify-center text-brand-soft-ink">
-              <Store className="w-5 h-5" aria-hidden />
-            </div>
-            <span className="min-w-0 break-words text-[15px] font-bold text-ink">{sellerTitle}</span>
-          </div>
+        <div className="mb-6 pb-4 border-b border-line flex items-center justify-between gap-3">
+          <span className="min-w-0 break-words font-semibold text-ink">{sellerTitle}</span>
           <div className="flex items-center gap-3 shrink-0">
             <Link
               href="/cart"
               className="min-h-11 text-sm font-semibold text-brand-ink hover:underline inline-flex items-center gap-1 whitespace-nowrap"
             >
               <span>{t('editTray')}</span>
-              <ChevronRight className="rtl:-scale-x-100 w-3.5 h-3.5" />
+              <ChevronRight className="rtl:-scale-x-100 w-4 h-4" aria-hidden />
             </Link>
           </div>
         </div>
 
         {kitchenClosed && (
-          <div role="status" className="mb-6 p-4 rounded-[20px] bg-accent-soft border border-accent/50 flex items-start gap-3" data-testid="kitchen-closed">
-            <div className="w-10 h-10 rounded-xl bg-surface text-ink flex items-center justify-center shrink-0">
-              <Clock className="w-5 h-5" aria-hidden />
-            </div>
+          <div role="status" className="mb-6 p-4 rounded-2xl bg-accent-soft flex items-start gap-3" data-testid="kitchen-closed">
+            <Clock className="w-5 h-5 mt-0.5 shrink-0 text-accent-soft-ink" aria-hidden />
             <div className="min-w-0">
-              <p className="text-[15px] font-bold text-accent-soft-ink">{t('kitchenClosedTitle', { kitchen: sellerTitle })}</p>
+              <p className="text-[15px] font-semibold text-accent-soft-ink">{t('kitchenClosedTitle', { kitchen: sellerTitle })}</p>
               <p className="text-sm text-accent-soft-ink mt-0.5">
                 {closedOpensText ? t('kitchenClosedOpens', { when: closedOpensText }) : t('kitchenClosedNoTime')}
               </p>
@@ -680,13 +634,10 @@ export default function CheckoutPage() {
 
             {/* 1. Where: the delivery address, or the kitchen to collect from */}
             {isPickup ? (
-              <div className="bg-surface rounded-[20px] p-4 sm:p-6 border border-line space-y-3" data-testid="pickup-card">
+              <div className="bg-surface rounded-2xl p-4 sm:p-6 border border-line space-y-3" data-testid="pickup-card">
                 <div className="flex items-center gap-2.5">
-                  <div className="w-9 h-9 rounded-xl bg-brand-soft text-brand-soft-ink flex items-center justify-center">
-                    <ShoppingBasket className="w-4 h-4" />
-                  </div>
                   <div>
-                    <h2 className="text-base font-bold text-ink">{t('pickupHeading')}</h2>
+                    <h2 className="text-base font-semibold text-ink">{t('pickupHeading')}</h2>
                     <p className="text-xs text-muted">{t('pickupHint')}</p>
                   </div>
                 </div>
@@ -698,13 +649,10 @@ export default function CheckoutPage() {
                 </div>
               </div>
             ) : (
-            <div className="bg-surface rounded-[20px] p-4 sm:p-6 border border-line space-y-4">
+            <div className="bg-surface rounded-2xl p-4 sm:p-6 border border-line space-y-4">
               <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
                 <div className="flex items-center gap-2.5 flex-1 min-w-[13rem]">
-                  <div className="w-9 h-9 rounded-xl bg-brand-soft text-brand-soft-ink flex items-center justify-center shrink-0">
-                    <MapPin className="w-4 h-4" />
-                  </div>
-                  <h2 className="min-w-0 text-base font-bold text-ink">{t('addressHeading')}</h2>
+                  <h2 className="min-w-0 text-base font-semibold text-ink">{t('addressHeading')}</h2>
                 </div>
                 {addresses.length > 0 && (
                   <Link
@@ -748,9 +696,9 @@ export default function CheckoutPage() {
                     return (
                       <label
                         key={address.id}
-                        className={`flex items-start gap-3 p-3.5 rounded-2xl border-2 cursor-pointer transition-all ${
+                        className={`flex items-start gap-3 p-3.5 rounded-2xl border cursor-pointer transition-colors ${
                           isSelected
-                            ? 'border-brand bg-brand-soft/40'
+                            ? 'border-brand ring-1 ring-brand bg-brand-soft/40'
                             : 'border-line hover:border-line-strong bg-surface'
                         }`}
                       >
@@ -764,9 +712,9 @@ export default function CheckoutPage() {
                         />
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-0.5">
-                            <span className="text-[15px] font-bold text-ink">{address.label || t('addressHome')}</span>
+                            <span className="text-[15px] font-semibold text-ink">{address.label || t('addressHome')}</span>
                             {address.isDefault && (
-                              <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-raised text-muted border border-line">
+                              <span className="text-xs text-muted">
                                 {t('addressDefault')}
                               </span>
                             )}
@@ -791,15 +739,17 @@ export default function CheckoutPage() {
             )}
 
             {/* 2. When */}
-            <div className="bg-surface rounded-[20px] p-4 sm:p-6 border border-line space-y-4">
+            <div className="bg-surface rounded-2xl p-4 sm:p-6 border border-line space-y-4">
               <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-brand-soft text-brand-soft-ink flex items-center justify-center">
-                  <Clock className="w-4 h-4" />
-                </div>
-                <h2 className="text-base font-bold text-ink">{t(isPickup ? 'pickupSlotHeading' : 'slotHeading')}</h2>
+                <h2 className="text-base font-semibold text-ink">{t(isPickup ? 'pickupSlotHeading' : 'slotHeading')}</h2>
               </div>
 
-              {days.length === 0 ? (
+              {kitchenDays === null ? (
+                <div className="space-y-2" aria-hidden>
+                  <div className="h-11 w-2/3 rounded-full bg-raised motion-safe:animate-pulse" />
+                  <div className="h-14 rounded-2xl bg-raised motion-safe:animate-pulse" />
+                </div>
+              ) : days.length === 0 ? (
                 <p className="text-sm text-muted">{t('noSlotLeft')}</p>
               ) : (
                 <>
@@ -812,7 +762,7 @@ export default function CheckoutPage() {
                           type="button"
                           role="radio"
                           aria-checked={active}
-                          onClick={() => setDeliverySlot({ offset: d.offset, time: d.slots.includes(deliverySlot.time) ? deliverySlot.time : d.slots[0] })}
+                          onClick={() => setDeliverySlot({ offset: d.offset, key: d.windows.some((w) => w.key === chosenTime) ? chosenTime! : d.windows[0].key })}
                           className={`shrink-0 min-h-11 px-4 rounded-full border text-sm font-semibold transition-colors ${
                             active ? 'border-brand bg-brand-soft text-brand-soft-ink' : 'border-line text-ink hover:border-line-strong'
                           }`}
@@ -822,31 +772,29 @@ export default function CheckoutPage() {
                       );
                     })}
                   </div>
-                  <div role="radiogroup" aria-label={t('timeWindow')} className="grid grid-cols-3 gap-2" data-testid="slot-times">
-                    {SLOT_TIMES.map((time) => {
-                      const open = !!chosenDay?.slots.includes(time);
-                      const active = open && time === chosenTime;
+                  {/* The kitchen's windows for that day: its sessions ("Lunch"), or morning, afternoon and evening cut to its hours */}
+                  <div role="radiogroup" aria-label={t('timeWindow')} className="grid grid-cols-2 sm:grid-cols-3 gap-2" data-testid="slot-times">
+                    {chosenDay?.windows.map((w) => {
+                      const active = w.key === chosenTime;
+                      const hours = windowHours(w.start, w.end);
+                      const name = w.name ? t(`slotName.${w.name}`) : w.label;
                       return (
                         <button
-                          key={time}
+                          key={w.key}
                           type="button"
                           role="radio"
                           aria-checked={active}
-                          disabled={!open}
-                          onClick={() => setDeliverySlot({ offset: chosenDay.offset, time })}
-                          className={`min-h-14 px-2 py-2 rounded-2xl border text-center transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+                          onClick={() => setDeliverySlot({ offset: chosenDay.offset, key: w.key })}
+                          className={`min-h-14 px-2 py-2 rounded-2xl border text-center transition-colors ${
                             active ? 'border-brand bg-brand-soft text-brand-soft-ink' : 'border-line text-ink hover:border-line-strong'
                           }`}
                         >
-                          <span className="block text-sm font-semibold">{t(`slotName.${time}`)}</span>
-                          <span className="block text-xs text-muted" data-ltr>{t(`slotHours.${time}`)}</span>
+                          <span className="block text-sm font-semibold">{name ?? hours}</span>
+                          {name && <span className="block text-xs text-muted">{hours}</span>}
                         </button>
                       );
                     })}
                   </div>
-                  {chosenDay?.offset === 0 && chosenDay.slots.length < SLOT_TIMES.length && (
-                    <p className="text-xs text-muted">{t('slotsPassed')}</p>
-                  )}
                 </>
               )}
 
@@ -868,12 +816,9 @@ export default function CheckoutPage() {
             </div>
 
             {/* 3. Payment Method */}
-            <div className="bg-surface rounded-[20px] p-4 sm:p-6 border border-line space-y-4">
+            <div className="bg-surface rounded-2xl p-4 sm:p-6 border border-line space-y-4">
               <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-brand-soft text-brand-soft-ink flex items-center justify-center">
-                  <Banknote className="w-4 h-4" />
-                </div>
-                <h2 className="text-base font-bold text-ink">{t('paymentHeading')}</h2>
+                <h2 className="text-base font-semibold text-ink">{t('paymentHeading')}</h2>
               </div>
 
               <div className="space-y-3">
@@ -885,9 +830,9 @@ export default function CheckoutPage() {
                 {/* Method 1: Cash on Delivery */}
                 {!cashUnavailable && (
                 <label
-                  className={`block p-4 rounded-2xl border-2 cursor-pointer transition-all ${
+                  className={`block p-4 rounded-2xl border cursor-pointer transition-colors ${
                     paymentMethod === 'cod'
-                      ? 'border-brand bg-brand-soft/40'
+                      ? 'border-brand ring-1 ring-brand bg-brand-soft/40'
                       : 'border-line hover:border-line-strong bg-surface'
                   }`}
                 >
@@ -900,15 +845,10 @@ export default function CheckoutPage() {
                       onChange={() => setPaymentMethod('cod')}
                       className="accent-brand w-4 h-4 cursor-pointer"
                     />
-                    <div className="w-8 h-8 rounded-xl bg-accent-soft text-accent-soft-ink flex items-center justify-center shrink-0">
-                      <Banknote className="w-4 h-4" />
-                    </div>
                     <div className="flex-1">
                       <div className="flex items-center gap-2">
-                        <span className="text-[15px] font-bold text-ink">{t('codTitle')}</span>
-                        <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-accent-soft text-accent-soft-ink">
-                          {t('recommended')}
-                        </span>
+                        <span className="text-[15px] font-semibold text-ink">{t('codTitle')}</span>
+                        <span className="text-xs text-muted">{t('recommended')}</span>
                       </div>
                       <p className="text-xs text-muted">{t(isPickup ? 'codHintPickup' : 'codHint')}</p>
                     </div>
@@ -925,9 +865,9 @@ export default function CheckoutPage() {
                 {/* Online: card / JazzCash / EasyPaisa through Safepay */}
                 {onlineAvailable && (
                   <label
-                    className={`block p-4 rounded-2xl border-2 cursor-pointer transition-all ${
+                    className={`block p-4 rounded-2xl border cursor-pointer transition-colors ${
                       paymentMethod === 'safepay'
-                        ? 'border-brand bg-brand-soft/40'
+                        ? 'border-brand ring-1 ring-brand bg-brand-soft/40'
                         : 'border-line hover:border-line-strong bg-surface'
                     }`}
                   >
@@ -940,11 +880,8 @@ export default function CheckoutPage() {
                         onChange={() => setPaymentMethod('safepay')}
                         className="accent-brand w-4 h-4 cursor-pointer"
                       />
-                      <div className="w-8 h-8 rounded-xl bg-brand-soft text-brand-soft-ink flex items-center justify-center shrink-0">
-                        <Smartphone className="w-4 h-4" />
-                      </div>
                       <div className="flex-1">
-                        <span className="text-[15px] font-bold text-ink">{t('onlineTitle')}</span>
+                        <span className="text-[15px] font-semibold text-ink">{t('onlineTitle')}</span>
                         <p className="text-xs text-muted">{t('onlineHint')}</p>
                       </div>
                     </div>
@@ -960,11 +897,11 @@ export default function CheckoutPage() {
                 {/* Nuray Wallet */}
                 {walletBalance !== null && (
                   <label
-                    className={`block p-4 rounded-2xl border-2 transition-all ${
+                    className={`block p-4 rounded-2xl border transition-colors ${
                       walletBalance < totalPayable
                         ? 'border-line bg-raised cursor-not-allowed opacity-70'
                         : paymentMethod === 'wallet'
-                        ? 'border-brand bg-brand-soft/40 cursor-pointer'
+                        ? 'border-brand ring-1 ring-brand bg-brand-soft/40 cursor-pointer'
                         : 'border-line hover:border-line-strong bg-surface cursor-pointer'
                     }`}
                   >
@@ -978,11 +915,8 @@ export default function CheckoutPage() {
                         onChange={() => setPaymentMethod('wallet')}
                         className="accent-brand w-4 h-4 cursor-pointer disabled:cursor-not-allowed"
                       />
-                      <div className="w-8 h-8 rounded-xl bg-raised text-ink flex items-center justify-center shrink-0">
-                        <Banknote className="w-4 h-4" />
-                      </div>
                       <div className="flex-1">
-                        <span className="text-[15px] font-bold text-ink">{t('walletTitle')}</span>
+                        <span className="text-[15px] font-semibold text-ink">{t('walletTitle')}</span>
                         <p className="text-xs text-muted">
                           {t('walletBalance', { amount: formatPrice(walletBalance) })}
                           {walletBalance < totalPayable && (
@@ -1000,11 +934,11 @@ export default function CheckoutPage() {
                 )}
 
                 {/* Method 2: Bank Transfer / Raast (IBFT) */}
-                {sellerAccountNumber && (
+                {takesTransfer('bank') && (
                 <label
-                  className={`block p-4 rounded-2xl border-2 cursor-pointer transition-all ${
+                  className={`block p-4 rounded-2xl border cursor-pointer transition-colors ${
                     paymentMethod === 'bank'
-                      ? 'border-brand bg-brand-soft/40'
+                      ? 'border-brand ring-1 ring-brand bg-brand-soft/40'
                       : 'border-line hover:border-line-strong bg-surface'
                   }`}
                 >
@@ -1017,13 +951,10 @@ export default function CheckoutPage() {
                       onChange={() => setPaymentMethod('bank')}
                       className="accent-brand w-4 h-4 cursor-pointer"
                     />
-                    <div className="w-8 h-8 rounded-xl bg-raised text-ink flex items-center justify-center shrink-0">
-                      <Building2 className="w-4 h-4" />
-                    </div>
                     <div className="flex-1">
                       <div className="flex items-center gap-2">
-                        <span className="text-[15px] font-bold text-ink">{t('bankTitle')}</span>
-                        <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-raised text-muted">
+                        <span className="text-[15px] font-semibold text-ink">{t('bankTitle')}</span>
+                        <span className="text-xs text-muted">
                           {t('directToChef')}
                         </span>
                       </div>
@@ -1032,74 +963,17 @@ export default function CheckoutPage() {
                   </div>
 
                   {paymentMethod === 'bank' && (
-                    <div className="mt-3.5 ms-7 pt-3.5 border-t border-line space-y-3">
-                        <div className="bg-raised rounded-2xl p-4 space-y-2.5">
-                          {sellerBankName && (
-                            <div className="flex items-center justify-between text-xs border-b border-line pb-2">
-                              <span className="text-muted text-xs">{t('bankName')}</span>
-                              <span className="font-bold text-ink">{sellerBankName}</span>
-                            </div>
-                          )}
-                          <div className="flex items-center justify-between text-xs border-b border-line pb-2">
-                            <span className="text-muted text-xs">{t('accountTitle')}</span>
-                            <span className="font-bold text-ink">{sellerAccountTitle}</span>
-                          </div>
-                          <div className="flex items-center justify-between gap-2">
-                            <div>
-                              <span className="text-muted text-xs block">{t('accountIban')}</span>
-                              <span className="font-mono text-sm font-extrabold text-ink tracking-wide" data-ltr>
-                                {sellerAccountNumber}
-                              </span>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.preventDefault();
-                                handleCopy(sellerAccountNumber, 'iban');
-                              }}
-                              className="h-9 px-3 text-xs font-bold bg-surface hover:bg-line text-ink rounded-lg flex items-center gap-1.5 transition-colors border border-line cursor-pointer"
-                            >
-                              {copiedField === 'iban' ? (
-                                <>
-                                  <Check className="w-3 h-3 text-brand-ink" />
-                                  <span>{t('copied')}</span>
-                                </>
-                              ) : (
-                                <>
-                                  <Copy className="w-3 h-3" />
-                                  <span>{t('copy')}</span>
-                                </>
-                              )}
-                            </button>
-                          </div>
-                        </div>
-
-                      <div>
-                        <label className="text-[11px] font-semibold text-ink block mb-1">
-                          {t('txnRefLabel')}
-                        </label>
-                        <input
-                          type="text"
-                          value={transactionRef}
-                          onChange={(e) => setTransactionRef(e.target.value)}
-                          placeholder={t('txnRefPlaceholder')}
-                          className="w-full px-3 py-1.5 text-xs border border-line-strong rounded-xl outline-none focus:ring-2 focus:ring-brand bg-surface"
-                        />
-                        <p className="text-xs text-muted mt-1">
-                          {t('uploadLater')}
-                        </p>
-                      </div>
-                    </div>
+                    <p className="mt-3.5 ms-7 pt-3.5 border-t border-line text-xs text-muted">{t('payAfterAccept')}</p>
                   )}
                 </label>
                 )}
 
                 {/* Method 3: JazzCash Direct Transfer */}
-                {sellerJazzCash && (
+                {takesTransfer('jazzcash') && (
                 <label
-                  className={`block p-4 rounded-2xl border-2 cursor-pointer transition-all ${
+                  className={`block p-4 rounded-2xl border cursor-pointer transition-colors ${
                     paymentMethod === 'jazzcash'
-                      ? 'border-brand bg-brand-soft/40'
+                      ? 'border-brand ring-1 ring-brand bg-brand-soft/40'
                       : 'border-line hover:border-line-strong bg-surface'
                   }`}
                 >
@@ -1112,80 +986,24 @@ export default function CheckoutPage() {
                       onChange={() => setPaymentMethod('jazzcash')}
                       className="accent-brand w-4 h-4 cursor-pointer"
                     />
-                    <div className="w-8 h-8 rounded-xl bg-raised text-ink flex items-center justify-center shrink-0">
-                      <Smartphone className="w-4 h-4" />
-                    </div>
                     <div className="flex-1">
-                      <span className="text-[15px] font-bold text-ink">{t('jazzTitle')}</span>
+                      <span className="text-[15px] font-semibold text-ink">{t('jazzTitle')}</span>
                       <p className="text-xs text-muted">{t('jazzHint')}</p>
                     </div>
                   </div>
 
                   {paymentMethod === 'jazzcash' && (
-                    <div className="mt-3.5 ms-7 pt-3.5 border-t border-line space-y-3">
-                        <div className="bg-raised rounded-2xl p-4 space-y-2.5">
-                          <div className="flex items-center justify-between text-xs border-b border-line pb-2">
-                            <span className="text-muted text-xs">{t('chefTitle')}</span>
-                            <span className="font-bold text-ink">{sellerTitle}</span>
-                          </div>
-                          <div className="flex items-center justify-between text-xs border-b border-line pb-2">
-                            <span className="text-muted text-xs">{t('accountTitle')}</span>
-                            <span className="font-bold text-ink">{sellerJazzCashTitle}</span>
-                          </div>
-                          <div className="flex items-center justify-between gap-2">
-                            <div>
-                              <span className="text-muted text-xs block">{t('jazzNumber')}</span>
-                              <span className="font-mono text-sm font-extrabold text-ink tracking-wide" data-ltr>
-                                {sellerJazzCash}
-                              </span>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.preventDefault();
-                                handleCopy(sellerJazzCash, 'jazzcash');
-                              }}
-                              className="h-9 px-3 text-xs font-bold bg-surface hover:bg-line text-ink rounded-lg flex items-center gap-1.5 transition-colors border border-line cursor-pointer"
-                            >
-                              {copiedField === 'jazzcash' ? (
-                                <>
-                                  <Check className="w-3 h-3 text-brand-ink" />
-                                  <span>{t('copied')}</span>
-                                </>
-                              ) : (
-                                <>
-                                  <Copy className="w-3 h-3" />
-                                  <span>{t('copy')}</span>
-                                </>
-                              )}
-                            </button>
-                          </div>
-                        </div>
-
-                      <div>
-                        <label className="text-[11px] font-semibold text-ink block mb-1">
-                          {t('jazzTidLabel')}
-                        </label>
-                        <input
-                          type="text"
-                          value={transactionRef}
-                          onChange={(e) => setTransactionRef(e.target.value)}
-                          placeholder={t('jazzTidPlaceholder')}
-                          dir="ltr"
-                          className="w-full px-3 py-1.5 text-xs border border-line-strong rounded-xl outline-none focus:ring-2 focus:ring-brand bg-surface"
-                        />
-                      </div>
-                    </div>
+                    <p className="mt-3.5 ms-7 pt-3.5 border-t border-line text-xs text-muted">{t('payAfterAccept')}</p>
                   )}
                 </label>
                 )}
 
                 {/* Method 4: EasyPaisa Direct Transfer */}
-                {sellerEasyPaisa && (
+                {takesTransfer('easypaisa') && (
                 <label
-                  className={`block p-4 rounded-2xl border-2 cursor-pointer transition-all ${
+                  className={`block p-4 rounded-2xl border cursor-pointer transition-colors ${
                     paymentMethod === 'easypaisa'
-                      ? 'border-brand bg-brand-soft/40'
+                      ? 'border-brand ring-1 ring-brand bg-brand-soft/40'
                       : 'border-line hover:border-line-strong bg-surface'
                   }`}
                 >
@@ -1198,70 +1016,14 @@ export default function CheckoutPage() {
                       onChange={() => setPaymentMethod('easypaisa')}
                       className="accent-brand w-4 h-4 cursor-pointer"
                     />
-                    <div className="w-8 h-8 rounded-xl bg-brand-soft text-brand-soft-ink flex items-center justify-center shrink-0">
-                      <Smartphone className="w-4 h-4" />
-                    </div>
                     <div className="flex-1">
-                      <span className="text-[15px] font-bold text-ink">{t('easyTitle')}</span>
+                      <span className="text-[15px] font-semibold text-ink">{t('easyTitle')}</span>
                       <p className="text-xs text-muted">{t('easyHint')}</p>
                     </div>
                   </div>
 
                   {paymentMethod === 'easypaisa' && (
-                    <div className="mt-3.5 ms-7 pt-3.5 border-t border-line space-y-3">
-                        <div className="bg-raised rounded-2xl p-4 space-y-2.5">
-                          <div className="flex items-center justify-between text-xs border-b border-line pb-2">
-                            <span className="text-muted text-xs">{t('chefTitle')}</span>
-                            <span className="font-bold text-ink">{sellerTitle}</span>
-                          </div>
-                          <div className="flex items-center justify-between text-xs border-b border-line pb-2">
-                            <span className="text-muted text-xs">{t('accountTitle')}</span>
-                            <span className="font-bold text-ink">{sellerEasyPaisaTitle}</span>
-                          </div>
-                          <div className="flex items-center justify-between gap-2">
-                            <div>
-                              <span className="text-muted text-xs block">{t('easyNumber')}</span>
-                              <span className="font-mono text-sm font-extrabold text-ink tracking-wide" data-ltr>
-                                {sellerEasyPaisa}
-                              </span>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.preventDefault();
-                                handleCopy(sellerEasyPaisa, 'easypaisa');
-                              }}
-                              className="h-9 px-3 text-xs font-bold bg-surface hover:bg-line text-ink rounded-lg flex items-center gap-1.5 transition-colors border border-line cursor-pointer"
-                            >
-                              {copiedField === 'easypaisa' ? (
-                                <>
-                                  <Check className="w-3 h-3 text-brand-ink" />
-                                  <span>{t('copied')}</span>
-                                </>
-                              ) : (
-                                <>
-                                  <Copy className="w-3 h-3" />
-                                  <span>{t('copy')}</span>
-                                </>
-                              )}
-                            </button>
-                          </div>
-                        </div>
-
-                      <div>
-                        <label className="text-[11px] font-semibold text-ink block mb-1">
-                          {t('easyTidLabel')}
-                        </label>
-                        <input
-                          type="text"
-                          value={transactionRef}
-                          onChange={(e) => setTransactionRef(e.target.value)}
-                          placeholder={t('easyTidPlaceholder')}
-                          dir="ltr"
-                          className="w-full px-3 py-1.5 text-xs border border-line-strong rounded-xl outline-none focus:ring-2 focus:ring-brand bg-surface"
-                        />
-                      </div>
-                    </div>
+                    <p className="mt-3.5 ms-7 pt-3.5 border-t border-line text-xs text-muted">{t('payAfterAccept')}</p>
                   )}
                 </label>
                 )}
@@ -1271,9 +1033,9 @@ export default function CheckoutPage() {
 
           {/* Right Column: Sticky Order Summary & Portions (5 of 12) */}
           <div className="lg:col-span-5">
-            <div className="bg-surface rounded-[24px] p-5 sm:p-6 border border-line sticky top-[calc(5rem+var(--safe-top))] space-y-5">
+            <div className="bg-surface rounded-2xl p-5 sm:p-6 border border-line shadow-[var(--shadow-card)] sticky top-[calc(5rem+var(--safe-top))] space-y-5">
               <div className="flex items-center justify-between pb-3 border-b border-line">
-                <h3 className="text-base font-bold text-ink">{t('orderSummary')}</h3>
+                <h3 className="text-base font-semibold text-ink">{t('orderSummary')}</h3>
                 <div className="flex items-center gap-3">
                   <span className="text-xs font-semibold text-muted">
                     {t(cart.summary.totalItems === 1 ? 'itemsOne' : 'itemsMany', { count: cart.summary.totalItems })}
@@ -1281,7 +1043,7 @@ export default function CheckoutPage() {
                   <button
                     type="button"
                     onClick={() => setShowClearModal(true)}
-                    className="text-xs font-bold text-muted hover:text-red-600 hover:bg-raised h-11 px-2.5 rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
+                    className="text-xs font-semibold text-muted hover:text-red-600 hover:bg-raised h-11 px-2.5 rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
                     title={t('removeAllDishes')}
                   >
                     <Trash2 className="w-3 h-3" />
@@ -1291,31 +1053,31 @@ export default function CheckoutPage() {
               </div>
 
               {/* Items List with Quantity Controls */}
-              <div className="space-y-3 max-h-72 overflow-y-auto pe-1">
-                {cart.items.map((item) => {
+              <div className="divide-y divide-line max-h-80 overflow-y-auto pe-1">
+                {cart.items.map((item, itemIndex) => {
                   const base = item.variant?.price ?? item.product.price;
-                  const promos = promotionsByProductId[item.product.id] || [];
-                  const unitPrice = promos.length > 0 ? getStackedDiscountedPrice(base, promos) : base;
+                  const promos = trayDeals.applied[itemIndex];
+                  const unitPrice = trayDeals.unitPrices[itemIndex];
                   const lineTotal = unitPrice * item.quantity;
                   const label = promos.length > 0 ? promos.map((p) => getPromotionLabel(p, t, formatPrice)).join(' + ') : null;
 
                   return (
-                    <div key={item.id} className="p-3 rounded-2xl bg-raised space-y-2">
+                    <div key={item.id} className="py-3 space-y-2">
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex-1 min-w-0">
-                          <p className="text-[15px] font-bold text-ink truncate">{item.product.name}</p>
+                          <p className="text-[15px] font-semibold text-ink truncate">{item.product.name}</p>
                           {item.variant && (
                             <p className="text-xs text-muted truncate">{item.variant.name}</p>
                           )}
                           {label && (
-                            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-brand-soft-ink bg-brand-soft px-1.5 py-0.2 rounded mt-0.5">
-                              <Tag className="w-2.5 h-2.5" />
+                            <span className="inline-flex items-center gap-1 text-xs font-medium text-accent-soft-ink bg-accent-soft px-1.5 py-0.5 rounded-md mt-1">
+                              <Tag className="w-3 h-3" aria-hidden />
                               {label}
                             </span>
                           )}
                         </div>
                         <div className="text-end shrink-0">
-                          <span className="text-sm font-extrabold text-ink">{formatPrice(lineTotal)}</span>
+                          <span className="text-sm font-semibold text-ink tabular-nums">{formatPrice(lineTotal)}</span>
                           {promos.length > 0 && base > unitPrice && (
                             <p className="text-xs text-muted line-through">
                               {formatPrice(base * item.quantity)}
@@ -1325,33 +1087,33 @@ export default function CheckoutPage() {
                       </div>
 
                       {/* Quantity Stepper */}
-                      <div className="flex items-center justify-between pt-1 border-t border-line">
-                        <span className="text-xs text-muted font-medium">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-muted">
                           {t('perPiece', { price: formatPrice(unitPrice) })}
                         </span>
-                        <div className="flex items-center h-11 bg-surface rounded-xl border border-line">
+                        <div className="flex items-center h-11 rounded-xl border border-line">
                           <button
                             type="button"
                             disabled={updatingItemId === item.id}
                             onClick={() => handleUpdateItemQuantity(item.id, item.quantity - 1)}
-                            className="w-11 h-11 rounded-s-xl hover:bg-raised text-ink flex items-center justify-center transition-colors disabled:opacity-50"
-                            title={t('decreasePortion')}
-                            aria-label={t('decreasePortion')}
+                            className={`w-11 h-11 rounded-s-xl hover:bg-raised flex items-center justify-center transition-colors disabled:opacity-50 ${item.quantity <= 1 ? 'text-muted hover:text-red-700' : 'text-ink'}`}
+                            title={t(item.quantity <= 1 ? 'removeDish' : 'decreasePortion')}
+                            aria-label={t(item.quantity <= 1 ? 'removeDish' : 'decreasePortion')}
                           >
-                            <Minus className="w-4 h-4" strokeWidth={2.5} />
+                            {item.quantity <= 1 ? <Trash2 className="w-4 h-4" aria-hidden /> : <Minus className="w-4 h-4" aria-hidden />}
                           </button>
-                          <span className="min-w-6 text-center text-sm font-extrabold text-ink" aria-live="polite">
+                          <span className="min-w-6 text-center text-sm font-semibold text-ink tabular-nums" aria-live="polite">
                             {item.quantity}
                           </span>
                           <button
                             type="button"
                             disabled={updatingItemId === item.id}
                             onClick={() => handleUpdateItemQuantity(item.id, item.quantity + 1)}
-                            className="w-11 h-11 rounded-e-xl hover:bg-raised text-brand-ink flex items-center justify-center transition-colors disabled:opacity-50"
+                            className="w-11 h-11 rounded-e-xl hover:bg-raised text-ink flex items-center justify-center transition-colors disabled:opacity-50"
                             title={t('increasePortion')}
                             aria-label={t('increasePortion')}
                           >
-                            <Plus className="w-4 h-4" strokeWidth={2.5} />
+                            <Plus className="w-4 h-4" aria-hidden />
                           </button>
                         </div>
                       </div>
@@ -1374,7 +1136,7 @@ export default function CheckoutPage() {
                     dir="ltr"
                     disabled={!!appliedPromo}
                     aria-label={t('voucherPlaceholder')}
-                    className="flex-1 min-w-0 h-11 px-3 text-sm font-semibold uppercase tracking-wider placeholder:normal-case placeholder:tracking-normal text-ink border border-line rounded-xl outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand bg-surface"
+                    className="flex-1 min-w-0 h-11 px-3 text-sm font-medium font-mono uppercase placeholder:font-sans placeholder:normal-case text-ink border border-line rounded-xl outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand bg-surface"
                   />
                   {appliedPromo ? (
                     <Button
@@ -1387,7 +1149,7 @@ export default function CheckoutPage() {
                         useCartStore.getState().setAppliedPromoCode(null);
                         showToast(t('promoRemoved'), 'info');
                       }}
-                      className="h-11 text-sm font-bold text-red-600 rounded-xl px-3"
+                      className="h-11 text-sm font-semibold text-red-600 rounded-xl px-3"
                     >
                       {tc('remove')}
                     </Button>
@@ -1412,7 +1174,7 @@ export default function CheckoutPage() {
                           setPromoValidating(false);
                         }
                       }}
-                      className="h-11 text-sm font-bold px-4 rounded-xl"
+                      className="h-11 text-sm font-semibold px-4 rounded-xl"
                     >
                       {promoValidating ? t('checking') : t('apply')}
                     </Button>
@@ -1457,11 +1219,11 @@ export default function CheckoutPage() {
                     ) : !selectedAddress ? (
                       <span className="font-medium text-muted">{t('deliveryChooseAddress')}</span>
                     ) : notDeliverable ? (
-                      <span className="font-bold text-red-600">{t('deliveryNotAvailable')}</span>
+                      <span className="font-semibold text-red-600">{t('deliveryNotAvailable')}</span>
                     ) : !deliveryEstimate ? (
                       <span className="font-medium text-muted">{estimatePending ? t('deliveryWorkingOut') : t('deliveryAtPlacing')}</span>
                     ) : deliveryEstimate.isFree ? (
-                      <span className="font-bold text-brand-soft-ink">{t('freeCaps')}</span>
+                      <span className="font-semibold text-brand-soft-ink">{t('freeCaps')}</span>
                     ) : (
                       <span className="font-semibold text-ink">{formatPrice(effectiveDeliveryFee)}</span>
                     )}
@@ -1475,11 +1237,11 @@ export default function CheckoutPage() {
 
                 <div className="pt-3 border-t border-line flex items-baseline justify-between">
                   <div>
-                    <span className="text-base font-extrabold text-ink block">{deliveryKnown ? t('totalPayable') : t('totalBeforeDelivery')}</span>
+                    <span className="text-base font-semibold text-ink block">{deliveryKnown ? t('totalPayable') : t('totalBeforeDelivery')}</span>
                     <span className="text-xs text-muted">{deliveryKnown ? t('includesDeliveryTax') : t('deliveryAddedWhenPlaced')}</span>
                   </div>
                   <span className="text-end">
-                    <bdi dir="ltr" className="text-2xl font-extrabold text-ink">{formatPrice(totalPayable)}</bdi>
+                    <bdi dir="ltr" className="text-2xl font-semibold text-ink">{formatPrice(totalPayable)}</bdi>
                     {deliveryToAdd && <span className="block text-xs font-semibold text-muted">{t('plusDelivery')}</span>}
                   </span>
                 </div>
@@ -1492,7 +1254,7 @@ export default function CheckoutPage() {
                 type="button"
                 disabled={!canPlaceOrder}
                 onClick={() => handleCreateOrder(deliveryKnown ? totalPayable : undefined)}
-                className="hidden lg:flex w-full h-14 bg-brand hover:bg-brand-500 text-on-brand font-extrabold text-base rounded-2xl transition-all active:scale-[0.99] items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                className="hidden lg:flex w-full h-12 bg-brand hover:bg-brand-500 text-on-brand font-semibold text-[15px] rounded-xl transition-[background-color,transform] active:scale-[0.98] items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
               >
                 {placeOrderLabel}
               </Button>
@@ -1522,7 +1284,7 @@ export default function CheckoutPage() {
           type="button"
           disabled={!canPlaceOrder}
           onClick={() => handleCreateOrder(deliveryKnown ? totalPayable : undefined)}
-          className="w-full h-13 bg-brand hover:bg-brand-500 text-on-brand font-extrabold text-base rounded-2xl active:scale-[0.99] flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+          className="w-full h-13 bg-brand hover:bg-brand-500 text-on-brand font-semibold text-base rounded-2xl active:scale-[0.99] flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
           data-testid="place-order-bar"
         >
           {placeOrderLabel}
