@@ -6,6 +6,7 @@ import { forgetSavedTokens, nativePlugins, notificationPath, removeListener, sec
 import { apiClient, type ApiResponse } from '@/lib/api-client';
 import { hasSession, useAuthStore, type User } from '@/lib/store/auth-store';
 import { canGoBack, trackHistoryDepth } from '@/lib/native-back';
+import { THEME_COLOURS } from '@/lib/theme';
 
 /**
  * Inside the Nuray store app (mobile/), connects the website to the phone; in a browser it does nothing.
@@ -68,6 +69,7 @@ export function NativeBridge() {
     // Capacitor's DARK style is light text, for the dark theme (lib/hooks/use-theme.ts changes it when the theme does).
     const dark = document.documentElement.getAttribute('data-theme') === 'dark';
     void plugins.StatusBar?.setStyle({ style: dark ? 'DARK' : 'LIGHT' }).catch(() => undefined);
+    void plugins.PageColor?.set({ color: THEME_COLOURS[dark ? 'dark' : 'light'] }).catch(() => undefined);
     void plugins.SplashScreen?.hide().catch(() => undefined);
 
     return () => {

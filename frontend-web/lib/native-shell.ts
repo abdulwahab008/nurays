@@ -35,6 +35,8 @@ export interface NativePlugins {
   };
   SecureStorage?: SecureStoragePlugin;
   StatusBar?: { setStyle(options: { style: 'LIGHT' | 'DARK' | 'DEFAULT' }): Promise<void> };
+  /** Android app only (mobile/.../PageColorPlugin.java): the page colour, shown around the page on older WebViews. */
+  PageColor?: { set(options: { color: string }): Promise<void> };
   SplashScreen?: { hide(): Promise<void> };
   SocialLogin?: SocialLoginPlugin;
   PushNotifications?: PushNotificationsPlugin;
