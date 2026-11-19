@@ -26,7 +26,9 @@ export function applyTheme(chosen: Theme): void {
   else root.removeAttribute('data-theme');
   document.querySelectorAll('meta[name="theme-color"]').forEach((meta) => meta.setAttribute('content', THEME_COLOURS[theme]));
   // Capacitor's DARK style is light text, for a dark page.
-  void nativePlugins(window as unknown as NativeWindow)?.StatusBar?.setStyle({ style: theme === 'dark' ? 'DARK' : 'LIGHT' }).catch(() => undefined);
+  const plugins = nativePlugins(window as unknown as NativeWindow);
+  void plugins?.StatusBar?.setStyle({ style: theme === 'dark' ? 'DARK' : 'LIGHT' }).catch(() => undefined);
+  void plugins?.PageColor?.set({ color: THEME_COLOURS[theme] }).catch(() => undefined);
 }
 
 function subscribe(onChange: () => void): () => void {

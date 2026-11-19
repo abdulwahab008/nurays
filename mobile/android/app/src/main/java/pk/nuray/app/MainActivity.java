@@ -14,6 +14,7 @@ public class MainActivity extends BridgeActivity {
     // status icons unreadable), so it gets the page colour of the phone's light or dark mode instead.
     @Override
     public void onCreate(Bundle savedInstanceState) {
+        registerPlugin(PageColorPlugin.class);
         super.onCreate(savedInstanceState);
         boolean night =
             (getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;
