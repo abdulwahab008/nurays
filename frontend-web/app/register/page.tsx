@@ -238,10 +238,11 @@ function RegisterForm() {
       const weak = weakPasswordMessage(err, t);
       if (weak) {
         fail('password', weak);
+      } else if (errorCode === 'PHONE_EXISTS' || errorMessage.includes('Phone number already')) {
+        // Before the email check: the phone message also says "already registered".
+        fail('phone', t('errPhoneExists'));
       } else if (errorCode === 'EMAIL_EXISTS' || errorMessage.includes('already registered')) {
         fail('email', t('errEmailExists'));
-      } else if (errorCode === 'PHONE_EXISTS' || errorMessage.includes('Phone number already')) {
-        fail('phone', t('errPhoneExists'));
       } else if (errorCode === 'VALIDATION_ERROR') {
         const validationErrors = apiErrorDetails(err);
         if (validationErrors && Array.isArray(validationErrors)) {
