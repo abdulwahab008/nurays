@@ -71,6 +71,26 @@ describe('toAppError', () => {
     expect(toAppError(new Error('PostgresError { code: "57014" }')) instanceof AppError).toBe(false);
   });
 
+  it('reads the same cancelled statement and a full pool the way Prisma 7 and node-postgres report them', () => {
+    // as captured from Prisma 7.10 with @prisma/adapter-pg against PostgreSQL 15
+    const cancelled = Object.assign(new Error('Invalid `prisma.$queryRaw()` invocation:\n\n\nRaw query failed. Code: `57014`. Message: `canceling statement due to statement timeout`'), {
+      code: 'P2010',
+      clientVersion: '7.10.1',
+      meta: { driverAdapterError: { name: 'DriverAdapterError', cause: { originalCode: '57014', kind: 'postgres', code: '57014' } } },
+    });
+    const poolFull = new Error('timeout exceeded when trying to connect');
+    for (const err of [cancelled, poolFull]) {
+      const e = toAppError(err) as AppError;
+      expect([e.statusCode, e.code]).toEqual([503, 'SERVICE_BUSY']);
+    }
+    const otherRaw = Object.assign(new Error('Raw query failed. Code: `42P01`.'), {
+      code: 'P2010',
+      clientVersion: '7.10.1',
+      meta: { driverAdapterError: { cause: { originalCode: '42P01', kind: 'postgres', code: '42P01' } } },
+    });
+    expect(toAppError(otherRaw) instanceof AppError).toBe(false);
+  });
+
   it('maps oversized and malformed bodies', () => {
     expect((toAppError(Object.assign(new Error('x'), { type: 'entity.too.large' })) as AppError).statusCode).toBe(413);
     expect((toAppError(Object.assign(new Error('x'), { type: 'entity.parse.failed' })) as AppError).statusCode).toBe(400);

@@ -1,6 +1,8 @@
 import { PrismaClient } from '@prisma/client';
+import 'dotenv/config';
+import { PrismaPg } from '@prisma/adapter-pg';
 
-const prisma = new PrismaClient();
+const prisma = new PrismaClient({ adapter: new PrismaPg(process.env.DATABASE_URL ?? '') });
 
 export async function seedCommunities() {
   console.log('🌱 Seeding authentic Karachi and pilot communities...');

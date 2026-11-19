@@ -8,12 +8,13 @@
  */
 import 'dotenv/config';
 import { Prisma, PrismaClient } from '@prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
 import bcrypt from 'bcrypt';
 import { seedCommunities } from '../prisma/seed-communities';
 import { isProduction } from '../src/config/env';
 import { MAX_RIDER_CASH_LIMIT } from '../src/validators/admin.validator';
 
-const prisma = new PrismaClient();
+const prisma = new PrismaClient({ adapter: new PrismaPg(process.env.DATABASE_URL ?? '') });
 const PASSWORD = 'Password123!';
 
 async function account(passwordHash: string, a: { email: string; phone: string; userType: string; name: string; city?: string; staffRole?: string }) {

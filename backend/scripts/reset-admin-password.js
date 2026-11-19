@@ -5,10 +5,12 @@
  * The new password has at least 12 characters and is not a common one. The account's sessions are all
  * signed out, and the reset is written to the audit log. The password is never printed.
  */
+require('dotenv/config');
 const { PrismaClient } = require('@prisma/client');
+const { PrismaPg } = require('@prisma/adapter-pg');
 const bcrypt = require('bcrypt');
 
-const prisma = new PrismaClient();
+const prisma = new PrismaClient({ adapter: new PrismaPg(process.env.DATABASE_URL ?? '') });
 
 const SALT_ROUNDS = 10;
 const MIN_STAFF_PASSWORD_LENGTH = 12;

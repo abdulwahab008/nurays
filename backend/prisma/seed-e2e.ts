@@ -13,11 +13,13 @@
  *   npx ts-node prisma/seed-e2e.ts
  */
 import { PrismaClient } from '@prisma/client';
+import 'dotenv/config';
+import { PrismaPg } from '@prisma/adapter-pg';
 import bcrypt from 'bcrypt';
 import { seedCommunities } from './seed-communities';
 import { seedCommunityKitchens } from './seed-community-kitchens';
 
-const prisma = new PrismaClient();
+const prisma = new PrismaClient({ adapter: new PrismaPg(process.env.DATABASE_URL ?? '') });
 
 async function main() {
   // --- communities & community kitchens ---

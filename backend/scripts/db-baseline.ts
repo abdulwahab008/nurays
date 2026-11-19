@@ -16,6 +16,7 @@ import 'dotenv/config';
 import { spawnSync } from 'child_process';
 import path from 'path';
 import { PrismaClient } from '@prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
 
 const BASELINE = '0_baseline';
 const BASELINE_SCHEMA = path.join(__dirname, '..', 'prisma', 'baseline', 'schema.prisma');
@@ -34,7 +35,7 @@ function fail(message: string): never {
 
 async function main() {
   if (!process.env.DATABASE_URL) fail('DATABASE_URL is not set.');
-  const db = new PrismaClient();
+  const db = new PrismaClient({ adapter: new PrismaPg(process.env.DATABASE_URL ?? '') });
   try {
     const [{ exists: hasHistory }] = await db.$queryRaw<Array<{ exists: boolean }>>`
       SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = current_schema() AND table_name = '_prisma_migrations') AS exists`;
