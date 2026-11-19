@@ -7,7 +7,7 @@ import { useAuthStore } from '@/lib/store/auth-store';
 import { apiErrorMessage } from '@/lib/api-client';
 import { useToast } from '@/components/ui/toast';
 import { useLiveRefresh } from '@/lib/hooks/use-live-refresh';
-import { riderService, RiderEarnings, RiderLedgerEntry } from '@/lib/services/rider.service';
+import { LEDGER_LABELS, riderService, RiderEarnings, RiderLedgerEntry } from '@/lib/services/rider.service';
 import { formatPrice, formatDate, formatTime } from '@/lib/utils';
 import { useT } from '@/lib/i18n';
 import { riderMessages, riderKeyFor } from '@/lib/i18n/messages/rider';
@@ -205,8 +205,10 @@ export default function RiderEarningsPage() {
                               return typeKey ? t(typeKey) : e.type;
                             };
                             const references = row.entries.map((e) => e.reference).filter(Boolean);
-                            // A delivery's entries are named by its order; the note on them only repeats the type in English.
-                            const detail = [row.orderNumber ? null : single?.note, ...references.map((ref) => t('earn.ref', { ref }))].filter(Boolean).join(', ');
+                            // A delivery's entries are named by its order; the note on them only repeats the type in English. So does
+                            // the server's default note on other entries ("Cash handed in" when the admin wrote none).
+                            const note = row.orderNumber || !single || single.note === LEDGER_LABELS[single.type] ? null : single.note;
+                            const detail = [note, ...references.map((ref) => t('earn.ref', { ref }))].filter(Boolean).join(', ');
                             return (
                               <li key={row.key} className={`py-3.5 flex gap-4 ${stacked ? 'max-sm:flex-col max-sm:gap-1.5 sm:items-start sm:justify-between' : 'items-start justify-between'}`}>
                                 <div className="min-w-0">
