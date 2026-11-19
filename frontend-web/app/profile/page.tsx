@@ -17,7 +17,7 @@ import { AppearanceSection } from '@/components/account/AppearanceSection';
 import { AccountSecuritySection } from '@/components/account/AccountSecuritySection';
 import { SignOutCard } from '@/components/account/SignOutCard';
 import { DangerZoneSection } from '@/components/account/DangerZoneSection';
-import { DashboardLayout, RIDER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
+import { DashboardLayout, HUB_MANAGER_SIDEBAR_ITEMS, RIDER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { useT } from '@/lib/i18n';
 import { accountMessages } from '@/lib/i18n/messages/account';
 import {
@@ -34,6 +34,7 @@ import {
   LifeBuoy,
   ChevronRight,
   Settings,
+  Snowflake,
 } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
@@ -64,8 +65,10 @@ export default function ProfilePage() {
   const photoInputRef = useRef<HTMLInputElement>(null);
 
   const isRider = (user?.userType ?? user?.user_type) === 'rider';
-  const sidebarItems = isRider ? RIDER_SIDEBAR_ITEMS : undefined;
-  const layoutRole = isRider ? 'rider' : 'customer';
+  // A hub manager has no customer things (addresses, wallet, saved kitchens): their own frame and links, as a rider has.
+  const isHubManager = (user?.userType ?? user?.user_type) === 'hub_manager';
+  const sidebarItems = isRider ? RIDER_SIDEBAR_ITEMS : isHubManager ? HUB_MANAGER_SIDEBAR_ITEMS : undefined;
+  const layoutRole = isRider ? 'rider' : isHubManager ? 'hub_manager' : 'customer';
 
   // A new photo is uploaded (resized by the server), then set as the profile picture.
   const changePhoto = async (file: File) => {
@@ -222,6 +225,10 @@ export default function ProfilePage() {
               {(isRider ? [
                 { href: '/riders/settings', icon: Settings, label: t('riderSettings') },
                 { href: '/riders/dashboard', icon: Bike, label: t('riderDeliveries') },
+                { href: '/notifications/settings', icon: Bell, label: t('notifications') },
+                { href: '/support', icon: LifeBuoy, label: t('helpSupport') },
+              ] : isHubManager ? [
+                { href: '/hub', icon: Snowflake, label: t('hubConsole') },
                 { href: '/notifications/settings', icon: Bell, label: t('notifications') },
                 { href: '/support', icon: LifeBuoy, label: t('helpSupport') },
               ] : [
