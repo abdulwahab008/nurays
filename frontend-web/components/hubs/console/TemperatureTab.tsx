@@ -20,7 +20,7 @@ export default function TemperatureTab({
   onSaved: () => Promise<void>;
 }) {
   const { showToast } = useToast();
-  const [probeTemp, setProbeTemp] = useState<number>(-19.5);
+  const [probeTemp, setProbeTemp] = useState('-19.5');
   const [probeUnit, setProbeUnit] = useState<number>(1);
   const [probeNotes, setProbeNotes] = useState('Routine cold-chain inspection probe');
   const [submittingProbe, setSubmittingProbe] = useState(false);
@@ -28,15 +28,16 @@ export default function TemperatureTab({
   const handleProbeSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!hubId) return;
+    const celsius = Number(probeTemp);
     try {
       setSubmittingProbe(true);
       const res = await apiClient.post(`/hubs/${hubId}/temperature-logs`, {
-        temperatureCelsius: Number(probeTemp),
+        temperatureCelsius: celsius,
         freezerUnit: Number(probeUnit),
         notes: probeNotes.trim() || undefined,
       });
       if (res.data.success) {
-        if (!isColdEnough(probeTemp)) {
+        if (!isColdEnough(celsius)) {
           showToast(`🚨 TEMPERATURE ALERT: Probe reading ${probeTemp}°C breached -18°C threshold!`, 'error');
         } else {
           showToast(`✅ Temperature probe verified at ${probeTemp}°C (Sub-Zero Compliant).`, 'success');
@@ -77,7 +78,7 @@ export default function TemperatureTab({
               type="number"
               step="0.1"
               value={probeTemp}
-              onChange={(e) => setProbeTemp(parseFloat(e.target.value) || 0)}
+              onChange={(e) => setProbeTemp(e.target.value)}
               required
               className="w-full border border-cyan-500 rounded-xl px-3 py-2 text-sm font-mono font-bold focus:ring-2 focus:ring-cyan-500 outline-none"
             />

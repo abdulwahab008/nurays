@@ -29,10 +29,13 @@ export default function IntakeTab({
   const [chosenProductId, setIntakeProductId] = useState('');
   const productId = chosenProductId || products[0]?.id || '';
   const [intakeBatchNumber, setIntakeBatchNumber] = useState(firstCode.batchNumber);
-  const [intakeQuantity, setIntakeQuantity] = useState(20);
+  // Number fields keep what is typed: "-20" passes through "-", and an emptied field is not 1 or 0.
+  const [quantityText, setQuantityText] = useState('20');
+  const intakeQuantity = Number(quantityText);
   const [intakeManufacturedDate, setIntakeManufacturedDate] = useState(() => dateInDays(0));
   const [intakeExpiryDate, setIntakeExpiryDate] = useState(() => dateInDays(90));
-  const [intakeTemp, setIntakeTemp] = useState<number>(-20.0);
+  const [tempText, setTempText] = useState('-20.0');
+  const intakeTemp = Number(tempText);
   const [intakeStorageUnit, setIntakeStorageUnit] = useState('FREEZER-01 / SHELF-A');
   const [intakeBarcode, setIntakeBarcode] = useState(firstCode.barcode);
   const [submittingIntake, setSubmittingIntake] = useState(false);
@@ -59,7 +62,7 @@ export default function IntakeTab({
       showToast('Batch number is required', 'error');
       return;
     }
-    if (intakeQuantity <= 0) {
+    if (!(intakeQuantity > 0)) {
       showToast('Quantity must be greater than 0', 'error');
       return;
     }
@@ -179,8 +182,8 @@ export default function IntakeTab({
                 <input
                   type="number"
                   min="1"
-                  value={intakeQuantity}
-                  onChange={(e) => setIntakeQuantity(parseInt(e.target.value) || 1)}
+                  value={quantityText}
+                  onChange={(e) => setQuantityText(e.target.value)}
                   required
                   className="w-full border border-gray-300 rounded-xl px-3.5 py-2.5 text-sm font-bold text-gray-900 focus:ring-2 focus:ring-cyan-500 outline-none"
                 />
@@ -273,8 +276,8 @@ export default function IntakeTab({
                 <input
                   type="number"
                   step="0.1"
-                  value={intakeTemp}
-                  onChange={(e) => setIntakeTemp(parseFloat(e.target.value) || 0)}
+                  value={tempText}
+                  onChange={(e) => setTempText(e.target.value)}
                   required
                   className="w-full border-2 border-cyan-500 rounded-xl px-4 py-3 text-xl font-mono font-black text-gray-900 focus:ring-4 focus:ring-cyan-500/20 outline-none"
                 />
