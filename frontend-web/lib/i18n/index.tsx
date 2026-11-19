@@ -59,11 +59,11 @@ export function LocaleProvider({ initialLocale, children }: { initialLocale: Loc
 
 export const useLocale = () => useContext(LocaleContext);
 
-const isEnglishOnlyPath = (pathname: string | null) => pathname === '/admin' || !!pathname?.startsWith('/admin/');
+const isEnglishOnlyPath = (pathname: string | null) => /^\/(admin|hub)(\/|$)/.test(pathname ?? '');
 
 /**
- * For what floats above every page (the questions in Dialogs.tsx, the toasts). The admin pages are written in English only
- * (AdminShell), so over them these read left to right with English buttons in either language; elsewhere they follow the
+ * For what floats above every page (the questions in Dialogs.tsx, the toasts). The admin pages and the hub console are
+ * written in English only (AdminShell, app/hub/layout.tsx), so over them these read left to right with English buttons in either language; elsewhere they follow the
  * language chosen.
  */
 export function PageLocale({ children }: { children: ReactNode }) {
