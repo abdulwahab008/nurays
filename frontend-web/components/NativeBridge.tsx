@@ -42,7 +42,12 @@ export function NativeBridge() {
       listeners.push(
         App.addListener('appUrlOpen', ({ url }) => {
           const path = appPathFromUrl(url, window.location.origin);
-          if (path) router.push(path);
+          if (!path) return;
+          // A link to a tab of the page already open (/riders/dashboard#available) changes only the hash: set it, so the
+          // page's hashchange listener switches tabs (router.push to the same page does not fire hashchange).
+          const [pathname, hash] = path.split('#');
+          if (hash !== undefined && pathname === window.location.pathname) window.location.hash = hash;
+          else router.push(path);
         })
       );
       listeners.push(
