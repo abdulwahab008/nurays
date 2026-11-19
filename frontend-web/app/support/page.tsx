@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { loginUrlHere } from '@/lib/auth-redirect';
 import { useRouter } from 'next/navigation';
 import { Send } from 'lucide-react';
-import { DashboardLayout, RIDER_SIDEBAR_ITEMS, SELLER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
+import { DashboardLayout, HUB_MANAGER_SIDEBAR_ITEMS, RIDER_SIDEBAR_ITEMS, SELLER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { useAuthStore, hasSession } from '@/lib/store/auth-store';
@@ -38,9 +38,13 @@ export default function SupportPage() {
   const [recentOrders, setRecentOrders] = useState<Order[]>([]);
   // Only customer orders can be picked here, so other accounts may raise these without one.
   const isCustomer = !userType || userType === 'customer';
-  // A rider or a kitchen asking for help keeps its own frame and menu (the rider's menu links here).
-  const layoutRole = userType === 'rider' ? 'rider' : userType === 'seller' ? 'seller' : 'customer';
-  const sidebarItems = userType === 'rider' ? RIDER_SIDEBAR_ITEMS : userType === 'seller' ? SELLER_SIDEBAR_ITEMS : undefined;
+  // A rider, a kitchen or a hub manager asking for help keeps its own frame and menu (their menus link here).
+  const layoutRole = userType === 'rider' || userType === 'seller' || userType === 'hub_manager' ? userType : 'customer';
+  const sidebarItems =
+    userType === 'rider' ? RIDER_SIDEBAR_ITEMS
+    : userType === 'seller' ? SELLER_SIDEBAR_ITEMS
+    : userType === 'hub_manager' ? HUB_MANAGER_SIDEBAR_ITEMS
+    : undefined;
   const needsOrder = (category: Category) => isCustomer && NEEDS_ORDER.includes(category);
   const orderNeeded = needsOrder(formData.category);
 
