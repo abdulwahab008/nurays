@@ -93,11 +93,15 @@ export function useReadyFor() {
   };
 }
 
-/** "Ready by 8:40 pm" ("Ready by 19 Nov, 7:00 pm" on another day), or "5 min late" in red once that time has passed. */
+/**
+ * "Ready by 8:40 pm" ("Ready by 19 Nov, 7:00 pm" on another day), or in red once that time has passed: "5 min late",
+ * and after an hour "Late since 7:00 pm" (minutes in the thousands are not read as days).
+ */
 export function ReadyBy({ at, now }: { at: string; now: number }) {
   const t = useT(kitchenOrderMessages);
   const { locale } = useLocale();
   const lateMin = Math.floor((now - new Date(at).getTime()) / 60_000);
+  if (lateMin >= 60) return <span className="font-semibold text-red-700">{t('list.lateSince', { time: whenShort(at, now, locale) })}</span>;
   if (lateMin >= 1) return <span className="font-semibold text-red-700">{t('list.late', { min: lateMin })}</span>;
   // A booked order is ready by its window, often another day: the day is said then ("Ready by 19 Nov, 7:00 pm").
   return <span className="text-ink">{t('list.readyBy', { time: whenShort(at, now, locale) })}</span>;
