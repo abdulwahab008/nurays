@@ -97,10 +97,17 @@ export default function ManualPaymentCard({
   }, [orderId, orderStatus]);
 
   const copyToClipboard = (text: string, key: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedKey(key);
-    showToast(t('copiedClipboard'), 'success');
-    setTimeout(() => setCopiedKey(null), 2500);
+    // Copying can be refused (no permission, or a page not served over https): say so instead of "copied".
+    void Promise.resolve()
+      .then(() => navigator.clipboard.writeText(text))
+      .then(
+        () => {
+          setCopiedKey(key);
+          showToast(t('copiedClipboard'), 'success');
+          setTimeout(() => setCopiedKey(null), 2500);
+        },
+        () => showToast(tc('copyFailed'), 'error'),
+      );
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
