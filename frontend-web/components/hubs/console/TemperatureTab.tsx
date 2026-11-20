@@ -28,7 +28,12 @@ export default function TemperatureTab({
   const handleProbeSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!hubId) return;
-    const celsius = Number(probeTemp);
+    // An emptied field reads as 0 to Number(), which would log a false 0°C breach: ask for the reading instead.
+    const celsius = probeTemp.trim() === '' ? NaN : Number(probeTemp);
+    if (!Number.isFinite(celsius)) {
+      showToast('Enter the temperature the probe shows.', 'error');
+      return;
+    }
     try {
       setSubmittingProbe(true);
       const res = await apiClient.post(`/hubs/${hubId}/temperature-logs`, {

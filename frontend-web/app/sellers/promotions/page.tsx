@@ -17,6 +17,7 @@ import { StatusPill } from '@/components/ui/StatusPill';
 import { dateClock } from '@/components/sellers/order-timing';
 import { useLocale, useT } from '@/lib/i18n';
 import { kitchenPromotionMessages } from '@/lib/i18n/messages/kitchen-promotions';
+import { commonMessages } from '@/lib/i18n/messages/common';
 
 type PromoT = ReturnType<typeof useT<typeof kitchenPromotionMessages.en>>;
 
@@ -616,6 +617,7 @@ export default function SellerPromotionsPage() {
   const { showToast } = useToast();
   const { confirm: confirmDialog } = useDialogs();
   const t = useT(kitchenPromotionMessages);
+  const tc = useT(commonMessages);
   const { locale } = useLocale();
 
   const [loading, setLoading] = useState(true);
@@ -805,8 +807,13 @@ export default function SellerPromotionsPage() {
   };
 
   const copyPromoCode = (code: string) => {
-    navigator.clipboard.writeText(code);
-    showToast(t('copied', { code }), 'success');
+    // Copying can be refused (no permission, or a page not served over https): say so instead of "copied".
+    void Promise.resolve()
+      .then(() => navigator.clipboard.writeText(code))
+      .then(
+        () => showToast(t('copied', { code }), 'success'),
+        () => showToast(tc('copyFailed'), 'error'),
+      );
   };
 
   const openNew = () => {

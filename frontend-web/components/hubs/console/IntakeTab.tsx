@@ -66,6 +66,11 @@ export default function IntakeTab({
       showToast('Quantity must be greater than 0', 'error');
       return;
     }
+    // An emptied temperature reads as 0 to Number(), which would quarantine the batch as a false breach.
+    if (tempText.trim() === '' || !Number.isFinite(intakeTemp)) {
+      showToast('Enter the temperature the probe shows.', 'error');
+      return;
+    }
 
     try {
       setSubmittingIntake(true);
