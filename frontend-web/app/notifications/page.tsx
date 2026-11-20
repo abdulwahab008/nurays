@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { loginUrlHere } from '@/lib/auth-redirect';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { DashboardLayout } from '@/components/layout/DashboardShell';
+import { DashboardLayout, HUB_MANAGER_SIDEBAR_ITEMS, RIDER_SIDEBAR_ITEMS, SELLER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { Button } from '@/components/ui/button';
 import { LoadError } from '@/components/ui/LoadError';
 import { useAuthStore, hasSession } from '@/lib/store/auth-store';
@@ -43,6 +43,14 @@ export default function NotificationsPage() {
   const { showToast } = useToast();
   const t = useT(accountMessages);
   const tc = useT(commonMessages);
+  // A hub manager's bell links here ("see all"): keep its own frame and menu, as the help page does.
+  const userType = user?.userType ?? user?.user_type;
+  const layoutRole = userType === 'rider' || userType === 'seller' || userType === 'hub_manager' ? userType : 'customer';
+  const sidebarItems =
+    userType === 'rider' ? RIDER_SIDEBAR_ITEMS
+    : userType === 'seller' ? SELLER_SIDEBAR_ITEMS
+    : userType === 'hub_manager' ? HUB_MANAGER_SIDEBAR_ITEMS
+    : undefined;
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
   const [loading, setLoading] = useState(true);
@@ -210,7 +218,8 @@ export default function NotificationsPage() {
     <DashboardLayout
       title={t('notifications')}
       subtitle={couldNotRead ? undefined : t(unreadCount !== 1 ? 'unreadMany' : 'unreadOne', { count: unreadCount })}
-      userType="customer"
+      sidebarItems={sidebarItems}
+      userType={layoutRole}
     >
       {/* Header Actions */}
       {!couldNotRead && (
