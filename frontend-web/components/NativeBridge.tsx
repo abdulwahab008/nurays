@@ -8,7 +8,7 @@ import { hasSession, useAuthStore, type User } from '@/lib/store/auth-store';
 import { canGoBack, trackHistoryDepth } from '@/lib/native-back';
 import { THEME_COLOURS } from '@/lib/theme';
 
-const LEGACY_TOKENS_CLEARED = 'nuray-legacy-tokens-cleared';
+const OLD_SIGN_IN_CLEARED = 'nuray-old-sign-in-cleared';
 
 /**
  * Inside the Nuray store app (mobile/), connects the website to the phone; in a browser it does nothing.
@@ -29,10 +29,10 @@ export function NativeBridge() {
 
     // Once per install, not on every launch. A failure is not retried: the old tokens are never read again, and an
     // unsigned simulator build (no keychain access) would otherwise log the same error at every start.
-    if (plugins.SecureStorage && !localStorage.getItem(LEGACY_TOKENS_CLEARED)) {
+    if (plugins.SecureStorage && !localStorage.getItem(OLD_SIGN_IN_CLEARED)) {
       void forgetSavedTokens(secureKV(plugins.SecureStorage))
         .catch(() => undefined)
-        .finally(() => localStorage.setItem(LEGACY_TOKENS_CLEARED, '1'));
+        .finally(() => localStorage.setItem(OLD_SIGN_IN_CLEARED, '1'));
     }
     if (!hasSession()) {
       void apiClient
