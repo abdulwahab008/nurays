@@ -8,6 +8,8 @@ import { hasSession, useAuthStore, type User } from '@/lib/store/auth-store';
 import { canGoBack, trackHistoryDepth } from '@/lib/native-back';
 import { THEME_COLOURS } from '@/lib/theme';
 
+const LEGACY_TOKENS_CLEARED = 'nuray-legacy-tokens-cleared';
+
 /**
  * Inside the Nuray store app (mobile/), connects the website to the phone; in a browser it does nothing.
  * - Sign-in tokens an earlier version kept in the phone's secure storage are removed (the refresh token is now a cookie).
@@ -25,7 +27,13 @@ export function NativeBridge() {
     const plugins = nativePlugins(window as unknown as NativeWindow);
     if (!plugins) return;
 
-    if (plugins.SecureStorage) void forgetSavedTokens(secureKV(plugins.SecureStorage)).catch(() => undefined);
+    // Once per install, not on every launch. A failure is not retried: the old tokens are never read again, and an
+    // unsigned simulator build (no keychain access) would otherwise log the same error at every start.
+    if (plugins.SecureStorage && !localStorage.getItem(LEGACY_TOKENS_CLEARED)) {
+      void forgetSavedTokens(secureKV(plugins.SecureStorage))
+        .catch(() => undefined)
+        .finally(() => localStorage.setItem(LEGACY_TOKENS_CLEARED, '1'));
+    }
     if (!hasSession()) {
       void apiClient
         .renewAccessToken()
