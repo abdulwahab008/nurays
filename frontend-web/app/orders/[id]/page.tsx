@@ -25,7 +25,8 @@ import { awaitingPayment, isPickupOrder } from '@/components/orders/order-progre
 import { Mark } from '@/components/ui/Mark';
 import { CoverImage } from '@/components/ui/CoverImage';
 import dynamic from 'next/dynamic';
-import { ArrowLeft, Bike, ChevronDown, LifeBuoy, MapPin, MessageCircle, Phone, Printer, Receipt, Star, X } from 'lucide-react';
+import { ArrowLeft, Bike, ChevronDown, LifeBuoy, MapPin, MessageCircle, Phone, Printer, Receipt, RotateCcw, Star, X } from 'lucide-react';
+import { addOrderToTray } from '@/lib/reorder';
 import { useT } from '@/lib/i18n';
 import { commonMessages, statusKey } from '@/lib/i18n/messages/common';
 import { ordersMessages } from '@/lib/i18n/messages/orders';
@@ -293,6 +294,7 @@ function OrderDetailContent() {
   const [trackingData, setTrackingData] = useState<DeliveryTrackingEvent | null>(null);
   const [showPlacedBanner, setShowPlacedBanner] = useState(false);
   const [showCancelModal, setShowCancelModal] = useState(false);
+  const [reordering, setReordering] = useState(false);
   const [cancelChoice, setCancelChoice] = useState<CancelChoice | null>(null);
   const [cancelReason, setCancelReason] = useState('');
   const [reviewed, setReviewed] = useState(false);
@@ -899,6 +901,30 @@ function OrderDetailContent() {
                 </button>
               </div>
             </section>
+
+            {['delivered', 'completed', 'cancelled'].includes(orderStatus) && (
+              <Button
+                variant="outline"
+                className="w-full min-h-11"
+                title={t('list.reorderTitle')}
+                disabled={reordering}
+                onClick={async () => {
+                  setReordering(true);
+                  try {
+                    await addOrderToTray(order.id);
+                    showToast(t('list.toastAddedToTray'), 'success');
+                    router.push('/cart');
+                  } catch (error) {
+                    showToast(apiErrorMessage(error, t('list.reorderFailed')), 'error');
+                  } finally {
+                    setReordering(false);
+                  }
+                }}
+              >
+                <RotateCcw className={`w-4 h-4 ${reordering ? 'animate-spin' : ''}`} aria-hidden />
+                {t('list.reorder')}
+              </Button>
+            )}
 
             {canCancel && (
               <Button
