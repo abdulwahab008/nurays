@@ -5,7 +5,7 @@ import { loginUrlHere } from '@/lib/auth-redirect';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ShoppingBag, Package, RotateCcw, Search, X } from 'lucide-react';
-import { orderService, Order, OrderItem } from '@/lib/services/order.service';
+import { orderService, Order } from '@/lib/services/order.service';
 import { formatPrice, formatDateTime } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { LoadError } from '@/components/ui/LoadError';
@@ -13,7 +13,7 @@ import { useAuthStore, hasSession } from '@/lib/store/auth-store';
 import { DashboardLayout } from '@/components/layout/DashboardShell';
 import { useSocket } from '@/lib/hooks/use-socket';
 import { useToast } from '@/components/ui/toast';
-import { cartService } from '@/lib/services/cart.service';
+import { addOrderToTray } from '@/lib/reorder';
 import { apiErrorMessage } from '@/lib/api-client';
 import { useT } from '@/lib/i18n';
 import { commonMessages, statusKey } from '@/lib/i18n/messages/common';
@@ -179,21 +179,7 @@ function OrdersContent() {
     e.stopPropagation();
     setReorderingId(order.id);
     try {
-      // The list carries only the first dishes and not how each was stocked; the order itself has all of them.
-      const items: OrderItem[] = (await orderService.getOrder(order.id)).data?.items ?? order.items ?? [];
-      for (const item of items) {
-        const pId = item.productId || item.product?.id;
-        if (pId) {
-          await cartService.addToCart({
-            productId: pId,
-            variantId: item.variantId || undefined,
-            quantity: item.quantity || 1,
-            stockType: item.fulfillmentType === 'hub' ? 'hub' : 'direct',
-            hubId: item.fulfillmentType === 'hub' ? item.hubId ?? undefined : undefined,
-            clearAndAdd: true,
-          });
-        }
-      }
+      await addOrderToTray(order.id, order.items ?? []);
       showToast(t('list.toastAddedToTray'), 'success');
       router.push('/cart');
     } catch (error) {
