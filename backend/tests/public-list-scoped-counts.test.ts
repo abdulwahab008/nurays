@@ -30,10 +30,9 @@ const kitchen = (id: string, totalReviews: number) => ({
 });
 
 describe('the kitchens list', () => {
-  it('counts on-menu dishes and approved reviews only for the kitchens on the page', async () => {
+  it('counts on-menu dishes only for the kitchens on the page and shows the stored review total', async () => {
     db.seller.findMany.mockResolvedValue([kitchen('a', 0), kitchen('b', 9)]);
     db.product.groupBy.mockResolvedValue([{ sellerId: 'a', _count: { _all: 3 } }]);
-    db.review.groupBy.mockResolvedValue([{ sellerId: 'a', _count: { _all: 2 } }]);
 
     const list = await listPublicSellers({});
 
@@ -41,9 +40,9 @@ describe('the kitchens list', () => {
     const products = db.product.groupBy.mock.calls[0][0] as Args;
     expect(products.where).toMatchObject({ sellerId: { in: ['a', 'b'] }, isActive: true, approvalStatus: 'approved' });
     expect(products.where).toHaveProperty('OR');
-    // only a kitchen with no stored review total falls back to counting
-    expect((db.review.groupBy.mock.calls[0][0] as Args).where).toEqual({ sellerId: { in: ['a'] }, isApproved: true });
-    expect(list.map((k) => [k.productCount, k.totalReviews])).toEqual([[3, 2], [0, 9]]);
+    // the stored total is the one review.service.ts keeps (reviewed orders); review rows are never counted here
+    expect(db.review.groupBy).not.toHaveBeenCalled();
+    expect(list.map((k) => [k.productCount, k.totalReviews])).toEqual([[3, 0], [0, 9]]);
   });
 
   it('asks nothing more when there are no kitchens', async () => {

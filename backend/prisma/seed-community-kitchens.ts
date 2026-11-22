@@ -68,8 +68,6 @@ export async function seedCommunityKitchens() {
       description: 'Generational home recipes passed down from grandmother: golden lachha parathas, shami kebabs, and sub-zero frozen savory snacks.',
       cuisine: ['Desi Ghee Parathas', 'Shami Kebabs', 'Frozen Packs', 'Desi Breakfast'],
       cover: 'https://images.unsplash.com/photo-1565557623262-b51c2513a641?w=800&q=80&auto=format&fit=crop',
-      rating: 4.85,
-      reviews: 245,
       prepTime: 20,
       dishes: [
         {
@@ -126,8 +124,6 @@ export async function seedCommunityKitchens() {
       description: 'Slow-simmered artisanal earthen pot desserts, rich saffron kheer, and authentic Hyderabadi shahi tukray.',
       cuisine: ['Zafrani Matka Kheer', 'Shahi Tukray', 'Gajar Ka Halwa', 'Desi Meetha'],
       cover: 'https://images.unsplash.com/photo-1593560708920-61dd98c46a4e?w=800&q=80&auto=format&fit=crop',
-      rating: 4.92,
-      reviews: 180,
       prepTime: 15,
       dishes: [
         {
@@ -166,8 +162,6 @@ export async function seedCommunityKitchens() {
       description: 'Master of Dum cooking in DHA for over 15 years. Every degh is sealed with whole wheat dough and slow-steamed over coals.',
       cuisine: ['Sindhi Dum Biryani', 'Mutton Yakhni Pulao', 'Zarda', 'Balochi Sajji'],
       cover: 'https://images.unsplash.com/photo-1633945274405-b6c8069047b0?w=800&q=80&auto=format&fit=crop',
-      rating: 4.95,
-      reviews: 480,
       prepTime: 25,
       dishes: [
         {
@@ -214,8 +208,6 @@ export async function seedCommunityKitchens() {
       description: 'Live coal grilled kebabs, prime beef bihari boti, and smoked chops seasoned with 18 freshly ground spices.',
       cuisine: ['Bihari Boti', 'Reshmi Seekh Kebab', 'Mutton Chops', 'Charcoal BBQ'],
       cover: 'https://images.unsplash.com/photo-1555939594-58d7cb561ad1?w=800&q=80&auto=format&fit=crop',
-      rating: 4.88,
-      reviews: 320,
       prepTime: 25,
       dishes: [
         {
@@ -254,8 +246,6 @@ export async function seedCommunityKitchens() {
       description: 'Clean room hygienic -18°C frozen appetizers, hand-folded samosas, spring rolls, and chicken patties with zero preservatives.',
       cuisine: ['Cocktail Samosas', 'Spring Rolls', 'Chicken Patties', '-18°C Frozen Snacks'],
       cover: 'https://images.unsplash.com/photo-1601050690597-df0568f70950?w=800&q=80&auto=format&fit=crop',
-      rating: 4.82,
-      reviews: 190,
       prepTime: 10,
       dishes: [
         {
@@ -292,8 +282,6 @@ export async function seedCommunityKitchens() {
       description: 'Clean eating fresh bowls, herb-marinated chicken breast, quinoa salads, and cold-pressed dressing bottles.',
       cuisine: ['Grilled Salad Boxes', 'Quinoa Bowls', 'Mediterranean Wraps'],
       cover: 'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=800&q=80&auto=format&fit=crop',
-      rating: 4.85,
-      reviews: 140,
       prepTime: 15,
       dishes: [
         {
@@ -322,8 +310,6 @@ export async function seedCommunityKitchens() {
       description: 'Famous for the traditional 12-hour braised beef shank nihari and kunna gosht, slow-cooked in thick clay pots in PECHS.',
       cuisine: ['12h Slow-Cooked Nihari', 'Kunna Gosht', 'Maghaz Masala', 'Roghni Kulcha'],
       cover: 'https://images.unsplash.com/photo-1603894584373-5ac82b2ae398?w=800&q=80&auto=format&fit=crop',
-      rating: 4.96,
-      reviews: 310,
       prepTime: 30,
       dishes: [
         {
@@ -360,8 +346,6 @@ export async function seedCommunityKitchens() {
       description: 'Daily fresh comfort food: yellow dal tadka, zeera rice, homestyle aloo gosht, and seasonal sabzi.',
       cuisine: ['Dal Chawal Thali', 'Aloo Gosht', 'Bhindi Masala', 'Homestyle Sabzi'],
       cover: 'https://images.unsplash.com/photo-1603894584373-5ac82b2ae398?w=800&q=80&auto=format&fit=crop',
-      rating: 4.88,
-      reviews: 210,
       prepTime: 20,
       dishes: [
         {
@@ -390,8 +374,6 @@ export async function seedCommunityKitchens() {
       description: 'Crispy desi ghee layered parathas, authentic Karachi anda ghotala, and morning breakfast boxes delivered hot.',
       cuisine: ['Desi Ghee Parathas', 'Anda Ghotala', 'Halwa Puri', 'Chai Nashta'],
       cover: 'https://images.unsplash.com/photo-1565557623262-b51c2513a641?w=800&q=80&auto=format&fit=crop',
-      rating: 4.83,
-      reviews: 175,
       prepTime: 15,
       dishes: [
         {
@@ -430,8 +412,6 @@ export async function seedCommunityKitchens() {
       description: 'Grand festive Dawat-style cooking: velvet shahi kofta curry with eggs, slow-cooked mutton korma, and saffron zarda.',
       cuisine: ['Shahi Kofta Curry', 'Degi Mutton Korma', 'Zarda', 'Dawat Dishes'],
       cover: 'https://images.unsplash.com/photo-1633945274405-b6c8069047b0?w=800&q=80&auto=format&fit=crop',
-      rating: 4.89,
-      reviews: 198,
       prepTime: 25,
       dishes: [
         {
@@ -460,8 +440,6 @@ export async function seedCommunityKitchens() {
       description: 'Pure desi chicken karahi in butter, organic saag with makki roti, and clay oven baked tandoori naans.',
       cuisine: ['Desi Murgh Karahi', 'Makki Roti', 'Sarson Ka Saag', 'Tandoor Breads'],
       cover: 'https://images.unsplash.com/photo-1606491956689-2ea866880c84?w=800&q=80&auto=format&fit=crop',
-      rating: 4.91,
-      reviews: 165,
       prepTime: 30,
       dishes: [
         {
@@ -493,8 +471,6 @@ export async function seedCommunityKitchens() {
         description: 'Long-grain fragrant dum biryani and yakhni pulao cooked in traditional deg in Askari 11.',
         cuisine: ['Dum Biryani', 'Yakhni Pulao', 'Kachumber'],
         cover: 'https://images.unsplash.com/photo-1633945274405-b6c8069047b0?w=800&q=80&auto=format&fit=crop',
-        rating: 4.88,
-        reviews: 210,
         prepTime: 20,
         dishes: [
           {
@@ -521,8 +497,6 @@ export async function seedCommunityKitchens() {
         description: 'Fresh wood-fired oven pizzas, gourmet smash burgers, and garlic butter focaccia.',
         cuisine: ['Smash Burgers', 'Artisan Pizza', 'Focaccia'],
         cover: 'https://images.unsplash.com/photo-1555939594-58d7cb561ad1?w=800&q=80&auto=format&fit=crop',
-        rating: 4.93,
-        reviews: 310,
         prepTime: 25,
         dishes: [
           {
@@ -553,8 +527,6 @@ export async function seedCommunityKitchens() {
           businessName: k.businessName,
           description: k.description,
           coverImageUrl: k.cover,
-          ratingAverage: k.rating,
-          totalReviews: k.reviews,
           isVerified: true,
           verificationStatus: 'approved',
           status: 'active',
@@ -575,8 +547,6 @@ export async function seedCommunityKitchens() {
           businessName: k.businessName,
           description: k.description,
           coverImageUrl: k.cover,
-          ratingAverage: k.rating,
-          totalReviews: k.reviews,
           isVerified: true,
           verificationStatus: 'approved',
           status: 'active',

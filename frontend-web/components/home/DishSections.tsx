@@ -113,10 +113,14 @@ export function DishCard({ dish, tray, note, row = false }: { dish: HomeDish; tr
               <span className="text-[11px] text-muted line-through truncate">{formatPrice(dish.originalPrice)}</span>
             )}
           </div>
-          {dish.rating && (
+          {dish.rating ? (
             <span className="text-xs font-semibold text-ink flex items-center gap-0.5 flex-shrink-0">
               <Star className="w-3.5 h-3.5 fill-accent text-accent" aria-hidden />
               <span>{dish.rating}</span>
+            </span>
+          ) : (
+            <span className="flex-shrink-0 px-1.5 py-0.5 rounded-full bg-accent-soft text-accent-soft-ink text-[10px] font-semibold">
+              {t('newBadge')}
             </span>
           )}
         </div>

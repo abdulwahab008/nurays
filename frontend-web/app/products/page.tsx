@@ -1148,12 +1148,16 @@ function ProductsContent() {
                           {formatPrice(product.price)}
                         </span>
                       )}
-                      {rating && (
+                      {rating ? (
                         <div className="flex items-center gap-1 mt-0.5 text-xs text-ink font-semibold">
                           <Star className="w-3 h-3 fill-accent text-accent" aria-hidden />
                           <span>{rating}</span>
                           {product.totalReviews ? <span className="text-muted font-normal">({product.totalReviews})</span> : null}
                         </div>
+                      ) : (
+                        <span className="inline-block mt-0.5 px-1.5 py-0.5 rounded-full bg-accent-soft text-accent-soft-ink text-[10px] font-semibold">
+                          {t('new')}
+                        </span>
                       )}
                     </div>
 

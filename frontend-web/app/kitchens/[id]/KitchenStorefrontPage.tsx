@@ -205,8 +205,8 @@ function toKitchenProfile(
   tk: KitchenT,
 ): KitchenProfile {
   const availability = s.availability ?? null;
-  // The stored aggregate is not trusted on its own: with no published review there is no rating to show.
-  const reviewCount = s.reviews?.length ? Number(s.totalReviews) || s.reviews.length : 0;
+  // The same stored figures the kitchen cards show, kept in step with the reviews by review.service.ts.
+  const reviewCount = Number(s.totalReviews) || 0;
   const rating = displayRating(s.ratingAverage, reviewCount);
   const businessKey = businessTypeKey(s.businessType);
   const typeLabel = businessKey ? tb(businessKey) : tk('kitchenFallback');
