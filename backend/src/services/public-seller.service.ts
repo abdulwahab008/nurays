@@ -53,7 +53,12 @@ export async function listPublicSellers(filters: PublicSellerFilters) {
   }
 
   if (city && typeof city === 'string') {
-    whereClause.community = { is: { isActive: true, city: { equals: city, mode: 'insensitive' } } };
+    whereClause.community = {
+      city: {
+        equals: city,
+        mode: 'insensitive',
+      },
+    };
   }
 
   if (businessType && typeof businessType === 'string') {

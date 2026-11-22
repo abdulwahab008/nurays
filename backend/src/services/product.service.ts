@@ -207,7 +207,7 @@ export const MAX_PLAUSIBLE_TRIP_KM = 200;
 /** Kitchens in other areas that deliver to this one, by the dish list's rule: their ids. */
 export function kitchensDeliveringTo(communityId: string): Promise<string[]> {
   return sellersPassingComputedFilters(
-    { isVerified: true, status: 'active', verificationStatus: 'approved', ...IN_LIVE_AREA, communityId: { not: communityId } },
+    { isVerified: true, status: 'active', verificationStatus: 'approved', ...IN_LIVE_AREA, OR: [{ communityId: null }, { communityId: { not: communityId } }] },
     { openNow: false, fastDelivery: false, deliversHere: true, customerCommunityId: communityId }
   );
 }
@@ -836,7 +836,7 @@ export class ProductService {
     });
 
     const isOwner = requestingUserId != null && product?.seller.userId === requestingUserId;
-    const isPubliclyVisible = product?.approvalStatus === 'approved' && product?.seller.status === 'active' && !!product.seller.community?.isActive;
+    const isPubliclyVisible = product?.approvalStatus === 'approved' && product?.seller.status === 'active' && product.seller.community?.isActive !== false;
 
     if (!product || (!isPubliclyVisible && !isOwner)) {
       throw new AppError('Product not found', 404, 'PRODUCT_NOT_FOUND');

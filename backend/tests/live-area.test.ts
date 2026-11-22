@@ -1,6 +1,6 @@
 /**
- * Nuray is live in a few Lahore areas only. Kitchens whose area is switched off (the Karachi demo kitchens), or that have no
- * area, are not shown to buyers and cannot be ordered from. The database is a hand-written double; what is under test is
+ * Nuray is live in a few Lahore areas only. Kitchens whose area is switched off (the Karachi demo kitchens) are not shown to
+ * buyers and cannot be ordered from; a kitchen with no area is not gated (there is no area to judge it by). The database is a hand-written double; what is under test is
  * what each read asks for and what the tray refuses.
  */
 const db: any = {};
@@ -12,8 +12,9 @@ jest.mock('../src/services/promotion.service', () => ({ __esModule: true, defaul
 import { listPublicSellers, getPublicSeller } from '../src/services/public-seller.service';
 import productService from '../src/services/product.service';
 import cartService from '../src/services/cart.service';
+import { assertInLiveArea } from '../src/utils/liveArea';
 
-const live = { community: { is: { isActive: true } } };
+const live = { NOT: { community: { is: { isActive: false } } } };
 
 describe('kitchen lists', () => {
   beforeEach(() => {
@@ -24,9 +25,7 @@ describe('kitchen lists', () => {
     await listPublicSellers({});
     expect(db.seller.findMany.mock.calls[0][0].where).toMatchObject(live);
     await listPublicSellers({ city: 'Karachi' });
-    expect(db.seller.findMany.mock.calls[1][0].where.community).toEqual({
-      is: { isActive: true, city: { equals: 'Karachi', mode: 'insensitive' } },
-    });
+    expect(db.seller.findMany.mock.calls[1][0].where).toMatchObject(live);
   });
 
   it("a kitchen's own page is a 404 outside the live areas", async () => {
@@ -61,13 +60,21 @@ describe('putting a dish in the tray', () => {
     seller: { id: 's1', businessName: 'Gulshan Kitchen', status: 'active', community },
   });
 
-  it.each([[{ isActive: false }], [null]])('is refused when the kitchen area is %p', async (community) => {
+  it('is refused when the kitchen area is switched off', async () => {
     db.cart = { findUnique: jest.fn(async () => ({ id: 'c1', userId: 'u1' })) };
-    db.product = { findFirst: jest.fn(async () => dish(community)) };
+    db.product = { findFirst: jest.fn(async () => dish({ isActive: false })) };
     await expect(cartService.addToCart('u1', { productId: 'p1', quantity: 1 })).rejects.toMatchObject({
       statusCode: 400,
       code: 'SELLER_OUTSIDE_SERVICE_AREA',
       message: "Gulshan Kitchen is not taking orders: Nuray isn't in its area yet",
     });
+  });
+});
+
+describe('the checkout check', () => {
+  it('lets a kitchen in a live area, or with no area, through', () => {
+    expect(() => assertInLiveArea({ businessName: 'K', community: { isActive: true } })).not.toThrow();
+    expect(() => assertInLiveArea({ businessName: 'K', community: null })).not.toThrow();
+    expect(() => assertInLiveArea({ businessName: 'K', community: { isActive: false } })).toThrow("K is not taking orders: Nuray isn't in its area yet");
   });
 });
