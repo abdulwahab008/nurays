@@ -8,7 +8,7 @@ import { computeSellerAvailability } from './availability.service';
 import { bookingRange, deliveryDays } from '../utils/deliveryWindows';
 import { computeCustomerFacingSellerInfo } from './product.service';
 import { SELLER_COMMUNITY_DELIVERY_SELECT } from '../utils/sellerDeliverySelect';
-import { IN_LIVE_AREA } from '../utils/liveArea';
+import { IN_LIVE_AREA, buyerPoint, restaurantsNearWhere } from '../utils/liveArea';
 
 /** The query a visitor's browsing of kitchens may carry: whatever the address bar had, so each value is checked before use. */
 export interface PublicSellerFilters {
@@ -46,6 +46,12 @@ export async function listPublicSellers(filters: PublicSellerFilters) {
     status: 'active',
     verificationStatus: 'approved',
     ...IN_LIVE_AREA,
+    // Restaurants only for a customer within 5 km of them (their address or location, else the chosen area's centre).
+    AND: [
+      await restaurantsNearWhere(
+        await buyerPoint(customerLat, customerLng, customerCommunityId ?? (typeof communityId === 'string' ? communityId : null)),
+      ),
+    ],
   };
 
   if (communityId && typeof communityId === 'string') {

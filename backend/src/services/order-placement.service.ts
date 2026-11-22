@@ -14,7 +14,7 @@ import { allocateHubStock } from './hub-allocation.service';
 import { DeliveryFeeShare } from '../utils/deliveryEarnings';
 import { OUTSIDE_AREAS_MESSAGE, getDeliveryFeeForSeller } from '../utils/deliveryFee';
 import { assertOnMenu } from '../utils/menu';
-import { assertInLiveArea } from '../utils/liveArea';
+import { assertInLiveArea, assertRestaurantReaches } from '../utils/liveArea';
 import { createStockAlert } from './stock-alert.service';
 import promotionService from './promotion.service';
 import { isAcceptingOrders, validateOrderTiming } from './availability.service';
@@ -409,6 +409,7 @@ export class OrderPlacement {
         select: {
           id: true,
           businessName: true,
+          businessType: true,
           freeDeliveryAreas: true,
           freeDeliveryRadiusKm: true,
           latitude: true,
@@ -454,6 +455,7 @@ export class OrderPlacement {
         const sellerSubtotal = orderItems
           .filter((i) => i.sellerId === seller.id)
           .reduce((sum, i) => sum + i.totalPrice, 0);
+        assertRestaurantReaches(seller, addr.latitude != null && addr.longitude != null ? { lat: addr.latitude, lng: addr.longitude } : null);
         const result = getDeliveryFeeForSeller(seller, addr, originLat, originLng, sellerSubtotal, { pricing, forcePlatform: !!hub });
         if (!result.deliverable) {
           throw new AppError(`${seller.businessName}: ${result.reason}`, 400, 'ADDRESS_NOT_DELIVERABLE');

@@ -9,6 +9,8 @@ jest.mock('../src/config/database', () => ({
     seller: { findMany: jest.fn() },
     product: { groupBy: jest.fn().mockResolvedValue([]) },
     review: { groupBy: jest.fn().mockResolvedValue([]) },
+    // The area's centre, for the 5 km restaurant rule: none here, so no restaurant is in range and no extra seller read.
+    community: { findFirst: jest.fn().mockResolvedValue(null) },
   },
 }));
 jest.mock('../src/services/product.service', () => ({

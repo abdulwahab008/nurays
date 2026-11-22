@@ -12,7 +12,7 @@ import { AppError } from '../middleware/errorHandler';
 import { computeSellerAvailability, isAcceptingOrders, type SellerAvailabilityInput } from './availability.service';
 import { getDeliveryFeeForSeller, haversineKm, type PlatformDeliveryPricing, type SellerDeliveryPolicy } from '../utils/deliveryFee';
 import { splitDeliveryFees } from '../utils/orderPricing';
-import { IN_LIVE_AREA } from '../utils/liveArea';
+import { IN_LIVE_AREA, buyerPoint, restaurantsNearWhere } from '../utils/liveArea';
 import { isOnMenu, menuNote, normalizeMenuInput, onMenuWhere } from '../utils/menu';
 import { notifyApprovers } from './approvals.service';
 import { notifySeller } from './notify.service';
@@ -205,9 +205,10 @@ async function sellersPassingComputedFilters(
 /** The farthest a delivery can go: the most an admin can set as the Nuray rider range (admin.validator deliveryMaxKm). */
 export const MAX_PLAUSIBLE_TRIP_KM = 200;
 /** Kitchens in other areas that deliver to this one, by the dish list's rule: their ids. */
-export function kitchensDeliveringTo(communityId: string): Promise<string[]> {
+export async function kitchensDeliveringTo(communityId: string): Promise<string[]> {
+  const near = await restaurantsNearWhere(await buyerPoint(null, null, communityId));
   return sellersPassingComputedFilters(
-    { isVerified: true, status: 'active', verificationStatus: 'approved', ...IN_LIVE_AREA, OR: [{ communityId: null }, { communityId: { not: communityId } }] },
+    { isVerified: true, status: 'active', verificationStatus: 'approved', ...IN_LIVE_AREA, AND: [near], OR: [{ communityId: null }, { communityId: { not: communityId } }] },
     { openNow: false, fastDelivery: false, deliversHere: true, customerCommunityId: communityId }
   );
 }
@@ -547,6 +548,14 @@ export class ProductService {
       filters = { ...filters, customerLat: undefined, customerLng: undefined };
     }
     const hasCustomerLocation = filters.customerLat != null && filters.customerLng != null;
+    // Restaurants only for a customer within 5 km of them (their address or location, else the chosen area's centre).
+    where.seller.AND = [
+      await restaurantsNearWhere(
+        hasCustomerLocation
+          ? { lat: filters.customerLat!, lng: filters.customerLng! }
+          : targetCommunity ? { lat: Number(targetCommunity.centerLatitude), lng: Number(targetCommunity.centerLongitude) } : null,
+      ),
+    ];
 
     // "Open now", "within X km", "fast delivery" and free delivery to the customer depend on opening hours, distance,
     // the delivery-time estimate and the delivery fee, which are worked out in code. They are worked out over the
