@@ -1397,6 +1397,8 @@ async function main() {
   const bigCat = await prisma.category.create({ data: { name: 'Big ' + uniq(), slug: 'big-' + uniq() } });
   const bigRun = uniq();
   await prisma.product.createMany({ data: Array.from({ length: 510 }, (_, i) => ({ sellerId: kHome.id, categoryId: bigCat.id, name: `Bulk ${bigRun} ${i}`, slug: `bulk-${bigRun}-${i}`, price: 50, unit: 'pc', stockQuantity: 1, stockType: 'direct', approvalStatus: 'approved', isActive: true })) as any });
+  const bulkIds = await prisma.product.findMany({ where: { categoryId: bigCat.id }, select: { id: true } });
+  await prisma.productImage.createMany({ data: bulkIds.map((p) => ({ productId: p.id, imageUrl: '/uploads/products/check-dish.webp', isPrimary: true })) });
   const bigLast: any = await productService.getProducts({ categoryId: bigCat.id, communityId: homeC.id, openNow: true, page: 26, limit: 20 } as any);
   ok('catalog: no 500-dish ceiling: the 510th dish is on page 26 and counted', bigLast.pagination.total === 510 && bigLast.products.length === 10, `total=${bigLast.pagination.total} last=${bigLast.products.length}`);
   const searchHit: any = await productService.getProducts({ search: `bulk ${bigRun} 50`, limit: 50 } as any);
