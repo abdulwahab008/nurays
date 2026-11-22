@@ -132,13 +132,13 @@ export function useHomeFeed(isAuthenticated: boolean, communityId: string | null
     let cancelled = false;
     type DishList = ApiResponse<{ products: Array<Product & { recommendationReason?: string }> }>;
     apiClient
-      .get<DishList>('/products/order-again', { params: { limit: 6 } })
+      .get<DishList>('/products/order-again', { params: { limit: 6, ...(communityId ? { communityId } : {}) } })
       .then((res) => {
         if (!cancelled) setOrderAgain(res.data?.data?.products ?? []);
       })
       .catch(() => undefined);
     apiClient
-      .get<DishList>('/products/recommended', { params: { limit: 6 } })
+      .get<DishList>('/products/recommended', { params: { limit: 6, ...(communityId ? { communityId } : {}) } })
       .then((res) => {
         if (!cancelled) setRecommended(res.data?.data?.products ?? []);
       })
@@ -146,7 +146,7 @@ export function useHomeFeed(isAuthenticated: boolean, communityId: string | null
     return () => {
       cancelled = true;
     };
-  }, [isAuthenticated]);
+  }, [isAuthenticated, communityId]);
 
   // The kitchens' running deals on the dishes shown, so a card's price is the one the storefront, tray and order charge.
   const dishIdsKey = [...new Set([...products, ...recommended, ...orderAgain].map((p) => p.id))].sort().join(',');

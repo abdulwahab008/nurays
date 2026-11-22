@@ -2,6 +2,7 @@ import prisma from '../config/database';
 import { logger } from '../utils/logger';
 import { AppError } from '../middleware/errorHandler';
 import { haversineKm } from '../utils/deliveryFee';
+import { restaurantReaches } from '../utils/liveArea';
 import { onMenuWhere } from '../utils/menu';
 import type { Prisma } from '@prisma/client';
 
@@ -10,6 +11,8 @@ const SELLER_CARD_SELECT = {
   id: true,
   businessName: true,
   businessType: true,
+  latitude: true,
+  longitude: true,
   description: true,
   ratingAverage: true,
   totalReviews: true,
@@ -150,8 +153,12 @@ export class CommunityService {
         deliveryBaseFee: Number(n.deliveryBaseFee),
         crossCommunityBaseFee: Number(n.crossCommunityBaseFee),
       })),
-      // An area Nuray is not live in shows no kitchens.
-      sellers: community.isActive ? community.sellers.map(sellerCard) : [],
+      // An area Nuray is not live in shows no kitchens; a restaurant shows only within 5 km of the area's centre.
+      sellers: community.isActive
+        ? community.sellers
+            .filter((s) => restaurantReaches(s, { lat: Number(community.centerLatitude), lng: Number(community.centerLongitude) }))
+            .map(sellerCard)
+        : [],
     };
   }
 
