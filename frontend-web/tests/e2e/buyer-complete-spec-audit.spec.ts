@@ -201,7 +201,7 @@ test.describe.serial('Buyer / Customer Specification Complete 27-Section Audit',
     const searchInput = page.locator('input[placeholder*="Search"]').first();
     await expect(searchInput).toBeVisible();
 
-    await expect(page.getByRole('heading', { name: 'Dishes near you' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Food near you' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Change delivery area' }).first()).toBeVisible();
 
     // Dish cards show how far the kitchen is
