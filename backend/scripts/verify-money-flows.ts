@@ -51,11 +51,11 @@ async function mkSeller(opts: any = {}) {
   const user = await mkUser('seller');
   // A bank account by default: a kitchen without one is refused bank transfers at checkout (PAYMENT_METHOD_UNAVAILABLE).
   return prisma.seller.create({
-    data: { userId: user.id, businessName: 'K' + uniq(), deliveryModes: ['delivery', 'pickup'], status: 'active', bankAccountNumber: 'PK36SCBL0000001123456702', ...opts },
+    data: { userId: user.id, businessName: 'K' + uniq(), deliveryModes: ['delivery', 'pickup'], status: 'active', bankAccountNumber: 'PK36SCBL0000001123456702', coverImageUrl: '/uploads/covers/check-kitchen.webp', ...opts },
   });
 }
 async function mkProduct(sellerId: string, stock: number, price = 100) {
-  return prisma.product.create({ data: { sellerId, name: 'P' + uniq(), slug: 'p-' + uniq(), price, unit: 'pc', stockQuantity: stock, stockType: 'direct', approvalStatus: 'approved', isActive: true } as any });
+  return prisma.product.create({ data: { sellerId, name: 'P' + uniq(), slug: 'p-' + uniq(), price, unit: 'pc', stockQuantity: stock, stockType: 'direct', approvalStatus: 'approved', isActive: true, images: { create: { imageUrl: '/uploads/products/check-dish.webp', isPrimary: true } } } as any });
 }
 const order = async (cust: string, items: any[], extra: any = {}) => ({
   order: await orderService.createOrder(cust, { items, deliveryType: 'self_pickup', paymentMethod: 'cod', ...extra } as any),
@@ -853,7 +853,7 @@ async function main() {
   // ---- 21. hub batches ----
   const DAY = 24 * 3600 * 1000;
   const hub = await prisma.hubCenter.create({ data: { name: 'H' + uniq(), code: 'H' + uniq(), city: 'Lahore', area: 'A', address: 'x', latitude: 31.5, longitude: 74.3, capacityCubicFeet: 100 } as any });
-  const hubProd = await prisma.product.create({ data: { sellerId: seller.id, name: 'HP' + uniq(), slug: 'hp-' + uniq(), price: 100, unit: 'pc', stockQuantity: 1000, stockType: 'hub', approvalStatus: 'approved', isActive: true } as any });
+  const hubProd = await prisma.product.create({ data: { sellerId: seller.id, name: 'HP' + uniq(), slug: 'hp-' + uniq(), price: 100, unit: 'pc', stockQuantity: 1000, stockType: 'hub', approvalStatus: 'approved', isActive: true, images: { create: { imageUrl: '/uploads/products/check-dish.webp', isPrimary: true } } } as any });
   const intake = (over: any = {}) => hubService.recordBatchIntake({ hubId: hub.id, productId: hubProd.id, quantity: 10, batchNumber: 'B', expiryDate: new Date(Date.now() + 30 * DAY), measuredTemperatureCelsius: -20, ...over });
   const icode = (over: any) => intake(over).then(() => 'OK', (e: any) => e.code);
 
@@ -937,7 +937,7 @@ async function main() {
   ok('temperature log limits are bounded (NaN no longer breaks it)', (await hubService.getTemperatureLogs(hub.id, NaN).then(() => 'OK', (e: any) => e.code)) === 'OK' && (await hubService.getTemperatureLogs(hub.id, 1e9).then(() => 'OK', (e: any) => e.code)) === 'OK');
 
   // ---- 21b. hub intake / release races, per-line allocation ----
-  const hubProd2 = await prisma.product.create({ data: { sellerId: seller.id, name: 'HQ' + uniq(), slug: 'hq-' + uniq(), price: 100, unit: 'pc', stockQuantity: 1000, stockType: 'hub', approvalStatus: 'approved', isActive: true } as any });
+  const hubProd2 = await prisma.product.create({ data: { sellerId: seller.id, name: 'HQ' + uniq(), slug: 'hq-' + uniq(), price: 100, unit: 'pc', stockQuantity: 1000, stockType: 'hub', approvalStatus: 'approved', isActive: true, images: { create: { imageUrl: '/uploads/products/check-dish.webp', isPrimary: true } } } as any });
   const intake2 = (over: any = {}) => hubService.recordBatchIntake({ hubId: hub.id, productId: hubProd2.id, quantity: 20, batchNumber: 'R', expiryDate: new Date(Date.now() + 30 * DAY), measuredTemperatureCelsius: -20, ...over });
   await intake2();
   const hubOrder2 = (qty: number, uid = hc.id) => orderService.createOrder(uid, { items: [{ productId: hubProd2.id, quantity: qty, stockType: 'hub', hubId: hub.id }], deliveryType: 'self_pickup', paymentMethod: 'cod' } as any) as Promise<any>;
@@ -1369,7 +1369,7 @@ async function main() {
   const kNear = await mkSeller({ communityId: nearC.id, latitude: 24.95, longitude: 67.15, scheduleMode: '24_7' });
   const kFar = await mkSeller({ communityId: farC.id, latitude: 25.5, longitude: 68.0, scheduleMode: '24_7' });
   const kClosed = await mkSeller({ latitude: 24.912, longitude: 67.112, scheduleMode: '24_7', availabilityOverride: 'closed' });
-  const catProduct = (sellerId: string, rating: number, extra: any = {}) => prisma.product.create({ data: { sellerId, categoryId: cat.id, name: 'Dish ' + uniq(), slug: 'd-' + uniq(), price: 100, unit: 'pc', stockQuantity: 5, stockType: 'direct', approvalStatus: 'approved', isActive: true, ratingAverage: rating, totalReviews: 10, ...extra } as any });
+  const catProduct = (sellerId: string, rating: number, extra: any = {}) => prisma.product.create({ data: { sellerId, categoryId: cat.id, name: 'Dish ' + uniq(), slug: 'd-' + uniq(), price: 100, unit: 'pc', stockQuantity: 5, stockType: 'direct', approvalStatus: 'approved', isActive: true, images: { create: { imageUrl: '/uploads/products/check-dish.webp', isPrimary: true } }, ratingAverage: rating, totalReviews: 10, ...extra } as any });
   for (const r of [3, 5, 4, 3, 5, 4, 3]) await catProduct(kHome.id, r);
   for (let i = 0; i < 5; i++) await catProduct(kNear.id, 5);
   for (let i = 0; i < 4; i++) await catProduct(kFar.id, 5);
@@ -1607,8 +1607,8 @@ async function main() {
     // Search: relevance and typos.
     const word = 'zarq' + Array.from({ length: 5 }, () => 'bcdfghjklmnpqrstvwxz'[Math.floor(Math.random() * 20)]).join('') + 'ani';
     const kSearch = await mkSeller();
-    const inDesc = await prisma.product.create({ data: { sellerId: kSearch.id, name: 'Plain rice ' + uniq(), description: `goes well with ${word}`, slug: 's-' + uniq(), price: 100, unit: 'pc', stockQuantity: 5, stockType: 'direct', approvalStatus: 'approved', isActive: true } as any });
-    const inName = await prisma.product.create({ data: { sellerId: kSearch.id, name: `${word} biryani`, slug: 's-' + uniq(), price: 100, unit: 'pc', stockQuantity: 5, stockType: 'direct', approvalStatus: 'approved', isActive: true } as any });
+    const inDesc = await prisma.product.create({ data: { sellerId: kSearch.id, name: 'Plain rice ' + uniq(), description: `goes well with ${word}`, slug: 's-' + uniq(), price: 100, unit: 'pc', stockQuantity: 5, stockType: 'direct', approvalStatus: 'approved', isActive: true, images: { create: { imageUrl: '/uploads/products/check-dish.webp', isPrimary: true } } } as any });
+    const inName = await prisma.product.create({ data: { sellerId: kSearch.id, name: `${word} biryani`, slug: 's-' + uniq(), price: 100, unit: 'pc', stockQuantity: 5, stockType: 'direct', approvalStatus: 'approved', isActive: true, images: { create: { imageUrl: '/uploads/products/check-dish.webp', isPrimary: true } } } as any });
     const found = (await productService.getProducts({ search: word, limit: 10 })).products.map((x: any) => x.id);
     ok('search puts a name match above a description match', found[0] === inName.id && found.includes(inDesc.id));
     const typo = word.slice(0, 4) + word.slice(5);

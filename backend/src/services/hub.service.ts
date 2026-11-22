@@ -3,7 +3,7 @@ import prisma from '../config/database';
 import { searchTerm } from '../utils/search';
 import { AppError } from '../middleware/errorHandler';
 import { sellableBatchWhere } from '../utils/hubStock';
-import { IN_LIVE_AREA } from '../utils/liveArea';
+import { HAS_COVER_PHOTO, HAS_PHOTO, IN_LIVE_AREA } from '../utils/liveArea';
 
 export class HubService {
   /**
@@ -26,7 +26,7 @@ export class HubService {
           // about to expire, and for a product that is live on the catalog.
           where: {
             ...sellableBatchWhere(),
-            product: { approvalStatus: 'approved', isActive: true, seller: { status: 'active', ...IN_LIVE_AREA } },
+            product: { approvalStatus: 'approved', isActive: true, ...HAS_PHOTO, seller: { status: 'active', ...IN_LIVE_AREA, ...HAS_COVER_PHOTO } },
           },
           select: { productId: true },
         },
@@ -73,7 +73,7 @@ export class HubService {
 
     // Public endpoint: show only what can be bought. It used to list quarantined,
     // damaged and expired batches, and products that were unapproved or inactive.
-    const product: Prisma.ProductWhereInput = { approvalStatus: 'approved', isActive: true, seller: { status: 'active', ...IN_LIVE_AREA } };
+    const product: Prisma.ProductWhereInput = { approvalStatus: 'approved', isActive: true, ...HAS_PHOTO, seller: { status: 'active', ...IN_LIVE_AREA, ...HAS_COVER_PHOTO } };
     if (filters.categoryId) {
       product.categoryId = filters.categoryId;
     }

@@ -120,6 +120,7 @@ async function main() {
     userId,
     businessName: `Load Kitchen ${i + 1}`,
     description: 'Home cooking for the load test.',
+    coverImageUrl: '/uploads/covers/load-kitchen.webp',
     verificationStatus: 'approved',
     isVerified: true,
     status: 'active',

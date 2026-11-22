@@ -2,7 +2,7 @@ import prisma from '../config/database';
 import { logger } from '../utils/logger';
 import { AppError } from '../middleware/errorHandler';
 import { haversineKm } from '../utils/deliveryFee';
-import { restaurantReaches } from '../utils/liveArea';
+import { HAS_COVER_PHOTO, HAS_PHOTO, restaurantReaches } from '../utils/liveArea';
 import { onMenuWhere } from '../utils/menu';
 import type { Prisma } from '@prisma/client';
 
@@ -32,7 +32,7 @@ const SELLER_CARD_SELECT = {
     },
   },
   products: {
-    where: { isActive: true, approvalStatus: 'approved', ...onMenuWhere() },
+    where: { isActive: true, approvalStatus: 'approved', ...HAS_PHOTO, ...onMenuWhere() },
     select: {
       id: true,
       name: true,
@@ -110,7 +110,7 @@ export class CommunityService {
       },
       include: {
         sellers: {
-          where: { isVerified: true, status: 'active' },
+          where: { isVerified: true, status: 'active', ...HAS_COVER_PHOTO },
           select: SELLER_CARD_SELECT,
         },
       },

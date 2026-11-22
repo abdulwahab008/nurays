@@ -12,7 +12,7 @@ import { AppError } from '../middleware/errorHandler';
 import { computeSellerAvailability, isAcceptingOrders, type SellerAvailabilityInput } from './availability.service';
 import { getDeliveryFeeForSeller, haversineKm, type PlatformDeliveryPricing, type SellerDeliveryPolicy } from '../utils/deliveryFee';
 import { splitDeliveryFees } from '../utils/orderPricing';
-import { IN_LIVE_AREA, buyerPoint, restaurantsNearWhere } from '../utils/liveArea';
+import { HAS_COVER_PHOTO, HAS_PHOTO, IN_LIVE_AREA, buyerPoint, restaurantsNearWhere } from '../utils/liveArea';
 import { isOnMenu, menuNote, normalizeMenuInput, onMenuWhere } from '../utils/menu';
 import { notifyApprovers } from './approvals.service';
 import { notifySeller } from './notify.service';
@@ -208,7 +208,7 @@ export const MAX_PLAUSIBLE_TRIP_KM = 200;
 export async function kitchensDeliveringTo(communityId: string): Promise<string[]> {
   const near = await restaurantsNearWhere(await buyerPoint(null, null, communityId));
   return sellersPassingComputedFilters(
-    { isVerified: true, status: 'active', verificationStatus: 'approved', ...IN_LIVE_AREA, AND: [near], OR: [{ communityId: null }, { communityId: { not: communityId } }] },
+    { isVerified: true, status: 'active', verificationStatus: 'approved', ...IN_LIVE_AREA, ...HAS_COVER_PHOTO, AND: [near], OR: [{ communityId: null }, { communityId: { not: communityId } }] },
     { openNow: false, fastDelivery: false, deliversHere: true, customerCommunityId: communityId }
   );
 }
@@ -490,7 +490,9 @@ export class ProductService {
     // ...that have cleared admin moderation...
     where.approvalStatus = 'approved';
     // ...nor a product from a suspended/inactive seller, or one outside the areas Nuray is live in.
-    where.seller = { status: 'active', ...IN_LIVE_AREA };
+    // ...and only dishes with a photo, from kitchens with a cover photo.
+    Object.assign(where, HAS_PHOTO);
+    where.seller = { status: 'active', ...IN_LIVE_AREA, ...HAS_COVER_PHOTO };
     // ...and only dishes that are on the menu today (fixed, today's weekday, or today's daily menu).
     where.AND = [...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []), onMenuWhere()];
 
@@ -845,7 +847,13 @@ export class ProductService {
     });
 
     const isOwner = requestingUserId != null && product?.seller.userId === requestingUserId;
-    const isPubliclyVisible = product?.approvalStatus === 'approved' && product?.seller.status === 'active' && product.seller.community?.isActive !== false;
+    // A dish with no photo, or from a kitchen with no cover photo, is hidden until one is added (its kitchen still sees it).
+    const isPubliclyVisible =
+      product?.approvalStatus === 'approved' &&
+      product?.seller.status === 'active' &&
+      product.seller.community?.isActive !== false &&
+      product.images.length > 0 &&
+      !!product.seller.coverImageUrl;
 
     if (!product || (!isPubliclyVisible && !isOwner)) {
       throw new AppError('Product not found', 404, 'PRODUCT_NOT_FOUND');

@@ -28,6 +28,7 @@ interface SellerDashboard {
   businessNameUrdu?: string;
   verificationStatus: string;
   rejectionReason?: string | null;
+  coverImageUrl?: string | null;
   isStoreOpen?: boolean;
   primaryCommunityName?: string | null;
   /** What a pending application still lacks (empty when it is complete and waiting for Nuray). */
@@ -282,6 +283,18 @@ function SellerDashboardContent() {
       <DashboardLayout title={t('dash.title')} subtitle={subtitle} sidebarItems={sidebarItems} userType="seller">
         <div className="max-w-6xl">
           {approved && <PushPrompt text={t('dash.pushText')} />}
+
+          {approved && !dashboard.coverImageUrl && (
+            <div role="alert" className="mb-6 rounded-xl bg-red-50 px-4 py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-red-700">{t('dash.noCoverTitle')}</p>
+                <p className="text-sm text-ink mt-0.5">{t('dash.noCoverBody')}</p>
+              </div>
+              <Link href="/sellers/settings" className="shrink-0">
+                <Button className="rounded-xl min-h-11">{t('dash.addCover')}</Button>
+              </Link>
+            </div>
+          )}
 
           {dashboard.verificationStatus === 'rejected' && (
             <div className="mb-6 rounded-xl bg-red-50 px-4 py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">

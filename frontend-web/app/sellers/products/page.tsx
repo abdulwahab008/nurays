@@ -476,6 +476,8 @@ function SellerProductsContent() {
                             <StatusPill tone="problem">{t('notApproved')}</StatusPill>
                           ) : !product.isActive ? (
                             <StatusPill>{t('hidden')}</StatusPill>
+                          ) : !product.images?.length ? (
+                            <StatusPill tone="problem">{t('needsPhoto')}</StatusPill>
                           ) : null}
                         </div>
                         <p className="text-sm text-muted mt-0.5">{meta}</p>
