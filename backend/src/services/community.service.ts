@@ -150,7 +150,8 @@ export class CommunityService {
         deliveryBaseFee: Number(n.deliveryBaseFee),
         crossCommunityBaseFee: Number(n.crossCommunityBaseFee),
       })),
-      sellers: community.sellers.map(sellerCard),
+      // An area Nuray is not live in shows no kitchens.
+      sellers: community.isActive ? community.sellers.map(sellerCard) : [],
     };
   }
 

@@ -12,6 +12,7 @@ import { AppError } from '../middleware/errorHandler';
 import { computeSellerAvailability, isAcceptingOrders, type SellerAvailabilityInput } from './availability.service';
 import { getDeliveryFeeForSeller, haversineKm, type PlatformDeliveryPricing, type SellerDeliveryPolicy } from '../utils/deliveryFee';
 import { splitDeliveryFees } from '../utils/orderPricing';
+import { IN_LIVE_AREA } from '../utils/liveArea';
 import { isOnMenu, menuNote, normalizeMenuInput, onMenuWhere } from '../utils/menu';
 import { notifyApprovers } from './approvals.service';
 import { notifySeller } from './notify.service';
@@ -206,7 +207,7 @@ export const MAX_PLAUSIBLE_TRIP_KM = 200;
 /** Kitchens in other areas that deliver to this one, by the dish list's rule: their ids. */
 export function kitchensDeliveringTo(communityId: string): Promise<string[]> {
   return sellersPassingComputedFilters(
-    { isVerified: true, status: 'active', verificationStatus: 'approved', OR: [{ communityId: null }, { communityId: { not: communityId } }] },
+    { isVerified: true, status: 'active', verificationStatus: 'approved', ...IN_LIVE_AREA, OR: [{ communityId: null }, { communityId: { not: communityId } }] },
     { openNow: false, fastDelivery: false, deliversHere: true, customerCommunityId: communityId }
   );
 }
@@ -487,8 +488,8 @@ export class ProductService {
     where.isActive = true;
     // ...that have cleared admin moderation...
     where.approvalStatus = 'approved';
-    // ...nor a product from a suspended/inactive seller.
-    where.seller = { status: 'active' };
+    // ...nor a product from a suspended/inactive seller, or one outside the areas Nuray is live in.
+    where.seller = { status: 'active', ...IN_LIVE_AREA };
     // ...and only dishes that are on the menu today (fixed, today's weekday, or today's daily menu).
     where.AND = [...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []), onMenuWhere()];
 
@@ -817,7 +818,7 @@ export class ProductService {
         category: true,
         seller: {
           include: {
-            community: { select: { id: true, name: true, slug: true, crossCommunityEnabled: true } },
+            community: { select: { id: true, name: true, slug: true, crossCommunityEnabled: true, isActive: true } },
             communityDeliveries: SELLER_COMMUNITY_DELIVERY_SELECT.communityDeliveries,
           },
         },
@@ -835,7 +836,7 @@ export class ProductService {
     });
 
     const isOwner = requestingUserId != null && product?.seller.userId === requestingUserId;
-    const isPubliclyVisible = product?.approvalStatus === 'approved' && product?.seller.status === 'active';
+    const isPubliclyVisible = product?.approvalStatus === 'approved' && product?.seller.status === 'active' && product.seller.community?.isActive !== false;
 
     if (!product || (!isPubliclyVisible && !isOwner)) {
       throw new AppError('Product not found', 404, 'PRODUCT_NOT_FOUND');

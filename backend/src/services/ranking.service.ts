@@ -10,6 +10,7 @@ import {
   trendScores,
 } from '../utils/ranking';
 import { onMenuWhere } from '../utils/menu';
+import { IN_LIVE_AREA } from '../utils/liveArea';
 import { cachedCatalogRead, catalogKey } from '../utils/catalogCache';
 
 /**
@@ -164,11 +165,11 @@ async function queryRankedProductIds(clean: string[], max: number): Promise<stri
   return (exact.length >= FUZZY_WHEN_FEWER_THAN ? exact : rows).map((r) => r.id);
 }
 
-/** Dishes a customer can be shown at all (active, approved, from an active kitchen). */
+/** Dishes a customer can be shown at all (active, approved, from an active kitchen in a live area). */
 async function visibleDishes(ids: string[]) {
   if (ids.length === 0) return [];
   return prisma.product.findMany({
-    where: { id: { in: ids }, isActive: true, approvalStatus: 'approved', seller: { status: 'active' }, ...onMenuWhere() },
+    where: { id: { in: ids }, isActive: true, approvalStatus: 'approved', seller: { status: 'active', ...IN_LIVE_AREA }, ...onMenuWhere() },
     select: { id: true, sellerId: true, categoryId: true, trendScore: true },
   });
 }

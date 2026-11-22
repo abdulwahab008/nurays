@@ -8,6 +8,7 @@ import { computeSellerAvailability } from './availability.service';
 import { bookingRange, deliveryDays } from '../utils/deliveryWindows';
 import { computeCustomerFacingSellerInfo } from './product.service';
 import { SELLER_COMMUNITY_DELIVERY_SELECT } from '../utils/sellerDeliverySelect';
+import { IN_LIVE_AREA } from '../utils/liveArea';
 
 /** The query a visitor's browsing of kitchens may carry: whatever the address bar had, so each value is checked before use. */
 export interface PublicSellerFilters {
@@ -44,6 +45,7 @@ export async function listPublicSellers(filters: PublicSellerFilters) {
     isVerified: true,
     status: 'active',
     verificationStatus: 'approved',
+    ...IN_LIVE_AREA,
   };
 
   if (communityId && typeof communityId === 'string') {
@@ -220,6 +222,7 @@ export async function getPublicSeller(id: string) {
       isVerified: true,
       status: 'active',
       verificationStatus: 'approved',
+      ...IN_LIVE_AREA,
     },
     include: {
       user: {

@@ -4,6 +4,7 @@ import { AppError } from '../middleware/errorHandler';
 import { OUTSIDE_AREAS_MESSAGE, getDeliveryFeeForSeller } from '../utils/deliveryFee';
 import { splitDeliveryFees } from '../utils/orderPricing';
 import { isOnMenu } from '../utils/menu';
+import { assertInLiveArea } from '../utils/liveArea';
 import { SELLER_COMMUNITY_DELIVERY_SELECT } from '../utils/sellerDeliverySelect';
 import { communityService } from './community.service';
 import promotionService from './promotion.service';
@@ -336,7 +337,7 @@ export class CartService {
         OR: [{ id: data.productId }, { slug: data.productId }],
       },
       include: {
-        seller: true,
+        seller: { include: { community: { select: { isActive: true } } } },
       },
     });
 
@@ -352,6 +353,7 @@ export class CartService {
     if (product.seller.status !== 'active') {
       throw new AppError(`${product.seller.businessName} is not available right now`, 400, 'SELLER_UNAVAILABLE');
     }
+    assertInLiveArea(product.seller);
     // Weekly and daily dishes can only be ordered on the days they are on the menu.
     if (!isOnMenu(product)) {
       throw new AppError(`${product.name} is not on the menu today`, 400, 'NOT_ON_MENU_TODAY');
