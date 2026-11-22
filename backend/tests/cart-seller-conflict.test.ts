@@ -11,7 +11,7 @@ jest.mock('../src/services/promotion.service', () => ({ __esModule: true, defaul
 
 import cartService from '../src/services/cart.service';
 
-const product = { id: 'p2', sellerId: 's2', isActive: true, approvalStatus: 'approved', name: 'Zafrani Biryani', menuType: 'fixed', availableDays: [], menuDate: null, seller: { id: 's2', businessName: "Naseem's Dum Pukht", status: 'active' } };
+const product = { id: 'p2', sellerId: 's2', isActive: true, approvalStatus: 'approved', name: 'Zafrani Biryani', menuType: 'fixed', availableDays: [], menuDate: null, seller: { id: 's2', businessName: "Naseem's Dum Pukht", status: 'active', community: { isActive: true } } };
 
 function givenTray() {
   db.cart = { findUnique: jest.fn(async () => ({ id: 'c1', userId: 'u1' })), create: jest.fn() };

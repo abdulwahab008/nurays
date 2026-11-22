@@ -14,6 +14,7 @@ import { allocateHubStock } from './hub-allocation.service';
 import { DeliveryFeeShare } from '../utils/deliveryEarnings';
 import { OUTSIDE_AREAS_MESSAGE, getDeliveryFeeForSeller } from '../utils/deliveryFee';
 import { assertOnMenu } from '../utils/menu';
+import { assertInLiveArea } from '../utils/liveArea';
 import { createStockAlert } from './stock-alert.service';
 import promotionService from './promotion.service';
 import { isAcceptingOrders, validateOrderTiming } from './availability.service';
@@ -215,7 +216,7 @@ export class OrderPlacement {
       const product = await prisma.product.findUnique({
         where: { id: item.productId },
         include: {
-          seller: true,
+          seller: { include: { community: { select: { isActive: true } } } },
         },
       });
 
@@ -226,6 +227,7 @@ export class OrderPlacement {
       if (!product.isActive || product.approvalStatus !== 'approved') {
         throw new AppError(`Product ${product.name} is not available`, 400, 'PRODUCT_UNAVAILABLE');
       }
+      assertInLiveArea(product.seller);
       // A weekly or daily dish must be on the menu on the day it is ordered for (the delivery slot's day, else today).
       assertOnMenu(product, data.deliverySlotDate ? new Date(data.deliverySlotDate) : new Date());
 
