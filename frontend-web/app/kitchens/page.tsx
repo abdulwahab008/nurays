@@ -15,6 +15,7 @@ import { displayRating, formatPrice } from '@/lib/utils';
 import { loginUrlHere } from '@/lib/auth-redirect';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { useCommunityStore } from '@/lib/store/community-store';
+import { OutsideServiceArea, useOutsideServiceArea } from '@/components/community/OutsideServiceArea';
 import { kitchensForArea, quoteOf, quoteParams, type QuotedSeller } from '@/components/marketplace/delivery-quote';
 import { useT } from '@/lib/i18n';
 import { browseMessages, businessTypeKey, type BrowseT } from '@/lib/i18n/messages/browse';
@@ -184,6 +185,7 @@ export default function KitchensDirectoryPage() {
     useShallow((s) => ({ selectedCommunity: s.selectedCommunity, openSelectorModal: s.openSelectorModal })),
   );
   const communityId = selectedCommunity?.id ?? null;
+  const outsideServiceArea = useOutsideServiceArea();
   const tb = useT(browseMessages);
   const tk = useT(kitchenMessages);
   const [search, setSearch] = useState('');
@@ -497,7 +499,9 @@ export default function KitchensDirectoryPage() {
         </div>
 
         <main className="mt-6">
-          {status === 'loading' ? (
+          {outsideServiceArea ? (
+            <OutsideServiceArea />
+          ) : status === 'loading' ? (
             <div role="status" className="flex items-center justify-center gap-2 py-16 text-sm text-muted">
               <span className="w-4 h-4 border-2 border-brand border-t-transparent rounded-full animate-spin" aria-hidden />
               {tk('loadingKitchens')}

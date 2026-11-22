@@ -14,6 +14,8 @@ export interface GpsDetection {
 
 interface CommunityState {
   selectedCommunity: Community | null;
+  /** The buyer's location or saved address is outside every live area: pages say Nuray isn't there yet. */
+  outsideArea: boolean;
   communities: Community[];
   isLoading: boolean;
   isDetecting: boolean;
@@ -40,6 +42,7 @@ export const useCommunityStore = create<CommunityState>()(
   persist(
     (set, get) => ({
       selectedCommunity: null,
+      outsideArea: false,
       communities: [],
       isLoading: false,
       isDetecting: false,
@@ -50,7 +53,7 @@ export const useCommunityStore = create<CommunityState>()(
       closeSelectorModal: () => set({ isSelectorModalOpen: false }),
 
       setSelectedCommunity: (community) => {
-        set({ selectedCommunity: community, isSelectorModalOpen: false });
+        set({ selectedCommunity: community, outsideArea: false, isSelectorModalOpen: false });
       },
 
       resolveCommunityFromText: (text: string) => {
@@ -66,10 +69,12 @@ export const useCommunityStore = create<CommunityState>()(
         if (list.length === 0) return;
         const hints: AreaHint[] = [{ area: profile?.area, city: profile?.city }];
         let found = findSavedArea(list, hints);
+        let hasAddresses = false;
         if (!found) {
           try {
             // The API also says which area an address is in (not yet in the shared Address type).
             const saved = ((await addressService.getAddresses()).data ?? []) as Array<Address & { communityId?: string | null }>;
+            hasAddresses = saved.length > 0;
             const ordered = [...saved].sort((a, b) => Number(b.isDefault) - Number(a.isDefault));
             found = findSavedArea(
               list,
@@ -80,7 +85,9 @@ export const useCommunityStore = create<CommunityState>()(
           }
         }
         // The customer may have chosen an area while this was being worked out; their choice stands.
-        if (found && !get().selectedCommunity) set({ selectedCommunity: found });
+        if (get().selectedCommunity) return;
+        if (found) set({ selectedCommunity: found, outsideArea: false });
+        else if (hasAddresses) set({ outsideArea: true });
       },
 
       loadCommunities: async (force = false) => {
@@ -96,9 +103,8 @@ export const useCommunityStore = create<CommunityState>()(
           if (current && list.length > 0) {
             // Re-sync with fresh community from list by id or slug
             const fresh = list.find((c) => c.id === current.id || c.slug === current.slug);
-            if (fresh) {
-              set({ selectedCommunity: fresh });
-            }
+            // An area chosen before that is no longer live: Nuray doesn't deliver there now.
+            set(fresh ? { selectedCommunity: fresh } : { selectedCommunity: null, outsideArea: true });
           }
         } catch (err) {
           set({ error: errorMessage(err, 'Failed to load communities'), isLoading: false });
@@ -138,11 +144,11 @@ export const useCommunityStore = create<CommunityState>()(
                 // Only a real match is chosen. A position outside every area picks nothing: the buyer chooses (FE-20).
                 const finalMatched = localMatch || backendMatch;
                 if (finalMatched) {
-                  set({ selectedCommunity: finalMatched, isDetecting: false });
+                  set({ selectedCommunity: finalMatched, outsideArea: false, isDetecting: false });
                   resolve({ community: finalMatched });
                   return;
                 }
-                set({ isDetecting: false });
+                set({ isDetecting: false, selectedCommunity: null, outsideArea: true });
                 resolve({ community: null, reason: 'outside' });
                 return;
               } catch (e) {
@@ -166,6 +172,7 @@ export const useCommunityStore = create<CommunityState>()(
       name: 'nuray-buyer-community',
       partialize: (state) => ({
         selectedCommunity: state.selectedCommunity,
+        outsideArea: state.outsideArea,
       }),
     }
   )

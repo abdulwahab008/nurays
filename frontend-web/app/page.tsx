@@ -34,6 +34,7 @@ import StatsBand from '@/components/home/StatsBand';
 import HomeFooter from '@/components/home/HomeFooter';
 import { useHomeFeed } from '@/components/home/useHomeFeed';
 import { useCommunityStore } from '@/lib/store/community-store';
+import { OutsideServiceArea, useOutsideServiceArea } from '@/components/community/OutsideServiceArea';
 import { quoteOf, type QuotedSeller } from '@/components/marketplace/delivery-quote';
 import { formatPrice } from '@/lib/utils';
 import { getStackedDiscountedPrice, type CatalogPromotionLike } from '@/lib/pricing';
@@ -94,6 +95,7 @@ export default function Home() {
   const { selectedCommunity, openSelectorModal } = useCommunityStore(
     useShallow((s) => ({ selectedCommunity: s.selectedCommunity, openSelectorModal: s.openSelectorModal })),
   );
+  const outsideServiceArea = useOutsideServiceArea();
 
   const {
     sellers,
@@ -298,23 +300,29 @@ export default function Home() {
       />
       {/* A visitor learns what Nuray is; a signed-in customer goes straight to what they order. */}
       {!isAuthenticated && <PromoBanners />}
-      <OrderAgainDishes dishes={orderAgainDishes} tray={dishTray} />
-      <TrendingKitchens kitchens={trendingKitchens} />
-      <KitchenGrid
-        title={selectedCommunity ? t('kitchensForArea', { area: selectedCommunity.name }) : undefined}
-        areaPrompt={selectedCommunity ? undefined : { text: t('chooseAreaPrompt'), action: t('chooseAreaButton'), onChoose: openSelectorModal }}
-        kitchens={kitchens}
-        filteredKitchens={filteredKitchens}
-        state={kitchensState}
-        onRetry={retryKitchens}
-        onClearFilters={clearFilters}
-        isAuthenticated={isAuthenticated}
-        favoriteKitchenIds={favoriteKitchenIds}
-        onToggleFavorite={toggleFavorite}
-        phoneLimit={!filtering}
-      />
-      <RecommendedDishes dishes={recommendedDishes} tray={dishTray} />
-      <PopularDishes dishes={popularDishes} state={dishesState} onRetry={retryDishes} tray={dishTray} />
+      {outsideServiceArea ? (
+        <OutsideServiceArea />
+      ) : (
+        <>
+        <OrderAgainDishes dishes={orderAgainDishes} tray={dishTray} />
+        <TrendingKitchens kitchens={trendingKitchens} />
+        <KitchenGrid
+          title={selectedCommunity ? t('kitchensForArea', { area: selectedCommunity.name }) : undefined}
+          areaPrompt={selectedCommunity ? undefined : { text: t('chooseAreaPrompt'), action: t('chooseAreaButton'), onChoose: openSelectorModal }}
+          kitchens={kitchens}
+          filteredKitchens={filteredKitchens}
+          state={kitchensState}
+          onRetry={retryKitchens}
+          onClearFilters={clearFilters}
+          isAuthenticated={isAuthenticated}
+          favoriteKitchenIds={favoriteKitchenIds}
+          onToggleFavorite={toggleFavorite}
+          phoneLimit={!filtering}
+        />
+        <RecommendedDishes dishes={recommendedDishes} tray={dishTray} />
+        <PopularDishes dishes={popularDishes} state={dishesState} onRetry={retryDishes} tray={dishTray} />
+        </>
+      )}
       {!isAuthenticated && <StatsBand stats={stats} />}
       <HomeFooter />
       {trayCount > 0 && (

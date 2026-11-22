@@ -16,6 +16,7 @@ import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient, apiErrorCode, apiErrorStatus, apiErrorDetails, errorMessage, type CartConflictDetails } from '@/lib/api-client';
 import { useCommunityStore } from '@/lib/store/community-store';
+import { OutsideServiceArea, useOutsideServiceArea } from '@/components/community/OutsideServiceArea';
 import { useHydrated } from '@/lib/hooks/use-hydrated';
 import { communityService, CommunityDetail, CommunityKitchen } from '@/lib/services/community.service';
 import { favoriteService } from '@/lib/services/favorite.service';
@@ -262,6 +263,7 @@ function ProductsContent() {
   // The first render still sees the signed-out state the server drew, so nothing is asked for until the browser has
   // read the session.
   const hydrated = useHydrated();
+  const outsideServiceArea = useOutsideServiceArea();
   const waitingForAddress = !hydrated || (isAuthenticated && !addressSettled);
 
   useEffect(() => {
@@ -1175,9 +1177,15 @@ function ProductsContent() {
       <div className="max-w-[1280px] mx-auto px-4 sm:px-8 py-6 md:py-8">
         <div className="space-y-6">
           {renderFilterBar()}
-          {renderKitchenSections()}
-          <h2 className="text-lg font-semibold text-ink mt-8 mb-3">{t('sectionDishes')}</h2>
-          {renderMarketplaceContent()}
+          {outsideServiceArea ? (
+            <OutsideServiceArea />
+          ) : (
+            <>
+              {renderKitchenSections()}
+              <h2 className="text-lg font-semibold text-ink mt-8 mb-3">{t('sectionDishes')}</h2>
+              {renderMarketplaceContent()}
+            </>
+          )}
         </div>
         <CartConflictModal isOpen={!!cartConflict} conflict={cartConflict} />
         <ClosedKitchenModal
