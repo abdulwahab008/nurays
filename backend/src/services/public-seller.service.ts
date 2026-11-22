@@ -128,23 +128,14 @@ export async function listPublicSellers(filters: PublicSellerFilters) {
     },
   });
 
-  // Scoped to the kitchens on the page: a relation _count aggregates the whole products and reviews tables first.
+  // Scoped to the kitchens on the page: a relation _count aggregates the whole products table first.
   const sellerIds = sellers.map((s) => s.id);
-  const unreviewedIds = sellers.filter((s) => !s.totalReviews).map((s) => s.id);
-  const [productRows, reviewRows] = await Promise.all([
-    sellerIds.length === 0 ? [] : prisma.product.groupBy({
-      by: ['sellerId'],
-      where: { sellerId: { in: sellerIds }, isActive: true, approvalStatus: 'approved', ...onMenuWhere() },
-      _count: { _all: true },
-    }),
-    unreviewedIds.length === 0 ? [] : prisma.review.groupBy({
-      by: ['sellerId'],
-      where: { sellerId: { in: unreviewedIds }, isApproved: true },
-      _count: { _all: true },
-    }),
-  ]);
+  const productRows = sellerIds.length === 0 ? [] : await prisma.product.groupBy({
+    by: ['sellerId'],
+    where: { sellerId: { in: sellerIds }, isActive: true, approvalStatus: 'approved', ...onMenuWhere() },
+    _count: { _all: true },
+  });
   const productCounts = new Map(productRows.map((r) => [r.sellerId, r._count._all]));
-  const reviewCounts = new Map(reviewRows.map((r) => [r.sellerId, r._count._all]));
 
   // The same fee and time the dish cards show, worked out once per kitchen; only when the visitor's area or address is known.
   const deliveryById = new Map<string, Awaited<ReturnType<typeof computeCustomerFacingSellerInfo>>['delivery']>();
@@ -170,7 +161,7 @@ export async function listPublicSellers(filters: PublicSellerFilters) {
     coverImageUrl: s.coverImageUrl,
     // Real rating only: 0 with no reviews (the UI shows "New"), never a made-up 4.8.
     ratingAverage: Number(s.ratingAverage) || 0,
-    totalReviews: s.totalReviews || reviewCounts.get(s.id) || 0,
+    totalReviews: s.totalReviews,
     trendScore: Math.round(s.trendScore * 100) / 100,
     // null when the kitchen hasn't set one: the UI shows nothing rather than a guess.
     minPrepTimeMinutes: s.minPrepTimeMinutes ?? null,
@@ -313,7 +304,7 @@ export async function getPublicSeller(id: string) {
     description: seller.description,
     coverImageUrl: seller.coverImageUrl,
     ratingAverage: Number(seller.ratingAverage) || 0,
-    totalReviews: seller.totalReviews || seller.reviews.length || 0,
+    totalReviews: seller.totalReviews,
     minPrepTimeMinutes: seller.minPrepTimeMinutes ?? null,
     minOrderAmountForDelivery: seller.minOrderAmountForDelivery != null ? Number(seller.minOrderAmountForDelivery) : null,
     freeDeliveryThreshold: seller.freeDeliveryThreshold != null ? Number(seller.freeDeliveryThreshold) : null,

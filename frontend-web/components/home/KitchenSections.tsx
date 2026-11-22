@@ -40,7 +40,7 @@ export function TrendingKitchens({ kitchens: trendingKitchens }: { kitchens: Hom
             <div className="min-w-0">
               <span className="block text-sm font-bold text-ink truncate group-hover:text-brand-ink">{k.name}</span>
               <span className="block text-[11px] text-muted truncate">
-                {[k.rating ? `★ ${k.rating}` : null, k.statusLabel].filter(Boolean).join(' · ')}
+                {[k.rating ? `★ ${k.rating}` : t('newBadge'), k.statusLabel].filter(Boolean).join(' · ')}
               </span>
             </div>
           </Link>
