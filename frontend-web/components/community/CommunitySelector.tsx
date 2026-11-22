@@ -110,8 +110,11 @@ export function CommunitySelector({ variant = 'navbar' }: CommunitySelectorProps
     if (detected) {
       showToast(t('locationDetected', { name: detected.name }), 'success');
       handleClose();
+    } else if (reason === 'outside') {
+      // The page behind now says Nuray isn't in this area yet, and lists where it is.
+      handleClose();
     } else {
-      showToast(t(reason === 'outside' ? 'gpsOutsideAreas' : 'gpsFailed'), reason === 'outside' ? 'info' : 'error');
+      showToast(t('gpsFailed'), 'error');
     }
   };
 
