@@ -204,9 +204,10 @@ export default function ProductForm(props: Props) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const problems = Object.fromEntries(
+    const problems: Record<string, string> = Object.fromEntries(
       Object.entries(productProblems(form, customUnit, { requireCategory: mode === 'create', variants })).map(([field, problem]) => [field, t(problem)])
     );
+    if (images.length === 0) problems['dish-photos-add'] = t('photoRequired');
     setFieldErrors(problems);
     const first = Object.keys(problems)[0];
     if (first) {
@@ -226,11 +227,13 @@ export default function ProductForm(props: Props) {
     try {
       setSaving(true);
       const uploaded = await uploadNewPhotos();
+      // A dish is never saved without the photos the kitchen chose: they are its picture on every page.
       if (uploaded === null) {
-        showToast(mode === 'create' ? t('photosNotUploadedCreate') : t('photosNotUploadedEdit'), 'warning');
+        showToast(t('photosNotUploaded'), 'error');
+        return;
       }
       const savedPhotos = images.filter((img) => img.url).map((img) => img.url as string);
-      const body = { ...productPayload(form, customUnit, [...savedPhotos, ...(uploaded || [])], mode), ...menuPayload(menu) };
+      const body = { ...productPayload(form, customUnit, [...savedPhotos, ...uploaded], mode), ...menuPayload(menu) };
 
       const response = productId ? await apiClient.patch(`/products/${productId}`, body) : await apiClient.post('/products', body);
       if (!response.data.success) return;
@@ -347,7 +350,7 @@ export default function ProductForm(props: Props) {
             </section>
           )}
 
-          <PhotosSection images={images} onChange={setImages} onTooMany={() => showToast(t('tooManyPhotos'), 'warning')} />
+          <PhotosSection images={images} onChange={(change) => { setImages(change); setFieldErrors((prev) => (prev['dish-photos-add'] ? {} : prev)); }} onTooMany={() => showToast(t('tooManyPhotos'), 'warning')} error={fieldErrors['dish-photos-add']} />
 
           <DetailsSection
             form={form}

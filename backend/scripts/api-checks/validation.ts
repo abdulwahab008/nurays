@@ -194,7 +194,7 @@ export default async function validation() {
     const r = await kitchen.owner.as('PATCH', `/products/${dish}`, body);
     ok(`PATCH /products/:id ${JSON.stringify(body)} is a 400, not a server error`, r.status === 400, r.code);
   }
-  const created = await kitchen.owner.as('POST', '/products', { name: 'Too Dear', price: 1e12, unit: 'plate', stockQuantity: 1, stockType: 'direct' });
+  const created = await kitchen.owner.as('POST', '/products', { name: 'Too Dear', price: 1e12, unit: 'plate', stockQuantity: 1, stockType: 'direct', images: ['/uploads/products/too-dear.webp'] });
   ok('POST /products with a price of a trillion is a 400, not a server error', created.status === 400, created.code);
   const dishAfter = await prisma.product.findUniqueOrThrow({ where: { id: dish }, select: { price: true, stockQuantity: true } });
   ok("and none of the refused changes was stored", Number(dishAfter.price) === 300 && dishAfter.stockQuantity === 50, dishAfter);

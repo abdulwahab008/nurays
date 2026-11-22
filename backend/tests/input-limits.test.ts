@@ -64,13 +64,21 @@ describe('the public product filter', () => {
 });
 
 describe('a dish', () => {
-  const dish = { name: 'Biryani', price: 300, unit: 'plate', stockQuantity: 10, stockType: 'direct' as const };
+  const dish = { name: 'Biryani', price: 300, unit: 'plate', stockQuantity: 10, stockType: 'direct' as const, images: ['/uploads/products/a.webp'] };
 
   it('takes sensible values', () => {
     expect(createProductSchema.safeParse({ ...dish, originalPrice: 350, costPrice: 120, shelfLifeHours: 48, preparationTime: 30, weightGrams: 500, storageDays: 3, minOrderQuantity: 1, maxOrderQuantity: 20 }).success).toBe(true);
     expect(updateProductSchema.safeParse({ menuType: 'daily', menuDate: '2026-10-31' }).success).toBe(true);
     expect(updateProductSchema.safeParse({ menuType: 'daily', menuDate: 'today' }).success).toBe(true);
     expect(updateProductSchema.safeParse({ menuType: 'fixed', menuDate: null }).success).toBe(true);
+  });
+
+  it('needs at least one photo, and an update cannot remove them all', () => {
+    const { images: _images, ...noPhoto } = dish;
+    expect(createProductSchema.safeParse(noPhoto).success).toBe(false);
+    expect(createProductSchema.safeParse({ ...dish, images: [] }).success).toBe(false);
+    expect(updateProductSchema.safeParse({ images: [] }).success).toBe(false);
+    expect(updateProductSchema.safeParse({ price: 320 }).success).toBe(true);
   });
 
   it('refuses a price before discount that is not above the price', () => {

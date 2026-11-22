@@ -14,6 +14,7 @@ import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient, apiErrorDetails, apiErrorMessage } from '@/lib/api-client';
 import { DatePicker } from '@/components/ui/DatePicker';
 import LocationMap from '@/components/ui/LocationMap';
+import FileUploadField from '@/components/ui/FileUploadField';
 import { KitchenAccountTab } from '@/components/sellers/KitchenAccountTab';
 import { bankAccountIsWrong, walletNumberIsWrong } from '@/lib/payout-account';
 import { sendAskingForPassword } from '@/lib/send-asking-for-password';
@@ -595,13 +596,20 @@ export default function SellerSettingsPage() {
         setLoading(false);
         return;
       }
+      // Customers don't see a kitchen without its cover photo, so it is part of every save.
+      if (!rest.coverImageUrl?.trim()) {
+        showToast(t('err.cover'), 'error');
+        setTab('kitchen');
+        setLoading(false);
+        return;
+      }
 
       const sanitizedRest = {
         businessName: rest.businessName.trim(),
         businessNameUrdu: rest.businessNameUrdu?.trim() || null,
         description: rest.description?.trim() || null,
         kitchenVideoUrl: rest.kitchenVideoUrl?.trim() || null,
-        coverImageUrl: rest.coverImageUrl?.trim() || null,
+        coverImageUrl: rest.coverImageUrl.trim(),
         jazzcashNumber: rest.jazzcashNumber?.trim() || null,
         jazzcashAccountTitle: rest.jazzcashAccountTitle?.trim() || null,
         easypaisaNumber: rest.easypaisaNumber?.trim() || null,
@@ -1020,6 +1028,16 @@ export default function SellerSettingsPage() {
                 />
               </div>
             </div>
+
+            <FileUploadField
+              kind="cover"
+              label={t('cover')}
+              hint={t('coverHint')}
+              value={formData.coverImageUrl || null}
+              onChange={(v) => setFormData((prev) => ({ ...prev, coverImageUrl: v ?? '' }))}
+              required
+              testId="settings-cover-upload"
+            />
 
             <div>
               <label htmlFor="description" className={labelClass}>{t('about')}</label>

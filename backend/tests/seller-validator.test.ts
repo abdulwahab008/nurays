@@ -5,7 +5,7 @@ import { AVAILABILITY_OVERRIDES, BUSINESS_TYPES, DELIVERY_MODES, registerSellerS
 // and a null that no column can hold reached the database as a 500.
 
 const update = (body: unknown) => updateSellerSchema.safeParse(body);
-const register = (extra: Record<string, unknown> = {}) => registerSellerSchema.safeParse({ businessName: 'Aysha Kitchen', ...extra });
+const register = (extra: Record<string, unknown> = {}) => registerSellerSchema.safeParse({ businessName: 'Aysha Kitchen', coverImageUrl: '/uploads/covers/c.webp', ...extra });
 
 describe('business type', () => {
   it.each(BUSINESS_TYPES)('accepts %s when registering and when editing', (type) => {
@@ -92,5 +92,16 @@ describe('pickup details', () => {
     expect(update({ pickupPhone: '+92 300 1234567' }).success).toBe(true);
     expect(update({ pickupAddress: 'x'.repeat(301) }).success).toBe(false);
     expect(update({ pickupLandmark: 'x'.repeat(201) }).success).toBe(false);
+  });
+});
+
+describe('cover photo', () => {
+  it('is required to register and cannot be removed on an update', () => {
+    expect(registerSellerSchema.safeParse({ businessName: 'Aysha Kitchen' }).success).toBe(false);
+    expect(register({ coverImageUrl: '' }).success).toBe(false);
+    expect(update({ coverImageUrl: null }).success).toBe(false);
+    expect(update({ coverImageUrl: '' }).success).toBe(false);
+    expect(update({ coverImageUrl: '/uploads/covers/new.webp' }).success).toBe(true);
+    expect(update({ businessName: 'Aysha Kitchen' }).success).toBe(true);
   });
 });
