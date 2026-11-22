@@ -217,7 +217,7 @@ export default function SellerRegisterPage() {
     { id: 'step-place', title: 'reg.s2', done: !!formData.communityId && formData.latitude != null && formData.longitude != null },
     { id: 'step-food', title: 'reg.s3', done: formData.mealCategories.length > 0 },
     { id: 'step-money', title: 'reg.s4', done: !!(formData.jazzcashNumber || formData.easypaisaNumber || formData.bankAccountNumber) },
-    { id: 'step-documents', title: 'reg.s5', done: cnicOnFile || (!!formData.cnicFrontUrl && !!formData.cnicBackUrl) },
+    { id: 'step-documents', title: 'reg.s5', done: (cnicOnFile || (!!formData.cnicFrontUrl && !!formData.cnicBackUrl)) && !!formData.coverImageUrl },
   ];
   const stepsDone = steps.filter((s) => s.done).length;
 
@@ -236,6 +236,9 @@ export default function SellerRegisterPage() {
     }
     if (!cnicOnFile && (!formData.cnicFrontUrl || !formData.cnicBackUrl)) {
       newErrors.cnic = t('reg.errCnic');
+    }
+    if (!formData.coverImageUrl) {
+      newErrors.cover = t('reg.errCover');
     }
     if (!formData.agreeToTerms && (!sellerInfo || sellerInfo.verificationStatus === 'rejected' || needsCompleting)) {
       newErrors.agreeToTerms = t('reg.errTerms');
@@ -259,7 +262,7 @@ export default function SellerRegisterPage() {
         latitude: formData.latitude ?? undefined,
         longitude: formData.longitude ?? undefined,
         communityId: formData.communityId || undefined,
-        coverImageUrl: formData.coverImageUrl || undefined,
+        coverImageUrl: formData.coverImageUrl,
         cnicFrontUrl: formData.cnicFrontUrl || undefined,
         cnicBackUrl: formData.cnicBackUrl || undefined,
         kitchenPhotoUrls: formData.kitchenPhotoUrls.filter((u): u is string => !!u),
@@ -741,8 +744,10 @@ export default function SellerRegisterPage() {
                     hint={t('reg.coverHint')}
                     value={formData.coverImageUrl || null}
                     onChange={(v) => setFormData((prev) => ({ ...prev, coverImageUrl: v ?? '' }))}
+                    required
                     testId="cover-upload"
                   />
+                  <FieldError message={errors.cover} />
                 </Section>
 
                 <div className="mt-10 pt-8 border-t border-line space-y-5">

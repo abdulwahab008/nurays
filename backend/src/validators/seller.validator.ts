@@ -39,7 +39,7 @@ export const registerSellerSchema = z.object({
   businessType: z.enum(BUSINESS_TYPES).optional().default('home_kitchen'),
   description: z.string().max(1000).optional(),
   kitchenVideoUrl: z.string().max(400).optional(),
-  coverImageUrl: z.string().max(400).optional(),
+  coverImageUrl: z.string().min(1, 'Add a cover photo of your kitchen').max(400),
   cnicFrontUrl: z.string().max(400).optional(),
   cnicBackUrl: z.string().max(400).optional(),
   kitchenPhotoUrls: z.array(z.string().max(400)).max(20).optional(),
@@ -96,7 +96,8 @@ export const updateSellerSchema = z.object({
   businessNameUrdu: z.string().max(120).optional().nullable(),
   description: z.string().max(1000).optional().nullable(),
   kitchenVideoUrl: z.string().max(400).refine((u) => !u || /^https:\/\//.test(u), 'Must be an https:// link').optional().nullable(),
-  coverImageUrl: z.string().max(400).optional().nullable(),
+  // A kitchen keeps its cover photo: it can be replaced, not removed.
+  coverImageUrl: z.string().min(1, 'Add a cover photo of your kitchen').max(400).optional(),
   jazzcashNumber: z.string().max(20).optional().nullable(),
   jazzcashAccountTitle: z.string().max(120).optional().nullable(),
   easypaisaNumber: z.string().max(20).optional().nullable(),

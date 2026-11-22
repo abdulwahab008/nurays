@@ -22,10 +22,13 @@ export default function PhotosSection({
   images,
   onChange,
   onTooMany,
+  error,
 }: {
   images: ProductImage[];
   onChange: (update: (prev: ProductImage[]) => ProductImage[]) => void;
   onTooMany: () => void;
+  /** Shown under the photos when the dish has none (every dish needs one). */
+  error?: string;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const t = useT(kitchenProductFormMessages);
@@ -82,8 +85,11 @@ export default function PhotosSection({
 
         {images.length < MAX_IMAGES && (
           <button
+            id="dish-photos-add"
             type="button"
             onClick={() => fileInputRef.current?.click()}
+            aria-invalid={Boolean(error)}
+            aria-describedby={error ? 'dish-photos-error' : undefined}
             className="aspect-square rounded-xl border border-dashed border-line-strong bg-surface hover:bg-raised transition-colors flex flex-col items-center justify-center gap-2 text-brand-ink focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-brand/40"
           >
             <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
@@ -94,6 +100,11 @@ export default function PhotosSection({
         )}
         <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={add} className="hidden" />
       </div>
+      {error && (
+        <p id="dish-photos-error" role="alert" className="mt-2 text-sm font-medium text-red-700">
+          {error}
+        </p>
+      )}
     </FormSection>
   );
 }

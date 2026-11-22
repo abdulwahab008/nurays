@@ -72,7 +72,8 @@ const productFields = z.object({
   maxOrderQuantity: z.number().int().positive().max(10_000).optional(),
   stockQuantity: z.number().int().nonnegative().max(1_000_000),
   stockType: z.enum(['direct', 'hub', 'both']),
-  images: z.array(z.string().min(1)).optional(), // Allow both URLs and local paths
+  // Every dish needs a photo: required on create, and an update that sends photos must keep at least one.
+  images: z.array(z.string().min(1)).min(1, 'Add at least one photo of the dish'),
   tags: z.array(z.string()).optional(),
   // When the dish can be ordered: always (fixed), on chosen weekdays (weekly, 0 = Sunday), or on the date put on the menu (daily).
   menuType: z.enum(['fixed', 'weekly', 'daily']).optional(),

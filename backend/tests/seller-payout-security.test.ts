@@ -160,10 +160,10 @@ describe('what the API accepts for a payout account', () => {
   });
 
   it('takes the kitchen’s numbers at sign-up in one form, and refuses ones that are not', () => {
-    const ok = registerSellerSchema.safeParse({ businessName: 'Aysha Kitchen', jazzcashNumber: '0300-1234567', easypaisaNumber: '', bankAccountNumber: 'pk36 scbl 0000 0011 2345 6702' });
+    const ok = registerSellerSchema.safeParse({ businessName: 'Aysha Kitchen', coverImageUrl: '/uploads/covers/c.webp', jazzcashNumber: '0300-1234567', easypaisaNumber: '', bankAccountNumber: 'pk36 scbl 0000 0011 2345 6702' });
     expect(ok.success && ok.data).toMatchObject({ jazzcashNumber: '03001234567', easypaisaNumber: '', bankAccountNumber: IBAN });
     for (const bad of [{ jazzcashNumber: '12345' }, { easypaisaNumber: 'call me' }, { bankAccountNumber: '1234' }]) {
-      expect(registerSellerSchema.safeParse({ businessName: 'Aysha Kitchen', ...bad }).success).toBe(false);
+      expect(registerSellerSchema.safeParse({ businessName: 'Aysha Kitchen', coverImageUrl: '/uploads/covers/c.webp', ...bad }).success).toBe(false);
     }
   });
 
