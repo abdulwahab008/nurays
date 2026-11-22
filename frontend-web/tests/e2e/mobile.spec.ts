@@ -24,7 +24,6 @@ test.describe('on a phone', () => {
 
   test('a dish opens from the list and its page fits the screen', async ({ page }) => {
     await page.goto('/products');
-    await page.getByRole('button', { name: /^Dishes/ }).tap();
     const first = page.locator('a[href*="/products/"]').first();
     await expect(first).toBeVisible({ timeout: 15000 });
     await first.tap();

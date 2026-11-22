@@ -199,6 +199,7 @@ export async function seedCommunityKitchens() {
     {
       community: dhaKarachi,
       businessName: "Abdul's Charcoal Kitchen",
+      businessType: 'restaurant',
       email: 'abdul.bbq@nuray.test',
       chef: 'Chef Abdul Wahab',
       avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300&q=80&auto=format&fit=crop',
@@ -273,6 +274,7 @@ export async function seedCommunityKitchens() {
     {
       community: clifton,
       businessName: "Clifton Healthy Salad Bowls",
+      businessType: 'restaurant',
       email: 'noor.clifton@nuray.test',
       chef: 'Noor-ul-Huda',
       avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=300&q=80&auto=format&fit=crop',
@@ -462,6 +464,7 @@ export async function seedCommunityKitchens() {
       {
         community: askari11,
         businessName: "Askari 11 Dum Biryani & Pulao",
+        businessType: 'restaurant',
         email: 'biryani.askari11@nuray.test',
         chef: 'Chef Farhan Qureshi',
         avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=300&q=80&auto=format&fit=crop',
@@ -488,6 +491,7 @@ export async function seedCommunityKitchens() {
       {
         community: dha5,
         businessName: "DHA Phase 5 Artisanal Oven",
+        businessType: 'restaurant',
         email: 'artisanal.dha5@nuray.test',
         chef: 'Chef Hamza Tariq',
         avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300&q=80&auto=format&fit=crop',
@@ -525,6 +529,7 @@ export async function seedCommunityKitchens() {
         data: {
           userId: user.id,
           businessName: k.businessName,
+          businessType: k.businessType ?? 'home_kitchen',
           description: k.description,
           coverImageUrl: k.cover,
           isVerified: true,
@@ -545,6 +550,7 @@ export async function seedCommunityKitchens() {
         where: { id: seller.id },
         data: {
           businessName: k.businessName,
+          businessType: k.businessType ?? 'home_kitchen',
           description: k.description,
           coverImageUrl: k.cover,
           isVerified: true,

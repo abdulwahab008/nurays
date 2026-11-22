@@ -201,7 +201,7 @@ test.describe('Customer Module E2E - All Tabs & Visual Polish', () => {
     await page.waitForLoadState('load');
     await verifyNoHorizontalOverflow();
 
-    await expect(page.getByRole('heading', { name: 'Dishes near you' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Food near you' })).toBeVisible();
     await expect(page.getByText(/Found \d+ dishes/)).toBeVisible();
     await page.screenshot({ path: path.join(ARTIFACT_SCREENSHOT_DIR, '02_products.png'), fullPage: true });
 

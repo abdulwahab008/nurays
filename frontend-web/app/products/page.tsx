@@ -114,16 +114,6 @@ function ProductsContent() {
 
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
 
-  // This is the dishes page: dishes unless the link (or the customer) asked for kitchens. Kept in the address so Back keeps it.
-  const [viewMode, setViewModeState] = useState<'kitchens' | 'dishes'>(searchParams.get('view') === 'kitchens' ? 'kitchens' : 'dishes');
-  const setViewMode = (mode: 'kitchens' | 'dishes') => {
-    setViewModeState(mode);
-    const params = new URLSearchParams(window.location.search);
-    if (mode === 'kitchens') params.set('view', 'kitchens');
-    else params.delete('view');
-    const query = params.toString();
-    router.replace(`/products${query ? `?${query}` : ''}`, { scroll: false });
-  };
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
@@ -278,9 +268,6 @@ function ProductsContent() {
     const paramSearch = searchParams.get('search') || '';
     setSearchQuery(paramSearch);
     setSearchInput(paramSearch);
-    // A chosen tab wins over the search, which opens on dishes only until Kitchens is picked (typing clears the choice).
-    if (searchParams.get('view') === 'kitchens') setViewModeState('kitchens');
-    else if (paramSearch) setViewModeState('dishes');
     setPage(1);
   }, [searchParams.toString()]);
 
@@ -515,7 +502,7 @@ function ProductsContent() {
       <div className="flex items-center justify-between flex-wrap gap-2 pt-1">
         <div>
           <h1 className="text-[22px] sm:text-[28px] leading-tight font-semibold text-ink tracking-tight">
-            {viewMode === 'kitchens' ? t('titleKitchens') : t('titleDishes')}
+            {t('titleBrowse')}
           </h1>
           <p className="text-sm text-muted mt-1 flex items-center gap-1.5 flex-wrap">
             <span>{selectedCommunity ? t('deliveringTo') : t('chooseAreaHint')}</span>
@@ -539,52 +526,8 @@ function ProductsContent() {
 
       {/* Unified Search & Filters Panel */}
       <div className="space-y-3">
-        {/* Top row: kitchens or dishes, and the sort */}
+        {/* Top row: the sort */}
         <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-2.5">
-          {/* View Switcher: Kitchens vs Dishes */}
-          <div className="grid grid-cols-2 gap-1 p-1 bg-raised rounded-xl h-12 shrink-0">
-            <button
-              type="button"
-              onClick={() => setViewMode('kitchens')}
-              aria-pressed={viewMode === 'kitchens'}
-              className={`flex items-center justify-center gap-1.5 px-4 rounded-[9px] text-sm transition-colors h-full cursor-pointer ${
-                viewMode === 'kitchens' ? 'bg-surface text-ink font-semibold shadow-xs' : 'text-muted font-bold hover:text-ink'
-              }`}
-            >
-              <ChefHat className="w-3.5 h-3.5" />
-              <span>{t('viewKitchens')}</span>
-              {activeCommunityDetail && (
-                <span
-                  className={`px-1.5 rounded-full text-[11px] font-semibold ${
-                    viewMode === 'kitchens' ? 'bg-brand-soft text-brand-soft-ink' : 'bg-line text-muted'
-                  }`}
-                >
-                  {(activeCommunityDetail.deliveringHere ?? activeCommunityDetail.sellers ?? []).length}
-                </span>
-              )}
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewMode('dishes')}
-              aria-pressed={viewMode === 'dishes'}
-              className={`flex items-center justify-center gap-1.5 px-4 rounded-[9px] text-sm transition-colors h-full cursor-pointer ${
-                viewMode === 'dishes' ? 'bg-surface text-ink font-semibold shadow-xs' : 'text-muted font-bold hover:text-ink'
-              }`}
-            >
-              <UtensilsCrossed className="w-3.5 h-3.5" />
-              <span>{t('viewDishes')}</span>
-              {!loading && !error && (
-                <span
-                  className={`px-1.5 rounded-full text-[11px] font-semibold ${
-                    viewMode === 'dishes' ? 'bg-brand-soft text-brand-soft-ink' : 'bg-line text-muted'
-                  }`}
-                >
-                  {totalProducts}
-                </span>
-              )}
-            </button>
-          </div>
-
           {/* Sort Dropdown */}
           <div className="flex items-center gap-1.5 shrink-0">
             <select
@@ -678,9 +621,8 @@ function ProductsContent() {
     </div>
   );
 
-  // Main Marketplace Content
-  function renderMarketplaceContent() {
-    if (viewMode === 'kitchens') {
+  // The area's home kitchens and restaurants, above the dishes.
+  function renderKitchenSections() {
       const kitchenSkeleton = (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
           {[1, 2, 3, 4, 5, 6].map((idx) => (
@@ -722,15 +664,13 @@ function ProductsContent() {
       const allKitchens = activeCommunityDetail?.deliveringHere ?? activeCommunityDetail?.sellers ?? [];
       const kitchens = openNow ? allKitchens.filter((k) => k.isOpen !== false) : allKitchens;
       const communityName = selectedCommunity.name || activeCommunityDetail?.name || t('yourArea');
+      const groups = [
+        { key: 'home', title: t('sectionHomeKitchens'), list: kitchens.filter((k) => k.businessType !== 'restaurant') },
+        { key: 'restaurants', title: t('sectionRestaurants'), list: kitchens.filter((k) => k.businessType === 'restaurant') },
+      ].filter((g) => g.list.length > 0);
 
       return (
         <div>
-          {activeCommunityDetail && (
-            <p className="mb-4 text-sm text-muted">
-              {t(kitchens.length === 1 ? 'showingKitchensOne' : 'showingKitchensMany', { count: kitchens.length, area: communityName })}
-            </p>
-          )}
-
           {communityKitchensLoading || (!activeCommunityDetail && !communityError) ? (
             kitchenSkeleton
           ) : communityError ? (
@@ -790,9 +730,17 @@ function ProductsContent() {
               </Button>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-              {kitchens.map((k) => {
+            <div className="space-y-6">
+              {groups.map((g) => (
+              <section key={g.key} aria-labelledby={`kitchens-${g.key}`}>
+                <h2 id={`kitchens-${g.key}`} className="text-lg font-semibold text-ink mb-3 flex items-center gap-2">
+                  {g.title}
+                  <span className="px-1.5 rounded-full text-[11px] font-semibold bg-brand-soft text-brand-soft-ink">{g.list.length}</span>
+                </h2>
+                <div className="flex gap-4 overflow-x-auto snap-x pb-2 -mx-1 px-1">
+              {g.list.map((k) => {
                 const isClosed = k.isOpen === false;
+                const isRestaurant = k.businessType === 'restaurant';
                 const rating = displayRating(k.ratingAverage, k.totalReviews);
                 const displayChef =
                   k.chefName && k.chefName.toLowerCase() !== k.businessName.toLowerCase()
@@ -811,7 +759,7 @@ function ProductsContent() {
                         setClosedKitchenModalData(k);
                       }
                     }}
-                    className={`group flex flex-col justify-between rounded-[20px] border bg-surface transition-colors duration-200 overflow-hidden ${
+                    className={`group w-[280px] sm:w-[300px] shrink-0 snap-start flex flex-col justify-between rounded-[20px] border bg-surface transition-colors duration-200 overflow-hidden ${
                       isClosed
                         ? 'border-line opacity-80 hover:opacity-100 hover:border-line-strong'
                         : 'border-line hover:border-line-strong'
@@ -844,7 +792,7 @@ function ProductsContent() {
                       ) : (
                         <span className="absolute top-3 start-3 px-2.5 py-1 rounded-full text-ink text-[11px] font-semibold bg-surface/95 inline-flex items-center gap-1 shadow-xs">
                           <ChefHat className="w-3 h-3 text-brand-ink" />
-                          <span>{t('homeKitchen')}</span>
+                          <span>{isRestaurant ? t('biz.restaurant') : t('homeKitchen')}</span>
                         </span>
                       )}
 
@@ -950,7 +898,7 @@ function ProductsContent() {
                               : 'text-brand-soft-ink bg-brand-soft'
                           }`}
                         >
-                          {isClosed ? (k.acceptsPreOrders ? t('preOrderSlot') : t('kitchenClosed')) : t('domesticKitchen')}
+                          {isClosed ? (k.acceptsPreOrders ? t('preOrderSlot') : t('kitchenClosed')) : isRestaurant ? t('biz.restaurant') : t('domesticKitchen')}
                         </span>
                         <span className="font-bold text-brand-ink inline-flex items-center gap-1 transition-transform">
                           <span>{isClosed ? (k.acceptsPreOrders ? t('checkPreOrder') : t('viewSchedule')) : t('viewMenu')}</span>
@@ -961,11 +909,16 @@ function ProductsContent() {
                   </Link>
                 );
               })}
+                </div>
+              </section>
+              ))}
             </div>
           )}
         </div>
       );
-    }
+  }
+
+  function renderMarketplaceContent() {
 
     // Dishes & Frozen Packs View
     if (error) {
@@ -1017,7 +970,7 @@ function ProductsContent() {
                 {t('changeArea')}
               </Button>
             )}
-            <Button onClick={() => setViewMode('kitchens')} className="rounded-xl text-xs font-semibold">
+            <Button onClick={() => router.push('/kitchens')} className="rounded-xl text-xs font-semibold">
               {t('browseKitchens')}
             </Button>
           </div>
@@ -1222,6 +1175,8 @@ function ProductsContent() {
       <div className="max-w-[1280px] mx-auto px-4 sm:px-8 py-6 md:py-8">
         <div className="space-y-6">
           {renderFilterBar()}
+          {renderKitchenSections()}
+          <h2 className="text-lg font-semibold text-ink mt-8 mb-3">{t('sectionDishes')}</h2>
           {renderMarketplaceContent()}
         </div>
         <CartConflictModal isOpen={!!cartConflict} conflict={cartConflict} />

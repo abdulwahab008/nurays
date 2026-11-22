@@ -208,7 +208,7 @@ model Seller {
   // this field existed; a narrower default would newly block pre-existing orders.
   deliveryModes       String[] @default(["delivery", "pickup"]) @map("delivery_modes") // delivery, pickup, dine_in
 
-  businessType        String   @default("restaurant") @map("business_type") // restaurant, home_kitchen, bakery, cafe, cloud_kitchen
+  businessType        String   @default("home_kitchen") @map("business_type") // restaurant, home_kitchen, bakery, cafe, cloud_kitchen
   mealCategories      String[] @default([]) @map("meal_categories") // breakfast, brunch, lunch, evening_snacks, dinner, late_night, desserts, beverages
   storeNotice         String?  @map("store_notice")
 
