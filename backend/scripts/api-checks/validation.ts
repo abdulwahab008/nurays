@@ -95,7 +95,7 @@ export default async function validation() {
   const card = (listing.body.data?.products ?? []).find((p: any) => p.id === dish);
   ok('the public listing still renders that kitchen (its availability never throws)', listing.status === 200 && card?.seller?.scheduleMode === 'fixed_daily' && typeof card.seller.availability?.isOpen === 'boolean', listing.code);
   const hot = await kitchen.owner.as('PATCH', '/sellers/me', { coverImageUrl: 'https://evil.example/p.png' });
-  ok('a hot-linked cover photo is refused (INVALID_IMAGE) and not stored', hot.status === 400 && hot.code === 'INVALID_IMAGE' && (await stored()).coverImageUrl === null, hot.code);
+  ok('a hot-linked cover photo is refused (INVALID_IMAGE) and not stored', hot.status === 400 && hot.code === 'INVALID_IMAGE' && (await stored()).coverImageUrl === '/uploads/covers/check-kitchen.webp', hot.code);
 
   // 6b. a kitchen's profile choices are the ones the screens offer (and a null no column can hold is a 400, not a 500)
   const choices = () => prisma.seller.findUniqueOrThrow({ where: { id: kitchen.sellerId }, select: { businessType: true, deliveryModes: true, availabilityOverride: true, orderCutoffTime: true } });

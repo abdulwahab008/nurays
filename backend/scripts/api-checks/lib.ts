@@ -151,6 +151,8 @@ export async function makeKitchen(opts: { provider?: 'platform' | 'self'; commun
       verificationStatus: 'approved',
       isVerified: true,
       deliveryProvider: opts.provider ?? 'platform',
+      // Customers only see kitchens with a cover photo and dishes with a photo.
+      coverImageUrl: '/uploads/covers/check-kitchen.webp',
       ...(opts.communityId ? { communityId: opts.communityId } : {}),
     } as any,
   });
@@ -170,6 +172,7 @@ export async function makeProduct(sellerId: string, opts: { price?: number; stoc
       stockType: 'direct',
       approvalStatus: 'approved',
       isActive: true,
+      images: { create: { imageUrl: '/uploads/products/check-dish.webp', isPrimary: true } },
     } as any,
   });
   return p.id;

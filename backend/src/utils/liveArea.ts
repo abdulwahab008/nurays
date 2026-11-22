@@ -9,6 +9,12 @@ import { haversineKm } from './deliveryFee';
  */
 export const IN_LIVE_AREA = { NOT: { community: { is: { isActive: false } } } } satisfies Prisma.SellerWhereInput;
 
+/** Customers only see kitchens with a cover photo (`gt: ''` excludes both null and empty). */
+export const HAS_COVER_PHOTO = { coverImageUrl: { gt: '' } } satisfies Prisma.SellerWhereInput;
+
+/** Customers only see dishes with at least one photo. */
+export const HAS_PHOTO = { images: { some: {} } } satisfies Prisma.ProductWhereInput;
+
 /** Refuses an order (or a tray item) from a kitchen outside the live areas. */
 export function assertInLiveArea(seller: { businessName: string; community?: { isActive: boolean } | null }) {
   if (seller.community && !seller.community.isActive) {

@@ -10,7 +10,7 @@ import {
   trendScores,
 } from '../utils/ranking';
 import { onMenuWhere } from '../utils/menu';
-import { IN_LIVE_AREA } from '../utils/liveArea';
+import { HAS_COVER_PHOTO, HAS_PHOTO, IN_LIVE_AREA } from '../utils/liveArea';
 import { cachedCatalogRead, catalogKey } from '../utils/catalogCache';
 
 /**
@@ -169,7 +169,7 @@ async function queryRankedProductIds(clean: string[], max: number): Promise<stri
 async function visibleDishes(ids: string[]) {
   if (ids.length === 0) return [];
   return prisma.product.findMany({
-    where: { id: { in: ids }, isActive: true, approvalStatus: 'approved', seller: { status: 'active', ...IN_LIVE_AREA }, ...onMenuWhere() },
+    where: { id: { in: ids }, isActive: true, approvalStatus: 'approved', ...HAS_PHOTO, seller: { status: 'active', ...IN_LIVE_AREA, ...HAS_COVER_PHOTO }, ...onMenuWhere() },
     select: { id: true, sellerId: true, categoryId: true, trendScore: true },
   });
 }

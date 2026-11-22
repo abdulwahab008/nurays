@@ -8,7 +8,7 @@ import { computeSellerAvailability } from './availability.service';
 import { bookingRange, deliveryDays } from '../utils/deliveryWindows';
 import { computeCustomerFacingSellerInfo } from './product.service';
 import { SELLER_COMMUNITY_DELIVERY_SELECT } from '../utils/sellerDeliverySelect';
-import { IN_LIVE_AREA, buyerPoint, restaurantsNearWhere } from '../utils/liveArea';
+import { HAS_COVER_PHOTO, HAS_PHOTO, IN_LIVE_AREA, buyerPoint, restaurantsNearWhere } from '../utils/liveArea';
 
 /** The query a visitor's browsing of kitchens may carry: whatever the address bar had, so each value is checked before use. */
 export interface PublicSellerFilters {
@@ -46,6 +46,7 @@ export async function listPublicSellers(filters: PublicSellerFilters) {
     status: 'active',
     verificationStatus: 'approved',
     ...IN_LIVE_AREA,
+    ...HAS_COVER_PHOTO,
     // Restaurants only for a customer within 5 km of them (their address or location, else the chosen area's centre).
     AND: [
       await restaurantsNearWhere(
@@ -116,7 +117,7 @@ export async function listPublicSellers(filters: PublicSellerFilters) {
       },
       communityDeliveries: SELLER_COMMUNITY_DELIVERY_SELECT.communityDeliveries,
       products: {
-        where: { isActive: true, approvalStatus: 'approved', ...onMenuWhere() },
+        where: { isActive: true, approvalStatus: 'approved', ...HAS_PHOTO, ...onMenuWhere() },
         take: 4,
         select: {
           id: true,
@@ -140,7 +141,7 @@ export async function listPublicSellers(filters: PublicSellerFilters) {
   const sellerIds = sellers.map((s) => s.id);
   const productRows = sellerIds.length === 0 ? [] : await prisma.product.groupBy({
     by: ['sellerId'],
-    where: { sellerId: { in: sellerIds }, isActive: true, approvalStatus: 'approved', ...onMenuWhere() },
+    where: { sellerId: { in: sellerIds }, isActive: true, approvalStatus: 'approved', ...HAS_PHOTO, ...onMenuWhere() },
     _count: { _all: true },
   });
   const productCounts = new Map(productRows.map((r) => [r.sellerId, r._count._all]));
@@ -229,6 +230,7 @@ export async function getPublicSeller(id: string) {
       status: 'active',
       verificationStatus: 'approved',
       ...IN_LIVE_AREA,
+      ...HAS_COVER_PHOTO,
     },
     include: {
       user: {
@@ -255,7 +257,7 @@ export async function getPublicSeller(id: string) {
         },
       },
       products: {
-        where: { isActive: true, approvalStatus: 'approved', ...onMenuWhere() },
+        where: { isActive: true, approvalStatus: 'approved', ...HAS_PHOTO, ...onMenuWhere() },
         orderBy: { createdAt: 'desc' },
         include: {
           category: {

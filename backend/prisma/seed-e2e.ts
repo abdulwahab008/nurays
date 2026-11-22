@@ -55,6 +55,9 @@ async function main() {
     },
   });
 
+  // Customers only see kitchens with a cover photo and dishes with a photo.
+  const E2E_PHOTO = 'https://images.unsplash.com/photo-1565557623262-b51c2513a641?w=800&q=80&auto=format&fit=crop';
+
   // --- seller record ---
   const seller = await prisma.seller.upsert({
     where: { userId: sellerUser.id },
@@ -64,6 +67,7 @@ async function main() {
       verificationStatus: 'approved',
       communityId: gulshan?.id,
       primaryCommunityName: gulshan?.name,
+      coverImageUrl: E2E_PHOTO,
     },
     create: {
       userId: sellerUser.id,
@@ -73,6 +77,7 @@ async function main() {
       verificationStatus: 'approved',
       communityId: gulshan?.id,
       primaryCommunityName: gulshan?.name,
+      coverImageUrl: E2E_PHOTO,
     },
   });
 
@@ -120,6 +125,12 @@ async function main() {
         price: p.price,
       },
     });
+  }
+
+  // Every seeded dish gets a photo (idempotent: only those still without one).
+  const bare = await prisma.product.findMany({ where: { sellerId: seller.id, images: { none: {} } }, select: { id: true } });
+  if (bare.length) {
+    await prisma.productImage.createMany({ data: bare.map((p) => ({ productId: p.id, imageUrl: E2E_PHOTO, isPrimary: true })) });
   }
 
   // --- a rider with one job on the move ---
