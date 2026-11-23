@@ -12,7 +12,7 @@ import { AppError } from '../middleware/errorHandler';
 import { computeSellerAvailability, isAcceptingOrders, type SellerAvailabilityInput } from './availability.service';
 import { getDeliveryFeeForSeller, haversineKm, type PlatformDeliveryPricing, type SellerDeliveryPolicy } from '../utils/deliveryFee';
 import { splitDeliveryFees } from '../utils/orderPricing';
-import { HAS_COVER_PHOTO, HAS_PHOTO, IN_LIVE_AREA, RESTAURANT_RADIUS_KM, buyerPoint, restaurantReaches, restaurantsNearWhere } from '../utils/liveArea';
+import { HAS_COVER_PHOTO, HAS_PHOTO, IN_LIVE_AREA, RESTAURANT_RADIUS_KM, buyerPoint, restaurantReaches, restaurantsNearWhere, type BuyerPoint } from '../utils/liveArea';
 import { isOnMenu, menuNote, normalizeMenuInput, onMenuWhere } from '../utils/menu';
 import { notifyApprovers } from './approvals.service';
 import { notifySeller } from './notify.service';
@@ -205,8 +205,8 @@ async function sellersPassingComputedFilters(
 /** The farthest a delivery can go: the most an admin can set as the Nuray rider range (admin.validator deliveryMaxKm). */
 export const MAX_PLAUSIBLE_TRIP_KM = 200;
 /** Kitchens in other areas that deliver to this one, by the dish list's rule: their ids. */
-export async function kitchensDeliveringTo(communityId: string): Promise<string[]> {
-  const near = await restaurantsNearWhere(await buyerPoint(null, null, communityId));
+export async function kitchensDeliveringTo(communityId: string, customer: BuyerPoint = null): Promise<string[]> {
+  const near = await restaurantsNearWhere(customer ?? (await buyerPoint(null, null, communityId)));
   return sellersPassingComputedFilters(
     { isVerified: true, status: 'active', verificationStatus: 'approved', ...IN_LIVE_AREA, ...HAS_COVER_PHOTO, AND: [near], OR: [{ communityId: null }, { communityId: { not: communityId } }] },
     { openNow: false, fastDelivery: false, deliversHere: true, customerCommunityId: communityId }

@@ -29,6 +29,10 @@ export interface CommunityKitchen {
   chefName?: string;
   avatar?: string | null;
   cuisines?: string[];
+  /** The kitchen's own area. */
+  area?: string | null;
+  /** How far the kitchen is from the customer (or the area's centre), in km. */
+  distanceKm?: number | null;
   isOpen?: boolean;
   opensAt?: string;
   closesAt?: string;
@@ -75,8 +79,9 @@ export const communityService = {
     return res.data?.data || [];
   },
 
-  getCommunity: async (identifier: string): Promise<CommunityDetail | null> => {
-    const res = await apiClient.get<ApiResponse<CommunityDetail>>(`/communities/${identifier}`);
+  getCommunity: async (identifier: string, customer?: { lat: number; lng: number } | null): Promise<CommunityDetail | null> => {
+    const params = customer ? { customerLat: customer.lat, customerLng: customer.lng } : undefined;
+    const res = await apiClient.get<ApiResponse<CommunityDetail>>(`/communities/${identifier}`, { params });
     return res.data?.data || null;
   },
 
