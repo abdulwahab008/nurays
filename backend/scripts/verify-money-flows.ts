@@ -1793,6 +1793,9 @@ async function main() {
     ok('a dish on today\'s menu can be added', (await code(cartService.addToCart(mb.id, { productId: pWeekOn.id, quantity: 1 } as any))) === 'OK');
     const mAddr = await prisma.userAddress.create({ data: { userId: mb.id, addressLine1: 'House 3', area: 'A', city: 'Lahore', latitude: 31.4728, longitude: 74.4538 } as any });
     ok('an order for a dish that is not on the menu is refused', (await code(orderService.createOrder(mb.id, { items: [{ productId: pWeekOff.id, quantity: 1 }], deliveryType: 'home_delivery', deliveryAddressId: mAddr.id, paymentMethod: 'cod' } as any))) === 'NOT_ON_MENU_TODAY');
+    const kSuspended = await mkSeller({ deliveryProvider: 'platform', status: 'suspended' });
+    const pSuspended = await mkProduct(kSuspended.id, 20, 100);
+    ok('an order sent straight to the API for a suspended kitchen\'s dish is refused, and no order is made', (await code(orderService.createOrder(mb.id, { items: [{ productId: pSuspended.id, quantity: 1 }], deliveryType: 'self_pickup', paymentMethod: 'cod' } as any))) === 'SELLER_UNAVAILABLE' && (await prisma.orderItem.count({ where: { productId: pSuspended.id } })) === 0);
     ok('a kitchen can put a daily dish on today\'s menu', (await code(productService.updateProduct(pDailyOff.id, kM.userId, { menuDate: 'today' }))) === 'OK' && (await prisma.product.findUnique({ where: { id: pDailyOff.id } }))!.menuDate?.getTime() === karachiDay().date.getTime());
     ok('a weekly dish needs at least one day', (await code(productService.updateProduct(pWeekOn.id, kM.userId, { menuType: 'weekly', availableDays: [] }))) === 'MENU_DAYS_REQUIRED');
     process.env.AUTO_ASSIGN_ENABLED = 'false';
