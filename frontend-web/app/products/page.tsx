@@ -177,7 +177,7 @@ function ProductsContent() {
     let cancelled = false;
     setCommunityKitchensLoading(true);
     communityService
-      .getCommunity(commId)
+      .getCommunity(commId, customerLocation)
       .then((detail) => {
         if (cancelled) return;
         if (detail) setCommunityDetail(detail);
@@ -195,7 +195,7 @@ function ProductsContent() {
     return () => {
       cancelled = true;
     };
-  }, [selectedCommunity?.id, selectedCommunity?.slug, communityReloadKey]);
+  }, [selectedCommunity?.id, selectedCommunity?.slug, communityReloadKey, customerLocation]);
 
   const sortOptions = [
     { value: 'newest', label: t('sort.newest') },
@@ -855,7 +855,9 @@ function ProductsContent() {
                               <CheckCircle2 className="w-4 h-4 text-brand-ink shrink-0" />
                             </div>
                             <p className="text-[13px] text-muted truncate mt-0.5">
-                              {displayChef} · {communityName}
+                              {[displayChef, k.area || communityName, k.distanceKm != null ? t('kmAway', { km: k.distanceKm }) : null]
+                                .filter(Boolean)
+                                .join(' · ')}
                             </p>
                           </div>
 
