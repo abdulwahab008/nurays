@@ -121,7 +121,7 @@ describe('GET /sellers/:id', () => {
   it('returns the kitchen page without the owner account details', async () => {
     db.seller.findFirst.mockResolvedValue(sellerRow());
     const res = fakeRes();
-    await getPublicSellerById({ params: { id: 'seller-1' } } as any, res);
+    await getPublicSellerById({ params: { id: 'seller-1' }, query: {} } as any, res);
 
     expect(res.body.data).toMatchObject({ id: 'seller-1', businessName: 'Sara Kitchen' });
     const keys = keysOf(res.body);
@@ -133,7 +133,7 @@ describe('GET /sellers/:id', () => {
   it('still finds a kitchen by its owner id, so older links keep working, and answers with the seller id', async () => {
     db.seller.findFirst.mockResolvedValue(sellerRow());
     const res = fakeRes();
-    await getPublicSellerById({ params: { id: 'user-77' } } as any, res);
+    await getPublicSellerById({ params: { id: 'user-77' }, query: {} } as any, res);
     const args = db.seller.findFirst.mock.calls[0][0];
     expect(args.where.OR).toEqual([{ id: 'user-77' }, { userId: 'user-77' }]);
     expect(Object.keys(args.include.user.select)).toEqual(['profile']);
@@ -142,6 +142,6 @@ describe('GET /sellers/:id', () => {
 
   it('answers 404 for a kitchen that is not public', async () => {
     db.seller.findFirst.mockResolvedValue(null);
-    await expect(getPublicSellerById({ params: { id: 'nope' } } as any, fakeRes())).rejects.toMatchObject({ code: 'SELLER_NOT_FOUND' });
+    await expect(getPublicSellerById({ params: { id: 'nope' }, query: {} } as any, fakeRes())).rejects.toMatchObject({ code: 'SELLER_NOT_FOUND' });
   });
 });

@@ -18,7 +18,7 @@ import { useCartStore } from '@/lib/store/cart-store';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { Button } from '@/components/ui/button';
 import { favoriteService } from '@/lib/services/favorite.service';
-import { productService } from '@/lib/services/product.service';
+import type { DeliveryQuote } from '@/components/marketplace/delivery-quote';
 import { addressService } from '@/lib/services/address.service';
 import { useCommunityStore } from '@/lib/store/community-store';
 import { loginUrlHere } from '@/lib/auth-redirect';
@@ -190,9 +190,12 @@ interface DeliveryToYou {
   min: number | null;
   max: number | null;
   reason: string | null;
+  /** A restaurant more than 5 km from the customer: it does not deliver to them at all. */
+  tooFar: boolean;
 }
 
 function describeDeliveryToYou(d: DeliveryToYou, tk: KitchenT): string {
+  if (d.tooFar) return tk('tooFarTitle');
   if (!d.deliverable) return d.reason || tk('notDeliverable');
   const fee = d.fee === 0 ? tk('freeDelivery') : tk('amountDelivery', { amount: formatPrice(d.fee) });
   return d.min != null && d.max != null ? tk('feeAndTime', { fee, min: d.min, max: d.max }) : fee;
@@ -358,7 +361,7 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
   }, [productIdsKey]);
 
   // The fee and time to the customer's address (signed in) or chosen area, worked out by the server exactly as on the
-  // dish cards: one of the kitchen's dishes, listed with where the customer is, carries the kitchen's quote.
+  // dish cards, and whether a restaurant is close enough to deliver at all.
   useEffect(() => {
     if (!sellerId) return;
     let cancelled = false;
@@ -377,17 +380,15 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
         return;
       }
       try {
-        const res = await productService.getProducts({
-          sellerId,
-          limit: 1,
-          communityId: communityId ?? undefined,
-          customerLat: coords?.latitude,
-          customerLng: coords?.longitude,
+        const res = await apiClient.get<ApiResponse<{ deliveryToYou: DeliveryQuote | null }>>(`/sellers/${sellerId}`, {
+          params: { communityId: communityId ?? undefined, customerLat: coords?.latitude, customerLng: coords?.longitude },
         });
-        const d = res.data?.products?.[0]?.delivery;
+        const d = res.data?.data?.deliveryToYou;
         if (cancelled) return;
         setDeliveryToYou(
-          d ? { deliverable: d.deliverable, fee: d.fee, min: d.estimatedMinMinutes, max: d.estimatedMaxMinutes, reason: d.reason } : null,
+          d
+            ? { deliverable: d.deliverable, fee: d.fee, min: d.estimatedMinMinutes, max: d.estimatedMaxMinutes, reason: d.reason, tooFar: d.tooFar === true }
+            : null,
         );
       } catch {
         if (!cancelled) setDeliveryToYou(null);
@@ -461,6 +462,10 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
   };
 
   const handleAddToCart = async (dish: KitchenDish) => {
+    if (kitchen && deliveryToYou?.tooFar) {
+      showToast(tk('tooFarTitle'), 'error');
+      return;
+    }
     if (kitchen && kitchen.isClosed && !kitchen.preOrderOnly) {
       showToast(tk('toastClosed', { name: kitchen.name }), 'error');
       return;
@@ -685,7 +690,8 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
   const deliveryLine = deliveryToYou ? describeDeliveryToYou(deliveryToYou, tk) : kitchen.deliveryFee;
 
   const isOpenNow = kitchen.availability?.isOpen === true;
-  const orderingBlocked = kitchen.isClosed && !kitchen.preOrderOnly;
+  const tooFar = deliveryToYou?.tooFar === true;
+  const orderingBlocked = (kitchen.isClosed && !kitchen.preOrderOnly) || tooFar;
 
   const renderStorefrontBody = () => (
     <>
@@ -792,6 +798,25 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
           </div>
         </div>
       </div>
+
+      {tooFar && (
+        <div className="max-w-[1280px] mx-auto px-4 sm:px-8 mt-5" data-testid="too-far-banner">
+          <div role="alert" className="bg-red-50 rounded-[20px] p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-start gap-3.5">
+              <div className="w-11 h-11 rounded-2xl bg-surface flex items-center justify-center text-red-700 shrink-0">
+                <MapPin className="w-5 h-5" aria-hidden />
+              </div>
+              <div>
+                <h4 className="font-semibold text-red-700 text-sm">{tk('tooFarTitle')}</h4>
+                <p className="text-[13px] text-ink mt-0.5 leading-relaxed max-w-2xl">{tk('tooFarBody', { name: kitchen.name, km: 5 })}</p>
+              </div>
+            </div>
+            <Button onClick={openAreaPicker} variant="outline" className="rounded-xl min-h-11 shrink-0">
+              {tk('changeArea')}
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Closed Kitchen / Pre-Order Banner (only when the API says the kitchen is closed) */}
       {kitchen.isClosed && (
@@ -997,7 +1022,7 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
 
                           {orderingBlocked ? (
                             <span className="inline-flex items-center h-11 px-3 rounded-xl bg-raised text-muted text-sm font-semibold cursor-not-allowed">
-                              {tk('closed')}
+                              {tooFar ? tk('tooFarShort') : tk('closed')}
                             </span>
                           ) : soldOut && count === 0 ? (
                             <button

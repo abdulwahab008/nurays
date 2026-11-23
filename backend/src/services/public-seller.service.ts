@@ -217,7 +217,8 @@ export async function listPublicSellers(filters: PublicSellerFilters) {
  * One verified kitchen's public storefront: its settings, availability, menu and latest reviews. 404 SELLER_NOT_FOUND when there is
  * no such kitchen or it is not verified and active.
  */
-export async function getPublicSeller(id: string) {
+/** `customer` is where the visitor is (their address or area), when known: the page then says whether the kitchen delivers to them. */
+export async function getPublicSeller(id: string, customer: { lat?: number | null; lng?: number | null; communityId?: string | null } = {}) {
   // Search by seller.id, or by the owner's user id so older bookmarks keep working. The user id is
   // accepted as input but never returned: the response carries the seller id only.
   const seller = await prisma.seller.findFirst({
@@ -233,6 +234,7 @@ export async function getPublicSeller(id: string) {
       ...HAS_COVER_PHOTO,
     },
     include: {
+      communityDeliveries: SELLER_COMMUNITY_DELIVERY_SELECT.communityDeliveries,
       user: {
         select: {
           profile: {
@@ -253,6 +255,7 @@ export async function getPublicSeller(id: string) {
           city: true,
           deliveryBaseFee: true,
           crossCommunityBaseFee: true,
+          crossCommunityEnabled: true,
           areaDescription: true,
         },
       },
@@ -377,5 +380,13 @@ export async function getPublicSeller(id: string) {
     })),
   };
 
-  return result;
+  const quoted = customer.communityId || (customer.lat != null && customer.lng != null)
+    ? await computeCustomerFacingSellerInfo(
+        { ...seller, minPrepTimeMinutes: seller.minPrepTimeMinutes ?? null },
+        customer.lat,
+        customer.lng,
+        customer.communityId,
+      )
+    : null;
+  return { ...result, deliveryToYou: quoted?.delivery ?? null };
 }

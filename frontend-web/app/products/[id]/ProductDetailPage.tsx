@@ -93,6 +93,8 @@ interface ProductDetail {
     fee: number;
     distanceKm: number | null;
     reason: string | null;
+    /** A restaurant more than 5 km from the customer. */
+    tooFar?: boolean;
   } | null;
   estimatedDeliveryMinMinutes?: number | null;
   estimatedDeliveryMaxMinutes?: number | null;
@@ -315,6 +317,10 @@ export default function ProductDetailPage({ initial }: { initial?: RawProduct })
 
   const handleAddToCart = async () => {
     if (!product) return;
+    if (product.delivery?.tooFar) {
+      showToast(t('tooFarTitle'), 'error');
+      return;
+    }
 
     // A kitchen that is closed, busy or away takes no orders. Say so now, as the kitchen's own page does, instead of letting the
     // dish sit in a bag that cannot be checked out.
@@ -805,7 +811,9 @@ export default function ProductDetailPage({ initial }: { initial?: RawProduct })
                           ? ` · ${t('etaMin', { min: product.estimatedDeliveryMinMinutes, max: product.estimatedDeliveryMaxMinutes })}`
                           : ''
                     }${product.delivery.distanceKm != null ? ` · ${t('kmAway', { km: product.delivery.distanceKm })}` : ''}`
-                  : product.delivery.reason || t('notDeliverable')}
+                  : product.delivery.tooFar
+                    ? t('tooFarTitle')
+                    : product.delivery.reason || t('notDeliverable')}
               </p>
               {selectedCommunity && product.delivery.distanceKm == null && (
                 <p className="text-xs text-muted mt-0.5">{t('toArea', { area: selectedCommunity.name })}</p>
@@ -956,11 +964,22 @@ export default function ProductDetailPage({ initial }: { initial?: RawProduct })
                 {product.availableToday === false ? t('notOnMenuToday', { days: product.menuLabel }) : t('onMenuNote', { days: product.menuLabel })}
               </p>
             )}
+            {product.delivery?.tooFar && (
+              <div role="alert" data-testid="too-far-banner" className="rounded-xl bg-red-50 px-3 py-2.5 flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-red-700">{t('tooFarTitle')}</p>
+                  <p className="text-xs text-ink mt-0.5">{t('tooFarBody', { name: product.seller.businessName, km: 5 })}</p>
+                </div>
+                <Button type="button" onClick={openSelectorModal} variant="outline" className="rounded-xl min-h-11 shrink-0">
+                  {t('changeArea')}
+                </Button>
+              </div>
+            )}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Button
                 onClick={handleAddToCart}
                 className="w-full h-12 text-[15px] font-semibold bg-brand text-on-brand hover:bg-brand-500 rounded-xl"
-                disabled={maxQty < quantity || addToCartLoading || product.availableToday === false}
+                disabled={maxQty < quantity || addToCartLoading || product.availableToday === false || product.delivery?.tooFar === true}
               >
                 {addToCartLoading ? t('adding') : t('addToBag', { amount: formatPrice(unitPrice * quantity) })}
               </Button>
@@ -968,7 +987,7 @@ export default function ProductDetailPage({ initial }: { initial?: RawProduct })
                 onClick={handleBuyNow}
                 variant="outline"
                 className="w-full h-12 text-[15px] font-semibold rounded-xl"
-                disabled={maxQty < quantity || addToCartLoading || product.availableToday === false}
+                disabled={maxQty < quantity || addToCartLoading || product.availableToday === false || product.delivery?.tooFar === true}
               >
                 {t('buyNow')}
               </Button>

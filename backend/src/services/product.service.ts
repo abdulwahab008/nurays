@@ -12,7 +12,7 @@ import { AppError } from '../middleware/errorHandler';
 import { computeSellerAvailability, isAcceptingOrders, type SellerAvailabilityInput } from './availability.service';
 import { getDeliveryFeeForSeller, haversineKm, type PlatformDeliveryPricing, type SellerDeliveryPolicy } from '../utils/deliveryFee';
 import { splitDeliveryFees } from '../utils/orderPricing';
-import { HAS_COVER_PHOTO, HAS_PHOTO, IN_LIVE_AREA, buyerPoint, restaurantsNearWhere, type BuyerPoint } from '../utils/liveArea';
+import { HAS_COVER_PHOTO, HAS_PHOTO, IN_LIVE_AREA, RESTAURANT_RADIUS_KM, buyerPoint, restaurantReaches, restaurantsNearWhere, type BuyerPoint } from '../utils/liveArea';
 import { isOnMenu, menuNote, normalizeMenuInput, onMenuWhere } from '../utils/menu';
 import { notifyApprovers } from './approvals.service';
 import { notifySeller } from './notify.service';
@@ -250,6 +250,7 @@ export async function computeCustomerFacingSellerInfo(
       latitude: unknown;
       longitude: unknown;
       minPrepTimeMinutes: number | null;
+      businessType?: string;
     },
   customerLat?: number | null,
   customerLng?: number | null,
@@ -259,7 +260,12 @@ export async function computeCustomerFacingSellerInfo(
   if ((customerLat == null || customerLng == null) && !customerCommunityId) {
     return { isAcceptingOrders: accepting.accepting, acceptingReason: accepting.reason, delivery: null };
   }
-  const feeResult = customerDeliveryQuote(seller, customerLat, customerLng, customerCommunityId, await getPlatformDeliveryPricing());
+  const quote = customerDeliveryQuote(seller, customerLat, customerLng, customerCommunityId, await getPlatformDeliveryPricing());
+  // A restaurant reaches only customers within 5 km (their location, else their area's centre).
+  const tooFar =
+    seller.businessType === 'restaurant' &&
+    !restaurantReaches({ businessType: seller.businessType, latitude: seller.latitude, longitude: seller.longitude }, await buyerPoint(customerLat, customerLng, customerCommunityId));
+  const feeResult = tooFar ? { ...quote, deliverable: false, reason: `Only delivers within ${RESTAURANT_RADIUS_KM} km` } : quote;
   const eta = estimateDeliveryMinutes(seller.minPrepTimeMinutes, feeResult.distanceKm);
   // A community fee is quoted whatever the distance, so a kitchen pinned in the wrong city still quotes one; the trip
   // time from that pin is not real, so none is given.
@@ -272,6 +278,7 @@ export async function computeCustomerFacingSellerInfo(
       fee: feeResult.fee,
       distanceKm: feeResult.distanceKm != null ? Math.round(feeResult.distanceKm * 10) / 10 : null,
       reason: feeResult.reason,
+      tooFar,
       // A time for a trip the kitchen will not make is worse than none: a buyer in another city was told "3,094 min".
       estimatedMinMinutes: feeResult.deliverable && plausibleTrip ? eta.minMinutes : null,
       estimatedMaxMinutes: feeResult.deliverable && plausibleTrip ? eta.maxMinutes : null,
