@@ -149,7 +149,12 @@ export const getPublicSellers = async (req: Request, res: Response) => {
 };
 
 export const getPublicSellerById = async (req: Request, res: Response) => {
-  const result = await publicSellerService.getPublicSeller(req.params.id);
+  const num = (v: unknown) => (typeof v === 'string' && v !== '' && Number.isFinite(Number(v)) ? Number(v) : null);
+  const result = await publicSellerService.getPublicSeller(req.params.id, {
+    lat: num(req.query.customerLat),
+    lng: num(req.query.customerLng),
+    communityId: typeof req.query.communityId === 'string' ? req.query.communityId : null,
+  });
 
   res.status(200).json({
     success: true,

@@ -11,6 +11,8 @@ export interface DeliveryQuote {
   reason: string | null;
   estimatedMinMinutes: number | null;
   estimatedMaxMinutes: number | null;
+  /** A restaurant more than 5 km from the customer. */
+  tooFar?: boolean;
 }
 
 export type QuotedSeller = PublicSeller & { delivery?: DeliveryQuote | null };
