@@ -227,6 +227,10 @@ export class OrderPlacement {
       if (!product.isActive || product.approvalStatus !== 'approved') {
         throw new AppError(`Product ${product.name} is not available`, 400, 'PRODUCT_UNAVAILABLE');
       }
+      // A suspended or closed kitchen takes no orders, also when the order is sent straight to the API (the tray checks this too).
+      if (product.seller.status !== 'active') {
+        throw new AppError(`${product.seller.businessName} is not available right now`, 400, 'SELLER_UNAVAILABLE');
+      }
       assertInLiveArea(product.seller);
       // A weekly or daily dish must be on the menu on the day it is ordered for (the delivery slot's day, else today).
       assertOnMenu(product, data.deliverySlotDate ? new Date(data.deliverySlotDate) : new Date());
