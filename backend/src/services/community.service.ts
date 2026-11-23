@@ -2,7 +2,8 @@ import prisma from '../config/database';
 import { logger } from '../utils/logger';
 import { AppError } from '../middleware/errorHandler';
 import { haversineKm } from '../utils/deliveryFee';
-import { HAS_COVER_PHOTO, HAS_PHOTO, restaurantReaches } from '../utils/liveArea';
+import { inArea } from './product.service';
+import { HAS_COVER_PHOTO, HAS_PHOTO, restaurantReaches, type BuyerPoint } from '../utils/liveArea';
 import { onMenuWhere } from '../utils/menu';
 import type { Prisma } from '@prisma/client';
 
@@ -43,7 +44,8 @@ const SELLER_CARD_SELECT = {
   },
   } satisfies Prisma.SellerSelect;
 
-function sellerCard(s: Prisma.SellerGetPayload<{ select: typeof SELLER_CARD_SELECT }>) {
+/** `from` is where the customer is (or their area's centre): the card says how far the kitchen is from there. */
+function sellerCard(s: Prisma.SellerGetPayload<{ select: typeof SELLER_CARD_SELECT }>, from: BuyerPoint) {
   return {
     id: s.id,
     businessName: s.businessName,
@@ -57,6 +59,12 @@ function sellerCard(s: Prisma.SellerGetPayload<{ select: typeof SELLER_CARD_SELE
     chefName: s.user?.profile?.fullName || s.businessName,
     avatar: s.user?.profile?.avatarUrl,
     cuisines: s.mealCategories || [],
+    // The kitchen's own area, not the one the customer chose.
+    area: s.primaryCommunityName,
+    distanceKm:
+      from && s.latitude != null && s.longitude != null
+        ? Math.round(haversineKm(from.lat, from.lng, Number(s.latitude), Number(s.longitude)) * 10) / 10
+        : null,
     products: s.products.map((p) => ({
       id: p.id,
       name: p.name,
@@ -103,7 +111,8 @@ export class CommunityService {
   /**
    * Get community by slug or id, with full details and resolved neighbor community objects
    */
-  async getCommunity(identifier: string) {
+  /** `customer` is the customer's own location when it is inside this area; otherwise the area's centre is used. */
+  async getCommunity(identifier: string, customer: BuyerPoint = null) {
     const community = await prisma.community.findFirst({
       where: {
         OR: [{ id: identifier }, { slug: identifier }],
@@ -119,6 +128,10 @@ export class CommunityService {
     if (!community) {
       throw new AppError('Community not found', 404, 'COMMUNITY_NOT_FOUND');
     }
+    // A saved address in another city says nothing about this area: distances are then from the area's centre.
+    const from = customer && inArea(customer.lat, customer.lng, community)
+      ? customer
+      : { lat: Number(community.centerLatitude), lng: Number(community.centerLongitude) };
 
     // Resolve neighbor communities
     const neighbors = community.neighborCommunityIds.length > 0
@@ -154,19 +167,17 @@ export class CommunityService {
         crossCommunityBaseFee: Number(n.crossCommunityBaseFee),
       })),
       // An area Nuray is not live in shows no kitchens; a restaurant shows only within 5 km of the area's centre.
-      sellers: community.isActive
-        ? community.sellers
-            .filter((s) => restaurantReaches(s, { lat: Number(community.centerLatitude), lng: Number(community.centerLongitude) }))
-            .map(sellerCard)
-        : [],
+      sellers: community.isActive ? community.sellers.filter((s) => restaurantReaches(s, from)).map((s) => sellerCard(s, from)) : [],
+      /** Where distances were measured from (not sent to the client). */
+      measuredFrom: from,
     };
   }
 
   /** The list cards for these kitchens (kitchens from other areas that deliver to one, say). */
-  async sellerCards(ids: string[]) {
+  async sellerCards(ids: string[], from: BuyerPoint) {
     if (ids.length === 0) return [];
     const sellers = await prisma.seller.findMany({ where: { id: { in: ids } }, select: SELLER_CARD_SELECT });
-    return sellers.map(sellerCard);
+    return sellers.map((s) => sellerCard(s, from));
   }
 
   distanceToCommunityKm(c: { centerLatitude: unknown; centerLongitude: unknown }, lat: number, lng: number): number {

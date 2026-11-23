@@ -11,10 +11,15 @@ export async function getCommunities(_req: Request, res: Response): Promise<void
 
 export async function getCommunity(req: Request, res: Response): Promise<void> {
   const { identifier } = req.params;
-  const data = await communityService.getCommunity(identifier);
+  const lat = Number(qstr(req.query.customerLat));
+  const lng = Number(qstr(req.query.customerLng));
+  const customer = Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180 ? { lat, lng } : null;
+  const data = await communityService.getCommunity(identifier, customer);
   // The kitchens a customer here can order from: the area's own, then other areas' that deliver here (as the dish list).
-  const deliveringHere = [...data.sellers, ...(await communityService.sellerCards(await kitchensDeliveringTo(data.id)))];
-  res.json({ success: true, data: { ...data, deliveringHere } });
+  const { measuredFrom, ...area } = data;
+  const others = await kitchensDeliveringTo(area.id, measuredFrom);
+  const deliveringHere = [...area.sellers, ...(await communityService.sellerCards(others, measuredFrom))];
+  res.json({ success: true, data: { ...area, deliveringHere } });
 }
 
 export async function detectCommunity(req: Request, res: Response): Promise<void> {
