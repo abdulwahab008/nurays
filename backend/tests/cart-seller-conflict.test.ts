@@ -44,3 +44,27 @@ describe('adding a dish from another kitchen to a tray', () => {
     expect(db.cartItem.deleteMany).not.toHaveBeenCalled();
   });
 });
+
+describe('checking the tray before checkout', () => {
+  const item = (seller: object) => ({ quantity: 1, priceSnapshot: 500, variant: null, product: { ...product, price: 500, stockQuantity: 9, seller: { ...product.seller, ...seller } } });
+  const check = async (seller: object) => {
+    db.cart = { findUnique: jest.fn(async () => ({ id: 'c1', userId: 'u1' })) };
+    db.cartItem = { findMany: jest.fn(async () => [item(seller)]) };
+    return cartService.validateCart('u1').then(() => null, (e) => e);
+  };
+
+  it('fails for a kitchen in an area Nuray has switched off', async () => {
+    const err = await check({ community: { isActive: false } });
+    expect(err).toMatchObject({ code: 'CART_VALIDATION_FAILED', details: ["Naseem's Dum Pukht is not taking orders: Nuray isn't in its area yet"] });
+  });
+
+  it('fails for a suspended kitchen', async () => {
+    const err = await check({ status: 'suspended' });
+    expect(err).toMatchObject({ code: 'CART_VALIDATION_FAILED', details: ["Naseem's Dum Pukht is not available right now"] });
+  });
+
+  it('passes for an active kitchen in a live area, or one with no area', async () => {
+    expect(await check({})).toBeNull();
+    expect(await check({ community: null })).toBeNull();
+  });
+});

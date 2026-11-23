@@ -647,7 +647,7 @@ export class CartService {
     const items = await prisma.cartItem.findMany({
       where: { cartId: cart.id },
       include: {
-        product: true,
+        product: { include: { seller: { select: { businessName: true, status: true, community: { select: { isActive: true } } } } } },
         variant: true,
       },
     });
@@ -659,6 +659,15 @@ export class CartService {
     const errors: string[] = [];
 
     for (const item of items) {
+      const seller = item.product.seller;
+      if (seller.status !== 'active') {
+        errors.push(`${seller.businessName} is not available right now`);
+        continue;
+      }
+      if (seller.community && !seller.community.isActive) {
+        errors.push(`${seller.businessName} is not taking orders: Nuray isn't in its area yet`);
+        continue;
+      }
       // Check if product still exists and is active
       if (!item.product.isActive || item.product.approvalStatus !== 'approved') {
         errors.push(`${item.product.name} is no longer available`);
