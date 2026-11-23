@@ -1,7 +1,15 @@
+import type { Prisma } from '@prisma/client';
 import prisma from '../config/database';
 import { AppError } from '../middleware/errorHandler';
 import { computeSellerAvailability } from './availability.service';
 import { haversineKm } from '../utils/deliveryFee';
+import { IN_LIVE_AREA } from '../utils/liveArea';
+
+/**
+ * A saved kitchen is listed only while customers can order from it: verified, active, approved, and not in an area Nuray
+ * has switched off. The saved row is kept, so the kitchen comes back to the list if it reopens.
+ */
+const AVAILABLE_KITCHEN = { isVerified: true, status: 'active', verificationStatus: 'approved', ...IN_LIVE_AREA } satisfies Prisma.SellerWhereInput;
 
 export class FavoriteService {
   /**
@@ -9,7 +17,7 @@ export class FavoriteService {
    */
   async getFavorites(userId: string, customerLat?: number, customerLng?: number) {
     const favorites = await prisma.favoriteSeller.findMany({
-      where: { userId },
+      where: { userId, seller: AVAILABLE_KITCHEN },
       orderBy: { createdAt: 'desc' },
       include: {
         seller: {
@@ -103,8 +111,9 @@ export class FavoriteService {
    * Add a seller to user's favorites
    */
   async addFavorite(userId: string, sellerId: string) {
-    const seller = await prisma.seller.findUnique({
-      where: { id: sellerId },
+    const seller = await prisma.seller.findFirst({
+      where: { id: sellerId, ...AVAILABLE_KITCHEN },
+      select: { id: true },
     });
 
     if (!seller) {
