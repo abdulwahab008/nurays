@@ -89,6 +89,20 @@ The 13 community kitchens (emails like `saima.akhtar@nuray.test`, `abdul.bbq@nur
 match `Password123!` (despite the comment next to it), so treat those accounts as having no usable password. Log in
 as `seller@nuray.test` (below) or reset the password through "Forgot password" if you need to act as one.
 
+### `npm run seed:lahore` (`backend/prisma/seed-lahore-kitchens.ts`)
+
+14 approved kitchens in the Lahore launch areas, 2 to 6 dishes each (56 in all), with photos so customers see them.
+Run it after the communities exist. Kitchens whose email already exists are skipped. All passwords are `Password123!`.
+
+| Area | Kitchens (login) |
+|---|---|
+| Askari 11 | `shabnam.riaz`, `hira.malik`, `ayesha.tariq`, `imran.qureshi` (restaurant) |
+| DHA 9 Town | `rubina.aslam`, `sana.iqbal`, `kashif.mehmood`, `faisal.chaudhry` (restaurant) |
+| DHA Phase 5 | `mehwish.siddiqui`, `gul.khan`, `saba.nadeem` |
+| DHA Phase 6 | `nasreen.akhtar`, `farah.naz`, `hamza.rauf` (restaurant) |
+
+Each login is followed by `@nuray.test`, for example `shabnam.riaz@nuray.test`.
+
 ### `scripts/seed-ideal-flow-users.ts`
 
 `cd backend && npx ts-node scripts/seed-ideal-flow-users.ts`. This is the script the dev demo panel and
