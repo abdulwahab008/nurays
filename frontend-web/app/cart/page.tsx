@@ -23,6 +23,7 @@ import { productService } from '@/lib/services/product.service';
 import { useCommunityStore } from '@/lib/store/community-store';
 import { loginUrlFor } from '@/lib/auth-redirect';
 import { CoverImage } from '@/components/ui/CoverImage';
+import { KitchenUnavailable } from '@/components/cart/KitchenUnavailable';
 import { kitchenMessages } from '@/lib/i18n/messages/kitchen';
 import { formatPrice, imageVariant, orderTotals } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -535,6 +536,10 @@ export default function CartPage() {
           </div>
         )}
 
+        {cart.activeSeller?.unavailableReason && (
+          <KitchenUnavailable reason={cart.activeSeller.unavailableReason} kitchen={cart.activeSeller.businessName} />
+        )}
+
         {/* Free Delivery Unlocker Progress Bar: only for a kitchen that has an order amount which waives its delivery fee */}
         {freeDeliveryThreshold != null && (
           <div
@@ -824,7 +829,16 @@ export default function CartPage() {
               </div>
 
               {/* Checkout CTA Button */}
-              {isAuthenticated ? (
+              {cart.activeSeller?.unavailableReason ? (
+                <button
+                  type="button"
+                  disabled
+                  className="w-full h-12 rounded-xl bg-brand text-on-brand text-[15px] font-semibold opacity-50 cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  <span>{t('proceedCheckout')}</span>
+                  <ArrowRight className="rtl:-scale-x-100 w-4 h-4 ms-1" aria-hidden />
+                </button>
+              ) : isAuthenticated ? (
                 <Link
                   href="/checkout"
                   className="w-full h-12 rounded-xl bg-brand hover:bg-brand-500 text-on-brand text-[15px] font-semibold transition-[background-color,transform] active:scale-[0.98] flex items-center justify-center gap-2"

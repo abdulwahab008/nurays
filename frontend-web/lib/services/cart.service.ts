@@ -1,5 +1,8 @@
 import { apiClient, ApiResponse } from '../api-client';
 
+/** Why the tray's kitchen can't take the order: suspended or closed, or in an area Nuray has switched off. */
+export type KitchenUnavailableReason = 'suspended' | 'outside_area';
+
 export interface CartItem {
   id: string;
   product: {
@@ -44,6 +47,7 @@ export interface CartResponse {
     advanceBookingMinDays?: number | null;
     advanceBookingMaxDays?: number | null;
     community?: { id?: string; name: string; slug?: string } | null;
+    unavailableReason?: KitchenUnavailableReason | null;
   } | null;
 }
 

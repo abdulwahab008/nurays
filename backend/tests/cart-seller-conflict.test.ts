@@ -68,3 +68,26 @@ describe('checking the tray before checkout', () => {
     expect(await check({ community: null })).toBeNull();
   });
 });
+
+describe('the tray says why its kitchen cannot take the order', () => {
+  const reason = async (seller: object) => {
+    db.cart = { findUnique: jest.fn(async () => ({ id: 'c1', userId: 'u1' })) };
+    db.cartItem = {
+      findMany: jest.fn(async () => [{
+        quantity: 1, priceSnapshot: 500, sellerId: 's2', variant: null, hub: null, stockType: 'direct',
+        product: { ...product, price: 500, images: [] },
+        seller: { id: 's2', businessName: "Naseem's Dum Pukht", status: 'active', deliveryModes: null, community: { id: 'k', name: 'Clifton', slug: 'clifton', isActive: true }, ...seller },
+      }]),
+    };
+    return (await cartService.getCart('u1')).activeSeller?.unavailableReason;
+  };
+
+  it('is null for an active kitchen in a live area, or with no area', async () => {
+    expect(await reason({})).toBeNull();
+    expect(await reason({ community: null })).toBeNull();
+  });
+  it('names a suspended kitchen', async () => expect(await reason({ status: 'suspended' })).toBe('suspended'));
+  it('names a kitchen in a switched-off area', async () => {
+    expect(await reason({ community: { id: 'k', name: 'Clifton', slug: 'clifton', isActive: false } })).toBe('outside_area');
+  });
+});
