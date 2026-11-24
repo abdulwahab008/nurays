@@ -26,6 +26,7 @@ import { orderService } from '@/lib/services/order.service';
 import { formatPrice, orderTotals } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { LoadError } from '@/components/ui/LoadError';
+import { KitchenUnavailable } from '@/components/cart/KitchenUnavailable';
 import { useToast } from '@/components/ui/toast';
 import { useAuthStore, hasSession } from '@/lib/store/auth-store';
 import { useCartStore } from '@/lib/store/cart-store';
@@ -551,8 +552,10 @@ export default function CheckoutPage() {
   // Exactly what the server charges (priceOrder in order.service.ts): GST on the goods after
   // all discounts, the total in whole rupees, so this is the amount the rider collects.
   const { gst: gstAmount, total: totalPayable } = orderTotals(discountedSubtotal - promoDiscountAmount, effectiveDeliveryFee);
+  const unavailableReason = cart?.activeSeller?.unavailableReason;
   const canPlaceOrder = !(
     processing ||
+    unavailableReason ||
     kitchenClosed ||
     !chosenTime ||
     !methodUsable(paymentMethod) ||
@@ -592,6 +595,8 @@ export default function CheckoutPage() {
             </Link>
           </div>
         </div>
+
+        {unavailableReason && <KitchenUnavailable reason={unavailableReason} kitchen={sellerTitle} className="mb-6" />}
 
         {kitchenClosed && (
           <div role="status" className="mb-6 p-4 rounded-2xl bg-accent-soft flex items-start gap-3" data-testid="kitchen-closed">

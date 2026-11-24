@@ -95,11 +95,13 @@ export class CartService {
             preOrderOnly: true,
             advanceBookingMinDays: true,
             advanceBookingMaxDays: true,
+            status: true,
             community: {
               select: {
                 id: true,
                 name: true,
                 slug: true,
+                isActive: true,
               },
             },
           },
@@ -196,6 +198,13 @@ export class CartService {
             advanceBookingMinDays: items[0].seller.advanceBookingMinDays,
             advanceBookingMaxDays: items[0].seller.advanceBookingMaxDays,
             community: items[0].seller.community || (items[0].seller.primaryCommunityName ? { name: items[0].seller.primaryCommunityName } : null),
+            // Why the kitchen can't take this order now, so the tray can say so before checkout (order placement refuses it too).
+            unavailableReason:
+              items[0].seller.status !== 'active'
+                ? 'suspended'
+                : items[0].seller.community?.isActive === false
+                  ? 'outside_area'
+                  : null,
           }
         : null,
     };

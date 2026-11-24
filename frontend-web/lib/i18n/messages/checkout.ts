@@ -208,6 +208,10 @@ export const checkoutMessages = defineMessages({
     'slotName.evening': 'Evening',
     noSlotLeft: 'No delivery windows are left. Please choose another day.',
     methodUnavailable: "This kitchen doesn't take this payment method. Please choose another.",
+    kitchenUnavailableTitle: "{kitchen} isn't taking orders",
+    kitchenSuspendedBody: 'This kitchen is not available right now, so this tray cannot be ordered.',
+    kitchenOutsideAreaBody: "Nuray isn't in this kitchen's area yet, so this tray cannot be ordered.",
+    findOtherKitchens: 'Find other kitchens',
   },
   ur: {
     percentOff: '{value}% رعایت',
@@ -396,5 +400,9 @@ export const checkoutMessages = defineMessages({
     'slotName.evening': 'شام',
     noSlotLeft: 'ڈیلیوری کا کوئی وقت باقی نہیں۔ براہِ کرم کوئی اور دن چنیں۔',
     methodUnavailable: 'یہ کچن ادائیگی کا یہ طریقہ نہیں لیتا۔ براہِ کرم کوئی اور چنیں۔',
+    kitchenUnavailableTitle: '{kitchen} ابھی آرڈر نہیں لے رہا',
+    kitchenSuspendedBody: 'یہ کچن ابھی دستیاب نہیں، اس لیے یہ ٹرے آرڈر نہیں ہو سکتی۔',
+    kitchenOutsideAreaBody: 'Nuray ابھی اس کچن کے علاقے میں موجود نہیں، اس لیے یہ ٹرے آرڈر نہیں ہو سکتی۔',
+    findOtherKitchens: 'دوسرے کچن دیکھیں',
   },
 });
