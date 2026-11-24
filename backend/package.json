@@ -17,6 +17,7 @@
     "prisma:studio": "prisma studio",
     "seed:e2e": "ts-node prisma/seed-e2e.ts",
     "seed:demo": "ts-node scripts/seed-ideal-flow-users.ts",
+    "seed:lahore": "ts-node prisma/seed-lahore-kitchens.ts",
     "api-checks": "ts-node scripts/api-checks/run-all.ts",
     "typecheck:scripts": "tsc -p tsconfig.scripts.json",
     "test": "jest",
