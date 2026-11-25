@@ -120,6 +120,7 @@ export const ADMIN_SIDEBAR_ITEMS: SidebarItem[] = [
   { name: 'Communities', href: '/admin/communities', icon: 'addresses' },
   { name: 'Promo codes', href: '/admin/promotions', icon: 'promotions', needs: 'read.core' },
   { name: 'Payouts', href: '/admin/payouts', icon: 'earnings', needs: 'read.finance' },
+  { name: 'Accounts', href: '/admin/finance/accounts', icon: 'earnings', needs: 'read.finance' },
   { name: 'GST report', href: '/admin/finance/gst', icon: 'analytics', needs: 'read.finance' },
   { name: 'Support', href: '/admin/support', icon: 'support' },
   { name: 'Reviews', href: '/admin/reviews', icon: 'reviews', needs: 'support.handle' },

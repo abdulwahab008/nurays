@@ -4,6 +4,7 @@ import prisma from '../config/database';
 import { getPayoutStatement as getStatement } from '../services/weekly-payout.service';
 import { sendStatement } from './payout-statement';
 import { gstByMonth, gstMonthCsv, gstMonthDetail } from '../services/finance-report.service';
+import { kitchenStatement, listAccounts, nurayAccountByMonth, riderStatement, statementCsv } from '../services/accounts.service';
 import { qstr } from '../utils/query';
 import adminService from '../services/admin.service';
 import { AppError } from '../middleware/errorHandler';
@@ -262,4 +263,30 @@ export const getGstMonth = async (req: Request, res: Response) => {
     return;
   }
   res.status(200).json({ success: true, data: detail });
+};
+
+/** Every kitchen's and rider's account (what Nuray owes them, or they owe Nuray), with the totals. */
+export const getAccounts = async (_req: Request, res: Response) => {
+  res.status(200).json({ success: true, data: await listAccounts() });
+};
+
+/** One kitchen's or rider's statement: debits, credits and a running balance, optionally for a period; `format=csv` downloads it. */
+export const getAccountStatement = async (req: Request, res: Response) => {
+  const type = String(req.params.type);
+  if (type !== 'kitchen' && type !== 'rider') throw new AppError('Unknown account type', 404, 'NOT_FOUND');
+  const from = qstr(req.query.from);
+  const to = qstr(req.query.to);
+  const statement = type === 'kitchen' ? await kitchenStatement(String(req.params.id), from, to) : await riderStatement(String(req.params.id), from, to);
+  if (req.query.format === 'csv') {
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="nuray-${type}-statement-${statement.from ?? 'start'}-to-${statement.to ?? 'today'}.csv"`);
+    res.status(200).send(statementCsv(statement));
+    return;
+  }
+  res.status(200).json({ success: true, data: statement });
+};
+
+/** Nuray's own account by month: revenue, costs, net and GST owed. */
+export const getNurayAccount = async (_req: Request, res: Response) => {
+  res.status(200).json({ success: true, data: { months: await nurayAccountByMonth() } });
 };
