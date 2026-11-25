@@ -1280,7 +1280,7 @@ model AuditLog {
 model LedgerEntry {
   id              String   @id @default(uuid())
   orderId         String?  @map("order_id")
-  transactionType String   @map("transaction_type") // customer_payment, seller_earning, platform_commission, delivery_fee, refund, adjustment
+  transactionType String   @map("transaction_type") // customer_payment, seller_earning, platform_commission, delivery_fee, seller_delivery_charge, seller_delivery_fee, gst_payable, platform_discount, refund, adjustment
   accountType     String   @map("account_type") // asset, liability, revenue, expense
   entryType       String   @map("entry_type") // debit, credit
   amount          Decimal  @db.Decimal(12, 2)

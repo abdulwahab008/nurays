@@ -34,6 +34,12 @@ import '../src/middleware/auth.middleware'; // brings in the Request.user type, 
 let pass = 0, fail = 0;
 const ok = (name: string, cond: boolean, extra = '') => { cond ? pass++ : fail++; console.log(`${cond ? 'PASS' : 'FAIL'}  ${name}${extra ? '  [' + extra + ']' : ''}`); };
 const code = async (p: Promise<any>) => { try { await p; return 'OK'; } catch (e: any) { return e.code || e.message; } };
+/** An order's ledger as an accountant reads it: debits equal credits, and the GST it was charged is owed to the tax office. */
+const ledgerOf = async (orderId: string) => {
+  const rows = await prisma.ledgerEntry.findMany({ where: { orderId } });
+  const side = (t: string) => Math.round(rows.filter((e) => e.entryType === t).reduce((a, e) => a + Number(e.amount), 0) * 100) / 100;
+  return { debit: side('debit'), credit: side('credit'), gst: Number(rows.find((e) => e.transactionType === 'gst_payable')?.amount ?? 0), rows };
+};
 let n = 0;
 const uniq = () => `${Date.now()}${++n}`;
 /** Every key anywhere in a JSON-like value (to prove a payload carries none of a list of private fields). */
@@ -347,6 +353,11 @@ async function main() {
   ok('ledger: platform revenue is only the platform-delivered fee; the self fee is payable to the seller',
     Number(platRev?.amount) === 150 && !ledS.some((e) => e.transactionType === 'delivery_fee') && Number(sellerFee?.amount) === 100 && sellerFee?.sellerId === selfS.id,
     `platform=${platRev?.amount} seller=${sellerFee?.amount}`);
+  for (const [label, o] of [['self-delivered', sdo], ['platform-delivered', pdo]] as const) {
+    const l = await ledgerOf(o.id);
+    const tax = Number((await prisma.order.findUnique({ where: { id: o.id } }))!.taxAmount);
+    ok(`ledger of a ${label} order balances and owes its GST to the tax office`, l.debit === l.credit && l.gst === tax, `debit=${l.debit} credit=${l.credit} gst=${l.gst} tax=${tax}`);
+  }
 
   // COD at the seller's own door: they hold everything, and owe the platform everything that isn't theirs
   const spC = await mkProduct(selfS.id, 20, 300);
@@ -1055,6 +1066,11 @@ async function main() {
   const earn = Number(ledA.find((e) => e.transactionType === 'seller_earning')!.amount);
   ok('ledger counts only live items and the net the customer paid', Math.abs(custPay - (Number(two.totalAmount) - refundedSum)) < 0.02 && earn === liveA, `custPay=${custPay} earn=${earn}`);
   const ledgerAgain = await Promise.all([ledgerService.recordOrderCompletion(two.id), ledgerService.recordOrderCompletion(two.id)]);
+  const lTwo = await ledgerOf(two.id);
+  const goodsOf = (items: any[]) => items.reduce((a, i) => a + Number(i.totalPrice) - Number(i.promoDiscount), 0);
+  const twoItems = await prisma.orderItem.findMany({ where: { orderId: two.id } });
+  const soldTax = Math.round(Number(two.taxAmount) * (goodsOf(twoItems.filter((i) => i.status !== 'cancelled')) / goodsOf(twoItems)) * 100) / 100;
+  ok('after a refund the ledger still balances and owes only the GST on what was sold', lTwo.debit === lTwo.credit && Math.abs(lTwo.gst - soldTax) < 0.01, `debit=${lTwo.debit} credit=${lTwo.credit} gst=${lTwo.gst} expected=${soldTax}`);
   ok('ledger posts once even if called twice', ledgerAgain.every((l: any) => !l.recorded) && (await prisma.ledgerEntry.count({ where: { orderId: two.id } })) === ledA.length);
 
   // (2) a late gateway/transfer confirmation cannot revive a refunded order
@@ -1490,6 +1506,11 @@ async function main() {
   const platformList: any[] = await promotionSvc.listPlatform();
   const platListed = platformList.find((p) => p.code === platCode);
   ok('a platform code works on any kitchen and its use is counted', Number(pcOrder.discountAmount) === 50 && platListed?.timesUsed === 1 && platListed?.discountGiven === 50, JSON.stringify(platListed && { used: platListed.timesUsed, given: platListed.discountGiven }));
+  await prisma.order.update({ where: { id: pcOrder.id }, data: { paymentStatus: 'paid', paidAt: new Date(), orderStatus: 'delivered' } });
+  await ledgerService.recordOrderCompletion(pcOrder.id);
+  const lPc = await ledgerOf(pcOrder.id);
+  const pcDiscount = lPc.rows.find((e) => e.transactionType === 'platform_discount');
+  ok("a platform code's discount is Nuray's cost in the ledger, which still balances", Number(pcDiscount?.amount) === 50 && pcDiscount?.accountType === 'expense' && lPc.debit === lPc.credit, `discount=${pcDiscount?.amount} debit=${lPc.debit} credit=${lPc.credit}`);
   ok('a used code cannot be deleted (switch it off instead)', (await code(promotionSvc.deletePlatform(platListed.id))) === 'PROMOTION_IN_USE');
   await promotionSvc.updatePlatform(platListed.id, { isActive: false });
   ok('switched off, it is refused at checkout', (await code(promotionSvc.validatePromotionCode(cust.id, platCode, 1000))) === 'PROMO_INACTIVE');
@@ -1774,6 +1795,8 @@ async function main() {
     await recordSettlement(rdA.rider.id, adminU.id, { cashHandedIn: total1 });
     const b2 = await computeSellerBalance(prisma, kA.id);
     ok('once the rider hands the cash in, the kitchen can withdraw its share minus the delivery fee', b2.awaitingRiderCash === 0 && b2.available === goods - 100, JSON.stringify(b2));
+    const lO1 = await ledgerOf(o1.id);
+    ok('a cash order a rider collected balances in the ledger, with its GST owed to the tax office', lO1.debit === lO1.credit && lO1.gst > 0, `debit=${lO1.debit} credit=${lO1.credit} gst=${lO1.gst}`);
     ok('the ledger records the delivery fee paid by the kitchen', (await prisma.ledgerEntry.count({ where: { orderId: o1.id, transactionType: 'seller_delivery_charge' } })) === 1 && (await prisma.ledgerEntry.count({ where: { orderId: o1.id, transactionType: 'delivery_fee' } })) === 1);
 
     // Menus: fixed, weekly (days), daily (today).
