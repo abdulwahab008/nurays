@@ -20,7 +20,7 @@ How Nuray is put together: what runs, how a request travels through it, what is 
    advisory locks)       adapter, BullMQ queue)     (uploads)                web push (VAPID), Google, Sentry
 ```
 
-One backend process does everything: serves the API, hosts the Socket.IO server, runs the scheduled sweeps and processes queued jobs. There is no separate worker service. The frontend is a separate Next.js app (built as a standalone server, see `frontend-web/next.config.ts`) that talks to the backend over HTTP and WebSocket. There is no mobile app in this repository.
+By default one backend process does everything: serves the API, hosts the Socket.IO server, runs the scheduled sweeps and processes queued jobs. With `PROCESS_ROLE=api` the API only serves requests and a separate worker process (`src/worker.ts`, same image, `node dist/worker.js`) runs the sweeps and the queue, sending its live updates through Redis (see the deployment guide). The frontend is a separate Next.js app (built as a standalone server, see `frontend-web/next.config.ts`) that talks to the backend over HTTP and WebSocket. There is no mobile app in this repository.
 
 ## Backend (`backend/src`)
 
