@@ -11,6 +11,8 @@ import {
   getPayoutStatement,
   getKitchenOwing,
   getOwingKitchens,
+  getGstReport,
+  getGstMonth,
   recordKitchenPayment,
   completePayout,
   failPayout,
@@ -187,6 +189,8 @@ router.get('/payouts', getPayouts);
 router.get('/payouts/:id/statement', getPayoutStatement);
 // A kitchen that owes Nuray (commission on cash it collected): what it owes, and recording that it paid
 router.get('/kitchens-owing', getOwingKitchens);
+router.get('/finance/gst', getGstReport);
+router.get('/finance/gst/:month', getGstMonth);
 router.get('/sellers/:id/owing', getKitchenOwing);
 router.post('/sellers/:id/payments-to-nuray', validate(paymentToNuraySchema), recordKitchenPayment);
 router.post('/payouts/:id/complete', validate(completePayoutSchema), completePayout);

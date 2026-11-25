@@ -15,6 +15,7 @@
  * up to the payout.
  */
 import { Prisma } from '@prisma/client';
+import { toCsv } from '../utils/csv';
 import prisma from '../config/database';
 import { AppError } from '../middleware/errorHandler';
 import { recordAudit } from '../middleware/audit';
@@ -285,13 +286,6 @@ const KIND_LABEL: Record<BalanceLine['kind'], string> = {
   kitchen_collected: 'Collected by the kitchen (commission owed)',
 };
 
-const csvCell = (v: string | number) => {
-  const text = String(v);
-  // A cell starting with = + - @ is a formula to a spreadsheet: quote it so it is read as text.
-  const safe = /^[=+\-@]/.test(text) && typeof v === 'string' ? `'${text}` : text;
-  return /[",\n]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
-};
-
 /** The statement as a spreadsheet. */
 export function statementCsv(s: PayoutStatement): string {
   const rows: Array<Array<string | number>> = [
@@ -308,5 +302,5 @@ export function statementCsv(s: PayoutStatement): string {
     ['Earlier balance and adjustments', '', '', '', '', s.totals.earlierAndAdjustments],
     ['Payout', '', '', '', '', s.payout.amount],
   ];
-  return rows.map((r) => r.map(csvCell).join(',')).join('\n') + '\n';
+  return toCsv(rows);
 }

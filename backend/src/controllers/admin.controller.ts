@@ -3,6 +3,7 @@ import { listOwingKitchens, recordPaymentToNuray, refreshOwing } from '../servic
 import prisma from '../config/database';
 import { getPayoutStatement as getStatement } from '../services/weekly-payout.service';
 import { sendStatement } from './payout-statement';
+import { gstByMonth, gstMonthCsv, gstMonthDetail } from '../services/finance-report.service';
 import { qstr } from '../utils/query';
 import adminService from '../services/admin.service';
 import { AppError } from '../middleware/errorHandler';
@@ -243,4 +244,22 @@ export const exportAuditLogs = async (req: Request, res: Response) => {
 export const getAuditLogs = async (req: Request, res: Response) => {
   const data = await auditLogService.listAuditLogs(req.query, pageArgs(req.query.page, req.query.limit, 50));
   res.status(200).json({ success: true, data });
+};
+
+/** GST owed to the tax office, month by month. */
+export const getGstReport = async (_req: Request, res: Response) => {
+  res.status(200).json({ success: true, data: { months: await gstByMonth() } });
+};
+
+/** One month's GST, order by order; `format=csv` downloads it for the accountant. */
+export const getGstMonth = async (req: Request, res: Response) => {
+  const month = String(req.params.month);
+  const detail = await gstMonthDetail(month);
+  if (req.query.format === 'csv') {
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="nuray-gst-${month}.csv"`);
+    res.status(200).send(gstMonthCsv(detail, month));
+    return;
+  }
+  res.status(200).json({ success: true, data: detail });
 };
