@@ -72,12 +72,12 @@ defineJob<{ to: string; subject: string; html: string; text?: string; stockAlert
 
 /** Email the user's pending verification link. */
 export const queueVerificationEmail = (userId: string) =>
-  enqueue('email.verification', { userId }, { jobId: `verify-${userId}-${Date.now()}` });
+  enqueue('email.verification', { userId }, { jobId: `verify-${userId}-${Date.now()}`, lane: 'email' });
 
 /** Create a fresh password-reset link for the user and email it. */
 export const queuePasswordResetEmail = (userId: string) =>
-  enqueue('email.password-reset', { userId }, { jobId: `reset-${userId}-${Date.now()}` });
+  enqueue('email.password-reset', { userId }, { jobId: `reset-${userId}-${Date.now()}`, lane: 'email' });
 
 /** Any other email (content is not secret). */
 export const queueEmail = (email: { to: string; subject: string; html: string; text?: string; stockAlertId?: string }) =>
-  enqueue('email.send', email);
+  enqueue('email.send', email, { lane: 'email' });

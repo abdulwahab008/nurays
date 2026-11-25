@@ -157,3 +157,39 @@ describe('the request id of a queued job', () => {
     ]);
   });
 });
+
+describe('lanes', () => {
+  it('starts a worker for every lane, the quick one with the most room', () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { Worker } = require('bullmq') as { Worker: jest.Mock };
+    Worker.mockClear();
+    jobs.startWorkers();
+    expect(Worker.mock.calls.map((c) => [c[0], c[2].concurrency])).toEqual([
+      ['nuray-jobs', 20],
+      ['nuray-jobs-email', 10],
+      ['nuray-jobs-sms', 10],
+    ]);
+  });
+
+  it("puts a job in its lane's queue, so slow email never waits in front of push", async () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { Queue } = require('bullmq') as { Queue: jest.Mock };
+    const landed: Array<[string, unknown]> = [];
+    Queue.mockImplementation((name: string) => ({
+      add: jest.fn(async (_job: string, data: unknown) => {
+        landed.push([name, data]);
+        return { remove: jest.fn() };
+      }),
+      close: jest.fn().mockResolvedValue(undefined),
+    }));
+    const queued = Promise.all([jobs.enqueue('probe', { n: 1 }, { lane: 'email' }), jobs.enqueue('probe', { n: 2 }), jobs.enqueue('probe', { n: 3 }, { lane: 'sms' })]);
+    await flush();
+    mockConnection.becomeReady();
+    await queued;
+    expect(landed).toEqual([
+      ['nuray-jobs-email', { n: 1 }],
+      ['nuray-jobs', { n: 2 }],
+      ['nuray-jobs-sms', { n: 3 }],
+    ]);
+  });
+});

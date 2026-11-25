@@ -48,5 +48,6 @@ defineJob<{ notificationId: string; channel: DeliveryChannel }>('notify.deliver'
   }
 });
 
+// Push is quick and goes in the main lane; email and SMS wait on outside providers in lanes of their own.
 export const queueDelivery = (notificationId: string, channel: DeliveryChannel) =>
-  enqueue('notify.deliver', { notificationId, channel }, { jobId: `notify-${notificationId}-${channel}` });
+  enqueue('notify.deliver', { notificationId, channel }, { jobId: `notify-${notificationId}-${channel}`, lane: channel === 'push' ? 'default' : channel });
