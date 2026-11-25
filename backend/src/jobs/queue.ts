@@ -15,7 +15,19 @@ import { logger, requestContext } from '../utils/logger';
  *   await enqueue('email.send', { to });
  */
 
-const QUEUE_NAME = 'nuray-jobs';
+/**
+ * Lanes: one durable queue each, with its own workers, so a slow outside service only holds up its own lane.
+ * Email waits on a mail server (up to 20 s on a bad day) and SMS on its provider; push and everything else
+ * are quick and must not queue behind them. In a burst of orders the jobs used to share five slots, and a
+ * slow mail server delayed every kitchen's push alert by minutes.
+ */
+export type Lane = 'default' | 'email' | 'sms';
+const LANES: Record<Lane, { queue: string; concurrency: number }> = {
+  default: { queue: 'nuray-jobs', concurrency: 20 },
+  email: { queue: 'nuray-jobs-email', concurrency: 10 },
+  sms: { queue: 'nuray-jobs-sms', concurrency: 10 },
+};
+const LANE_NAMES = Object.keys(LANES) as Lane[];
 
 // The id of the request that queued a job travels in its data, so the worker's log lines carry it too.
 const REQUEST_ID_KEY = '_requestId';
@@ -38,8 +50,8 @@ export function unpackJobData(job: { name: string; id?: string; data: unknown })
 type Handler = (payload: any) => Promise<void>;
 
 const handlers = new Map<string, Handler>();
-let queue: Queue | null = null;
-let worker: Worker | null = null;
+const queues = new Map<Lane, Queue>();
+const workers: Worker[] = [];
 const localRuns = new Set<Promise<void>>();
 
 export interface EnqueueOptions {
@@ -49,6 +61,8 @@ export interface EnqueueOptions {
   delayMs?: number;
   /** Deduplicate: a second job with the same id while the first exists is dropped. */
   jobId?: string;
+  /** The lane the job waits in (default 'default'): 'email' and 'sms' for jobs that call those providers. */
+  lane?: Lane;
 }
 
 export function defineJob<T>(name: string, handler: (payload: T) => Promise<void>) {
@@ -80,16 +94,20 @@ function firstReady(connection: NonNullable<typeof queueConnection>): Promise<vo
   });
 }
 
-function getQueue(): Queue | null {
+function getQueue(lane: Lane = 'default'): Queue | null {
   if (!redisUrl()) return null;
-  if (!queue) {
+  if (!queueConnection) {
     queueConnection = newRedisConnection('queue', { maxRetriesPerRequest: null });
-    queue = new Queue(QUEUE_NAME, { connection: queueConnection });
     const opening = firstReady(queueConnection);
     connecting = opening;
     void opening.then(() => {
       if (connecting === opening) connecting = null;
     });
+  }
+  let queue = queues.get(lane);
+  if (!queue) {
+    queue = new Queue(LANES[lane].queue, { connection: queueConnection });
+    queues.set(lane, queue);
   }
   return queue;
 }
@@ -119,7 +137,7 @@ async function runLocally(name: string, payload: unknown, attempts: number, dela
 /** Queue a job. Never throws for a failing job; throws only for an unknown job name. */
 export async function enqueue<T>(name: string, payload: T, opts: EnqueueOptions = {}): Promise<void> {
   if (!handlers.has(name)) throw new Error(`Unknown background job "${name}"`);
-  const q = getQueue();
+  const q = getQueue(opts.lane);
   if (connecting) await connecting;
   // While Redis is unreachable the job runs here at once rather than holding the request
   // for the enqueue timeout on every call.
@@ -163,47 +181,53 @@ export interface QueueCounts {
   delayed: number;
 }
 
-/** Job counts of the durable queue; null without Redis or while it is unreachable (jobs then run in this process). */
+/** Job counts of the durable queue, every lane together; null without Redis or while it is unreachable (jobs then run in this process). */
 export async function getQueueCounts(): Promise<QueueCounts | null> {
-  const q = getQueue();
+  const lanes = LANE_NAMES.map((lane) => getQueue(lane));
   if (connecting) await connecting;
-  if (!q || !queueReady()) return null;
+  if (lanes.some((q) => !q) || !queueReady()) return null;
   try {
-    const counts = await withTimeout(q.getJobCounts('waiting', 'active', 'failed', 'delayed'), ENQUEUE_TIMEOUT_MS);
-    return { waiting: counts.waiting ?? 0, active: counts.active ?? 0, failed: counts.failed ?? 0, delayed: counts.delayed ?? 0 };
+    const all = await withTimeout(Promise.all(lanes.map((q) => q!.getJobCounts('waiting', 'active', 'failed', 'delayed'))), ENQUEUE_TIMEOUT_MS);
+    const sum = (key: keyof QueueCounts) => all.reduce((total, counts) => total + (counts[key] ?? 0), 0);
+    return { waiting: sum('waiting'), active: sum('active'), failed: sum('failed'), delayed: sum('delayed') };
   } catch (err) {
     logger.warn({ err }, 'Could not read the job queue counts');
     return null;
   }
 }
 
-/** Start processing queued jobs in this process (no-op without Redis: jobs run inline). */
-export function startWorkers(concurrency = 5) {
-  if (!redisUrl() || worker) return;
+async function runJob(job: Job) {
+  const handler = handlers.get(job.name);
+  if (!handler) throw new Error(`No handler for background job "${job.name}"`);
+  const { payload, requestId } = unpackJobData(job);
+  await requestContext.run({ requestId }, () => handler(payload));
+}
+
+/** Start processing queued jobs in this process, one worker per lane (no-op without Redis: jobs run inline). */
+export function startWorkers() {
+  if (!redisUrl() || workers.length > 0) return;
   getQueue(); // the queue's own connection opens now too, so the first job finds it ready
-  worker = new Worker(
-    QUEUE_NAME,
-    async (job: Job) => {
-      const handler = handlers.get(job.name);
-      if (!handler) throw new Error(`No handler for background job "${job.name}"`);
-      const { payload, requestId } = unpackJobData(job);
-      await requestContext.run({ requestId }, () => handler(payload));
-    },
-    { connection: newRedisConnection('queue-worker', { maxRetriesPerRequest: null }), concurrency }
-  );
-  worker.on('failed', (job, err) => {
-    const attempts = job?.opts.attempts ?? 1;
-    const final = (job?.attemptsMade ?? 0) >= attempts;
-    const requestId = job ? unpackJobData(job).requestId : undefined;
-    logger.error({ err, requestId, job: job?.name, jobId: job?.id, attempt: job?.attemptsMade, attempts, final }, final ? 'Job failed; giving up' : 'Job failed; will retry');
-  });
-  worker.on('error', (err) => logger.error({ err }, 'Job worker error'));
+  for (const lane of LANE_NAMES) {
+    const { queue, concurrency } = LANES[lane];
+    const worker = new Worker(queue, runJob, {
+      connection: newRedisConnection(lane === 'default' ? 'queue-worker' : `queue-worker-${lane}`, { maxRetriesPerRequest: null }),
+      concurrency,
+    });
+    worker.on('failed', (job, err) => {
+      const attempts = job?.opts.attempts ?? 1;
+      const final = (job?.attemptsMade ?? 0) >= attempts;
+      const requestId = job ? unpackJobData(job).requestId : undefined;
+      logger.error({ err, requestId, lane, job: job?.name, jobId: job?.id, attempt: job?.attemptsMade, attempts, final }, final ? 'Job failed; giving up' : 'Job failed; will retry');
+    });
+    worker.on('error', (err) => logger.error({ err, lane }, 'Job worker error'));
+    workers.push(worker);
+  }
 }
 
 /** Finish running jobs and stop (graceful shutdown). */
 export async function stopWorkers(): Promise<void> {
-  await Promise.allSettled([worker?.close(), ...Array.from(localRuns)]);
-  await queue?.close().catch(() => undefined);
-  worker = null;
-  queue = null;
+  await Promise.allSettled([...workers.map((w) => w.close()), ...Array.from(localRuns)]);
+  await Promise.allSettled(Array.from(queues.values()).map((q) => q.close()));
+  workers.length = 0;
+  queues.clear();
 }

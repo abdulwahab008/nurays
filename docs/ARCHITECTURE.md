@@ -70,7 +70,7 @@ Account emails (verification, password reset) use the `email.verification` and `
 
 Two mechanisms, both started from `index.ts`:
 
-**BullMQ queue** (`jobs/queue.ts`, queue name `nuray-jobs`). Jobs: `email.verification`, `email.password-reset`, `email.send`, `notify.deliver`. Up to 5 attempts with exponential backoff from 15 s, concurrency 5, finished jobs kept (last 1000 completed, 5000 failed). Without `REDIS_URL` a job runs in-process right after it is enqueued (3 attempts) and is lost if the process stops. If Redis is configured but unreachable, `enqueue` waits 3 s, then runs the job in-process.
+**BullMQ queues** (`jobs/queue.ts`), one per lane, each with its own workers so a slow provider only delays its own lane: `nuray-jobs` (push and everything quick, 20 at a time), `nuray-jobs-email` (`email.verification`, `email.password-reset`, `email.send`, and `notify.deliver` for email, 10 at a time) and `nuray-jobs-sms` (`notify.deliver` for SMS, 10 at a time). Up to 5 attempts with exponential backoff from 15 s, finished jobs kept (last 1000 completed, 5000 failed). Without `REDIS_URL` a job runs in-process right after it is enqueued (3 attempts) and is lost if the process stops. If Redis is configured but unreachable, `enqueue` waits 3 s, then runs the job in-process.
 
 **Scheduled sweeps** (`jobs/scheduler.ts`, registered at the bottom of `index.ts`). Plain `setInterval` timers; each also runs once about 5 s after boot.
 
