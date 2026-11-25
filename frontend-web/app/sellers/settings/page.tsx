@@ -192,6 +192,7 @@ export default function SellerSettingsPage() {
 
     orderCutoffTime: '' as string,
     maxDailyOrders: null as number | null,
+    maxOpenOrders: null as number | null,
     minPrepTimeMinutes: null as number | null,
     preOrderOnly: false,
     advanceBookingMinDays: null as number | null,
@@ -275,6 +276,7 @@ export default function SellerSettingsPage() {
 
           orderCutoffTime: seller.orderCutoffTime || '',
           maxDailyOrders: seller.maxDailyOrders ?? null,
+          maxOpenOrders: seller.maxOpenOrders ?? null,
           minPrepTimeMinutes: seller.minPrepTimeMinutes ?? null,
           preOrderOnly: seller.preOrderOnly ?? false,
           advanceBookingMinDays: seller.advanceBookingMinDays ?? null,
@@ -507,6 +509,7 @@ export default function SellerSettingsPage() {
         availabilityNote,
         orderCutoffTime,
         maxDailyOrders,
+        maxOpenOrders,
         minPrepTimeMinutes,
         preOrderOnly,
         advanceBookingMinDays,
@@ -640,6 +643,7 @@ export default function SellerSettingsPage() {
             availabilityNote: availabilityNote || null,
             orderCutoffTime: orderCutoffTime || null,
             maxDailyOrders: maxDailyOrders ?? null,
+            maxOpenOrders: maxOpenOrders ?? null,
             minPrepTimeMinutes: minPrepTimeMinutes ?? undefined,
             preOrderOnly,
             advanceBookingMinDays: advanceBookingMinDays ?? undefined,
@@ -965,6 +969,26 @@ export default function SellerSettingsPage() {
                   }
                   className={fieldClass}
                 />
+              </div>
+              <div>
+                <label htmlFor="max-open-orders" className={labelClass}>{t('maxOpenOrders')}</label>
+                <input
+                  id="max-open-orders"
+                  type="number"
+                  inputMode="numeric"
+                  min={1}
+                  placeholder={t('noLimit')}
+                  value={formData.maxOpenOrders ?? ''}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      maxOpenOrders: e.target.value === '' ? null : parseInt(e.target.value, 10),
+                    })
+                  }
+                  aria-describedby="max-open-orders-hint"
+                  className={fieldClass}
+                />
+                <p id="max-open-orders-hint" className="text-sm text-muted mt-1.5">{t('maxOpenOrdersHint')}</p>
               </div>
               <div>
                 <label htmlFor="pre-order-lead" className={labelClass}>{t('preOrderLead')}</label>

@@ -58,7 +58,7 @@ type CheckoutSeller = NonNullable<CartResponse['activeSeller']> & {
 };
 
 /** The refusals the server gives when the kitchen can't take this order, each with its own sentence for the customer. */
-const KITCHEN_REFUSALS = ['KITCHEN_CLOSED', 'KITCHEN_PREORDER_ONLY', 'KITCHEN_ORDER_CUTOFF', 'KITCHEN_DAILY_LIMIT', 'ORDER_TIMING_INVALID'] as const;
+const KITCHEN_REFUSALS = ['KITCHEN_CLOSED', 'KITCHEN_PREORDER_ONLY', 'KITCHEN_ORDER_CUTOFF', 'KITCHEN_DAILY_LIMIT', 'KITCHEN_BUSY', 'ORDER_TIMING_INVALID'] as const;
 type KitchenRefusal = (typeof KITCHEN_REFUSALS)[number];
 const isKitchenRefusal = (code: string | undefined): code is KitchenRefusal => KITCHEN_REFUSALS.some((c) => c === code);
 

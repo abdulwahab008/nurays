@@ -149,6 +149,7 @@ export const updateSellerSchema = z.object({
   // HH:MM. Anything else used to be stored and then ignored, so the cut-off the kitchen set never applied.
   orderCutoffTime: timeString.optional().nullable(),
   maxDailyOrders: z.number().int().nonnegative().max(100_000).optional().nullable(),
+  maxOpenOrders: z.number().int().positive().max(10_000).optional().nullable(),
   minPrepTimeMinutes: z.number().int().min(0).max(10_080).optional().nullable(),
   preOrderOnly: z.boolean().optional(),
   advanceBookingMinDays: z.number().int().min(0).max(365).optional().nullable(),

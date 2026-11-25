@@ -40,6 +40,7 @@ const SELLER_ORDERING_SELECT = {
   id: true,
   orderCutoffTime: true,
   maxDailyOrders: true,
+  maxOpenOrders: true,
   preOrderOnly: true,
   minPrepTimeMinutes: true,
   latitude: true,
