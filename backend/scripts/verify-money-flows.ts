@@ -1794,6 +1794,9 @@ async function main() {
     const adminU = await mkUser('admin');
     await recordSettlement(rdA.rider.id, adminU.id, { cashHandedIn: total1 });
     const b2 = await computeSellerBalance(prisma, kA.id);
+    const { kitchenStatement } = require('../src/services/accounts.service');
+    const kStmt = await kitchenStatement(kA.id);
+    ok("the kitchen's account statement closes at the balance its payouts use", Math.abs(kStmt.closingBalance - (b2.available + b2.pendingPayout)) < 0.01 && kStmt.awaitingRiderCash === b2.awaitingRiderCash, `statement=${kStmt.closingBalance} balance=${b2.available + b2.pendingPayout}`);
     ok('once the rider hands the cash in, the kitchen can withdraw its share minus the delivery fee', b2.awaitingRiderCash === 0 && b2.available === goods - 100, JSON.stringify(b2));
     const lO1 = await ledgerOf(o1.id);
     ok('a cash order a rider collected balances in the ledger, with its GST owed to the tax office', lO1.debit === lO1.credit && lO1.gst > 0, `debit=${lO1.debit} credit=${lO1.credit} gst=${lO1.gst}`);
