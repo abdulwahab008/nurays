@@ -212,7 +212,8 @@ Code: `utils/paymentCustody.ts` (`collectorOf`), stored in `Order.paymentCollect
 
 - Nuray holds it: Nuray owes the kitchen its payout.
 - The kitchen holds it: the kitchen owes Nuray everything that is not its own (commission, Nuray's delivery fee, tax, refunds Nuray paid out). (A Nuray delivery fee is the kitchen's cost on every order, whoever holds the money.) Seller balance = payouts available to withdraw, computed in `seller-balance.service.ts`; it can be negative.
-- Ledger entries (`ledger.service.ts`) are posted once, when an order is delivered and paid (or when a late transfer is confirmed): customer payment (net of refunds), seller earning, platform commission, Nuray delivery fee, and any self-delivery fee payable.
+- Ledger entries (`ledger.service.ts`) are posted once, when an order is delivered and paid (or when a late transfer is confirmed): customer payment (net of refunds), seller earning, platform commission, Nuray delivery fee, the delivery fee charged to the kitchen, any self-delivery fee payable, **GST payable** to the tax office, and the **platform discount** Nuray paid for (a platform promo code). Every order's debits equal its credits; `scripts/verify-money-flows.ts` checks that.
+- **GST payable** (`gst_payable`, a liability): the order's tax, which Nuray files whoever held the cash (a kitchen that collected it owes it to Nuray). After a refund it is the tax on the dishes still sold (the refund gave back the tax on cancelled ones), never more than the customer paid net of refunds. Orders posted before this entry existed got it from migration `20261125140000_ledger_gst_payable`. A month's GST to file is the sum of `gst_payable` entries for orders delivered that month.
 
 ### Seller payouts
 

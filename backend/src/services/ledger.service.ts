@@ -3,6 +3,7 @@ import prisma from '../config/database';
 import { pageArgs } from '../utils/pagination';
 import { parseBreakdown, platformDeliveryFee } from '../utils/deliveryEarnings';
 import { collectorOf } from '../utils/paymentCustody';
+import { roundMoney } from '../utils/pricing';
 
 const CATCH_UP_DAYS = 14;
 const CATCH_UP_SETTLE_MS = 5 * 60 * 1000;
@@ -69,7 +70,8 @@ export class LedgerService {
         where: { orderId, status: { not: 'failed' } },
         _sum: { amount: true },
       });
-      const totalAmount = Math.max(0, Number(order.totalAmount) - Number(refunded._sum.amount ?? 0));
+      const refundedAmount = Number(refunded._sum.amount ?? 0);
+      const totalAmount = Math.max(0, Number(order.totalAmount) - refundedAmount);
 
       const totalCommission = liveItems.reduce((sum, item) => sum + Number(item.commissionAmount), 0);
       const totalSellerPayout = liveItems.reduce((sum, item) => sum + Number(item.sellerPayout), 0);
@@ -168,6 +170,40 @@ export class LedgerService {
           currency: 'PKR',
           description: `Self-delivery fee payable to seller for Order #${order.orderNumber}`,
           sellerId: share.sellerId,
+        });
+      }
+
+      // 6. GST the customer paid: Nuray files it with the tax office whoever held the cash (a kitchen that collected it
+      // owes it to Nuray), so it is owed, not earned. After a refund only the tax on what was still sold is owed; the
+      // refund gave back the tax on cancelled dishes. An order re-priced before payment already carries the right tax.
+      const goods = (items: typeof order.items) => items.reduce((sum, i) => sum + Number(i.totalPrice) - Number(i.promoDiscount ?? 0), 0);
+      const allGoods = goods(order.items);
+      const soldShare = refundedAmount > 0 && allGoods > 0 ? goods(liveItems) / allGoods : 1;
+      const gst = Math.min(totalAmount, roundMoney(Number(order.taxAmount) * soldShare));
+      if (gst > 0) {
+        entries.push({
+          orderId,
+          transactionType: 'gst_payable',
+          accountType: 'liability',
+          entryType: 'credit',
+          amount: gst,
+          currency: 'PKR',
+          description: `GST (5%) collected for Order #${order.orderNumber}, payable to the tax office`,
+        });
+      }
+      // 7. A discount Nuray pays for (a platform promo code): the customer paid less but the kitchen earns, and Nuray
+      // takes commission, as on the full price. Nuray's cost is what keeps the books level.
+      const side = (type: 'debit' | 'credit') => entries.filter((e) => e.entryType === type).reduce((sum, e) => sum + Number(e.amount), 0);
+      const platformDiscount = roundMoney(side('credit') - side('debit'));
+      if (Number(order.discountAmount) > 0 && platformDiscount > 0) {
+        entries.push({
+          orderId,
+          transactionType: 'platform_discount',
+          accountType: 'expense',
+          entryType: 'debit',
+          amount: Math.min(platformDiscount, Number(order.discountAmount)),
+          currency: 'PKR',
+          description: `Discount Nuray paid for on Order #${order.orderNumber} (platform promo code)`,
         });
       }
 
