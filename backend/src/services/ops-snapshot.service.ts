@@ -15,7 +15,8 @@ let lastFailedJobs: number | null = null;
  * tool: "open deliveries nobody took for 15 minutes", "payments failing", "approvals piling up",
  * "ready orders no rider took" (readyNoRiderStuck), "background jobs failing" (jobsFailed).
  */
-export async function logOpsSnapshot() {
+/** The numbers of the snapshot (also shown on the admin System health page). */
+export async function readOpsSnapshot() {
   const now = Date.now();
   const hourAgo = new Date(now - 60 * 60 * 1000);
   const readyNoRider = { orderStatus: 'ready', delivery: { is: { riderId: null, status: 'pending' } } };
@@ -35,9 +36,7 @@ export async function logOpsSnapshot() {
     prisma.sellerPayout.count({ where: { status: 'pending' } }),
     prisma.supportTicket.count({ where: { status: { in: ['open', 'in_progress'] } } }),
   ]);
-  logger.info(
-    {
-      metric: 'ops_snapshot',
+  return {
       openDeliveries,
       oldestOpenDeliveryMinutes: oldestOpen ? Math.round((now - oldestOpen.createdAt.getTime()) / 60000) : 0,
       activeDeliveries,
@@ -55,9 +54,13 @@ export async function logOpsSnapshot() {
       jobsActive: jobs?.active ?? null,
       jobsDelayed: jobs?.delayed ?? null,
       jobsFailed: jobs?.failed ?? null,
-    },
-    'ops snapshot'
-  );
+  };
+}
+
+export async function logOpsSnapshot() {
+  const snapshot = await readOpsSnapshot();
+  logger.info({ metric: 'ops_snapshot', ...snapshot }, 'ops snapshot');
+  const jobs = snapshot.jobsFailed === null ? null : { failed: snapshot.jobsFailed };
   if (jobs) {
     if (lastFailedJobs !== null && jobs.failed > lastFailedJobs) {
       logger.warn({ metric: 'jobs_failed', failed: jobs.failed, newlyFailed: jobs.failed - lastFailedJobs }, 'Background jobs failed since the last snapshot');

@@ -72,6 +72,8 @@ const RULES: Rule[] = [
   { method: 'GET', path: /^\/(sellers\/[^/]+\/owing|kitchens-owing)$/, permission: 'read.finance' },
   { method: 'GET', path: /^\/(riders\/money|riders\/[^/]+\/money|payouts|analytics|hub-managers)(\/|$)/, permission: 'read.finance' },
   { method: 'GET', path: /^\/approvals$/, permission: 'read.core' },
+  // Job failure reasons can quote addresses a mail server refused: admins, not support staff.
+  { method: 'GET', path: /^\/system-health$/, permission: 'audit.read' },
 ];
 
 /**

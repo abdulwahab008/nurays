@@ -82,3 +82,14 @@ describe('a path written the way the router still accepts it', () => {
     expect(permissionForRequest('POST', '/%')).toBe('ops.write');
   });
 });
+
+describe('the System health page', () => {
+  it('is for admins, not support staff (failure reasons can quote email addresses)', () => {
+    const { permissionForRequest, can } = jest.requireActual('../src/utils/permissions') as typeof import('../src/utils/permissions');
+    const needs = permissionForRequest('GET', '/system-health');
+    expect(needs).toBe('audit.read');
+    expect(can('admin', needs)).toBe(true);
+    expect(can('super_admin', needs)).toBe(true);
+    expect(can('support', needs)).toBe(false);
+  });
+});

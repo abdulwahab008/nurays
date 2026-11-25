@@ -85,7 +85,7 @@ import {
   assignHubManagerSchema,
 } from '../validators/admin.validator';
 import { adminReplySchema } from '../validators/support.validator';
-import { getStaff, postStaff, patchStaffRole, postStaffStatus, postStaffPassword, deleteStaffTwoFactor, deleteStaff, getApprovalQueues } from '../controllers/admin-staff.controller';
+import { getStaff, postStaff, patchStaffRole, postStaffStatus, postStaffPassword, deleteStaffTwoFactor, deleteStaff, getApprovalQueues, getSystemHealthReading } from '../controllers/admin-staff.controller';
 import { getReviews, postHideReview, postKeepReview, postRestoreReview } from '../controllers/admin-reviews.controller';
 import { staffReviewsQuerySchema } from '../validators/review.validator';
 
@@ -99,6 +99,7 @@ router.use(enforceStaffPermissions);
 router.use(auditWrites('admin'));
 
 router.get('/approvals', getApprovalQueues);
+router.get('/system-health', getSystemHealthReading);
 router.get('/staff', getStaff);
 router.post('/staff', validate(createStaffSchema), postStaff);
 router.patch('/staff/:id', validate(staffRoleSchema), patchStaffRole);

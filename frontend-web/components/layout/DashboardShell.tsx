@@ -124,6 +124,7 @@ export const ADMIN_SIDEBAR_ITEMS: SidebarItem[] = [
   { name: 'Reviews', href: '/admin/reviews', icon: 'reviews', needs: 'support.handle' },
   { name: 'Analytics', href: '/admin/analytics', icon: 'analytics', needs: 'read.finance' },
   { name: 'Audit log', href: '/admin/audit-log', icon: 'inventory', needs: 'audit.read' },
+  { name: 'System health', href: '/admin/system', icon: 'analytics', needs: 'audit.read' },
   { name: 'Settings', href: '/admin/settings', icon: 'settings', needs: 'read.finance' },
   { name: 'Staff', href: '/admin/staff', icon: 'profile', needs: 'staff.manage' },
 ];
