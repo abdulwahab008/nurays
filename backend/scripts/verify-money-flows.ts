@@ -1852,13 +1852,14 @@ async function main() {
   for (let i = 0; i < 5; i++) await prisma.otpVerification.create({ data: { phone: capPhone, otpCode: '111111', purpose: 'login', expiresAt: new Date(Date.now() - 1000), attempts: 5 } });
   ok('no more than 5 codes per number per hour', (await otpService.generateOTP(capPhone, 'login').then(() => 'OK', (e: any) => e.code)) === 'OTP_RATE_LIMITED');
 
-  // ---- Weekly kitchen payouts (Money 1) ----
+  // ---- Daily kitchen payouts, every working day (Money 1) ----
   {
     const weekly = require('../src/services/weekly-payout.service');
     const adminSvc = require('../src/services/admin.service').default;
     const wCust = await mkUser();
-    // The next Monday, 07:00 Pakistan time (02:00 UTC): its week (ending the Sunday before) holds today's orders.
+    // The next Monday, 07:00 Pakistan time (02:00 UTC): its run covers everything up to the Sunday before, today's orders included.
     const nextMonday = (() => { const d = new Date(); const pk = new Date(d.getTime() + 5 * 3600e3); const add = ((8 - pk.getUTCDay()) % 7) || 7; return new Date(Date.UTC(pk.getUTCFullYear(), pk.getUTCMonth(), pk.getUTCDate() + add, 2, 0)); })();
+    const saturday = new Date(nextMonday.getTime() - 2 * 24 * 3600e3);
     const tuesday = new Date(nextMonday.getTime() + 24 * 3600e3);
     const earn = async (sellerId: string, price: number) => {
       const prod = await mkProduct(sellerId, 10, price);
@@ -1878,33 +1879,48 @@ async function main() {
     const unapproved = await mkSeller({ bankAccountNumber: '123456789' }); await earn(unapproved.id, 2000);
     const payoutsOf = (sellerId: string) => prisma.sellerPayout.findMany({ where: { sellerId } });
 
-    const midweek = await weekly.runWeeklyPayouts(tuesday);
-    ok('no weekly payouts are made on a day other than Monday', midweek.ran === false && (await payoutsOf(wk.id)).length === 0);
-    const early = await weekly.runWeeklyPayouts(new Date(nextMonday.getTime() - 2 * 3600e3)); // 05:00 PKT
-    ok('nor on Monday before 06:00', early.ran === false && (await payoutsOf(wk.id)).length === 0);
+    const weekend = await weekly.runDailyPayouts(saturday);
+    ok('no payouts are made on a Saturday', weekend.ran === false && (await payoutsOf(wk.id)).length === 0);
+    const early = await weekly.runDailyPayouts(new Date(nextMonday.getTime() - 2 * 3600e3)); // 05:00 PKT
+    ok('nor on a working day before 06:00', early.ran === false && (await payoutsOf(wk.id)).length === 0);
+    const mondayDate = new Date(nextMonday.getTime() + 5 * 3600e3).toISOString().slice(0, 10);
+    await prisma.systemSetting.upsert({ where: { key: 'payoutHolidays' }, create: { key: 'payoutHolidays', value: [mondayDate] as any }, update: { value: [mondayDate] as any } });
+    const holiday = await weekly.runDailyPayouts(nextMonday);
+    ok('nor on a payout holiday an admin listed', holiday.ran === false && (await payoutsOf(wk.id)).length === 0);
+    await prisma.systemSetting.delete({ where: { key: 'payoutHolidays' } });
 
-    const run1 = await weekly.runWeeklyPayouts(nextMonday);
+    // A rider Nuray owes money to (pay earned beyond the cash they hold) is told it is due, once a day.
+    const owedRiderUser = await mkUser('rider');
+    const owedRider = await prisma.rider.create({ data: { userId: owedRiderUser.id, city: 'Lahore', verificationStatus: 'approved', status: 'active' } as any });
+    await prisma.riderLedgerEntry.create({ data: { riderId: owedRider.id, type: 'delivery_fee', amount: 300, note: 'check' } as any });
+    const run1 = await weekly.runDailyPayouts(nextMonday);
+    ok("a rider who is owed pay is told it is due today", run1.ridersDue.some((r: any) => r.riderId === owedRider.id && r.amount === 300) &&
+      (await prisma.notification.count({ where: { userId: owedRiderUser.id, dedupeKey: `rider-pay-due:${run1.runDate}:${owedRider.id}` } })) === 1);
     const [wkPayout] = await payoutsOf(wk.id);
     const sunday = new Date(nextMonday.getTime() - 24 * 3600e3).toISOString().slice(0, 10);
-    ok('on Monday a kitchen with a balance gets a payout of all of it, to its bank account, for the week to Sunday',
+    ok('on a working day a kitchen with a balance gets a payout of all of it, to its bank account, for everything up to the day before',
       run1.ran && !!wkPayout && wkPayout.status === 'pending' && Math.abs(Number(wkPayout.netAmount) - wkEarn.goods) < 0.01 && wkPayout.payoutMethod === 'bank_transfer' &&
         (wkPayout.accountDetails as any)?.accountNumber === '123456789012' && (wkPayout.accountDetails as any)?.automatic === true && wkPayout.periodEnd.toISOString().slice(0, 10) === sunday,
       `${wkPayout?.netAmount} vs ${wkEarn.goods} ${wkPayout?.payoutMethod} ${JSON.stringify(wkPayout?.accountDetails)} ${wkPayout?.periodEnd?.toISOString()}`);
     ok('the period starts the day the kitchen joined (its first payout)', wkPayout?.periodStart.toISOString().slice(0, 10) === new Date(wk.createdAt.getTime() + 5 * 3600e3).toISOString().slice(0, 10));
-    ok('no payout for a kitchen with no payout account, one under the minimum, one that switched weekly payouts off, or one not approved',
+    ok('no payout for a kitchen with no payout account, one under the minimum, one that switched automatic payouts off, or one not approved',
       (await payoutsOf(noAcct.id)).length === 0 && (await payoutsOf(small.id)).length === 0 && (await payoutsOf(optedOut.id)).length === 0 && (await payoutsOf(unapproved.id)).length === 0);
     const [wPayout] = await payoutsOf(wallet.id);
     ok("a kitchen whose payout schedule names JazzCash is paid there first", wPayout?.payoutMethod === 'jazzcash' && (wPayout.accountDetails as any)?.accountNumber === '03001234567', `${wPayout?.payoutMethod} ${JSON.stringify(wPayout?.accountDetails)}`);
-    ok('the kitchen is told', (await prisma.notification.count({ where: { userId: wk.userId, dedupeKey: `payout:${wkPayout?.id}:weekly` } })) === 1);
+    ok('the kitchen is told', (await prisma.notification.count({ where: { userId: wk.userId, dedupeKey: `payout:${wkPayout?.id}:daily` } })) === 1);
     const admins = await prisma.user.count({ where: { userType: 'admin', status: 'active' } });
-    ok('and so are the admins, once per run', admins === 0 || (await prisma.notification.count({ where: { dedupeKey: { startsWith: `weekly-payouts:${run1.runDate}:` } } })) === admins);
+    ok('and so are the admins, once per run', admins === 0 || (await prisma.notification.count({ where: { dedupeKey: { startsWith: `daily-payouts:${run1.runDate}:` } } })) === admins);
 
-    const run2 = await weekly.runWeeklyPayouts(new Date(nextMonday.getTime() + 3600e3));
+    const run2 = await weekly.runDailyPayouts(new Date(nextMonday.getTime() + 3600e3));
+    ok('and only once that day, however often the job runs', (await prisma.notification.count({ where: { userId: owedRiderUser.id } })) === 1);
     ok('the next hourly run makes no second payout while the first one waits', (await payoutsOf(wk.id)).length === 1 && !run2.created.some((c: any) => c.sellerId === wk.id));
     await adminSvc.completePayout(wkPayout.id, 'TX-WEEKLY');
-    await earn(wk.id, 1500);
-    await weekly.runWeeklyPayouts(new Date(nextMonday.getTime() + 2 * 3600e3));
-    ok('nor once it is sent and more money comes in the same Monday: one weekly payout per kitchen per week', (await payoutsOf(wk.id)).length === 1);
+    const more = await earn(wk.id, 1500);
+    await weekly.runDailyPayouts(new Date(nextMonday.getTime() + 2 * 3600e3));
+    ok('nor once it is sent and more money comes in the same day: one payout per kitchen per day', (await payoutsOf(wk.id)).length === 1);
+    await weekly.runDailyPayouts(tuesday);
+    const tue = (await payoutsOf(wk.id)).find((p) => p.id !== wkPayout.id);
+    ok("the next working day the new money is paid out, covering the day before", !!tue && Math.abs(Number(tue.netAmount) - more.goods) < 0.01 && tue.periodEnd.toISOString().slice(0, 10) === mondayDate, `${tue?.netAmount} vs ${more.goods} ${tue?.periodEnd?.toISOString()}`);
 
     const st = await weekly.getPayoutStatement(wkPayout.id, { sellerId: wk.id });
     ok("the statement lists the week's order with what it adds, and adds up to the payout",
@@ -1926,8 +1942,8 @@ async function main() {
     ok('"withdraw now" still works, and its statement covers up to today', wnPayout?.periodEnd.toISOString().slice(0, 10) === todayPk && (await weekly.getPayoutStatement(wnPayout.id)).lines.length === 1);
 
     await prisma.systemSetting.upsert({ where: { key: 'weeklyPayouts' }, create: { key: 'weeklyPayouts', value: false as any }, update: { value: false as any } });
-    const off = await weekly.runWeeklyPayouts(new Date(nextMonday.getTime() + 7 * 24 * 3600e3));
-    ok('an admin can switch weekly payouts off', off.ran === false);
+    const off = await weekly.runDailyPayouts(new Date(nextMonday.getTime() + 7 * 24 * 3600e3));
+    ok('an admin can switch automatic payouts off', off.ran === false);
     await prisma.systemSetting.delete({ where: { key: 'weeklyPayouts' } });
   }
 

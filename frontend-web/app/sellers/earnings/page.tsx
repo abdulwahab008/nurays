@@ -63,7 +63,7 @@ interface EarningsData {
   availableBalance: number;
   codCommissionOwed: number;
   awaitingRiderCash: number;
-  /** Whether Nuray has an account to send the weekly payout to. */
+  /** Whether Nuray has an account to send the daily payout to. */
   hasPayoutAccount: boolean;
   /** What is still owed to Nuray after netting, and the cash pause (kitchen-owing.service.ts). */
   owing: { amount: number; since: string | null; cashPausesAt: string | null; cashPaused: boolean };
@@ -302,7 +302,7 @@ export default function SellerEarningsPage() {
                   <div className="mt-4 pt-4 border-t border-line">
                     {!showPayoutForm ? (
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                        <p className="text-sm text-muted">{t('weeklyNote')}</p>
+                        <p className="text-sm text-muted">{t('autoNote')}</p>
                         <Button onClick={() => setShowPayoutForm(true)} className="shrink-0">
                           {t('requestPayout')}
                         </Button>
@@ -438,7 +438,7 @@ export default function SellerEarningsPage() {
                           )}
                           {(payout.automatic || toNuray) && (
                             <span className="mt-1.5 flex flex-wrap gap-1.5">
-                              {payout.automatic && <StatusPill>{t('weekly')}</StatusPill>}
+                              {payout.automatic && <StatusPill>{t('automatic')}</StatusPill>}
                               {toNuray && <StatusPill>{t('paidToNuray')}</StatusPill>}
                             </span>
                           )}

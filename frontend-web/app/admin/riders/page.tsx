@@ -110,7 +110,9 @@ function RidersMoney() {
   const [loading, setLoading] = useState(true);
   // Why the riders could not be read; shown instead of "No riders here", which would be untrue.
   const [loadError, setLoadError] = useState<unknown>(null);
-  const [filter, setFilter] = useState<(typeof FILTERS)[number][0]>('all');
+  // A "pay due" notice links here with ?filter=owed.
+  const linked = useSearchParams().get('filter');
+  const [filter, setFilter] = useState<(typeof FILTERS)[number][0]>(FILTERS.find(([key]) => key === linked)?.[0] ?? 'all');
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(1);
 

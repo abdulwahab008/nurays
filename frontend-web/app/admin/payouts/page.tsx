@@ -235,7 +235,7 @@ export default function AdminPayoutsPage() {
           <LoadError error={loadError} onRetry={loadPayouts} title="We couldn't load the payouts" />
         ) : payouts.length === 0 ? (
           <p className="py-12 text-center text-sm text-muted">
-            {filter === 'pending' ? 'No payouts to send. Weekly payouts appear here when they are due.' : 'No payouts here yet.'}
+            {filter === 'pending' ? "No payouts to send. Each working day's kitchen payouts appear here from 06:00." : 'No payouts here yet.'}
           </p>
         ) : (
           <div className="space-y-4">

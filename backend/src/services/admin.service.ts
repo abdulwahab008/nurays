@@ -871,8 +871,10 @@ export class AdminService {
     supportPhone: '+92-300-1234567',
     commissionRate: 15,
     minPayoutAmount: 1000,
-    // Every Monday each kitchen's balance becomes a payout by itself (weekly-payout.service.ts).
+    // Every working day each kitchen's balance becomes a payout by itself (weekly-payout.service.ts); the name is older.
     weeklyPayouts: true,
+    // Days with no payout run besides weekends (public holidays), as YYYY-MM-DD.
+    payoutHolidays: [] as string[],
     // Nuray rider delivery to other communities (see delivery-pricing.service.ts).
     ...DELIVERY_SETTING_DEFAULTS,
   };

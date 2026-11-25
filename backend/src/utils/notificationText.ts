@@ -240,17 +240,26 @@ const CATALOGUE = {
       message: `آپ کا ${p.amount} کا پے آؤٹ نہیں بھیجا جا سکا: ${p.reason}۔ رقم آپ کے بیلنس میں واپس آ گئی ہے؛ اپنی پے آؤٹ کی تفصیلات چیک کر کے دوبارہ درخواست دیں۔`,
     })
   ),
-  'payout.weekly': entry<{ amount: string; periodEnd: string; method: string }>(
+  'payout.daily': entry<{ amount: string; periodEnd: string; method: string }>(
     (p) => ({
-      title: 'Your weekly payout is on its way',
-      message: `${p.amount} for the week to ${p.periodEnd} is being sent to your ${payoutMethod.en[p.method] ?? p.method} account. The statement lists every order.`,
+      title: 'Your payout is on its way',
+      message: `${p.amount} for your orders up to ${p.periodEnd} is being sent to your ${payoutMethod.en[p.method] ?? p.method} account. The statement lists every order.`,
     }),
     (p) => ({
-      title: 'آپ کا ہفتہ وار پے آؤٹ آ رہا ہے',
-      message: `${p.periodEnd} تک کے ہفتے کے ${p.amount} آپ کے ${payoutMethod.ur[p.method] ?? p.method} اکاؤنٹ میں بھیجے جا رہے ہیں۔ اسٹیٹمنٹ میں ہر آرڈر درج ہے۔`,
+      title: 'آپ کا پے آؤٹ آ رہا ہے',
+      message: `${p.periodEnd} تک کے آپ کے آرڈرز کے ${p.amount} آپ کے ${payoutMethod.ur[p.method] ?? p.method} اکاؤنٹ میں بھیجے جا رہے ہیں۔ اسٹیٹمنٹ میں ہر آرڈر درج ہے۔`,
     })
   ),
-  'owing.reminder': entry<{ owed: string; pausesOn: string }>(
+  'payout.riderDue': entry<{ amount: string }>(
+    (p) => ({
+      title: 'Your pay is due today',
+      message: `Nuray owes you ${p.amount} after the cash you hold. It is paid today; an admin will send it.`,
+    }),
+    (p) => ({
+      title: 'آج آپ کی تنخواہ واجب ہے',
+      message: `آپ کے پاس موجود نقدی کے بعد Nuray پر آپ کے ${p.amount} واجب ہیں۔ یہ آج ادا کیے جائیں گے؛ ایڈمن بھیجے گا۔`,
+    })
+  ),  'owing.reminder': entry<{ owed: string; pausesOn: string }>(
     (p) => ({
       title: 'You owe Nuray commission',
       message: `You owe Nuray ${p.owed} in commission on cash orders. It is taken from your online earnings; if it is still owed on ${p.pausesOn}, cash orders pause until it is paid.`,
@@ -388,9 +397,13 @@ const CATALOGUE = {
     title: `${p.kitchen} owes Nuray ${p.owed}`,
     message: 'Its cash and direct-transfer orders are paused until it pays or its online orders cover the amount.',
   })),
-  'admin.weeklyPayouts': englishOnly<{ count: number; total: string }>((p) => ({
-    title: 'Weekly kitchen payouts to send',
+  'admin.dailyPayouts': englishOnly<{ count: number; total: string }>((p) => ({
+    title: "Today's kitchen payouts to send",
     message: `${p.count} kitchen payout${p.count === 1 ? '' : 's'} (${p.total}) are waiting to be sent.`,
+  })),
+  'admin.riderPayDue': englishOnly<{ count: number; total: string }>((p) => ({
+    title: "Today's rider pay to send",
+    message: `${p.count} rider${p.count === 1 ? ' is' : 's are'} owed ${p.total} after the cash they hold. Pay them from the Riders page.`,
   })),
   'approval.kitchenApplication': englishOnly<{ businessName: string }>((p) => ({ title: 'New kitchen application', message: `${p.businessName} applied to sell on Nuray.` })),
   'approval.categoryRequest': englishOnly<Named>((p) => ({ title: 'New category request', message: `A kitchen asked for the category "${p.name}".` })),

@@ -1,13 +1,18 @@
 /**
- * Weekly kitchen payouts and payout statements.
+ * Kitchen payouts (every working day) and payout statements, and the daily "pay due" notice for riders.
  *
- * Every Monday from 06:00 (Pakistan time) each approved, active kitchen whose balance reaches its minimum gets a payout
- * of its whole balance, to the first account it has saved (bank, then JazzCash, then EasyPaisa; its payout schedule's
- * method first when it has one). A kitchen that already has a payout waiting keeps that one instead. The money is
- * still sent by an admin, who marks the payout completed as before; "Withdraw now" stays for a kitchen that wants its
- * money sooner. The job runs every hour and makes at most one payout per kitchen per Monday, so a missed hour or a
- * restart catches up the same day (utils/payoutWeek.ts). WEEKLY_PAYOUTS_ENABLED=false keeps the job from being
- * scheduled at all (test servers); an admin turns it off with the weeklyPayouts setting.
+ * Every working day (Monday to Friday, except the holidays an admin lists in the payoutHolidays setting) from 06:00
+ * Pakistan time, each approved, active kitchen whose balance reaches its minimum gets a payout of its whole balance,
+ * for everything up to the end of the day before (Monday's run covers the weekend), to the first account it has
+ * saved (bank, then JazzCash, then EasyPaisa; its payout schedule's method first when it has one). A kitchen that
+ * already has a payout waiting keeps that one instead. The money is still sent by an admin, who marks the payout
+ * completed as before; "Withdraw now" stays for a kitchen that wants its money the same day. The job runs every hour
+ * and makes at most one payout per kitchen per day, so a missed hour or a restart catches up (utils/payoutWeek.ts).
+ * WEEKLY_PAYOUTS_ENABLED=false keeps the job from being scheduled at all (test servers); an admin turns automatic
+ * payouts off with the weeklyPayouts setting (its name is older than the daily schedule).
+ *
+ * Riders have no payout account in the app: their pay is in the rider ledger and an admin pays it from the rider's
+ * page. The same run tells each rider Nuray owes money to that it is due today, and the admins how many and how much.
  *
  * A statement lists the orders a payout covers: those delivered in its period before the payout was made, each with what it added to (or, for
  * money the kitchen collected itself, took from) what Nuray owes the kitchen. What the period's orders do not explain
@@ -22,8 +27,9 @@ import { recordAudit } from '../middleware/audit';
 import { logger } from '../utils/logger';
 import { roundMoney } from '../utils/pricing';
 import { normalizePayoutDestination, type PayoutMethod } from '../utils/payoutAccount';
-import { PAYOUT_METHOD_ORDER, addDays, payoutWeek, pktDate } from '../utils/payoutWeek';
+import { PAYOUT_METHOD_ORDER, addDays, payoutDay, pktDate } from '../utils/payoutWeek';
 import { computeSellerBalance, sellerBalanceLines, type BalanceLine } from './seller-balance.service';
+import { riderMoney } from './rider-ledger.service';
 import { notify } from './notify.service';
 import adminService from './admin.service';
 import { notificationText } from '../utils/notificationText';
@@ -71,23 +77,27 @@ export async function nextPeriodStart(client: Tx | typeof prisma, sellerId: stri
   return new Date(`${from}T00:00:00Z`);
 }
 
-export type WeeklySkip = 'opted_out' | 'no_account' | 'payout_waiting' | 'already_paid' | 'below_minimum';
+export type PayoutSkip = 'opted_out' | 'no_account' | 'payout_waiting' | 'already_paid' | 'below_minimum';
 
-export interface WeeklyRunResult {
+export interface PayoutRunResult {
   runDate: string;
   ran: boolean;
   created: Array<{ sellerId: string; payoutId: string; amount: number }>;
-  skipped: Record<WeeklySkip, number>;
+  skipped: Record<PayoutSkip, number>;
+  /** Riders told their pay is due today. */
+  ridersDue: Array<{ riderId: string; amount: number }>;
 }
 
-/** Make this week's payouts (does nothing outside Monday 06:00–24:00, or when an admin switched weekly payouts off). */
-export async function runWeeklyPayouts(now: Date = new Date()): Promise<WeeklyRunResult> {
-  const week = payoutWeek(now);
-  const result: WeeklyRunResult = {
+/** Make today's payouts (nothing on a weekend or listed holiday, before 06:00, or when an admin switched automatic payouts off). */
+export async function runDailyPayouts(now: Date = new Date()): Promise<PayoutRunResult> {
+  const holidays = (await adminService.getSettingValue<string[]>('payoutHolidays')) ?? [];
+  const week = payoutDay(now, Array.isArray(holidays) ? holidays : []);
+  const result: PayoutRunResult = {
     runDate: week.runDate,
     ran: false,
     created: [],
     skipped: { opted_out: 0, no_account: 0, payout_waiting: 0, already_paid: 0, below_minimum: 0 },
+    ridersDue: [],
   };
   if (!week.due || (await adminService.getSettingValue<boolean>('weeklyPayouts')) === false) return result;
   result.ran = true;
@@ -111,7 +121,7 @@ export async function runWeeklyPayouts(now: Date = new Date()): Promise<WeeklyRu
   });
 
   for (const seller of sellers) {
-    // A kitchen with no schedule row is paid weekly; one that has a row follows its own switch.
+    // A kitchen with no schedule row is paid automatically; one that has a row follows its own switch.
     if (seller.payoutSchedule && !seller.payoutSchedule.autoPayout) {
       result.skipped.opted_out++;
       continue;
@@ -153,19 +163,19 @@ export async function runWeeklyPayouts(now: Date = new Date()): Promise<WeeklyRu
       }
       const amount = Number(outcome.netAmount);
       result.created.push({ sellerId: seller.id, payoutId: outcome.id, amount });
-      void recordAudit({ userId: null, action: 'payout:WEEKLY_CREATED', entityType: 'seller_payout', entityId: outcome.id, data: { sellerId: seller.id, amount, runDate: week.runDate }, responseStatus: 201 });
+      void recordAudit({ userId: null, action: 'payout:DAILY_CREATED', entityType: 'seller_payout', entityId: outcome.id, data: { sellerId: seller.id, amount, runDate: week.runDate }, responseStatus: 201 });
       await notify({
         userId: seller.userId,
         category: 'payments',
         type: 'payout',
-        text: notificationText('payout.weekly', { amount: `Rs ${amount.toLocaleString('en-PK')}`, periodEnd: week.periodEnd, method: destination.payoutMethod }),
+        text: notificationText('payout.daily', { amount: `Rs ${amount.toLocaleString('en-PK')}`, periodEnd: week.periodEnd, method: destination.payoutMethod }),
         actionUrl: '/sellers/earnings',
         channels: ['push', 'email'],
-        dedupeKey: `payout:${outcome.id}:weekly`,
+        dedupeKey: `payout:${outcome.id}:daily`,
       });
     } catch (err) {
       // One kitchen's trouble does not hold up the others; the next hourly run tries it again.
-      logger.error({ err, sellerId: seller.id, runDate: week.runDate }, 'Could not make a weekly payout');
+      logger.error({ err, sellerId: seller.id, runDate: week.runDate }, 'Could not make a daily payout');
     }
   }
 
@@ -177,14 +187,46 @@ export async function runWeeklyPayouts(now: Date = new Date()): Promise<WeeklyRu
         userId: admin.id,
         category: 'payments',
         type: 'payout',
-        text: notificationText('admin.weeklyPayouts', { count: result.created.length, total: `Rs ${total.toLocaleString('en-PK')}` }),
+        text: notificationText('admin.dailyPayouts', { count: result.created.length, total: `Rs ${total.toLocaleString('en-PK')}` }),
         actionUrl: '/admin/payouts',
-        dedupeKey: `weekly-payouts:${week.runDate}:${admin.id}:${result.created.length}`,
+        dedupeKey: `daily-payouts:${week.runDate}:${admin.id}:${result.created.length}`,
       });
     }
   }
-  logger.info({ runDate: week.runDate, created: result.created.length, skipped: result.skipped }, 'Weekly payouts');
+  await noticeRiderPayDue(week.runDate, result);
+  logger.info({ runDate: week.runDate, created: result.created.length, skipped: result.skipped, ridersDue: result.ridersDue.length }, 'Daily payouts');
   return result;
+}
+
+/** Tell each rider Nuray owes money to (pay earned beyond the cash they hold) that it is due today, and the admins the total. Once a day each. */
+async function noticeRiderPayDue(runDate: string, result: PayoutRunResult) {
+  const riders = await prisma.rider.findMany({ where: { status: 'active', verificationStatus: 'approved' }, select: { id: true, userId: true } });
+  for (const rider of riders) {
+    const { balance } = await riderMoney(prisma, rider.id);
+    if (balance <= 0) continue;
+    result.ridersDue.push({ riderId: rider.id, amount: balance });
+    await notify({
+      userId: rider.userId,
+      category: 'payments',
+      type: 'payout',
+      text: notificationText('payout.riderDue', { amount: `Rs ${balance.toLocaleString('en-PK')}` }),
+      actionUrl: '/riders/earnings',
+      dedupeKey: `rider-pay-due:${runDate}:${rider.id}`,
+    });
+  }
+  if (result.ridersDue.length === 0) return;
+  const total = roundMoney(result.ridersDue.reduce((s, r) => s + r.amount, 0));
+  const admins = await prisma.user.findMany({ where: { userType: 'admin', status: 'active' }, select: { id: true } });
+  for (const admin of admins) {
+    await notify({
+      userId: admin.id,
+      category: 'payments',
+      type: 'payout',
+      text: notificationText('admin.riderPayDue', { count: result.ridersDue.length, total: `Rs ${total.toLocaleString('en-PK')}` }),
+      actionUrl: '/admin/riders?filter=owed',
+      dedupeKey: `rider-pay-due:${runDate}:${admin.id}`,
+    });
+  }
 }
 
 export interface StatementLine {

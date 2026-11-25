@@ -46,6 +46,10 @@ export const updateSettingsSchema = z.object({
   commissionRate: z.number().min(0).max(100).optional(),
   minPayoutAmount: z.number().min(0).max(10_000_000).optional(),
   weeklyPayouts: z.boolean().optional(),
+  payoutHolidays: z
+    .array(z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'A holiday is a date as YYYY-MM-DD').refine((d) => { const at = new Date(`${d}T00:00:00Z`); return !Number.isNaN(at.getTime()) && at.toISOString().startsWith(d); }, 'Not a real date'))
+    .max(100)
+    .optional(),
   // Nuray rider delivery to other communities (delivery-pricing.service.ts).
   deliveryPerKm: z.number().min(0).max(1000).optional(),
   deliveryIncludedKm: z.number().min(0).max(100).optional(),
