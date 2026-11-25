@@ -40,6 +40,7 @@ export default function AdminSettingsPage() {
         deliveryIncludedKm: String(s.deliveryIncludedKm ?? 3),
         deliveryMaxKm: String(s.deliveryMaxKm ?? 20),
         deliveryFallbackFee: String(s.deliveryFallbackFee ?? 150),
+        payoutHolidays: Array.isArray(s.payoutHolidays) ? s.payoutHolidays.join('\n') : '',
       });
     } catch (error) {
       setLoadError(error);
@@ -176,6 +177,24 @@ export default function AdminSettingsPage() {
                   onChange={(e) => setFormData({ ...formData, minPayoutAmount: e.target.value })}
                   className="nuray-input w-full"
                 />
+              </div>
+              <div className="sm:col-span-2">
+                <label htmlFor="payoutHolidays" className="block text-sm font-medium text-ink mb-2">
+                  Payout holidays
+                </label>
+                <textarea
+                  id="payoutHolidays"
+                  rows={3}
+                  value={formData.payoutHolidays}
+                  onChange={(e) => setFormData({ ...formData, payoutHolidays: e.target.value })}
+                  placeholder={'2026-12-25\n2027-02-05'}
+                  aria-describedby="payoutHolidays-hint"
+                  className="nuray-input w-full"
+                />
+                <p id="payoutHolidays-hint" className="mt-1 text-xs text-muted">
+                  Kitchens are paid every working day, Monday to Friday, for their orders up to the day before. List public holidays here,
+                  one date per line (YYYY-MM-DD): no payouts are made that day, and the next working day covers it.
+                </p>
               </div>
             </div>
           </div>

@@ -12,6 +12,7 @@ const GOOD: SettingsForm = {
   deliveryIncludedKm: '3',
   deliveryMaxKm: '20',
   deliveryFallbackFee: '150',
+  payoutHolidays: '',
 };
 
 const refused = (over: Partial<SettingsForm>) => {
@@ -63,4 +64,15 @@ test('the bounds themselves are accepted', () => {
 
 test('an e-mail address that is not one is refused', () => {
   for (const email of ['help', 'help@', '@nuray.pk', 'a b@nuray.pk']) assert.equal(refused({ supportEmail: email })?.field, 'supportEmail', email);
+});
+
+test('payout holidays are sent as a sorted list of dates, one per line or comma separated', () => {
+  const result = checkSettingsForm({ ...GOOD, payoutHolidays: '2026-12-25\n2026-08-14, 2026-12-25\n' });
+  assert.equal(result.ok, true);
+  if (result.ok) assert.deepEqual(result.body.payoutHolidays, ['2026-08-14', '2026-12-25']);
+});
+
+test('a holiday that is not a real date is refused, naming it', () => {
+  assert.match(refused({ payoutHolidays: '2026-02-30' })!.message, /"2026-02-30" is not a date/);
+  assert.match(refused({ payoutHolidays: '25/12/2026' })!.message, /"25\/12\/2026" is not a date/);
 });

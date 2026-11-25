@@ -125,7 +125,7 @@ Services hold all the rules; controllers stay thin. A service that changes money
 
 ### Background work
 
-- **Scheduled jobs** (13, in `backend/src/index.ts`): dispatch waiting orders (every 60 s), sweep stale orders (2 min), expire payment attempts, ranking scores and ledger catch-up (15 min), ops snapshot (5 min), hub batch expiry and weekly payouts (1 h), stock alerts, secrets purge, kitchen owing and refresh-token pruning (6 h), audit retention (24 h). Every instance runs the timers, but each run first takes a **Redis lease** (`lock:job:<name>`), so only one instance does the work.
+- **Scheduled jobs** (13, in `backend/src/index.ts`): dispatch waiting orders (every 60 s), sweep stale orders (2 min), expire payment attempts, ranking scores and ledger catch-up (15 min), ops snapshot (5 min), hub batch expiry and daily payouts (1 h), stock alerts, secrets purge, kitchen owing and refresh-token pruning (6 h), audit retention (24 h). Every instance runs the timers, but each run first takes a **Redis lease** (`lock:job:<name>`), so only one instance does the work.
 - **Queued jobs** (BullMQ queue `nuray-jobs`): emails and notification delivery (push, email, SMS), with 5 attempts and backoff. Every instance runs a worker, so the work spreads out.
 
 ## Data design

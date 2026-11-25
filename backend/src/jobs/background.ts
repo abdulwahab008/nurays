@@ -2,7 +2,7 @@ import { checkAndCreateStockAlerts } from '../services/stock-alert.service';
 import hubService from '../services/hub.service';
 import { recomputeRankings } from '../services/ranking.service';
 import { pruneRefreshTokens } from '../services/session.service';
-import { runWeeklyPayouts } from '../services/weekly-payout.service';
+import { runDailyPayouts } from '../services/weekly-payout.service';
 import { refreshAllOwing } from '../services/kitchen-owing.service';
 import { logOpsSnapshot } from '../services/ops-snapshot.service';
 import { sweepStaleOrders, purgeExpiredSecrets } from '../services/order-maintenance.service';
@@ -42,8 +42,8 @@ export function startBackgroundWork() {
   scheduleJob('purge-expired-secrets', 6 * 60 * 60 * 1000, () => purgeExpiredSecrets());
   // Audit log rows older than two years (the retention period; the database refuses anything newer).
   scheduleJob('audit-retention', 24 * 60 * 60 * 1000, () => purgeOldAuditLogs());
-  // Monday's kitchen payouts (from 06:00 Pakistan time; hourly, so a missed hour catches up). Off on test servers.
-  if (process.env.WEEKLY_PAYOUTS_ENABLED !== 'false') scheduleJob('weekly-payouts', 60 * 60 * 1000, () => runWeeklyPayouts());
+  // Each working day's kitchen payouts and rider pay notices (from 06:00 Pakistan time; hourly, so a missed hour catches up). Off on test servers.
+  if (process.env.WEEKLY_PAYOUTS_ENABLED !== 'false') scheduleJob('daily-payouts', 60 * 60 * 1000, () => runDailyPayouts());
   // Which kitchens owe Nuray and since when (their cash orders pause after two weeks), with a daily reminder.
   scheduleJob('kitchen-owing', 6 * 60 * 60 * 1000, () => refreshAllOwing());
   // Refresh tokens nobody can use any more (expired, or in a session that ended a day ago).

@@ -18,9 +18,11 @@ export interface SettingsForm {
   deliveryIncludedKm: string;
   deliveryMaxKm: string;
   deliveryFallbackFee: string;
+  /** Payout holidays, one YYYY-MM-DD date per line (or separated by commas). */
+  payoutHolidays: string;
 }
 
-type NumberKey = Exclude<keyof SettingsForm, 'platformName' | 'supportEmail' | 'supportPhone'>;
+type NumberKey = Exclude<keyof SettingsForm, 'platformName' | 'supportEmail' | 'supportPhone' | 'payoutHolidays'>;
 
 /** The box, what a person calls it, and the lowest and highest value the API accepts. */
 const NUMBERS: ReadonlyArray<readonly [NumberKey, string, number, number]> = [
@@ -39,11 +41,11 @@ const TEXTS: ReadonlyArray<readonly [keyof SettingsForm, string]> = [
 ];
 
 export type SettingsCheck =
-  | { ok: true; body: Record<keyof SettingsForm, string | number> }
+  | { ok: true; body: Record<keyof SettingsForm, string | number | string[]> }
   | { ok: false; field: keyof SettingsForm; message: string };
 
 export function checkSettingsForm(form: SettingsForm): SettingsCheck {
-  const body: Record<string, string | number> = {};
+  const body: Record<string, string | number | string[]> = {};
   for (const [key, label] of TEXTS) {
     const value = form[key].trim();
     if (!value) return { ok: false, field: key, message: `${label} can't be empty.` };
@@ -61,5 +63,12 @@ export function checkSettingsForm(form: SettingsForm): SettingsCheck {
     }
     body[key] = value;
   }
-  return { ok: true, body: body as Record<keyof SettingsForm, string | number> };
+  const holidays = form.payoutHolidays.split(/[\s,]+/).filter(Boolean);
+  for (const day of holidays) {
+    const at = new Date(`${day}T00:00:00Z`);
+    const real = /^\d{4}-\d{2}-\d{2}$/.test(day) && !Number.isNaN(at.getTime()) && at.toISOString().startsWith(day);
+    if (!real) return { ok: false, field: 'payoutHolidays', message: `Payout holidays: "${day}" is not a date as YYYY-MM-DD.` };
+  }
+  body.payoutHolidays = [...new Set(holidays)].sort();
+  return { ok: true, body: body as Record<keyof SettingsForm, string | number | string[]> };
 }
