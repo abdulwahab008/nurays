@@ -229,6 +229,7 @@ model Seller {
   // Home-kitchen order controls
   orderCutoffTime       String?  @map("order_cutoff_time") // "HH:MM" — today's orders stop being accepted at this time; null = no cutoff
   maxDailyOrders        Int?     @map("max_daily_orders")
+  maxOpenOrders         Int?     @map("max_open_orders") // orders still to cook (pending, confirmed, preparing) before new ones wait; null = no limit
   minPrepTimeMinutes    Int?     @map("min_prep_time_minutes")
   preOrderOnly          Boolean  @default(false) @map("pre_order_only")
   advanceBookingMinDays Int?     @map("advance_booking_min_days")

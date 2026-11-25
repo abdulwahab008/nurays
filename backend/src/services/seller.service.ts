@@ -38,6 +38,7 @@ function formatBusinessOperationsFields(seller: {
   availabilityNote: string | null;
   orderCutoffTime: string | null;
   maxDailyOrders: number | null;
+  maxOpenOrders: number | null;
   minPrepTimeMinutes: number | null;
   preOrderOnly: boolean;
   advanceBookingMinDays: number | null;
@@ -64,6 +65,7 @@ function formatBusinessOperationsFields(seller: {
     availabilityNote: seller.availabilityNote,
     orderCutoffTime: seller.orderCutoffTime,
     maxDailyOrders: seller.maxDailyOrders,
+    maxOpenOrders: seller.maxOpenOrders,
     minPrepTimeMinutes: seller.minPrepTimeMinutes,
     preOrderOnly: seller.preOrderOnly,
     advanceBookingMinDays: seller.advanceBookingMinDays,
@@ -387,6 +389,7 @@ export class SellerService {
       availabilityNote?: string | null;
       orderCutoffTime?: string | null;
       maxDailyOrders?: number | null;
+      maxOpenOrders?: number | null;
       minPrepTimeMinutes?: number | null;
       preOrderOnly?: boolean;
       advanceBookingMinDays?: number | null;
@@ -468,6 +471,7 @@ export class SellerService {
     if (data.availabilityNote !== undefined) updateData.availabilityNote = data.availabilityNote;
     if (data.orderCutoffTime !== undefined) updateData.orderCutoffTime = data.orderCutoffTime;
     if (data.maxDailyOrders !== undefined) updateData.maxDailyOrders = data.maxDailyOrders;
+    if (data.maxOpenOrders !== undefined) updateData.maxOpenOrders = data.maxOpenOrders;
     if (data.minPrepTimeMinutes !== undefined) updateData.minPrepTimeMinutes = data.minPrepTimeMinutes;
     if (data.preOrderOnly !== undefined) updateData.preOrderOnly = data.preOrderOnly;
     if (data.advanceBookingMinDays !== undefined) updateData.advanceBookingMinDays = data.advanceBookingMinDays;

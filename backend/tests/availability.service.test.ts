@@ -1,12 +1,14 @@
 jest.mock('../src/config/database', () => ({
   __esModule: true,
-  default: { orderItem: { count: jest.fn() } },
+  default: { $queryRaw: jest.fn() },
 }));
 
-import { computeSellerAvailability, isAcceptingOrders, validateOrderTiming } from '../src/services/availability.service';
+import { claimKitchenCapacity, computeSellerAvailability, isAcceptingOrders, validateOrderTiming } from '../src/services/availability.service';
 import prisma from '../src/config/database';
 
-const countMock = (prisma as any).orderItem.count as jest.Mock;
+const queryMock = (prisma as any).$queryRaw as jest.Mock;
+/** The order count the next queries answer (the queries are counts of distinct orders). */
+const countMock = { mockResolvedValue: (n: number) => queryMock.mockResolvedValue([{ n: BigInt(n) }]) };
 
 // 2026-08-03T10:00:00Z is a Monday, 15:00 PKT (UTC+5).
 const MONDAY_3PM_PKT = new Date('2026-08-03T10:00:00Z');
@@ -191,7 +193,7 @@ describe('computeSellerAvailability', () => {
 });
 
 describe('isAcceptingOrders', () => {
-  beforeEach(() => countMock.mockReset());
+  beforeEach(() => queryMock.mockReset());
 
   it('refuses when the seller is closed', async () => {
     const seller = { ...baseSeller({ scheduleMode: '24_7', status: 'inactive' }), id: 's1', orderCutoffTime: null, maxDailyOrders: null, preOrderOnly: false };
@@ -329,5 +331,58 @@ describe('validateOrderTiming', () => {
     const seller = { preOrderOnly: false, advanceBookingMinDays: 2, advanceBookingMaxDays: 7 };
     const result = validateOrderTiming(seller, '2026-08-04', MONDAY_3PM_PKT); // only 1 day ahead
     expect(result.valid).toBe(false);
+  });
+});
+
+describe('orders at a time (maxOpenOrders)', () => {
+  const capped = (maxOpenOrders: number | null) => ({
+    ...baseSeller({ scheduleMode: '24_7' }), id: 's1', businessName: "Nani Jaan's Handi", orderCutoffTime: null, maxDailyOrders: null, maxOpenOrders, preOrderOnly: false,
+  });
+
+  it('says the kitchen is busy once it has that many orders still to cook', async () => {
+    countMock.mockResolvedValue(15);
+    const result = await isAcceptingOrders(capped(15), MONDAY_3PM_PKT);
+    expect(result).toMatchObject({ accepting: false, code: 'KITCHEN_BUSY' });
+  });
+
+  it('takes the order with a place left, and ignores the count with no limit set', async () => {
+    countMock.mockResolvedValue(14);
+    expect((await isAcceptingOrders(capped(15), MONDAY_3PM_PKT)).accepting).toBe(true);
+    queryMock.mockClear();
+    expect((await isAcceptingOrders(capped(null), MONDAY_3PM_PKT)).accepting).toBe(true);
+    expect(queryMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('claimKitchenCapacity (inside the order transaction)', () => {
+  const tx = () => {
+    const calls: string[] = [];
+    let open = 0;
+    const $queryRaw = jest.fn(async (parts: TemplateStringsArray) => {
+      const text = parts.join('?');
+      calls.push(text.includes('FOR UPDATE') ? 'lock' : 'count');
+      return text.includes('FOR UPDATE') ? [] : [{ n: BigInt(open) }];
+    });
+    return { client: { $queryRaw } as never, calls, setOpen: (n: number) => (open = n) };
+  };
+  const kitchen = (id: string, maxOpenOrders: number | null) => ({ id, businessName: id, maxDailyOrders: null, maxOpenOrders });
+
+  it("locks the capped kitchen's row before counting, and refuses when it is full", async () => {
+    const t = tx();
+    t.setOpen(15);
+    await expect(claimKitchenCapacity(t.client, [kitchen('a', 15)])).rejects.toMatchObject({ statusCode: 400, code: 'KITCHEN_BUSY' });
+    expect(t.calls).toEqual(['lock', 'count']);
+  });
+
+  it('does not lock or count a kitchen with no limits, so its orders never wait on each other', async () => {
+    const t = tx();
+    await claimKitchenCapacity(t.client, [kitchen('a', null)]);
+    expect(t.calls).toEqual([]);
+  });
+
+  it('lets the order through with a place left', async () => {
+    const t = tx();
+    t.setOpen(14);
+    await expect(claimKitchenCapacity(t.client, [kitchen('a', 15)])).resolves.toBeUndefined();
   });
 });

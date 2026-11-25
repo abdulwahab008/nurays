@@ -17,7 +17,7 @@ import { assertOnMenu } from '../utils/menu';
 import { assertInLiveArea, assertRestaurantReaches } from '../utils/liveArea';
 import { createStockAlert } from './stock-alert.service';
 import promotionService from './promotion.service';
-import { isAcceptingOrders, validateOrderTiming } from './availability.service';
+import { claimKitchenCapacity, isAcceptingOrders, validateOrderTiming } from './availability.service';
 import { windowProblem } from '../utils/deliveryWindows';
 import { ONLINE_GATEWAY_METHODS, SELLER_DIRECT_METHODS, codCollectorOf } from '../utils/paymentCustody';
 import { assertKitchenTakesCash } from './kitchen-owing.service';
@@ -568,6 +568,8 @@ export class OrderPlacement {
     // Create order with items in transaction (retried with a new number on a clash)
     let order: Awaited<ReturnType<typeof placeOrder>>;
     const placeOrder = () => this.withOrderNumber((orderNumber) => prisma.$transaction(async (tx) => {
+      // The kitchen's limits, again under its row lock: the check above can pass for every order of a burst at once.
+      await claimKitchenCapacity(tx, [...sellersInOrder.values()]);
       // Create order
       const newOrder = await tx.order.create({
         data: {

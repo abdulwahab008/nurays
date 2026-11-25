@@ -77,7 +77,7 @@ A kitchen that cannot find a category for its dish asks for one (`POST /category
 2. An admin moderates from `/admin/products` (`POST /admin/products/:id/moderate`). Approve: `approvalStatus: approved, isActive: true`; reject: `rejected, isActive: false` with a reason. The kitchen is notified either way ("Dish approved" or "Dish not approved: <reason>", with push).
 3. Editing an approved dish does not send it back for approval (the update keeps its approval status).
 4. A dish is visible and orderable only when `isActive`, `approvalStatus = approved` and its kitchen's `status = active`. These conditions are checked again in the cart and at checkout.
-5. Whether a kitchen is accepting orders right now is computed by `services/availability.service.ts` from its schedule (Pakistan time), manual override (busy, vacation, ...), order cut-off, daily cap and pre-order-only setting, and enforced at checkout.
+5. Whether a kitchen is accepting orders right now is computed by `services/availability.service.ts` from its schedule (Pakistan time), manual override (busy, vacation, ...), order cut-off, orders-at-a-time and daily caps and pre-order-only setting, and enforced at checkout. Both caps count orders (not dishes) and are checked again inside the order's transaction with the kitchen's row locked, so a burst of orders cannot overshoot them.
 
 ## 5. Browsing and search
 

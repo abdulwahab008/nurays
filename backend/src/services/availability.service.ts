@@ -8,7 +8,9 @@
  * regardless of what timezone the server process happens to run in.
  */
 
+import type { Prisma } from '@prisma/client';
 import prisma from '../config/database';
+import { AppError } from '../middleware/errorHandler';
 
 const PKT_OFFSET_MINUTES = 5 * 60;
 const DAY_NAMES = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const;
@@ -201,7 +203,7 @@ export function computeSellerAvailability(seller: SellerAvailabilityInput, now: 
 }
 
 /** Why a kitchen refuses a new order, as a code a client can put in the customer's language. */
-export type NotAcceptingCode = 'KITCHEN_CLOSED' | 'KITCHEN_PREORDER_ONLY' | 'KITCHEN_ORDER_CUTOFF' | 'KITCHEN_DAILY_LIMIT';
+export type NotAcceptingCode = 'KITCHEN_CLOSED' | 'KITCHEN_PREORDER_ONLY' | 'KITCHEN_ORDER_CUTOFF' | 'KITCHEN_DAILY_LIMIT' | 'KITCHEN_BUSY';
 
 export type AcceptingResult =
   | { accepting: true; reason: null; code: null; nextOpenAt: null }
@@ -238,6 +240,7 @@ export async function isAcceptingOrders(
     id: string;
     orderCutoffTime: string | null;
     maxDailyOrders: number | null;
+    maxOpenOrders?: number | null;
     preOrderOnly: boolean;
   },
   now: Date = new Date(),
@@ -283,28 +286,8 @@ export async function isAcceptingOrders(
     }
   }
 
-  if (seller.maxDailyOrders != null) {
-    const { pktDate } = pktParts(now);
-    const dayStartUtc = new Date(
-      Date.UTC(pktDate.getUTCFullYear(), pktDate.getUTCMonth(), pktDate.getUTCDate(), 0, 0, 0) - PKT_OFFSET_MINUTES * 60 * 1000
-    );
-    const dayEndUtc = new Date(dayStartUtc.getTime() + 24 * 60 * 60 * 1000);
-    const todaysOrderCount = await prisma.orderItem.count({
-      where: {
-        sellerId: seller.id,
-        createdAt: { gte: dayStartUtc, lt: dayEndUtc },
-        status: { not: 'cancelled' },
-      },
-    });
-    if (todaysOrderCount >= seller.maxDailyOrders) {
-      return {
-        accepting: false,
-        reason: `This kitchen has reached its ${seller.maxDailyOrders}-order daily limit`,
-        code: 'KITCHEN_DAILY_LIMIT',
-        nextOpenAt: availability.nextOpenAt,
-      };
-    }
-  }
+  const full = await capacityProblem(prisma, seller, now);
+  if (full) return { accepting: false, reason: full.reason, code: full.code, nextOpenAt: availability.nextOpenAt };
 
   return { accepting: true, reason: null, code: null, nextOpenAt: null };
 }
@@ -342,4 +325,52 @@ export function validateOrderTiming(
     return { valid: false, reason: `Orders can only be placed up to ${maxDays} day(s) in advance` };
   }
   return { valid: true, reason: null };
+}
+
+/** A kitchen's order lines that still have to be cooked: what "orders at a time" counts. */
+const IN_PROGRESS_STATUSES = ['pending', 'confirmed', 'preparing'];
+
+type CapacitySeller = { id: string; businessName?: string; maxDailyOrders: number | null; maxOpenOrders?: number | null };
+type Db = Pick<typeof prisma, '$queryRaw'> | Prisma.TransactionClient;
+
+/** Orders (not dishes) of this kitchen: still to cook, or taken today (Pakistan time) and not cancelled. */
+async function countOrders(db: Db, sellerId: string, which: 'open' | 'today', now: Date): Promise<number> {
+  if (which === 'open') {
+    const [row] = await db.$queryRaw<Array<{ n: bigint }>>`
+      SELECT count(DISTINCT order_id) AS n FROM order_items
+      WHERE seller_id = ${sellerId} AND status = ANY(${IN_PROGRESS_STATUSES})`;
+    return Number(row.n);
+  }
+  const { pktDate } = pktParts(now);
+  const dayStart = new Date(Date.UTC(pktDate.getUTCFullYear(), pktDate.getUTCMonth(), pktDate.getUTCDate()) - PKT_OFFSET_MINUTES * 60 * 1000);
+  const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
+  const [row] = await db.$queryRaw<Array<{ n: bigint }>>`
+    SELECT count(DISTINCT order_id) AS n FROM order_items
+    WHERE seller_id = ${sellerId} AND created_at >= ${dayStart} AND created_at < ${dayEnd} AND status <> 'cancelled'`;
+  return Number(row.n);
+}
+
+/** Why the kitchen is full right now (orders at a time, then orders today), or null when it has room. */
+async function capacityProblem(db: Db, seller: CapacitySeller, now: Date): Promise<{ code: 'KITCHEN_BUSY' | 'KITCHEN_DAILY_LIMIT'; reason: string } | null> {
+  if (seller.maxOpenOrders != null && (await countOrders(db, seller.id, 'open', now)) >= seller.maxOpenOrders) {
+    return { code: 'KITCHEN_BUSY', reason: `This kitchen is busy with ${seller.maxOpenOrders} orders right now. Please try again in a few minutes.` };
+  }
+  if (seller.maxDailyOrders != null && (await countOrders(db, seller.id, 'today', now)) >= seller.maxDailyOrders) {
+    return { code: 'KITCHEN_DAILY_LIMIT', reason: `This kitchen has reached its ${seller.maxDailyOrders}-order daily limit` };
+  }
+  return null;
+}
+
+/**
+ * The kitchens' limits again, inside the order's transaction and with each capped kitchen's row locked until it
+ * commits, so a burst of orders cannot all read "one place left" and all get in. Only orders to the same capped
+ * kitchen wait on each other. Call it first in the transaction, before the new order's own lines exist.
+ */
+export async function claimKitchenCapacity(tx: Prisma.TransactionClient, sellers: CapacitySeller[], now: Date = new Date()) {
+  const capped = sellers.filter((s) => s.maxOpenOrders != null || s.maxDailyOrders != null).sort((a, b) => a.id.localeCompare(b.id));
+  for (const seller of capped) {
+    await tx.$queryRaw`SELECT id FROM sellers WHERE id = ${seller.id} FOR UPDATE`;
+    const full = await capacityProblem(tx, seller, now);
+    if (full) throw new AppError(`${seller.businessName ?? 'This kitchen'}: ${full.reason}`, 400, full.code);
+  }
 }
