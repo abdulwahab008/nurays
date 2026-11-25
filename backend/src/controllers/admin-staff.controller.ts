@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { AppError } from '../middleware/errorHandler';
 import { getApprovals } from '../services/approvals.service';
+import { getSystemHealth } from '../services/system-health.service';
 import { resetTwoFactor } from '../services/staff-two-factor.service';
 import { listStaff, createStaff, changeStaffRole, setStaffStatus, resetStaffPassword, removeStaff } from '../services/staff.service';
 
@@ -36,4 +37,9 @@ export const deleteStaff = async (req: Request, res: Response) => {
 /** Everything waiting for a decision, limited to what this staff role can act on. */
 export const getApprovalQueues = async (req: Request, res: Response) => {
   res.status(200).json({ success: true, data: await getApprovals(req.user?.staffRole) });
+};
+
+/** The System health page: job lanes, failed jobs, stuck orders and full kitchens. */
+export const getSystemHealthReading = async (_req: Request, res: Response) => {
+  res.status(200).json({ success: true, data: await getSystemHealth() });
 };

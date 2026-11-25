@@ -231,3 +231,71 @@ export async function stopWorkers(): Promise<void> {
   workers.length = 0;
   queues.clear();
 }
+
+export interface LaneHealth {
+  lane: Lane;
+  waiting: number;
+  active: number;
+  /** Waiting to retry after a failure. */
+  delayed: number;
+  /** Gave up after every attempt (the last 5000 are kept). */
+  failed: number;
+  /** Processes taking this lane's jobs right now; 0 means its jobs only pile up. */
+  workers: number;
+}
+
+export interface JobProblem {
+  lane: Lane;
+  name: string;
+  id: string | null;
+  reason: string;
+  attempts: number;
+  at: string | null;
+}
+
+/**
+ * Each lane's counts and connected workers, the latest jobs that gave up, and the latest ones waiting to retry (for
+ * the admin System health page). Null without Redis or while it is unreachable: jobs then run in this process.
+ */
+export async function getLaneHealth(limit = 10): Promise<{ lanes: LaneHealth[]; failed: JobProblem[]; retrying: JobProblem[] } | null> {
+  const lanes = LANE_NAMES.map((lane) => [lane, getQueue(lane)] as const);
+  if (connecting) await connecting;
+  if (lanes.some(([, q]) => !q) || !queueReady()) return null;
+  const problem = (lane: Lane) => (job: Job): JobProblem => ({
+    lane,
+    name: job.name,
+    id: job.id ?? null,
+    reason: (job.failedReason || 'No reason recorded').slice(0, 300),
+    attempts: job.attemptsMade,
+    at: job.finishedOn ? new Date(job.finishedOn).toISOString() : job.processedOn ? new Date(job.processedOn).toISOString() : null,
+  });
+  const byLatest = (a: JobProblem, b: JobProblem) => (b.at ?? '').localeCompare(a.at ?? '');
+  try {
+    const read = await withTimeout(
+      Promise.all(
+        lanes.map(async ([lane, q]) => {
+          const [counts, workers, failed, delayed] = await Promise.all([
+            q!.getJobCounts('waiting', 'active', 'delayed', 'failed'),
+            q!.getWorkersCount(),
+            q!.getFailed(0, limit - 1),
+            q!.getDelayed(0, limit - 1),
+          ]);
+          return {
+            lane: { lane, waiting: counts.waiting ?? 0, active: counts.active ?? 0, delayed: counts.delayed ?? 0, failed: counts.failed ?? 0, workers },
+            failed: failed.filter(Boolean).map(problem(lane)),
+            retrying: delayed.filter((j) => j && j.attemptsMade > 0).map(problem(lane)),
+          };
+        })
+      ),
+      ENQUEUE_TIMEOUT_MS
+    );
+    return {
+      lanes: read.map((r) => r.lane),
+      failed: read.flatMap((r) => r.failed).sort(byLatest).slice(0, limit),
+      retrying: read.flatMap((r) => r.retrying).sort(byLatest).slice(0, limit),
+    };
+  } catch (err) {
+    logger.warn({ err }, 'Could not read the job lanes');
+    return null;
+  }
+}
