@@ -203,7 +203,7 @@ Each stage keeps the same code. It changes what runs where, and each step has to
 - Run the load ladder again after each change. 10,000 is a target, not a measured result.
 
 **Stage 3: beyond one database**
-- Split the background work onto its own instances (`scheduler + worker`, no HTTP), so a payout run cannot slow checkout. This needs a small change: the jobs start in `index.ts` today.
+- Run the background work on its own instances, so a payout run cannot slow checkout: the API with `PROCESS_ROLE=api` and `node dist/worker.js` from the same image (the `worker` service in `docker-compose.yml`; see the deployment guide).
 - Partition the large append-only tables by month: orders history, notifications, audit log, ledgers.
 - Use Redis with failover (Sentinel or a managed HA tier); today one Redis outage turns limits off and moves jobs in-process.
 - Run a geocoder and tile server of your own, and add more payment providers so Safepay is not a single point.

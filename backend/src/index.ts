@@ -16,26 +16,16 @@ import helmet from 'helmet';
 import compression from 'compression';
 import socketManager from './config/socket';
 import { fileRoutes } from './storage/serve';
-import { checkAndCreateStockAlerts } from './services/stock-alert.service';
-import hubService from './services/hub.service';
-import { recomputeRankings } from './services/ranking.service';
-import { scheduleJob, stopScheduler } from './jobs/scheduler';
-import { pruneRefreshTokens } from './services/session.service';
-import { runWeeklyPayouts } from './services/weekly-payout.service';
-import { refreshAllOwing } from './services/kitchen-owing.service';
-import { startWorkers, stopWorkers } from './jobs/queue';
-import './jobs/email.jobs';
+import { startBackgroundWork } from './jobs/background';
+import { stopScheduler } from './jobs/scheduler';
+import { stopWorkers } from './jobs/queue';
 import prisma from './config/database';
 import { closeRedis } from './config/redis';
 import { markShuttingDown, isShuttingDown, closeHttpServer } from './utils/lifecycle';
 import { apiLimiter } from './middleware/rateLimiter';
 import { rejectUnsafeText } from './middleware/unsafeText';
 import { requestId, httpLogger } from './middleware/requestContext';
-import { isProduction } from './config/env';
-import { logOpsSnapshot } from './services/ops-snapshot.service';
-import { sweepStaleOrders, purgeExpiredSecrets } from './services/order-maintenance.service';
-import { purgeOldAuditLogs } from './services/audit-retention.service';
-import { expireAbandonedAttempts } from './services/online-payment.service';
+import { isProduction, processRole } from './config/env';
 import { errorHandler } from './middleware/errorHandler';
 import { flushProductViews } from './services/product.service';
 import { notFoundHandler } from './middleware/notFoundHandler';
@@ -66,9 +56,6 @@ import supportRoutes from './routes/support.routes';
 import uploadRoutes from './routes/upload.routes';
 import communityRoutes from './routes/community.routes';
 import favoriteRoutes from './routes/favorite.routes';
-import { dispatchWaiting, reclaimIdleAssignments } from './services/dispatch.service';
-import riderService from './services/rider.service';
-import ledgerService from './services/ledger.service';
 
 const app = express();
 const httpServer = createServer(app);
@@ -163,44 +150,8 @@ app.use(errorHandler);
 httpServer.listen(PORT, () => {
   logger.info({ port: PORT, env: process.env.NODE_ENV || 'development', api: `http://localhost:${PORT}/api/${API_VERSION}` }, 'Server running (WebSocket server initialized)');
 
-  // Background jobs. Each run holds a Redis lease, so with several app instances only one
-  // runs a given job at a time (jobs/scheduler.ts).
-  // Safety-net sweep for stock alerts an order-time check might have missed
-  // (e.g. a threshold lowered after the fact); real-time alerting on order creation
-  // is the primary path.
-  scheduleJob('stock-alerts', 6 * 60 * 60 * 1000, () => checkAndCreateStockAlerts());
-  // Hub batches past their expiry stop showing as available.
-  scheduleJob('hub-expiry', 60 * 60 * 1000, () => hubService.expireStaleBatches());
-  // Orders nobody is moving forward release their stock and the customer's money.
-  // Open rider jobs are offered again; first, one given to a rider who never moved on it goes back to the pool.
-  scheduleJob('dispatch-waiting', 60 * 1000, async () => {
-    await reclaimIdleAssignments();
-    await dispatchWaiting();
-  });
-  // An order accepted ahead of its delivery day gets its rider job when that day comes.
-  scheduleJob('scheduled-deliveries', 60 * 1000, () => riderService.createDueDeliveries());
-  scheduleJob('stale-orders', 2 * 60 * 1000, () => sweepStaleOrders());
-  // Old one-time codes and used / expired reset tokens.
-  scheduleJob('purge-expired-secrets', 6 * 60 * 60 * 1000, () => purgeExpiredSecrets());
-  // Audit log rows older than two years (the retention period; the database refuses anything newer).
-  scheduleJob('audit-retention', 24 * 60 * 60 * 1000, () => purgeOldAuditLogs());
-  // Monday's kitchen payouts (from 06:00 Pakistan time; hourly, so a missed hour catches up). Off on test servers.
-  if (process.env.WEEKLY_PAYOUTS_ENABLED !== 'false') scheduleJob('weekly-payouts', 60 * 60 * 1000, () => runWeeklyPayouts());
-  // Which kitchens owe Nuray and since when (their cash orders pause after two weeks), with a daily reminder.
-  scheduleJob('kitchen-owing', 6 * 60 * 60 * 1000, () => refreshAllOwing());
-  // Refresh tokens nobody can use any more (expired, or in a session that ended a day ago).
-  scheduleJob('prune-refresh-tokens', 6 * 60 * 60 * 1000, () => pruneRefreshTokens());
-  // Online checkout sessions nobody completed (a late payment confirmation still settles).
-  scheduleJob('expire-payment-attempts', 15 * 60 * 1000, () => expireAbandonedAttempts());
-  // Delivered, paid orders whose ledger posting failed after the delivery was saved.
-  scheduleJob('ledger-catch-up', 15 * 60 * 1000, () => ledgerService.postMissedCompletions());
-  scheduleJob('ops-snapshot', 5 * 60 * 1000, () => logOpsSnapshot());
-  // Trending and rating scores the listings sort by (recent orders fade over days, so this
-  // keeps them current even when nobody orders).
-  scheduleJob('ranking-scores', 15 * 60 * 1000, () => recomputeRankings());
-
-  // Background jobs (emails, notifications). With Redis every instance takes queued jobs.
-  startWorkers();
+  // The timed jobs and queue workers run here too unless a worker process has them (PROCESS_ROLE=api).
+  if (processRole() === 'all') startBackgroundWork();
 });
 
 /**
@@ -233,6 +184,7 @@ async function shutdown(signal: string, exitCode = 0) {
   const httpClosed = closeHttpServer(httpServer);
   await socketManager.close().catch((err) => logger.error({ err }, 'Closing sockets failed'));
   await httpClosed;
+  // After the listener: a request still finishing may queue a job.
   await stopWorkers().catch((err) => logger.error({ err }, 'Stopping job workers failed'));
   await flushProductViews();
   await Promise.allSettled([prisma.$disconnect(), closeRedis(), flushSentry()]);

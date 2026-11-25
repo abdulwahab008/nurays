@@ -43,6 +43,8 @@ services:
       # Apply pending database migrations on start. For a database created before the
       # migration baseline, run `npm run db:baseline` once first (see backend/prisma/README.md).
       MIGRATE_ON_START: ${MIGRATE_ON_START:-false}
+      # The worker service below runs the timed jobs and the queue, so this one only serves requests.
+      PROCESS_ROLE: api
     volumes:
       - uploads:/app/uploads
     extra_hosts:
@@ -54,6 +56,34 @@ services:
       timeout: 5s
       retries: 3
       start_period: 20s
+
+  # Same image as the backend, started as the worker: timed jobs and queued emails, push and SMS, no HTTP.
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: nuray-worker
+    command: ["node", "dist/worker.js"]
+    restart: unless-stopped
+    logging: *logging
+    stop_grace_period: 30s
+    env_file:
+      - backend/.env
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql://apple@host.docker.internal:5432/frozennuray_dev}
+      REDIS_URL: ${REDIS_URL:-redis://host.docker.internal:6379}
+      FRONTEND_URL: http://frontend:3000
+      UPLOADS_DIR: /app/uploads
+    volumes:
+      - uploads:/app/uploads
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    # The image's check calls the API's /health, which a worker does not serve.
+    healthcheck:
+      disable: true
+    depends_on:
+      backend:
+        condition: service_healthy
 
   frontend:
     build:

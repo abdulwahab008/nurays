@@ -219,7 +219,7 @@ in the same release as the code that stops using the old shape).
 |---|---|
 | `backend/Dockerfile` | Builds TypeScript, then a runtime image with production dependencies only, running as a non-root user. `NODE_ENV=production`, `PORT=3001`, `UV_THREADPOOL_SIZE=8`, `UPLOADS_DIR=/app/uploads`, a `HEALTHCHECK` on `/api/v1/health`. `exec node dist/index.js` keeps node as PID 1 so SIGTERM reaches it. The image contains `dist` and `prisma`, not `scripts/`. |
 | `frontend-web/Dockerfile` | Next.js standalone build with the `NEXT_PUBLIC_*` build args, non-root, port 3000, healthcheck on `/`. |
-| `docker-compose.yml` | Builds both images for local use. Expects PostgreSQL and Redis on the host (`host.docker.internal`), mounts a named `uploads` volume, `stop_grace_period: 30s`, and starts the frontend after the backend is healthy. It is not a full production stack: it has no database, Redis, TLS or proxy. |
+| `docker-compose.yml` | Builds both images for local use and runs three services: `backend` (the API, `PROCESS_ROLE=api`), `worker` (the same image started as `node dist/worker.js`: the timed jobs and the queue, no HTTP) and `frontend`. Expects PostgreSQL and Redis on the host (`host.docker.internal`), mounts a named `uploads` volume, `stop_grace_period: 30s`, and starts the frontend after the backend is healthy. It is not a full production stack: it has no database, Redis, TLS or proxy. |
 | `.github/workflows/docker-publish.yml` | On pushes to `main` and `v*` tags (or manually), builds both images and pushes them to GitHub Container Registry as `ghcr.io/<owner>/nuray-backend` and `nuray-frontend`. Tags: `main` and `sha-<short>` on `main`; the version, `major.minor` and `latest` on `v*` tags. Frontend build args come from repository variables (`vars.NEXT_PUBLIC_API_URL`, and so on). Without them it bakes in `http://localhost:3001/api/v1`, so set the variables before using these images in production. |
 
 Both runtime images take Debian's pending security updates at build time and contain `node` only: npm, npx, corepack
@@ -307,7 +307,18 @@ mandatory in production):
 
 ## Background jobs
 
-Scheduled in `backend/src/index.ts` through `jobs/scheduler.ts`; each first runs at a random moment 5 to 65 seconds
+The timed jobs below and the queue workers (emails, push, SMS) start in `backend/src/jobs/background.ts`. Where they
+run:
+
+- **In the API (default, `PROCESS_ROLE=all`)**: one process does everything. Fine for one or two small instances.
+- **In a worker of their own**: start the API with `PROCESS_ROLE=api` and run `node dist/worker.js` (`npm run
+  start:worker`) from the same image. A payout run or a burst of emails then cannot slow checkout, and the two scale
+  apart (for example four API instances and one worker). Both need `REDIS_URL`. The worker sends its live updates
+  (rider offers, order changes) through Redis to the API instances that hold the sockets. Several workers are safe:
+  each timed run takes a Redis lease and each queued job is taken once. With `PROCESS_ROLE=api` and no worker
+  running, no timed job runs and no email, push or SMS goes out, so deploy them together.
+
+Scheduled through `jobs/scheduler.ts`; each first runs at a random moment 5 to 65 seconds
 after boot (so they do not all start together, then or on every later boundary) and then repeats. At most
 `SCHEDULER_CONCURRENCY` (default 2) run at once per instance; the others wait their turn.
 

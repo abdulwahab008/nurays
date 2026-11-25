@@ -76,6 +76,18 @@ class SocketManager {
   private io: SocketIOServer | null = null;
   private userSockets: Map<string, Set<string>> = new Map(); // userId -> Set of socketIds
 
+  /**
+   * A process with no clients of its own (the worker): what its jobs emit (rider offers, order updates, room
+   * changes) goes through the Redis adapter to the API instances that hold the sockets.
+   */
+  initializeEmitter() {
+    this.io = new SocketIOServer();
+    this.io.adapter(createAdapter(
+      newRedisConnection('socket-pub', { maxRetriesPerRequest: null }),
+      newRedisConnection('socket-sub', { maxRetriesPerRequest: null }),
+    ));
+  }
+
   initialize(httpServer: HTTPServer) {
     this.io = new SocketIOServer(httpServer, {
       cors: {

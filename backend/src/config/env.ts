@@ -56,6 +56,14 @@ export function emailProvider(env: NodeJS.ProcessEnv = process.env): EmailProvid
   return 'console';
 }
 
+/**
+ * What the API process runs: 'all' (default) serves HTTP and also runs the timed jobs and queue workers; 'api' serves
+ * HTTP only, for when a worker process (`dist/worker.js`) runs the background work.
+ */
+export type ProcessRole = 'all' | 'api';
+export const processRole = (env: NodeJS.ProcessEnv = process.env): ProcessRole =>
+  (env.PROCESS_ROLE || '').trim().toLowerCase() === 'api' ? 'api' : 'all';
+
 /** Every configuration problem, as human-readable lines (empty = fine). */
 export function configProblems(env: NodeJS.ProcessEnv = process.env): string[] {
   const problems: string[] = [];
@@ -65,6 +73,10 @@ export function configProblems(env: NodeJS.ProcessEnv = process.env): string[] {
   };
 
   need('DATABASE_URL', 'PostgreSQL connection');
+  const role = (env.PROCESS_ROLE || '').trim().toLowerCase();
+  if (role && role !== 'all' && role !== 'api') problems.push(`PROCESS_ROLE must be "all" or "api" (got "${env.PROCESS_ROLE}"); the worker is started with dist/worker.js.`);
+  // Without Redis queued jobs run in the process that queued them, and a worker's live updates would reach nobody.
+  if (role === 'api') need('REDIS_URL', 'PROCESS_ROLE=api hands the background work to a worker process through Redis');
   const jwt = env.JWT_SECRET || '';
   if (!jwt) problems.push('JWT_SECRET is required.');
   else if (jwt.length < 32) problems.push('JWT_SECRET must be at least 32 characters.');
