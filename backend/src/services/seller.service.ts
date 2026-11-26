@@ -1,3 +1,4 @@
+import type { Prisma } from '@prisma/client';
 import { recordAudit } from '../middleware/audit';
 import prisma from '../config/database';
 import { forgetAuthUsers } from './auth-cache.service';
@@ -15,7 +16,10 @@ import { notifyApprovers } from './approvals.service';
 import { kitchenApplicationGaps } from '../utils/kitchenApplication';
 import { changedPayoutDetails } from '../utils/payoutAccount';
 import { pktDate } from '../utils/payoutWeek';
-import { nextPeriodStart, payoutDestination } from './weekly-payout.service';
+import { PAYOUT_ACCOUNT_HOLD_HOURS, nextPeriodStart, payoutDestination, payoutHoldUntil } from './weekly-payout.service';
+import { notifyAdmins } from './rider-deposit.service';
+import { notify } from './notify.service';
+import { normalizePayoutDestination, type PayoutMethod } from '../utils/payoutAccount';
 import { logPayoutEvent, payoutEvents } from './payout-log.service';
 import { confirmPasswordIfSet } from './reauth.service';
 import { notificationText } from '../utils/notificationText';
@@ -313,6 +317,8 @@ export class SellerService {
       bankAccountName: seller.bankAccountName,
       bankAccountNumber: seller.bankAccountNumber,
       bankName: seller.bankName,
+      /** Set while payouts wait after a payout account change. */
+      payoutsHeldUntil: payoutHoldUntil(seller.payoutAccountChangedAt),
       lowStockThreshold: seller.lowStockThreshold,
       enableStockAlerts: seller.enableStockAlerts,
       freeDeliveryAreas: (seller.freeDeliveryAreas as string[] | null) ?? [],
@@ -427,6 +433,9 @@ export class SellerService {
     if (newLat !== storedLat || newLng !== storedLng) await assertPinNearArea(seller.communityId, newLat, newLng);
 
     const updateData: Record<string, unknown> = { ...payout.changes };
+    // A number changed to another account (not just cleared): payouts wait, and the kitchen and admins are told.
+    const accountMoved = (['bankAccountNumber', 'jazzcashNumber', 'easypaisaNumber'] as const).some((f) => payout.changes[f]);
+    if (accountMoved) updateData.payoutAccountChangedAt = new Date();
     if (data.businessName !== undefined) updateData.businessName = data.businessName;
     if (data.businessNameUrdu !== undefined) updateData.businessNameUrdu = data.businessNameUrdu;
     if (data.description !== undefined) updateData.description = data.description;
@@ -484,6 +493,11 @@ export class SellerService {
       where: { id: seller.id },
       data: updateData,
     });
+    if (accountMoved) {
+      const at = Date.now();
+      await notify({ userId, category: 'payments', type: 'payout', text: notificationText('payout.accountChanged', { hours: PAYOUT_ACCOUNT_HOLD_HOURS }), actionUrl: '/sellers/settings', channels: ['push', 'email'], dedupeKey: `payout-account:${seller.id}:${at}` });
+      await notifyAdmins(notificationText('admin.payoutAccountChanged', { kitchen: updated.businessName, hours: PAYOUT_ACCOUNT_HOLD_HOURS }), `payout-account:${seller.id}:${at}`, '/admin/payouts');
+    }
 
     return {
       id: updated.id,
@@ -1060,6 +1074,17 @@ export class SellerService {
       );
     }
 
+    // Only to an account on file, and not while a new one is waiting out its hold: whoever can request a payout must
+    // not also be able to name where it goes.
+    const held = payoutHoldUntil(seller.payoutAccountChangedAt);
+    if (held) {
+      throw new AppError(`Your payout account changed recently. For your safety, payouts start again on ${held.toLocaleString('en-PK', { timeZone: 'Asia/Karachi', dateStyle: 'medium', timeStyle: 'short' })}.`, 409, 'PAYOUT_ACCOUNT_ON_HOLD');
+    }
+    const destination = payoutDestination(seller, data.payoutMethod);
+    if (!destination || destination.payoutMethod !== data.payoutMethod || (data.accountNumber && normalizePayoutDestination(destination.payoutMethod as PayoutMethod, data.accountNumber) !== destination.accountNumber)) {
+      throw new AppError('Payouts go only to the payout account saved in your Settings.', 400, 'PAYOUT_ACCOUNT_NOT_ON_FILE');
+    }
+
     // The earnings go to the account named here: a stolen session must not be able to send them anywhere alone.
     const owner = await prisma.user.findUnique({ where: { id: seller.userId }, select: { id: true, passwordHash: true } });
     await confirmPasswordIfSet(owner, data.currentPassword, 'Enter your password to request a payout', ctx);
@@ -1096,9 +1121,7 @@ export class SellerService {
           commissionDeducted,
           netAmount,
           payoutMethod: data.payoutMethod,
-          accountDetails: {
-            accountNumber: data.accountNumber,
-          },
+          accountDetails: { ...destination } as unknown as Prisma.InputJsonValue,
           status: 'pending',
           // What the statement lists: the days since the last payout, up to today.
           periodStart: await nextPeriodStart(tx, sellerId, seller.createdAt),

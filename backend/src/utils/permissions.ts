@@ -65,7 +65,7 @@ const RULES: Rule[] = [
   { method: 'GET', path: /^\/rider-deposits$/, permission: 'read.finance' },
   { method: 'WRITE', path: /^\/orders\/[^/]+\/(refund|confirm-payment)$/, permission: 'money.write' },
   { method: 'WRITE', path: /^\/refunds\/[^/]+\/(complete|dismiss)$/, permission: 'money.write' },
-  { method: 'WRITE', path: /^\/payouts\/[^/]+\/(complete|fail)$/, permission: 'money.write' },
+  { method: 'WRITE', path: /^\/payouts\/[^/]+\/(approve|complete|fail)$/, permission: 'money.write' },
   { method: 'WRITE', path: /^\/sellers\/[^/]+\/payments-to-nuray$/, permission: 'money.write' },
   { method: 'WRITE', path: /^\/support\/tickets\/[^/]+\/reply$/, permission: 'support.handle' },
   { method: 'WRITE', path: /^\/reviews\/[^/]+\/(hide|keep|restore)$/, permission: 'support.handle' },

@@ -150,6 +150,11 @@ export const getPayouts = async (req: Request, res: Response) => {
   });
 };
 
+/** A second admin approves a large payout before another sends it. */
+export const approvePayout = async (req: Request, res: Response) => {
+  res.status(200).json({ success: true, data: await adminService.approvePayout(String(req.params.id), req.user!.userId) });
+};
+
 export const completePayout = async (req: Request, res: Response) => {
   const { id } = req.params;
   const { transactionId } = req.body;

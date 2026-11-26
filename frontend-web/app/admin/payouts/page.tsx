@@ -30,11 +30,14 @@ interface Payout {
   automatic?: boolean;
   kitchenConfirmation?: 'received' | 'not_received' | null;
   events?: Array<{ event: string; actorType: string; reference: string | null; note: string | null; at: string }>;
+  /** A large payout: it needs a second admin's approval before another admin sends it. */
+  secondApproval?: { approvedBy: string | null } | null;
 }
 
 /** What each step in a payout's log means, for staff. */
 const EVENT_LABEL: Record<string, string> = {
   created: 'Created',
+  approved: 'Approved by a second admin',
   sent: 'Sent',
   failed: 'Failed',
   received: 'Confirmed it arrived',
@@ -57,6 +60,7 @@ const FILTERS = ['pending', 'completed', 'failed', 'all'] as const;
 
 export default function AdminPayoutsPage() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const userId = useAuthStore((s) => s.user?.id);
   const { showToast } = useToast();
   const { ask: askDialog } = useDialogs();
   const [loading, setLoading] = useState(true);
@@ -158,6 +162,19 @@ export default function AdminPayoutsPage() {
       loadPayouts();
     } catch (error) {
       showToast(apiErrorMessage(error, 'Failed to complete payout'), 'error');
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  const handleApprove = async (payout: Payout) => {
+    try {
+      setProcessingId(payout.id);
+      await apiClient.post(`/admin/payouts/${payout.id}/approve`);
+      showToast('Approved. Another admin can now send it.', 'success');
+      loadPayouts();
+    } catch (error) {
+      showToast(apiErrorMessage(error, 'Could not approve the payout'), 'error');
     } finally {
       setProcessingId(null);
     }
@@ -307,9 +324,18 @@ export default function AdminPayoutsPage() {
                   {payout.status === 'pending' && (
                     <div className="flex flex-col gap-2 items-end">
                       <div className="flex gap-2">
-                        <Button onClick={() => handleComplete(payout)} disabled={processingId === payout.id}>
-                          {processingId === payout.id ? 'Saving…' : 'Mark as sent'}
-                        </Button>
+                        {payout.secondApproval && !payout.secondApproval.approvedBy ? (
+                          <Button onClick={() => handleApprove(payout)} disabled={processingId === payout.id}>
+                            {processingId === payout.id ? 'Saving…' : 'Approve (large payout)'}
+                          </Button>
+                        ) : (
+                          <Button
+                            onClick={() => handleComplete(payout)}
+                            disabled={processingId === payout.id || (!!payout.secondApproval && payout.secondApproval.approvedBy === userId)}
+                          >
+                            {processingId === payout.id ? 'Saving…' : 'Mark as sent'}
+                          </Button>
+                        )}
                         <Button
                           variant="outline"
                           onClick={() => setFailReasonFor(failReasonFor === payout.id ? null : payout.id)}
@@ -319,6 +345,15 @@ export default function AdminPayoutsPage() {
                           Mark as failed
                         </Button>
                       </div>
+                      {payout.secondApproval && (
+                        <p className="text-xs text-muted text-right max-w-56">
+                          {!payout.secondApproval.approvedBy
+                            ? 'Large payout: a second admin approves it, then another sends it.'
+                            : payout.secondApproval.approvedBy === userId
+                              ? 'You approved it, so another admin must send it.'
+                              : 'Approved by a second admin.'}
+                        </p>
+                      )}
                       {failReasonFor === payout.id && (
                         <div className="flex gap-2 items-center mt-1">
                           <input
