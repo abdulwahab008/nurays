@@ -369,6 +369,11 @@ async function main() {
   ok('COD self-delivery counts as earned but is not withdrawable; the seller owes commission + tax on it',
     Math.abs(dash2.overview.totalEarnings - (selfGoods + 100 + codGoods + 100)) < 0.01 && dash2.overview.availableForPayout === 0 && Math.abs(dash2.overview.codCommissionOwed - codOwed) < 0.01,
     `total=${dash2.overview.totalEarnings} available=${dash2.overview.availableForPayout} owed=${dash2.overview.codCommissionOwed} expected=${codOwed}`);
+  await ledgerService.recordOrderCompletion(codOrder.id);
+  const lCod = await ledgerOf(codOrder.id);
+  const codFee = lCod.rows.find((e) => e.transactionType === 'seller_delivery_fee');
+  ok('ledger of a cash order a self-delivering kitchen collected itself balances, its delivery fee credited to the kitchen',
+    lCod.debit === lCod.credit && Number(codFee?.amount) === 100 && codFee?.sellerId === selfS.id, `debit=${lCod.debit} credit=${lCod.credit} fee=${codFee?.amount}`);
 
   // cancelling a self-delivery order's only item refunds everything, delivery fee included
   const sp1b = await mkProduct(selfS.id, 20, 500);
