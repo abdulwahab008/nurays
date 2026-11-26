@@ -15,6 +15,7 @@ import { jobScore } from '../utils/ranking';
 import { newHandoverCode, verifyHandoverCode } from './handover.service';
 import { realPhoneOrNull } from '../utils/otp';
 import { cashLimitOf, listRiderEntries, postDeliveryEntries, riderEarningsSummary, riderMoney } from './rider-ledger.service';
+import { CASH_DUE_HOURS, ridersWithOverdueCash } from './rider-deposit.service';
 import { assertOwnDocument } from '../utils/documents';
 import { presentFile } from '../storage';
 import { notifyApprovers } from './approvals.service';
@@ -507,6 +508,13 @@ export class RiderService {
       // No more customer cash than the rider's limit, counting what they hold and what they'll
       // collect on the jobs they already have. Prepaid jobs are always fine.
       if (isCashAtDoor(liveOrder)) {
+        if ((await ridersWithOverdueCash([rider.id])).has(rider.id)) {
+          throw new AppError(
+            `You have held customer cash for more than ${CASH_DUE_HOURS} hours. Deposit it and submit the receipt before taking more cash orders; prepaid orders are still open to you.`,
+            409,
+            'CASH_OVERDUE'
+          );
+        }
         const cashHeld = Number(locked.cash_held);
         const toCollect = cashToCollect(active);
         const limit = cashLimitOf(rider);

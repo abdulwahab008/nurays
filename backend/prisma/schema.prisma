@@ -773,6 +773,7 @@ model Rider {
   hub             HubCenter? @relation(fields: [hubId], references: [id], onDelete: SetNull)
   deliveries      Delivery[]
   ledgerEntries   RiderLedgerEntry[]
+  cashDeposits    RiderCashDeposit[]
   documents       RiderDocument[]
 
   @@index([status, verificationStatus])
@@ -847,6 +848,33 @@ model RiderDocument {
 /// platform owes the rider (negative: what the rider owes, e.g. cash still to deposit).
 ///   delivery_fee +, bonus +, cod_collected - (cash taken at the door), cash_deposit + (handed
 ///   in), payout - (paid to the rider), adjustment +/-.
+/// Cash a rider deposited into Nuray's account (bank, JazzCash, EasyPaisa) with the receipt, waiting for an admin to
+/// check it arrived. Approving it posts the same rider ledger entries an admin settle-up does (cash handed in, and the
+/// pay kept from the cash); rejecting it posts nothing.
+model RiderCashDeposit {
+  id              String    @id @default(uuid())
+  riderId         String    @map("rider_id")
+  /// Cash put into Nuray's account.
+  amount          Decimal   @db.Decimal(12, 2)
+  /// Cash the rider kept from what they hold, as their earned pay (no transfer needed for it).
+  keptAsPay       Decimal   @default(0) @map("kept_as_pay") @db.Decimal(12, 2)
+  method          String // bank_transfer | jazzcash | easypaisa
+  transactionRef  String    @map("transaction_ref")
+  receiptUrl      String    @map("receipt_url") // private:proofs/... uploaded by the rider
+  status          String    @default("pending") // pending | approved | rejected
+  rejectionReason String?   @map("rejection_reason")
+  reviewedBy      String?   @map("reviewed_by")
+  reviewedAt      DateTime? @map("reviewed_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  rider Rider @relation(fields: [riderId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt])
+  @@index([riderId, createdAt])
+  @@map("rider_cash_deposits")
+}
+
 model RiderLedgerEntry {
   id         String   @id @default(uuid())
   riderId    String   @map("rider_id")

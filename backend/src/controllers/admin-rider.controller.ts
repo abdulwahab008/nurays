@@ -9,6 +9,7 @@ import {
   setCashLimit,
 } from '../services/rider-ledger.service';
 import { setRiderCommunity } from '../services/dispatch.service';
+import { approveDeposit, listDeposits, rejectDeposit } from '../services/rider-deposit.service';
 
 /** Riders' cash and earnings, for settling up with them. */
 
@@ -55,4 +56,20 @@ export const updateRiderCashLimit = async (req: Request, res: Response) => {
 export const updateRiderCommunity = async (req: Request, res: Response) => {
   const data = await setRiderCommunity(req.params.id, req.body.communityId);
   res.status(200).json({ success: true, data, message: 'Community updated' });
+};
+
+/** Rider deposits to check (pending first by default), with a signed link to each receipt. */
+export const getRiderDeposits = async (req: Request, res: Response) => {
+  const status = typeof req.query.status === 'string' ? req.query.status : 'pending';
+  res.status(200).json({ success: true, data: await listDeposits(status === 'all' ? undefined : status, Number(req.query.page) || 1) });
+};
+
+/** The money arrived: post it to the rider's ledger. */
+export const postApproveDeposit = async (req: Request, res: Response) => {
+  res.status(200).json({ success: true, data: await approveDeposit(String(req.params.id), adminId(req)) });
+};
+
+/** The money did not arrive, or the receipt is wrong. */
+export const postRejectDeposit = async (req: Request, res: Response) => {
+  res.status(200).json({ success: true, data: await rejectDeposit(String(req.params.id), adminId(req), req.body.reason) });
 };

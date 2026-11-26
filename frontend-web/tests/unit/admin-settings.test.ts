@@ -13,6 +13,13 @@ const GOOD: SettingsForm = {
   deliveryMaxKm: '20',
   deliveryFallbackFee: '150',
   payoutHolidays: '',
+  depositBankName: '',
+  depositBankTitle: '',
+  depositBankNumber: '',
+  depositJazzcashTitle: 'Nuray',
+  depositJazzcashNumber: '0300-111 2223',
+  depositEasypaisaTitle: '',
+  depositEasypaisaNumber: '',
 };
 
 const refused = (over: Partial<SettingsForm>) => {
@@ -75,4 +82,15 @@ test('payout holidays are sent as a sorted list of dates, one per line or comma 
 test('a holiday that is not a real date is refused, naming it', () => {
   assert.match(refused({ payoutHolidays: '2026-02-30' })!.message, /"2026-02-30" is not a date/);
   assert.match(refused({ payoutHolidays: '25/12/2026' })!.message, /"25\/12\/2026" is not a date/);
+});
+
+test("Nuray's deposit accounts are sent together, mobile numbers as digits only", () => {
+  const result = checkSettingsForm(GOOD);
+  assert.equal(result.ok, true);
+  if (result.ok) assert.deepEqual(result.body.nurayDepositAccounts, { bankName: '', bankAccountTitle: '', bankAccountNumber: '', jazzcashTitle: 'Nuray', jazzcashNumber: '03001112223', easypaisaTitle: '', easypaisaNumber: '' });
+});
+
+test('a deposit number that is not a mobile number, or a bank account with no title, is refused', () => {
+  assert.match(refused({ depositEasypaisaNumber: '12345' })!.message, /EasyPaisa number must be a mobile number/);
+  assert.match(refused({ depositBankNumber: 'PK36SCBL0000001123456702' })!.message, /bank account title/);
 });

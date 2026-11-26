@@ -45,3 +45,13 @@ export const riderLocationSchema = z.object({
 });
 
 export const claimDeliverySchema = z.object({ askFee: z.number().positive().max(100000).optional() });
+
+export const submitDepositSchema = z.object({
+  amount: z.number().positive().max(1_000_000),
+  keptAsPay: z.number().min(0).max(1_000_000).optional(),
+  method: z.enum(['bank_transfer', 'jazzcash', 'easypaisa']),
+  transactionRef: z.string().trim().min(4, 'Enter the transaction ID from your receipt').max(60),
+  receiptUrl: z.string().min(1, 'Upload a photo of the receipt').max(400),
+});
+
+export const keepAsPaySchema = z.object({ amount: z.number().positive().max(1_000_000) });

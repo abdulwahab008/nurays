@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { AppError } from '../middleware/errorHandler';
 import riderService from '../services/rider.service';
+import { depositSummary, keepCashAsPay, submitDeposit } from '../services/rider-deposit.service';
 
 export const getAvailableDeliveries = async (req: Request, res: Response) => {
   if (!req.user) throw new AppError('Authentication required', 401, 'AUTH_REQUIRED');
@@ -93,4 +94,22 @@ export const updateVehicle = async (req: Request, res: Response) => {
   if (!req.user) throw new AppError('Authentication required', 401, 'AUTH_REQUIRED');
   const data = await riderService.updateVehicle(req.user.userId, req.body);
   res.status(200).json({ success: true, data, message: 'Vehicle details saved' });
+};
+
+/** What to deposit now (cash held, pay to keep), Nuray's accounts, and the rider's recent deposits. */
+export const getMyDeposits = async (req: Request, res: Response) => {
+  if (!req.user) throw new AppError('Authentication required', 401, 'AUTH_REQUIRED');
+  res.status(200).json({ success: true, data: await depositSummary(req.user.userId) });
+};
+
+/** The rider submits a deposit they made, with the transaction ID and the receipt. */
+export const postMyDeposit = async (req: Request, res: Response) => {
+  if (!req.user) throw new AppError('Authentication required', 401, 'AUTH_REQUIRED');
+  res.status(201).json({ success: true, data: await submitDeposit(req.user.userId, req.body) });
+};
+
+/** The rider keeps cash they hold as the pay Nuray owes them (nothing to transfer). */
+export const postKeepAsPay = async (req: Request, res: Response) => {
+  if (!req.user) throw new AppError('Authentication required', 401, 'AUTH_REQUIRED');
+  res.status(200).json({ success: true, data: await keepCashAsPay(req.user.userId, req.body.amount) });
 };

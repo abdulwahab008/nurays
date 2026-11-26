@@ -1,5 +1,8 @@
 import { Router } from 'express';
 import {
+  getMyDeposits,
+  postMyDeposit,
+  postKeepAsPay,
   getAvailableDeliveries,
   getMyDeliveries,
   claimDelivery,
@@ -16,7 +19,7 @@ import {
 import { authenticate, authorize } from '../middleware/auth.middleware';
 import { validate } from '../middleware/validation.middleware';
 import { locationLimiter } from '../middleware/rateLimiter';
-import { updateDeliveryStatusSchema, riderApplicationSchema, riderVehicleSchema, dutyStatusSchema, claimDeliverySchema, riderLocationSchema } from '../validators/rider.validator';
+import { updateDeliveryStatusSchema, riderApplicationSchema, riderVehicleSchema, dutyStatusSchema, claimDeliverySchema, riderLocationSchema, submitDepositSchema, keepAsPaySchema } from '../validators/rider.validator';
 import { submissionLimiter } from '../middleware/rateLimiter';
 
 const router = Router();
@@ -26,6 +29,9 @@ router.use(authorize('rider'));
 
 router.get('/me', getRiderProfile);
 router.get('/me/earnings', getRiderEarnings);
+router.get('/me/deposits', getMyDeposits);
+router.post('/me/deposits', submissionLimiter, validate(submitDepositSchema), postMyDeposit);
+router.post('/me/keep-as-pay', submissionLimiter, validate(keepAsPaySchema), postKeepAsPay);
 router.get('/me/application', getMyApplication);
 router.put('/me/application', submissionLimiter, validate(riderApplicationSchema), submitApplication);
 router.patch('/me/vehicle', submissionLimiter, validate(riderVehicleSchema), updateVehicle);
