@@ -421,6 +421,10 @@ const CATALOGUE = {
     title: "Last night's books check found problems",
     message: `${p.count} thing${p.count === 1 ? '' : 's'} in Nuray's books need${p.count === 1 ? 's' : ''} looking at. Open Accounts to see what.`,
   })),
+  'admin.moneyDispute': englishOnly<{ ticket: string; subject: string }>((p) => ({
+    title: 'A question about money',
+    message: `${p.ticket}: ${p.subject}. Money questions are high priority in Support.`,
+  })),
   'admin.payoutAccountChanged': englishOnly<{ kitchen: string; hours: number }>((p) => ({
     title: 'A kitchen changed its payout account',
     message: `${p.kitchen} changed where it is paid. Its payouts wait ${p.hours} hours; check with the kitchen if this looks wrong.`,

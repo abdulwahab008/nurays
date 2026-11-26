@@ -28,7 +28,7 @@ interface OrderMoney {
 interface Step { text: string; at?: string | null; done: boolean; link?: boolean }
 
 /** A delivered order's money, step by step: earned, cash handed in, which payout, sent, arrived. */
-export function OrderMoneyTimeline({ orderId }: { orderId: string }) {
+export function OrderMoneyTimeline({ orderId, orderNumber }: { orderId: string; orderNumber: string }) {
   const t = useT(kitchenOrderMessages);
   const { locale } = useLocale();
   const [money, setMoney] = useState<OrderMoney | null>(null);
@@ -94,6 +94,12 @@ export function OrderMoneyTimeline({ orderId }: { orderId: string }) {
           </li>
         ))}
       </ol>
+      <Link
+        href={`/support?category=money&orderId=${orderId}&subject=${encodeURIComponent(t('money.questionSubject', { number: orderNumber }))}`}
+        className="mt-2 inline-flex min-h-11 items-center text-sm font-semibold text-brand-ink hover:underline"
+      >
+        {t('money.question')}
+      </Link>
     </section>
   );
 }

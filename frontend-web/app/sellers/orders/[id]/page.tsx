@@ -393,7 +393,7 @@ export default function SellerOrderDetailPage() {
                 )}
               </section>
 
-              {['delivered', 'completed'].includes(order.orderStatus) && <OrderMoneyTimeline orderId={order.id} />}
+              {['delivered', 'completed'].includes(order.orderStatus) && <OrderMoneyTimeline orderId={order.id} orderNumber={order.orderNumber} />}
 
               <section className="pt-6 border-t border-line">
                 <h2 className="text-sm font-semibold text-ink">{t('detail.history')}</h2>
