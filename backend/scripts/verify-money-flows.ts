@@ -1932,6 +1932,22 @@ async function main() {
     ok('the statement downloads as a spreadsheet with the order on it', csv.includes(wkEarn.order.orderNumber) && csv.includes('Earlier balance and adjustments') && csv.split('\n')[0].startsWith('Kitchen,'));
     ok('a cell that would be a spreadsheet formula is written as text', weekly.statementCsv({ ...st, kitchen: { ...st.kitchen, businessName: '=HYPERLINK("x")' } }).includes(`"'=HYPERLINK(""x"")"`));
 
+    // The payout log: every step, who did it, and the kitchen's answer.
+    const log = require('../src/services/payout-log.service');
+    const evs = async (id: string) => (await prisma.payoutEvent.findMany({ where: { payoutId: id }, orderBy: { createdAt: 'asc' } })).map((e) => `${e.event}:${e.actorType}${e.reference ? ':' + e.reference : ''}`);
+    ok('the payout log has the daily run creating it and the admin sending it, with the reference', JSON.stringify(await evs(wkPayout.id)) === JSON.stringify(['created:system', 'sent:admin:TX-WEEKLY']), JSON.stringify(await evs(wkPayout.id)));
+    ok('the log cannot be edited or deleted', (await code(prisma.payoutEvent.updateMany({ where: { payoutId: wkPayout.id }, data: { note: 'x' } }))) !== 'OK' && (await code(prisma.payoutEvent.deleteMany({ where: { payoutId: wkPayout.id } }))) !== 'OK');
+    ok('"not received" needs a note', (await code(log.confirmPayout(wk.id, wk.userId, wkPayout.id, 'not_received', ''))) === 'NOTE_REQUIRED');
+    ok("another kitchen cannot answer for this payout", (await code(log.confirmPayout(wallet.id, wallet.userId, wkPayout.id, 'received'))) === 'PAYOUT_NOT_CONFIRMABLE');
+    await log.confirmPayout(wk.id, wk.userId, wkPayout.id, 'received');
+    const confirmed = await prisma.sellerPayout.findUnique({ where: { id: wkPayout.id } });
+    ok('the kitchen confirms it arrived, once', confirmed?.kitchenConfirmation === 'received' && (await evs(wkPayout.id)).at(-1) === 'received:kitchen' &&
+      (await code(log.confirmPayout(wk.id, wk.userId, wkPayout.id, 'not_received', 'nothing here'))) === 'PAYOUT_NOT_CONFIRMABLE');
+    const [jcPayout] = await payoutsOf(wallet.id);
+    ok('a payout not sent yet cannot be confirmed', (await code(log.confirmPayout(wallet.id, wallet.userId, jcPayout.id, 'received'))) === 'PAYOUT_NOT_CONFIRMABLE');
+    await adminSvc.failPayout(jcPayout.id, 'JazzCash number not registered');
+    ok('a failed payout is in the log with its reason', (await prisma.payoutEvent.count({ where: { payoutId: jcPayout.id, event: 'failed', note: 'JazzCash number not registered' } })) === 1);
+
     // a "withdraw now" request covers the days since the last payout, up to today
     const wn = await mkSeller({ ...approved, bankAccountNumber: '123456789' });
     await prisma.sellerPayoutSchedule.create({ data: { sellerId: wn.id, payoutMethod: 'bank_transfer', autoPayout: true, minimumPayoutAmount: 1 } as any });
@@ -1939,6 +1955,7 @@ async function main() {
     await sellerService.requestPayout(wn.id, { amount: wnEarn.goods, payoutMethod: 'bank_transfer', accountNumber: '123456789' });
     const [wnPayout] = await payoutsOf(wn.id);
     const todayPk = new Date(Date.now() + 5 * 3600e3).toISOString().slice(0, 10);
+    ok('a kitchen\'s own request is in the log as made by the kitchen', JSON.stringify(await evs(wnPayout.id)) === JSON.stringify(['created:kitchen']));
     ok('"withdraw now" still works, and its statement covers up to today', wnPayout?.periodEnd.toISOString().slice(0, 10) === todayPk && (await weekly.getPayoutStatement(wnPayout.id)).lines.length === 1);
 
     await prisma.systemSetting.upsert({ where: { key: 'weeklyPayouts' }, create: { key: 'weeklyPayouts', value: false as any }, update: { value: false as any } });
@@ -2045,6 +2062,8 @@ async function main() {
     const half = Math.round((owed / 2) * 100) / 100;
     const part = await owing.recordPaymentToNuray({ sellerId: pk.id, amount: half, reference: 'R-PART', adminId: admin.id });
     ok('part of it leaves the rest owed', Math.abs(part.owed - (owed - half)) < 0.01 && part.owesSince instanceof Date, JSON.stringify(part));
+    ok("a kitchen's payment to Nuray is in the payout log with the admin who recorded it and the reference",
+      (await prisma.payoutEvent.count({ where: { event: 'payment_received', actorType: 'admin', actorId: admin.id, reference: 'R-PART', payout: { sellerId: pk.id } } })) === 1);
     const rest = await owing.recordPaymentToNuray({ sellerId: pk.id, amount: Math.round((owed - half) * 100) / 100, reference: 'R-REST', adminId: admin.id });
     const b2 = await computeBalanceFor(pk.id);
     ok('paying the rest clears it: nothing owed, cash open, and the balance is zero', rest.owed === 0 && rest.owesSince === null && Math.abs(b2.available) < 0.01 && Math.abs(b2.paidToNuray - owed) < 0.01 && b2.paidOut === 0, JSON.stringify(b2));

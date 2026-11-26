@@ -16,6 +16,7 @@ import { kitchenApplicationGaps } from '../utils/kitchenApplication';
 import { changedPayoutDetails } from '../utils/payoutAccount';
 import { pktDate } from '../utils/payoutWeek';
 import { nextPeriodStart, payoutDestination } from './weekly-payout.service';
+import { logPayoutEvent, payoutEvents } from './payout-log.service';
 import { confirmPasswordIfSet } from './reauth.service';
 import { notificationText } from '../utils/notificationText';
 
@@ -1088,7 +1089,7 @@ export class SellerService {
       const netAmount = data.amount;
 
       // Create payout request
-      return tx.sellerPayout.create({
+      const created = await tx.sellerPayout.create({
         data: {
           sellerId,
           amount: data.amount,
@@ -1104,7 +1105,8 @@ export class SellerService {
           periodEnd: new Date(`${pktDate(new Date())}T00:00:00Z`),
         },
       });
-
+      await logPayoutEvent(tx, { payoutId: created.id, event: 'created', actorType: 'kitchen', actorId: seller.userId, note: `Requested by the kitchen, to ${data.payoutMethod.replace('_', ' ')}` });
+      return created;
     });
 
     void recordAudit({
@@ -1132,6 +1134,7 @@ export class SellerService {
       orderBy: { createdAt: 'desc' },
     });
 
+    const events = await payoutEvents(payouts.map((p) => p.id));
     return payouts.map((p) => ({
       id: p.id,
       amount: Number(p.amount),
@@ -1141,9 +1144,13 @@ export class SellerService {
       requestedAt: p.createdAt,
       processedAt: p.processedAt,
       failedReason: p.failedReason,
+      transactionId: p.transactionId,
       periodStart: p.periodStart.toISOString().slice(0, 10),
       periodEnd: p.periodEnd.toISOString().slice(0, 10),
       automatic: (p.accountDetails as { automatic?: unknown } | null)?.automatic === true,
+      kitchenConfirmation: p.kitchenConfirmation,
+      kitchenConfirmedAt: p.kitchenConfirmedAt,
+      events: events.get(p.id) ?? [],
     }));
   }
 

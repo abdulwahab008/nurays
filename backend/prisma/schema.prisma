@@ -1007,6 +1007,26 @@ model PaymentAttempt {
   @@map("payment_attempts")
 }
 
+/// Every step of a payout, never edited or deleted (a database trigger refuses it): who made it, sent it (with the
+/// bank or wallet reference), why it failed, and whether the kitchen confirmed it arrived.
+model PayoutEvent {
+  id        String   @id @default(uuid())
+  payoutId  String   @map("payout_id")
+  /// created | sent | failed | received | not_received | payment_received
+  event     String
+  /// system | admin | kitchen
+  actorType String   @map("actor_type")
+  actorId   String?  @map("actor_id")
+  reference String?
+  note      String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  payout SellerPayout @relation(fields: [payoutId], references: [id], onDelete: Restrict)
+
+  @@index([payoutId, createdAt])
+  @@map("payout_events")
+}
+
 model SellerPayout {
   id                String    @id @default(uuid())
   sellerId          String    @map("seller_id")
@@ -1024,7 +1044,11 @@ model SellerPayout {
   createdAt         DateTime  @default(now()) @map("created_at")
   updatedAt         DateTime  @updatedAt @map("updated_at")
 
+  /// The kitchen's answer once the money is sent: received | not_received (null = not answered yet).
+  kitchenConfirmation   String?   @map("kitchen_confirmation")
+  kitchenConfirmedAt    DateTime? @map("kitchen_confirmed_at")
   seller            Seller    @relation(fields: [sellerId], references: [id], onDelete: Restrict)
+  events            PayoutEvent[]
 
   @@index([sellerId, status])
 

@@ -18,6 +18,7 @@ import { useLocale, useT } from '@/lib/i18n';
 import { commonMessages } from '@/lib/i18n/messages/common';
 import { kitchenEarningsMessages } from '@/lib/i18n/messages/kitchen-earnings';
 import { payoutDestinationIsWrong } from '@/lib/payout-account';
+import { PayoutTrail, type PayoutEvent } from '@/components/payouts/PayoutTrail';
 import { sendAskingForPassword } from '@/lib/send-asking-for-password';
 import { useShallow } from 'zustand/react/shallow';
 import { PayoutStatement } from '@/components/payouts/PayoutStatement';
@@ -78,6 +79,8 @@ interface EarningsData {
     periodStart?: string;
     periodEnd?: string;
     automatic?: boolean;
+    kitchenConfirmation?: 'received' | 'not_received' | null;
+    events?: PayoutEvent[];
   }>;
 }
 
@@ -472,6 +475,7 @@ export default function SellerEarningsPage() {
                             <ChevronRight className="mt-1 h-4 w-4 shrink-0 text-muted rtl:-scale-x-100" aria-hidden="true" />
                           </button>
                         )}
+                        <PayoutTrail payout={payout} onChanged={loadEarnings} />
                       </li>
                     );
                   })}

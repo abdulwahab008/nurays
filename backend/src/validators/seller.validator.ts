@@ -190,3 +190,5 @@ export const requestPayoutSchema = z
     return { ...request, accountNumber };
   });
 
+
+export const payoutNotReceivedSchema = z.object({ note: z.string().trim().min(3, 'Tell us what you see in your account').max(300) });

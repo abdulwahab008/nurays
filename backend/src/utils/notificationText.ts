@@ -413,6 +413,10 @@ const CATALOGUE = {
     title: 'Rider cash overdue',
     message: `${p.count} rider${p.count === 1 ? ' has' : 's have'} held customer cash (${p.total} in hand) for more than ${p.hours} hours.`,
   })),
+  'admin.payoutNotReceived': englishOnly<{ kitchen: string; amount: string; reference: string }>((p) => ({
+    title: 'A kitchen says a payout did not arrive',
+    message: `${p.kitchen} has not received ${p.amount} (reference ${p.reference}). Check the transfer with the bank or wallet.`,
+  })),
   'admin.dailyPayouts': englishOnly<{ count: number; total: string }>((p) => ({
     title: "Today's kitchen payouts to send",
     message: `${p.count} kitchen payout${p.count === 1 ? '' : 's'} (${p.total}) are waiting to be sent.`,

@@ -13,6 +13,7 @@ import { realPhoneOrNull } from '../utils/otp';
 import { computeSellerAvailability } from './availability.service';
 import { NotificationText, notificationText } from '../utils/notificationText';
 import { invalidateCatalogCache } from '../utils/catalogCache';
+import { logPayoutEvent, payoutEvents } from './payout-log.service';
 
 const DAY_NAMES = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'] as const;
 
@@ -759,10 +760,14 @@ export class AdminService {
       prisma.sellerPayout.count({ where }),
     ]);
 
+    const events = await payoutEvents(payouts.map((p) => p.id));
     return {
       payouts: payouts.map((p) => ({
         id: p.id,
         seller: p.seller,
+        kitchenConfirmation: p.kitchenConfirmation,
+        kitchenConfirmedAt: p.kitchenConfirmedAt,
+        events: events.get(p.id) ?? [],
         amount: Number(p.amount),
         netAmount: Number(p.netAmount),
         payoutMethod: p.payoutMethod,
@@ -787,7 +792,7 @@ export class AdminService {
   /**
    * Mark a pending payout as completed (admin only)
    */
-  async completePayout(payoutId: string, transactionId?: string) {
+  async completePayout(payoutId: string, transactionId?: string, adminId?: string) {
     const payout = await prisma.sellerPayout.findUnique({ where: { id: payoutId } });
     if (!payout) {
       throw new AppError('Payout not found', 404, 'PAYOUT_NOT_FOUND');
@@ -821,6 +826,7 @@ export class AdminService {
       if (claimed.count === 0) {
         throw new AppError('Payout is no longer pending', 409, 'PAYOUT_NOT_PENDING');
       }
+      await logPayoutEvent(tx, { payoutId, event: 'sent', actorType: 'admin', actorId: adminId ?? null, reference: transactionId || null, note: `Rs ${Number(payout.netAmount).toFixed(2)} sent by ${payout.payoutMethod.replace('_', ' ')}` });
     });
     await notifySellerOfPayout(payout.sellerId, {
       text: notificationText('payout.sent', { amount: `Rs ${Number(payout.netAmount ?? payout.amount).toLocaleString()}`, transactionId: transactionId || null }),
@@ -833,7 +839,7 @@ export class AdminService {
   /**
    * Mark a pending payout as failed (admin only)
    */
-  async failPayout(payoutId: string, reason: string) {
+  async failPayout(payoutId: string, reason: string, adminId?: string) {
     const payout = await prisma.sellerPayout.findUnique({ where: { id: payoutId } });
     if (!payout) {
       throw new AppError('Payout not found', 404, 'PAYOUT_NOT_FOUND');
@@ -853,6 +859,7 @@ export class AdminService {
     if (claimed.count === 0) {
       throw new AppError('Payout is no longer pending', 409, 'PAYOUT_NOT_PENDING');
     }
+    await logPayoutEvent(prisma, { payoutId, event: 'failed', actorType: 'admin', actorId: adminId ?? null, note: reason });
     await notifySellerOfPayout(payout.sellerId, {
       text: notificationText('payout.failed', { amount: `Rs ${Number(payout.netAmount ?? payout.amount).toLocaleString()}`, reason }),
       dedupeKey: `payout:${payoutId}:failed`,

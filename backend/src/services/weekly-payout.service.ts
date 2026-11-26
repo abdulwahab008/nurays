@@ -30,6 +30,7 @@ import { normalizePayoutDestination, type PayoutMethod } from '../utils/payoutAc
 import { PAYOUT_METHOD_ORDER, addDays, payoutDay, pktDate } from '../utils/payoutWeek';
 import { computeSellerBalance, sellerBalanceLines, type BalanceLine } from './seller-balance.service';
 import { riderMoney } from './rider-ledger.service';
+import { logPayoutEvent } from './payout-log.service';
 import { notify } from './notify.service';
 import adminService from './admin.service';
 import { notificationText } from '../utils/notificationText';
@@ -143,7 +144,7 @@ export async function runDailyPayouts(now: Date = new Date()): Promise<PayoutRun
         const balance = await computeSellerBalance(tx, seller.id);
         const amount = Math.floor(balance.available * 100) / 100;
         if (amount <= 0 || amount < minimum) return 'below_minimum' as const;
-        return tx.sellerPayout.create({
+        const created = await tx.sellerPayout.create({
           data: {
             sellerId: seller.id,
             amount,
@@ -156,6 +157,8 @@ export async function runDailyPayouts(now: Date = new Date()): Promise<PayoutRun
             periodEnd: new Date(`${week.periodEnd}T00:00:00Z`),
           },
         });
+        await logPayoutEvent(tx, { payoutId: created.id, event: 'created', actorType: 'system', note: `Daily payout for orders up to ${week.periodEnd}, to ${destination.payoutMethod.replace('_', ' ')}` });
+        return created;
       });
       if (typeof outcome === 'string') {
         result.skipped[outcome]++;

@@ -152,7 +152,7 @@ export const completePayout = async (req: Request, res: Response) => {
   const { id } = req.params;
   const { transactionId } = req.body;
 
-  const result = await adminService.completePayout(id, transactionId);
+  const result = await adminService.completePayout(id, transactionId, req.user?.userId);
 
   res.status(200).json({
     success: true,
@@ -165,7 +165,7 @@ export const failPayout = async (req: Request, res: Response) => {
   const { id } = req.params;
   const { reason } = req.body;
 
-  const result = await adminService.failPayout(id, reason);
+  const result = await adminService.failPayout(id, reason, req.user?.userId);
 
   res.status(200).json({
     success: true,
