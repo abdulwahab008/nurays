@@ -270,6 +270,10 @@ function SellerDashboardContent() {
   const needYou = needYouCount ?? liveOrders?.length ?? overview.pendingOrders ?? 0;
   const shownOrders = (liveOrders ?? []).slice(0, SHOWN_ORDERS);
   const moreOrders = liveOrders ? needYou - shownOrders.length : 0;
+  const dishes = (items: Array<{ quantity: number }>) => {
+    const n = items.reduce((sum, i) => sum + i.quantity, 0);
+    return n === 1 ? t('dash.oneDish') : t('dash.dishes', { count: n });
+  };
   const newCount = (liveOrders ?? []).filter((o) => o.order.orderStatus === 'pending' || o.order.orderStatus === 'confirmed').length;
   const approved = dashboard.verificationStatus === 'approved';
   const missing = dashboard.applicationMissing ?? [];
@@ -394,13 +398,8 @@ function SellerDashboardContent() {
                           className="flex items-center gap-3 sm:gap-4 px-5 py-3.5 min-h-11 hover:bg-raised focus-visible:outline-none focus-visible:bg-raised"
                         >
                           <div className="min-w-0 flex-1">
-                            <p dir="auto" className="text-[15px] text-ink truncate rtl:text-right">
-                              {items.map((i, n) => (
-                                <span key={i.id}>
-                                  {n > 0 && ', '}
-                                  <bdi>{i.quantity} × {i.product?.name ?? ''}</bdi>
-                                </span>
-                              ))}
+                            <p className="text-[15px] font-medium text-ink">
+                              <OrderNo number={order.orderNumber} /> · {dishes(items)}
                             </p>
                             <p className="text-sm text-muted">
                               {order.orderStatus === 'preparing' && order.estimatedDeliveryAt ? (
@@ -410,7 +409,6 @@ function SellerDashboardContent() {
                               ) : (
                                 age(order.createdAt, now)
                               )}
-                              , <OrderNo number={order.orderNumber} />
                             </p>
                           </div>
                           <OrderStatusPill
