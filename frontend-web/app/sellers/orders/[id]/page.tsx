@@ -19,6 +19,7 @@ import { useLocale, useT } from '@/lib/i18n';
 import { commonMessages } from '@/lib/i18n/messages/common';
 import { historyNote, kitchenOrderMessages, kitchenStatusLabel, paymentMethodLabel, paymentStatusLabel, type NotePart } from '@/lib/i18n/messages/kitchen-orders';
 import { ExternalLink } from '@/components/ExternalLink';
+import { OrderMoneyTimeline } from '@/components/sellers/OrderMoneyTimeline';
 import { RejectOrderDialog } from '@/components/sellers/RejectOrderDialog';
 import { NewOrderAlertSlot } from '@/components/sellers/new-order-alert';
 import { KitchenOrderRider, PrepTimePicker, ReadyBy, RiderStatus, dateClock, fitPrepMinutes, useNow } from '@/components/sellers/order-timing';
@@ -391,6 +392,8 @@ export default function SellerOrderDetailPage() {
                   </dl>
                 )}
               </section>
+
+              {['delivered', 'completed'].includes(order.orderStatus) && <OrderMoneyTimeline orderId={order.id} />}
 
               <section className="pt-6 border-t border-line">
                 <h2 className="text-sm font-semibold text-ink">{t('detail.history')}</h2>
