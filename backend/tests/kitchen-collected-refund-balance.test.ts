@@ -31,6 +31,9 @@ function row(over: Record<string, unknown>) {
     refunds_failed: 0,
     refunds_completed: 0,
     refunds_active: 0,
+    delivery_fee: 0,
+    refunds_before: 0,
+    refunds_after: 0,
     ...over,
   };
 }
@@ -54,7 +57,11 @@ describe('a dismissed refund on money the kitchen collected', () => {
   });
 
   it('a full refund still waiting to be sent charges the kitchen the whole total', async () => {
-    expect(await owed({ payment_status: 'refund_pending', refunds_active: T })).toBe(T);
+    expect(await owed({ payment_status: 'refund_pending', refunds_active: T, refunds_after: T })).toBe(T);
+  });
+
+  it('a partial refund after delivery takes its share of the kitchen\'s earnings: half the dishes refunded, half of E', async () => {
+    expect(await owed({ refunds_active: 525, refunds_after: 525 })).toBe(T - E / 2);
   });
 
   it('on a cancelled order a dismissed refund cancels the debt', async () => {

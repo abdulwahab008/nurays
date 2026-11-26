@@ -216,7 +216,9 @@ export default function AdminOrderDetailPage() {
 
   // Dismissed refunds (status "failed") were never owed, so they do not count against what can still be refunded.
   const refundedSoFar = (order?.refunds ?? []).filter((r) => r.status !== 'failed').reduce((sum, r) => sum + Number(r.amount), 0);
-  const refundable = order ? Math.max(0, Math.round((Number(order.totalAmount) - refundedSoFar) * 100) / 100) : 0;
+  // Once delivered, the delivery fee is not refundable (as the API enforces): only the dishes and tax.
+  const afterDelivery = !!order?.deliveredAt && ['delivered', 'completed'].includes(order.orderStatus);
+  const refundable = order ? Math.max(0, Math.round((Number(order.totalAmount) - (afterDelivery ? Number(order.deliveryFee) : 0) - refundedSoFar) * 100) / 100) : 0;
 
   const loadOrder = async () => {
     try {
@@ -676,6 +678,8 @@ export default function AdminOrderDetailPage() {
                         />
                         <p className="mt-1 text-xs text-muted">
                           Up to {formatPrice(refundable)}{refundedSoFar > 0 ? ` (${formatPrice(refundedSoFar)} already refunded)` : ''}. Leave empty to refund all of it.
+                          {afterDelivery && order.deliveryFee > 0 ? ' The delivery fee is not refundable once the order is delivered.' : ''}
+                          {afterDelivery ? " The kitchen's share and Nuray's commission are reduced in proportion." : ''}
                         </p>
                       </div>
                       <div>

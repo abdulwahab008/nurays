@@ -2,6 +2,7 @@ import prisma from '../config/database';
 import { selfDeliveryFeeFor, sellerPaidDeliveryFor } from '../utils/deliveryEarnings';
 import { collectorOf } from '../utils/paymentCustody';
 import { roundMoney } from '../utils/pricing';
+import { refundFraction } from '../utils/postDeliveryRefund';
 import { logger } from '../utils/logger';
 
 type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
@@ -120,6 +121,11 @@ export interface BalanceOrder {
   refundsCompleted: number;
   /** Refunds that stand: sent, or still waiting to be sent. */
   refundsActive: number;
+  /** The delivery fee the customer paid (never refunded after delivery). */
+  deliveryFee: number;
+  /** Refunds that stand, made before the order was delivered (cancelled dishes), and after it. */
+  refundsBeforeDelivery: number;
+  refundsAfterDelivery: number;
 }
 
 /**
@@ -147,6 +153,9 @@ async function balanceOrders(client: Client, sellerId: string): Promise<BalanceO
       refunds_failed: number;
       refunds_completed: number;
       refunds_active: number;
+      delivery_fee: number;
+      refunds_before: number;
+      refunds_after: number;
     }>
   >`
     WITH mine AS (
@@ -173,12 +182,17 @@ async function balanceOrders(client: Client, sellerId: string): Promise<BalanceO
       (SELECT f.seller_id FROM order_items f WHERE f.order_id = o.id ORDER BY f.created_at ASC, f.id ASC LIMIT 1) AS first_seller_id,
       COALESCE(r.failed, 0)::float8 AS refunds_failed,
       COALESCE(r.completed, 0)::float8 AS refunds_completed,
-      COALESCE(r.active, 0)::float8 AS refunds_active
+      COALESCE(r.active, 0)::float8 AS refunds_active,
+      o.delivery_fee::float8 AS delivery_fee,
+      COALESCE(r.before_delivery, 0)::float8 AS refunds_before,
+      COALESCE(r.after_delivery, 0)::float8 AS refunds_after
     FROM mine
     JOIN orders o ON o.id = mine.order_id
     LEFT JOIN LATERAL (
       SELECT SUM(x.amount) FILTER (WHERE x.status = 'failed') AS failed, SUM(x.amount) FILTER (WHERE x.status = 'completed') AS completed,
-             SUM(x.amount) FILTER (WHERE x.status <> 'failed') AS active
+             SUM(x.amount) FILTER (WHERE x.status <> 'failed') AS active,
+             SUM(x.amount) FILTER (WHERE x.status <> 'failed' AND (o.delivered_at IS NULL OR x.created_at < o.delivered_at)) AS before_delivery,
+             SUM(x.amount) FILTER (WHERE x.status <> 'failed' AND o.delivered_at IS NOT NULL AND x.created_at >= o.delivered_at) AS after_delivery
       FROM refunds x
       WHERE x.order_id = o.id
     ) r ON true
@@ -205,6 +219,9 @@ async function balanceOrders(client: Client, sellerId: string): Promise<BalanceO
     refundsFailed: Number(r.refunds_failed),
     refundsCompleted: Number(r.refunds_completed),
     refundsActive: Number(r.refunds_active),
+    deliveryFee: Number(r.delivery_fee),
+    refundsBeforeDelivery: Number(r.refunds_before),
+    refundsAfterDelivery: Number(r.refunds_after),
   }));
 }
 
@@ -256,7 +273,10 @@ export async function sellerBalanceLines(client: Client, sellerId: string) {
     const earned = delivered && o.paymentStatus === 'paid';
     const kept = earned ? selfDeliveryFeeFor(o.deliveryFeeBreakdown, sellerId) : 0;
     const paid = earned ? sellerPaidDeliveryFor(o.deliveryFeeBreakdown, sellerId) : 0;
-    const entitlement = earned ? o.livePayout + kept - paid : 0;
+    // A refund after delivery takes its share of the dishes, never the delivery fees (utils/postDeliveryRefund.ts).
+    const refundedShare = earned ? refundFraction(o.refundsAfterDelivery, o.totalAmount - o.deliveryFee - o.refundsBeforeDelivery) : 0;
+    const dishes = roundMoney(o.livePayout - o.livePayout * refundedShare);
+    const entitlement = earned ? dishes + kept - paid : 0;
     if (earned) {
       totalEarnings += entitlement;
       deliveryEarned += kept;

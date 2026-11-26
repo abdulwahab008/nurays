@@ -4,6 +4,15 @@ import { pageArgs } from '../utils/pagination';
 import { parseBreakdown, platformDeliveryFee } from '../utils/deliveryEarnings';
 import { collectorOf } from '../utils/paymentCustody';
 import { roundMoney } from '../utils/pricing';
+import { splitRefund } from '../utils/postDeliveryRefund';
+
+/** A refund made at or after delivery (a goodwill refund) rather than for dishes cancelled before it. */
+export const isAfterDelivery = (refundedAt: Date, deliveredAt: Date | null) => deliveredAt !== null && refundedAt >= deliveredAt;
+/** The refund a reversal entry belongs to, or null for an order's own entries. */
+const reversalOf = (e: { metadata: Prisma.JsonValue }) => {
+  const m = e.metadata as { refundId?: unknown } | null;
+  return typeof m?.refundId === 'string' ? m.refundId : null;
+};
 
 const CATCH_UP_DAYS = 14;
 const CATCH_UP_SETTLE_MS = 5 * 60 * 1000;
@@ -65,12 +74,11 @@ export class LedgerService {
       const liveItems = order.items.filter((i) => i.status !== 'cancelled');
       const liveSellerIds = new Set(liveItems.map((i) => i.sellerId));
 
-      // What the customer actually paid net of refunds already given back.
-      const refunded = await tx.refund.aggregate({
-        where: { orderId, status: { not: 'failed' } },
-        _sum: { amount: true },
-      });
-      const refundedAmount = Number(refunded._sum.amount ?? 0);
+      // What the customer paid net of refunds made before delivery (cancelled dishes). A refund after delivery is posted
+      // as its own reversal once it is paid (reverseRefund), so it never changes what was sold.
+      const refunds = await tx.refund.findMany({ where: { orderId, status: { not: 'failed' } }, orderBy: { createdAt: 'asc' } });
+      const afterDelivery = refunds.filter((r) => isAfterDelivery(r.createdAt, order.deliveredAt));
+      const refundedAmount = refunds.filter((r) => !afterDelivery.includes(r)).reduce((sum, r) => sum + Number(r.amount), 0);
       const totalAmount = Math.max(0, Number(order.totalAmount) - refundedAmount);
 
       const totalCommission = liveItems.reduce((sum, item) => sum + Number(item.commissionAmount), 0);
@@ -210,8 +218,45 @@ export class LedgerService {
       }
 
       await tx.ledgerEntry.createMany({ data: entries });
+      for (const r of afterDelivery.filter((x) => x.status === 'completed')) await this.reverseRefund(tx, orderId, r.id, Number(r.amount));
       return { recorded: true, orderId };
     });
+  }
+
+  /**
+   * A refund after delivery, once paid: reversal entries take its share off the kitchen's earnings, Nuray's commission,
+   * the GST and any discount Nuray paid for, in proportion (utils/postDeliveryRefund.ts); the delivery fees stay. They are
+   * dated when the refund is paid, so a month already reported or invoiced never changes. Nothing is posted while the
+   * order has no entries yet: posting it includes the refund. Once per refund.
+   */
+  async reverseRefund(tx: Prisma.TransactionClient, orderId: string, refundId: string, amount: number) {
+    const entries = await tx.ledgerEntry.findMany({ where: { orderId } });
+    if (entries.length === 0 || entries.some((e) => reversalOf(e) === refundId)) return;
+    const original = entries.filter((e) => !reversalOf(e));
+    const total = (type: string, side: 'debit' | 'credit') =>
+      original.filter((e) => e.transactionType === type && e.entryType === side).reduce((sum, e) => sum + Number(e.amount), 0);
+    const base = { sellerEarning: total('seller_earning', 'credit'), commission: total('platform_commission', 'credit'), gst: total('gst_payable', 'credit'), platformDiscount: total('platform_discount', 'debit') };
+    const earlier = entries.filter((e) => reversalOf(e) && e.transactionType === 'refund').reduce((sum, e) => sum + Number(e.amount), 0);
+    const before = splitRefund(earlier, base);
+    const after = splitRefund(earlier + amount, base);
+    const sellerId = original.find((e) => e.transactionType === 'seller_earning')?.sellerId ?? null;
+    const order = await tx.order.findUniqueOrThrow({ where: { id: orderId }, select: { orderNumber: true } });
+
+    const lines: Prisma.LedgerEntryCreateManyInput[] = [];
+    // `side` is the side that lowers the account; a negative change (rounding) goes on the other side.
+    const add = (transactionType: string, accountType: string, side: 'debit' | 'credit', change: number, description: string, seller: string | null = null) => {
+      const value = roundMoney(change);
+      if (value === 0) return;
+      const entryType = value > 0 ? side : side === 'debit' ? 'credit' : 'debit';
+      lines.push({ orderId, transactionType, accountType, entryType, amount: Math.abs(value), currency: 'PKR', description, sellerId: seller, metadata: { refundId } });
+    };
+    const what = `refund after delivery on Order #${order.orderNumber}`;
+    add('refund', 'asset', 'credit', after.refund - before.refund, `Paid back to the customer: ${what}`);
+    add('seller_earning', 'liability', 'debit', after.sellerEarning - before.sellerEarning, `The kitchen's share of the ${what}`, sellerId);
+    add('platform_commission', 'revenue', 'debit', after.commission - before.commission, `Nuray's commission on the ${what}`, sellerId);
+    add('gst_payable', 'liability', 'debit', after.gst - before.gst, `GST given back with the ${what}`);
+    add('platform_discount', 'expense', 'credit', after.platformDiscount - before.platformDiscount, `Nuray's discount on the ${what}`);
+    if (lines.length) await tx.ledgerEntry.createMany({ data: lines });
   }
 
   /**

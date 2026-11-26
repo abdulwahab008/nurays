@@ -10,6 +10,7 @@
  * the ledger will credit for today's orders, and every screen adds up to the net earnings.
  */
 import { roundMoney } from '../utils/pricing';
+import { refundFraction } from '../utils/postDeliveryRefund';
 import { selfDeliveryFeeFor, sellerPaidDeliveryFor } from '../utils/deliveryEarnings';
 
 export interface ReportOrder {
@@ -19,7 +20,29 @@ export interface ReportOrder {
   createdAt: Date;
   /** Who charges and who pays each kitchen's delivery fee on this order (utils/deliveryEarnings.ts). */
   deliveryFeeBreakdown?: unknown;
+  /** For a refund after delivery, which takes its share of the dishes (utils/postDeliveryRefund.ts). */
+  totalAmount?: unknown;
+  deliveryFee?: unknown;
+  deliveredAt?: Date | null;
+  refunds?: Array<{ amount: unknown; status: string; createdAt: Date }>;
 }
+
+/** The share of an order's dishes that refunds after delivery gave back, as the balance counts it. */
+function refundedShare(o: ReportOrder): number {
+  const standing = (o.refunds ?? []).filter((r) => r.status !== 'failed');
+  if (!o.deliveredAt || standing.length === 0) return 0;
+  const after = standing.filter((r) => r.createdAt >= o.deliveredAt!).reduce((sum, r) => sum + Number(r.amount), 0);
+  const before = standing.filter((r) => r.createdAt < o.deliveredAt!).reduce((sum, r) => sum + Number(r.amount), 0);
+  return refundFraction(after, Number(o.totalAmount) - Number(o.deliveryFee) - before);
+}
+
+/** The report fields an order needs for the refund share: select them alongside the order. */
+export const REPORT_ORDER_REFUND_FIELDS = {
+  totalAmount: true,
+  deliveryFee: true,
+  deliveredAt: true,
+  refunds: { select: { amount: true, status: true, createdAt: true } },
+} as const;
 
 export interface ReportLine {
   status: string;
@@ -87,6 +110,11 @@ export function earnedOrders(lines: ReportLine[], sellerId: string): EarnedOrder
       earned.dishes += Number(line.sellerPayout);
       earned.unitsSold += line.quantity;
     }
+  }
+  const orderOf = new Map(lines.flatMap((l) => (l.order ? [[l.order.id, l.order] as const] : [])));
+  for (const e of orders.values()) {
+    const share = refundedShare(orderOf.get(e.id)!);
+    if (share > 0) e.dishes = roundMoney(e.dishes - e.dishes * share);
   }
   return [...orders.values()];
 }

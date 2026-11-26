@@ -1,6 +1,6 @@
 import prisma from '../config/database';
 import { AppError } from '../middleware/errorHandler';
-import { DELIVERED_PKT } from './finance-report.service';
+import { ENTRY_MONTH, ENTRY_PKT, REVERSAL, SIGNED_AMOUNT } from './finance-report.service';
 import adminService from './admin.service';
 import { pktDate } from '../utils/payoutWeek';
 
@@ -37,14 +37,19 @@ const currentMonth = () => pktDate(new Date()).slice(0, 7);
 type Row = { month: string; order_number: string; delivered_on: string; commission: string; delivery: string };
 
 async function rows(sellerId: string, month?: string): Promise<Row[]> {
+  // A refund after delivery takes its share of the commission back in the month it was paid, as its own line.
   return prisma.$queryRawUnsafe<Row[]>(
-    `SELECT to_char(${DELIVERED_PKT}, 'YYYY-MM') AS month, o.order_number, to_char(${DELIVERED_PKT}, 'YYYY-MM-DD') AS delivered_on,
-            coalesce(sum(l.amount) FILTER (WHERE l.transaction_type = 'platform_commission'), 0) AS commission,
-            coalesce(sum(l.amount) FILTER (WHERE l.transaction_type = 'seller_delivery_charge'), 0) AS delivery
-     FROM ledger_entries l JOIN orders o ON o.id = l.order_id
-     WHERE l.seller_id = $1 AND l.transaction_type IN ('platform_commission', 'seller_delivery_charge')
-       AND to_char(${DELIVERED_PKT}, 'YYYY-MM') < $2 ${month ? `AND to_char(${DELIVERED_PKT}, 'YYYY-MM') = $3` : ''}
-     GROUP BY 1, 2, 3, ${DELIVERED_PKT} ORDER BY ${DELIVERED_PKT}, o.order_number`,
+    `SELECT month, order_number, delivered_on, sum(commission) AS commission, sum(delivery) AS delivery FROM (
+       SELECT ${ENTRY_MONTH} AS month,
+              o.order_number || CASE WHEN ${REVERSAL} THEN ' (refund)' ELSE '' END AS order_number,
+              to_char(${ENTRY_PKT}, 'YYYY-MM-DD') AS delivered_on,
+              CASE WHEN l.transaction_type = 'platform_commission' THEN ${SIGNED_AMOUNT} ELSE 0 END AS commission,
+              CASE WHEN l.transaction_type = 'seller_delivery_charge' THEN ${SIGNED_AMOUNT} ELSE 0 END AS delivery
+       FROM ledger_entries l JOIN orders o ON o.id = l.order_id
+       WHERE l.seller_id = $1 AND l.transaction_type IN ('platform_commission', 'seller_delivery_charge')
+     ) e
+     WHERE month < $2 ${month ? 'AND month = $3' : ''}
+     GROUP BY 1, 2, 3 ORDER BY 3, 2`,
     sellerId,
     currentMonth(),
     ...(month ? [month] : [])
@@ -57,13 +62,13 @@ function summarise(sellerId: string, month: string, lines: Row[]): InvoiceSummar
   return { month, number: invoiceNumber(sellerId, month), orders: lines.length, commission, deliveryCharges, total: round(commission + deliveryCharges) };
 }
 
-/** The kitchen's invoices, newest first: one for each finished month with commission or delivery fees. */
+/** The kitchen's invoices, newest first: one for each finished month with commission or delivery fees, or a refund that gave some back. */
 export async function listInvoices(sellerId: string): Promise<InvoiceSummary[]> {
   const byMonth = new Map<string, Row[]>();
   for (const r of await rows(sellerId)) byMonth.set(r.month, [...(byMonth.get(r.month) ?? []), r]);
   return [...byMonth.entries()]
     .map(([month, lines]) => summarise(sellerId, month, lines))
-    .filter((i) => i.total > 0)
+    .filter((i) => i.total !== 0)
     .sort((a, b) => b.month.localeCompare(a.month));
 }
 
@@ -71,7 +76,7 @@ export async function getInvoice(sellerId: string, month: string): Promise<Commi
   if (!MONTH.test(month)) throw new AppError('Choose a month as YYYY-MM', 400, 'VALIDATION_ERROR');
   const lines = await rows(sellerId, month);
   const summary = summarise(sellerId, month, lines);
-  if (summary.total <= 0) throw new AppError('There is no invoice for that month', 404, 'INVOICE_NOT_FOUND');
+  if (lines.length === 0 || summary.total === 0) throw new AppError('There is no invoice for that month', 404, 'INVOICE_NOT_FOUND');
   const seller = await prisma.seller.findUniqueOrThrow({ where: { id: sellerId }, select: { businessName: true, pickupAddress: true } });
   const [y, m] = month.split('-').map(Number);
   return {

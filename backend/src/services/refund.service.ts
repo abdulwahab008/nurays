@@ -9,8 +9,11 @@ import { logEvent, logger } from '../utils/logger';
 import { creditWallet } from './wallet.service';
 import { refreshOwing } from './kitchen-owing.service';
 import { notificationText } from '../utils/notificationText';
+import ledgerService, { isAfterDelivery } from './ledger.service';
 
 type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
+
+export const DELIVERED = ['delivered', 'completed'];
 
 export interface IssuedRefund {
   refundId: string;
@@ -128,8 +131,12 @@ export async function issueRefund(
       processedAt: isWallet ? new Date() : null,
     },
   });
+  // Paid at once from the wallet: a refund after delivery is taken off the books now (a manual one when it is sent).
+  if (isWallet && isAfterDelivery(refund.createdAt, order.deliveredAt)) await ledgerService.reverseRefund(tx, orderId, refund.id, amount);
 
-  if (fullyRefunded) {
+  // A refund after delivery gives back part of what was sold (the delivery fee never comes back), so the order stays
+  // delivered and paid; it is shared out in proportion (utils/postDeliveryRefund.ts).
+  if (fullyRefunded && !(DELIVERED.includes(order.orderStatus) && order.deliveredAt)) {
     await tx.order.update({
       where: { id: orderId },
       data: { paymentStatus: isWallet ? 'refunded' : 'refund_pending' },
@@ -335,6 +342,7 @@ async function completeRefundRecord(refundId: string, adminId: string, reference
         referenceId: refund.id,
       });
     }
+    if (isAfterDelivery(refund.createdAt, order.deliveredAt)) await ledgerService.reverseRefund(tx, order.id, refund.id, Number(refund.amount));
     if (order.paymentStatus === 'refund_pending') {
       const stillPending = await tx.refund.count({ where: { orderId: order.id, status: 'pending' } });
       if (stillPending === 0) {

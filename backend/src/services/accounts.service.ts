@@ -1,4 +1,5 @@
 import prisma from '../config/database';
+import { ENTRY_MONTH, SIGNED_AMOUNT } from './finance-report.service';
 import { AppError } from '../middleware/errorHandler';
 import { roundMoney } from '../utils/pricing';
 import { toCsv } from '../utils/csv';
@@ -195,11 +196,12 @@ export async function listAccounts() {
 
 /** Nuray's own account by month (delivery month, Pakistan time): revenue, costs and the GST it owes. */
 export async function nurayAccountByMonth() {
-  const ledger = await prisma.$queryRaw<Array<{ month: string; type: string; amount: string }>>`
-    SELECT to_char((COALESCE(o.delivered_at, o.paid_at, o.created_at) AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Karachi', 'YYYY-MM') AS month,
-           l.transaction_type AS type, sum(l.amount) AS amount
+  // A refund after delivery counts in the month it was paid, taking back its share of sales, commission, GST and discount.
+  const ledger = await prisma.$queryRawUnsafe<Array<{ month: string; type: string; amount: string }>>(`
+    SELECT ${ENTRY_MONTH} AS month,
+           CASE WHEN l.transaction_type = 'refund' THEN 'customer_payment' ELSE l.transaction_type END AS type, sum(${SIGNED_AMOUNT}) AS amount
     FROM ledger_entries l JOIN orders o ON o.id = l.order_id
-    GROUP BY 1, 2`;
+    GROUP BY 1, 2`);
   const riderPay = await prisma.$queryRaw<Array<{ month: string; amount: string }>>`
     SELECT to_char((created_at AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Karachi', 'YYYY-MM') AS month, sum(amount) AS amount
     FROM rider_ledger_entries WHERE type IN ('delivery_fee', 'bonus') GROUP BY 1`;
