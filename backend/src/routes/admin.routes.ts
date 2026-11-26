@@ -21,6 +21,7 @@ import {
   postStatementMatch,
   recordKitchenPayment,
   completePayout,
+  approvePayout,
   failPayout,
   getSettings,
   updateSettings,
@@ -213,6 +214,7 @@ router.post('/finance/books-check', postBooksCheck);
 router.post('/finance/statement-match', validate(statementMatchSchema), postStatementMatch);
 router.get('/sellers/:id/owing', getKitchenOwing);
 router.post('/sellers/:id/payments-to-nuray', validate(paymentToNuraySchema), recordKitchenPayment);
+router.post('/payouts/:id/approve', approvePayout);
 router.post('/payouts/:id/complete', validate(completePayoutSchema), completePayout);
 router.post('/payouts/:id/fail', validate(failPayoutSchema), failPayout);
 

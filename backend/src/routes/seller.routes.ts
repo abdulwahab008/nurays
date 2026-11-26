@@ -10,6 +10,8 @@ import {
   requestPayout,
   getPayoutHistory,
   getPayoutStatement,
+  getInvoices,
+  getInvoiceForMonth,
   confirmPayoutReceipt,
   toggleStoreLive,
   getPublicSellers,
@@ -54,6 +56,8 @@ router.get('/me/analytics', getSellerAnalytics);
 router.post('/me/payouts', validate(requestPayoutSchema), requestPayout);
 router.get('/me/payouts', getPayoutHistory);
 router.get('/me/payouts/:id/statement', getPayoutStatement);
+router.get('/me/invoices', getInvoices);
+router.get('/me/invoices/:month', getInvoiceForMonth);
 router.post('/me/payouts/:id/received', confirmPayoutReceipt);
 router.post('/me/payouts/:id/not-received', validate(payoutNotReceivedSchema), confirmPayoutReceipt);
 

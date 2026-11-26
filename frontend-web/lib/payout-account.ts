@@ -36,7 +36,3 @@ export const walletNumberIsWrong = (input: string): boolean => input.trim() !== 
 
 /** Typed text that is not blank and not an IBAN or account number. */
 export const bankAccountIsWrong = (input: string): boolean => input.trim() !== '' && normalizeBankAccount(input) === null;
-
-/** Whether the account typed for a payout request does not suit the way the money is being sent. A blank one is wrong here: the request needs it. */
-export const payoutDestinationIsWrong = (method: PayoutMethod, input: string): boolean =>
-  (method === 'bank_transfer' ? normalizeBankAccount(input) : normalizeWalletNumber(input)) === null;

@@ -17,11 +17,11 @@ import { formatPrice } from '@/lib/utils';
 import { useLocale, useT } from '@/lib/i18n';
 import { commonMessages } from '@/lib/i18n/messages/common';
 import { kitchenEarningsMessages } from '@/lib/i18n/messages/kitchen-earnings';
-import { payoutDestinationIsWrong } from '@/lib/payout-account';
 import { PayoutTrail, type PayoutEvent } from '@/components/payouts/PayoutTrail';
 import { sendAskingForPassword } from '@/lib/send-asking-for-password';
 import { useShallow } from 'zustand/react/shallow';
 import { PayoutStatement } from '@/components/payouts/PayoutStatement';
+import { KitchenInvoices } from '@/components/sellers/KitchenInvoices';
 import { shortDay } from '@/components/sellers/order-timing';
 
 const sidebarItems = SELLER_SIDEBAR_ITEMS;
@@ -99,7 +99,9 @@ export default function SellerEarningsPage() {
   const [requestingPayout, setRequestingPayout] = useState(false);
   const [showPayoutForm, setShowPayoutForm] = useState(false);
   const [payoutMethod, setPayoutMethod] = useState<'bank_transfer' | 'jazzcash' | 'easypaisa'>('jazzcash');
-  const [accountNumber, setAccountNumber] = useState('');
+  // Payouts only go to an account saved in Settings (and wait after one changes).
+  const [savedAccounts, setSavedAccounts] = useState<Partial<Record<'bank_transfer' | 'jazzcash' | 'easypaisa', string>>>({});
+  const [heldUntil, setHeldUntil] = useState<string | null>(null);
   const [statementFor, setStatementFor] = useState<string | null>(null);
   const [owingWhyOpen, setOwingWhyOpen] = useState(false);
 
@@ -107,10 +109,17 @@ export default function SellerEarningsPage() {
     try {
       setLoading(true);
       setLoadError(null);
-      const [dashboardRes, payoutsRes] = await Promise.all([
+      const [dashboardRes, payoutsRes, profileRes] = await Promise.all([
         apiClient.get('/sellers/me/dashboard'),
         apiClient.get('/sellers/me/payouts'),
+        apiClient.get('/sellers/me'),
       ]);
+      const profile = profileRes.data.data ?? {};
+      const saved = { jazzcash: profile.jazzcashNumber, easypaisa: profile.easypaisaNumber, bank_transfer: profile.bankAccountNumber };
+      setSavedAccounts(Object.fromEntries(Object.entries(saved).filter(([, v]) => typeof v === 'string' && v.trim())));
+      setHeldUntil(profile.payoutsHeldUntil ?? null);
+      const firstSaved = (['jazzcash', 'easypaisa', 'bank_transfer'] as const).find((m) => saved[m]?.trim());
+      if (firstSaved) setPayoutMethod(firstSaved);
       if (dashboardRes.data.success) {
         const dashboard = dashboardRes.data.data;
         const ov = dashboard.overview || {};
@@ -163,13 +172,9 @@ export default function SellerEarningsPage() {
       showToast(t('noBalance'), 'warning');
       return;
     }
-    if (!accountNumber.trim()) {
-      showToast(t('enterAccount'), 'warning');
-      return;
-    }
-    // The money is sent to this account: a wrong digit pays a stranger, so it is checked here as the server checks it.
-    if (payoutDestinationIsWrong(payoutMethod, accountNumber)) {
-      showToast(t(payoutMethod === 'bank_transfer' ? 'accountInvalidBank' : 'accountInvalidWallet'), 'warning');
+    const accountNumber = savedAccounts[payoutMethod];
+    if (!accountNumber) {
+      showToast(t('noSavedAccount'), 'warning');
       return;
     }
 
@@ -181,7 +186,7 @@ export default function SellerEarningsPage() {
           apiClient.post('/sellers/me/payouts', {
             amount: earnings.availableBalance,
             payoutMethod,
-            accountNumber: accountNumber.trim(),
+            accountNumber,
             ...(currentPassword ? { currentPassword } : {}),
           }),
         (wrongBefore) =>
@@ -190,7 +195,6 @@ export default function SellerEarningsPage() {
       if (response?.data.success) {
         showToast(t('payoutSubmitted'), 'success');
         setShowPayoutForm(false);
-        setAccountNumber('');
         loadEarnings();
       }
     } catch (error) {
@@ -303,7 +307,16 @@ export default function SellerEarningsPage() {
 
                 {earnings.availableBalance > 0 && (
                   <div className="mt-4 pt-4 border-t border-line">
-                    {!showPayoutForm ? (
+                    {heldUntil ? (
+                      <p className="text-sm text-muted" role="status">
+                        {t('accountOnHold', { date: new Date(heldUntil).toLocaleString(locale === 'ur' ? 'ur-PK' : 'en-PK', { dateStyle: 'medium', timeStyle: 'short' }) })}
+                      </p>
+                    ) : Object.keys(savedAccounts).length === 0 ? (
+                      <p className="text-sm text-muted">
+                        {t('noSavedAccount')}{' '}
+                        <Link href="/sellers/settings" className="font-semibold text-brand-ink hover:underline">{t('openSettings')}</Link>
+                      </p>
+                    ) : !showPayoutForm ? (
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                         <p className="text-sm text-muted">{t('autoNote')}</p>
                         <Button onClick={() => setShowPayoutForm(true)} className="shrink-0">
@@ -312,47 +325,30 @@ export default function SellerEarningsPage() {
                       </div>
                     ) : (
                       <div className="space-y-4">
-                        <div className="grid gap-4 sm:grid-cols-[200px_minmax(0,1fr)]">
-                          <div>
-                            <label htmlFor="payout-method" className="block text-sm font-medium text-ink mb-1.5">{t('receiveVia')}</label>
-                            <select
-                              id="payout-method"
-                              value={payoutMethod}
-                              onChange={(e) => setPayoutMethod(e.target.value as typeof payoutMethod)}
-                              className="w-full min-h-11 px-3 rounded-xl border border-line-strong bg-surface text-ink focus:outline-none focus:border-brand-600 focus:ring-3 focus:ring-brand/30"
-                            >
-                              <option value="jazzcash">{t('jazzcash')}</option>
-                              <option value="easypaisa">{t('easypaisa')}</option>
-                              <option value="bank_transfer">{t('bankTransfer')}</option>
-                            </select>
-                          </div>
-                          <div>
-                            <label htmlFor="payout-account" className="block text-sm font-medium text-ink mb-1.5">
-                              {payoutMethod === 'bank_transfer' ? t('bankAccountNumber') : t('walletNumber')}
-                            </label>
-                            <input
-                              id="payout-account"
-                              type="text"
-                              value={accountNumber}
-                              onChange={(e) => setAccountNumber(e.target.value)}
-                              placeholder={t('example', { value: payoutMethod === 'bank_transfer' ? 'PK36SCBL0000001123456702' : '03001234567' })}
-                              dir="ltr"
-                              className="w-full min-h-11 px-3 rounded-xl border border-line-strong bg-surface text-ink tabular-nums placeholder:text-muted focus:outline-none focus:border-brand-600 focus:ring-3 focus:ring-brand/30"
-                            />
-                          </div>
+                        <div className="max-w-sm">
+                          <label htmlFor="payout-method" className="block text-sm font-medium text-ink mb-1.5">{t('receiveVia')}</label>
+                          <select
+                            id="payout-method"
+                            value={payoutMethod}
+                            onChange={(e) => setPayoutMethod(e.target.value as typeof payoutMethod)}
+                            className="w-full min-h-11 px-3 rounded-xl border border-line-strong bg-surface text-ink focus:outline-none focus:border-brand-600 focus:ring-3 focus:ring-brand/30"
+                          >
+                            {(['jazzcash', 'easypaisa', 'bank_transfer'] as const).filter((m) => savedAccounts[m]).map((m) => (
+                              <option key={m} value={m}>{t(m === 'bank_transfer' ? 'bankTransfer' : m)}</option>
+                            ))}
+                          </select>
+                          <p className="mt-1.5 text-sm text-muted">
+                            {t('toSavedAccount')} <bdi dir="ltr" className="tabular-nums">{savedAccounts[payoutMethod]}</bdi>
+                          </p>
                         </div>
                         <div className="flex flex-wrap gap-3">
-                          <Button onClick={handleRequestPayout} disabled={requestingPayout || !accountNumber.trim()}>
+                          <Button onClick={handleRequestPayout} disabled={requestingPayout || !savedAccounts[payoutMethod]}>
                             {requestingPayout && (
                               <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" aria-hidden="true" />
                             )}
                             {requestingPayout ? t('submitting') : t('confirmRequest')}
                           </Button>
-                          <Button
-                            variant="outline"
-                            onClick={() => { setShowPayoutForm(false); setAccountNumber(''); }}
-                            disabled={requestingPayout}
-                          >
+                          <Button variant="outline" onClick={() => setShowPayoutForm(false)} disabled={requestingPayout}>
                             {tc('cancel')}
                           </Button>
                         </div>
@@ -482,6 +478,7 @@ export default function SellerEarningsPage() {
                 </ul>
               )}
             </section>
+            <KitchenInvoices />
           </div>
         ) : loadError ? (
           <LoadError error={loadError} onRetry={loadEarnings} title={t('loadFailed')} />

@@ -67,6 +67,19 @@ export function payoutDestination(seller: PayoutAccountFields, preferred?: strin
   return null;
 }
 
+/**
+ * A payout waits this long after a kitchen's payout account number changes: if someone else changed it, the kitchen
+ * (told at once) has time to say so before any money goes there.
+ */
+export const PAYOUT_ACCOUNT_HOLD_HOURS = 48;
+
+/** Until when a kitchen's payouts wait after an account change, or null when they don't. */
+export function payoutHoldUntil(changedAt: Date | null, now = new Date()): Date | null {
+  if (!changedAt) return null;
+  const until = new Date(changedAt.getTime() + PAYOUT_ACCOUNT_HOLD_HOURS * 3600e3);
+  return until > now ? until : null;
+}
+
 /** The first day a new payout covers: the day after the last payout's period (failed ones aside), else the day the kitchen joined. */
 export async function nextPeriodStart(client: Tx | typeof prisma, sellerId: string, joinedAt: Date): Promise<Date> {
   const last = await client.sellerPayout.findFirst({
@@ -78,7 +91,7 @@ export async function nextPeriodStart(client: Tx | typeof prisma, sellerId: stri
   return new Date(`${from}T00:00:00Z`);
 }
 
-export type PayoutSkip = 'opted_out' | 'no_account' | 'payout_waiting' | 'already_paid' | 'below_minimum';
+export type PayoutSkip = 'opted_out' | 'no_account' | 'account_hold' | 'payout_waiting' | 'already_paid' | 'below_minimum';
 
 export interface PayoutRunResult {
   runDate: string;
@@ -97,7 +110,7 @@ export async function runDailyPayouts(now: Date = new Date()): Promise<PayoutRun
     runDate: week.runDate,
     ran: false,
     created: [],
-    skipped: { opted_out: 0, no_account: 0, payout_waiting: 0, already_paid: 0, below_minimum: 0 },
+    skipped: { opted_out: 0, no_account: 0, account_hold: 0, payout_waiting: 0, already_paid: 0, below_minimum: 0 },
     ridersDue: [],
   };
   if (!week.due || (await adminService.getSettingValue<boolean>('weeklyPayouts')) === false) return result;
@@ -117,6 +130,7 @@ export async function runDailyPayouts(now: Date = new Date()): Promise<PayoutRun
       jazzcashAccountTitle: true,
       easypaisaNumber: true,
       easypaisaAccountTitle: true,
+      payoutAccountChangedAt: true,
       payoutSchedule: { select: { autoPayout: true, payoutMethod: true, minimumPayoutAmount: true } },
     },
   });
@@ -130,6 +144,10 @@ export async function runDailyPayouts(now: Date = new Date()): Promise<PayoutRun
     const destination = payoutDestination(seller, seller.payoutSchedule?.payoutMethod);
     if (!destination) {
       result.skipped.no_account++;
+      continue;
+    }
+    if (payoutHoldUntil(seller.payoutAccountChangedAt, now)) {
+      result.skipped.account_hold++;
       continue;
     }
     const minimum = seller.payoutSchedule ? Number(seller.payoutSchedule.minimumPayoutAmount) : defaultMinimum;

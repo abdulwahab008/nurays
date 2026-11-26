@@ -50,6 +50,7 @@ export const updateSettingsSchema = z.object({
   supportPhone: z.string().min(1).optional(),
   commissionRate: z.number().min(0).max(100).optional(),
   minPayoutAmount: z.number().min(0).max(10_000_000).optional(),
+  largePayoutAmount: z.number().min(1000).max(100_000_000).optional(),
   weeklyPayouts: z.boolean().optional(),
   nurayDepositAccounts: z
     .object({
