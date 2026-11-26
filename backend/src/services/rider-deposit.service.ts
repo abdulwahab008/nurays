@@ -115,7 +115,7 @@ export async function depositSummary(userId: string) {
   };
 }
 
-const notifyAdmins = async (text: ReturnType<typeof notificationText>, dedupeKey: string, actionUrl: string) => {
+export const notifyAdmins = async (text: ReturnType<typeof notificationText>, dedupeKey: string, actionUrl: string) => {
   const admins = await prisma.user.findMany({ where: { userType: 'admin', status: 'active' }, select: { id: true } });
   for (const admin of admins) await notify({ userId: admin.id, category: 'payments', type: 'payout', text, actionUrl, dedupeKey: `${dedupeKey}:${admin.id}` });
 };

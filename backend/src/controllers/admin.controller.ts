@@ -4,6 +4,7 @@ import prisma from '../config/database';
 import { getPayoutStatement as getStatement } from '../services/weekly-payout.service';
 import { sendStatement } from './payout-statement';
 import { gstByMonth, gstMonthCsv, gstMonthDetail } from '../services/finance-report.service';
+import { latestBooksCheck, runBooksCheck } from '../services/books-check.service';
 import { kitchenStatement, listAccounts, nurayAccountByMonth, riderStatement, statementCsv } from '../services/accounts.service';
 import { qstr } from '../utils/query';
 import adminService from '../services/admin.service';
@@ -289,4 +290,14 @@ export const getAccountStatement = async (req: Request, res: Response) => {
 /** Nuray's own account by month: revenue, costs, net and GST owed. */
 export const getNurayAccount = async (_req: Request, res: Response) => {
   res.status(200).json({ success: true, data: { months: await nurayAccountByMonth() } });
+};
+
+/** The latest books check (nightly, or one an admin ran), null before the first. */
+export const getBooksCheck = async (_req: Request, res: Response) => {
+  res.status(200).json({ success: true, data: await latestBooksCheck() });
+};
+
+/** Runs the books check now. */
+export const postBooksCheck = async (_req: Request, res: Response) => {
+  res.status(200).json({ success: true, data: await runBooksCheck('manual') });
 };

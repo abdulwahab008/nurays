@@ -16,6 +16,8 @@ import {
   getAccounts,
   getAccountStatement,
   getNurayAccount,
+  getBooksCheck,
+  postBooksCheck,
   recordKitchenPayment,
   completePayout,
   failPayout,
@@ -204,6 +206,8 @@ router.get('/finance/gst/:month', getGstMonth);
 router.get('/finance/accounts', getAccounts);
 router.get('/finance/accounts/:type/:id', getAccountStatement);
 router.get('/finance/nuray', getNurayAccount);
+router.get('/finance/books-check', getBooksCheck);
+router.post('/finance/books-check', postBooksCheck);
 router.get('/sellers/:id/owing', getKitchenOwing);
 router.post('/sellers/:id/payments-to-nuray', validate(paymentToNuraySchema), recordKitchenPayment);
 router.post('/payouts/:id/complete', validate(completePayoutSchema), completePayout);
