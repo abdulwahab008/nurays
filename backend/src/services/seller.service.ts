@@ -10,7 +10,7 @@ import adminService from './admin.service';
 import { computeSellerAvailability } from './availability.service';
 import { computeSellerBalance } from './seller-balance.service';
 import { refreshOwing } from './kitchen-owing.service';
-import { earnedOrders, earningsOf, isEarned, orderCounts, periodTotals } from './seller-reporting';
+import { REPORT_ORDER_REFUND_FIELDS, earnedOrders, earningsOf, isEarned, orderCounts, periodTotals } from './seller-reporting';
 import { assertOwnDocument, assertOwnPublicImage } from '../utils/documents';
 import { notifyApprovers } from './approvals.service';
 import { kitchenApplicationGaps } from '../utils/kitchenApplication';
@@ -721,7 +721,7 @@ export class SellerService {
         status: true,
         quantity: true,
         sellerPayout: true,
-        order: { select: { id: true, orderStatus: true, paymentStatus: true, createdAt: true, deliveryFeeBreakdown: true } },
+        order: { select: { id: true, orderStatus: true, paymentStatus: true, createdAt: true, deliveryFeeBreakdown: true, ...REPORT_ORDER_REFUND_FIELDS } },
       },
     });
     const today = periodTotals(todayLines, startOfToday, sellerId);
@@ -940,6 +940,7 @@ export class SellerService {
             paymentStatus: true,
             createdAt: true,
             deliveryFeeBreakdown: true,
+            ...REPORT_ORDER_REFUND_FIELDS,
           },
         },
         product: { select: { name: true } },

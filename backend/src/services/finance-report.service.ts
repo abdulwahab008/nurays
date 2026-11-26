@@ -5,10 +5,18 @@ import { toCsv } from '../utils/csv';
 /** An order counts in the month it was delivered, in Pakistan time (stored times are UTC). */
 export const DELIVERED_PKT = `(COALESCE(o.delivered_at, o.paid_at, o.created_at) AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Karachi'`;
 
+/** A reversal entry: what a refund after delivery took back (ledger.service reverseRefund). */
+export const REVERSAL = `(l.metadata->>'refundId') IS NOT NULL`;
+/** When an entry counts: an order's own entries when it was delivered, a refund's reversal when the refund was paid. */
+export const ENTRY_PKT = `CASE WHEN ${REVERSAL} THEN (l.created_at AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Karachi' ELSE ${DELIVERED_PKT} END`;
+export const ENTRY_MONTH = `to_char(${ENTRY_PKT}, 'YYYY-MM')`;
+/** An entry's amount as it counts towards its own kind of money: a reversal takes away. */
+export const SIGNED_AMOUNT = `(CASE WHEN ${REVERSAL} THEN -l.amount ELSE l.amount END)`;
+
 const round = (n: number) => Math.round(n * 100) / 100;
 
 /** The goods an order's GST was charged on (after discounts), scaled to the part of its tax still owed after a refund. */
-const TAXABLE = `CASE WHEN o.tax_amount > 0 THEN (o.total_amount - o.delivery_fee - o.tax_amount) * l.amount / o.tax_amount ELSE 0 END`;
+const TAXABLE = `CASE WHEN o.tax_amount > 0 THEN (o.total_amount - o.delivery_fee - o.tax_amount) * ${SIGNED_AMOUNT} / o.tax_amount ELSE 0 END`;
 
 export interface GstMonth {
   month: string;
@@ -23,13 +31,13 @@ export interface GstMonth {
 /** GST owed to the tax office, month by month: the sum of the ledger's `gst_payable` entries. */
 export async function gstByMonth(): Promise<GstMonth[]> {
   const rows = await prisma.$queryRawUnsafe<Array<{ month: string; orders: bigint; gst: string; taxable: string; nuray: string; kitchens: string; riders: string }>>(`
-    SELECT to_char(${DELIVERED_PKT}, 'YYYY-MM') AS month,
+    SELECT ${ENTRY_MONTH} AS month,
            count(DISTINCT o.id) AS orders,
-           sum(l.amount) AS gst,
+           sum(${SIGNED_AMOUNT}) AS gst,
            sum(${TAXABLE}) AS taxable,
-           coalesce(sum(l.amount) FILTER (WHERE o.payment_collected_by NOT IN ('seller', 'rider') OR o.payment_collected_by IS NULL), 0) AS nuray,
-           coalesce(sum(l.amount) FILTER (WHERE o.payment_collected_by = 'seller'), 0) AS kitchens,
-           coalesce(sum(l.amount) FILTER (WHERE o.payment_collected_by = 'rider'), 0) AS riders
+           coalesce(sum(${SIGNED_AMOUNT}) FILTER (WHERE o.payment_collected_by NOT IN ('seller', 'rider') OR o.payment_collected_by IS NULL), 0) AS nuray,
+           coalesce(sum(${SIGNED_AMOUNT}) FILTER (WHERE o.payment_collected_by = 'seller'), 0) AS kitchens,
+           coalesce(sum(${SIGNED_AMOUNT}) FILTER (WHERE o.payment_collected_by = 'rider'), 0) AS riders
     FROM ledger_entries l JOIN orders o ON o.id = l.order_id
     WHERE l.transaction_type = 'gst_payable'
     GROUP BY 1 ORDER BY 1 DESC`);
@@ -61,13 +69,13 @@ const HELD_BY: Record<string, GstLine['heldBy']> = { seller: 'Kitchen', rider: '
 export async function gstMonthDetail(month: string): Promise<{ month: GstMonth | null; lines: GstLine[] }> {
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw new AppError('Choose a month as YYYY-MM', 400, 'VALIDATION_ERROR');
   const rows = await prisma.$queryRawUnsafe<Array<{ order_number: string; delivered_on: string; kitchens: string; payment_method: string; collected_by: string | null; gst: string; taxable: string }>>(
-    `SELECT o.order_number,
-            to_char(${DELIVERED_PKT}, 'YYYY-MM-DD') AS delivered_on,
+    `SELECT o.order_number || CASE WHEN ${REVERSAL} THEN ' (refund)' ELSE '' END AS order_number,
+            to_char(${ENTRY_PKT}, 'YYYY-MM-DD') AS delivered_on,
             (SELECT string_agg(DISTINCT s.business_name, ', ') FROM order_items i JOIN sellers s ON s.id = i.seller_id WHERE i.order_id = o.id) AS kitchens,
-            o.payment_method, o.payment_collected_by AS collected_by, l.amount AS gst, ${TAXABLE} AS taxable
+            o.payment_method, o.payment_collected_by AS collected_by, ${SIGNED_AMOUNT} AS gst, ${TAXABLE} AS taxable
      FROM ledger_entries l JOIN orders o ON o.id = l.order_id
-     WHERE l.transaction_type = 'gst_payable' AND to_char(${DELIVERED_PKT}, 'YYYY-MM') = $1
-     ORDER BY ${DELIVERED_PKT}, o.order_number`,
+     WHERE l.transaction_type = 'gst_payable' AND ${ENTRY_MONTH} = $1
+     ORDER BY ${ENTRY_PKT}, o.order_number`,
     month
   );
   const lines = rows.map((r) => {

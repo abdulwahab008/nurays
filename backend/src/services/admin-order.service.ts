@@ -11,7 +11,8 @@ import realtimeOrderService from './realtime-order.service';
 import socketManager from '../config/socket';
 import riderService from './rider.service';
 import { releasePromotionUsage } from './promotion.service';
-import { issueRefund, IssuedRefund } from './refund.service';
+import { DELIVERED, issueRefund, IssuedRefund } from './refund.service';
+import { roundMoney } from '../utils/pricing';
 import ledgerService from './ledger.service';
 import { postDeliveryEntries } from './rider-ledger.service';
 import { releaseHubAllocations } from './hub-allocation.service';
@@ -705,8 +706,19 @@ export class AdminOrderService {
       throw new AppError('Cancel this order to refund it', 400, 'USE_CANCEL_ENDPOINT');
     }
 
-    const refund = refundAmount ?? Number(order.totalAmount);
     const orderTotal = Number(order.totalAmount);
+    // After delivery the delivery fee is not refundable: at most the dishes and tax not already refunded.
+    const delivered = DELIVERED.includes(order.orderStatus) && order.deliveredAt !== null;
+    const refundedSoFar = Number((await prisma.refund.aggregate({ where: { orderId, status: { not: 'failed' } }, _sum: { amount: true } }))._sum.amount ?? 0);
+    const refundable = delivered ? roundMoney(orderTotal - Number(order.deliveryFee) - refundedSoFar) : orderTotal;
+    const refund = refundAmount ?? refundable;
+    if (delivered && refund > refundable + 0.005) {
+      throw new AppError(
+        `The delivery fee is not refundable once an order is delivered. At most Rs ${Math.max(0, refundable)} can be refunded on this order.`,
+        400,
+        'DELIVERY_FEE_NOT_REFUNDABLE',
+      );
+    }
     if (refund <= 0 || refund > orderTotal) {
       throw new AppError(
         `Refund amount must be between 0 and ${orderTotal}`,
@@ -730,7 +742,7 @@ export class AdminOrderService {
       if (!r) {
         throw new AppError('Order is not paid, cannot process refund', 400, 'ORDER_NOT_PAID');
       }
-      if (isWallet && r.fullyRefunded) {
+      if (isWallet && r.fullyRefunded && !delivered) {
         await tx.order.update({ where: { id: orderId }, data: { orderStatus: 'refunded' } });
       }
       return r;

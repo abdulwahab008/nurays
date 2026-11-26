@@ -84,8 +84,8 @@ beforeEach(() => {
   // the one active order), and computeSellerBalance's orders, one summed row each: the earned order and the refunded one.
   const stats = [{ active_orders: 1, pending_orders: 1, gross_sales: 1000, platform_fees: 100, item_payouts: 900 }];
   const balanceRows = [
-    { id: 'order-earned', total_amount: 1150, payment_method: 'card', payment_collected_by: 'platform', payment_status: 'paid', has_paid_at: true, order_status: 'delivered', delivery_type: 'home_delivery', delivery_provider: 'platform', delivery_fee_breakdown: riderFee, live_payout: 900, first_seller_id: SELLER, refunds_failed: 0, refunds_completed: 0 },
-    { id: 'order-refunded', total_amount: 1800, payment_method: 'card', payment_collected_by: 'platform', payment_status: 'refunded', has_paid_at: true, order_status: 'delivered', delivery_type: 'home_delivery', delivery_provider: 'platform', delivery_fee_breakdown: [], live_payout: 1620, first_seller_id: SELLER, refunds_failed: 0, refunds_completed: 1800 },
+    { id: 'order-earned', total_amount: 1150, payment_method: 'card', payment_collected_by: 'platform', payment_status: 'paid', has_paid_at: true, order_status: 'delivered', delivery_type: 'home_delivery', delivery_provider: 'platform', delivery_fee_breakdown: riderFee, live_payout: 900, first_seller_id: SELLER, refunds_failed: 0, refunds_completed: 0, delivery_fee: 0, refunds_before: 0, refunds_after: 0 },
+    { id: 'order-refunded', total_amount: 1800, payment_method: 'card', payment_collected_by: 'platform', payment_status: 'refunded', has_paid_at: true, order_status: 'delivered', delivery_type: 'home_delivery', delivery_provider: 'platform', delivery_fee_breakdown: [], live_payout: 1620, first_seller_id: SELLER, refunds_failed: 0, refunds_completed: 1800, delivery_fee: 0, refunds_before: 0, refunds_after: 1800 },
   ];
   mockPrisma.$queryRaw.mockImplementation(async (sql: TemplateStringsArray) => {
     const text = sql.join('');

@@ -9,6 +9,7 @@
  * Build it with `migrate deploy` (not `db push`): the CHECK constraints these checks rely
  * on are only in the migrations.
  */
+import { Prisma } from '@prisma/client';
 import prisma from '../src/config/database';
 import orderService from '../src/services/order.service';
 import orderPlacement from '../src/services/order-placement.service';
@@ -2374,6 +2375,94 @@ async function main() {
     ok("this month's invoice is not shown before the month ends", (await code(inv.getInvoice(ik.id, new Date(pk).toISOString().slice(0, 7)))) === 'INVOICE_NOT_FOUND');
     ok("another kitchen has no such invoice", (await code(inv.getInvoice((await mkSeller()).id, lastMonthKey))) === 'INVOICE_NOT_FOUND');
     ok('a month that is not a month is refused', (await code(inv.getInvoice(ik.id, '2026-13'))) === 'VALIDATION_ERROR');
+  }
+
+  // ---- Refunds after delivery: shared in proportion, the delivery fee never refunded (Money 10) ----
+  {
+    const fin = require('../src/services/finance-report.service');
+    const inv = require('../src/services/commission-invoice.service');
+    const bc = require('../src/services/books-check.service');
+    const rAdmin = await mkUser('admin');
+    const rCust = await mkUser();
+    const sideTotal = (es: any[], t: string) => es.filter((e) => e.entryType === t).reduce((s2, e) => s2 + Number(e.amount), 0);
+    const balanced = async (orderId: string) => { const es = await prisma.ledgerEntry.findMany({ where: { orderId } }); return es.length > 0 && Math.abs(sideTotal(es, 'debit') - sideTotal(es, 'credit')) < 0.005; };
+    const reversals = (orderId: string) => prisma.ledgerEntry.findMany({ where: { orderId, metadata: { path: ['refundId'], not: Prisma.DbNull } } });
+    const net = async (orderId: string, type: string) => (await prisma.ledgerEntry.findMany({ where: { orderId, transactionType: type } })).reduce((s2, e) => s2 + (e.entryType === 'credit' ? 1 : -1) * Number(e.amount), 0);
+    const avail = async (sellerId: string) => (await computeBalanceFor(sellerId)).available;
+    const near = (a2: number, b2: number) => Math.abs(a2 - b2) < 0.02;
+    const delivered = async (k: any, data: any = {}, o2: { deliveryFee?: number; post?: boolean } = {}) => {
+      const prod = await mkProduct(k.id, 20, 1000);
+      const placed: any = (await order(rCust.id, [{ productId: prod.id, quantity: 1 }], { paymentMethod: 'cod' })).order;
+      const fee = o2.deliveryFee ?? 0;
+      const at = new Date(Date.now() - 60e3);
+      await prisma.order.update({ where: { id: placed.id }, data: { orderStatus: 'delivered', deliveredAt: at, paymentMethod: 'wallet', paymentCollectedBy: 'platform', paymentStatus: 'paid', paidAt: at, ...(fee ? { deliveryFee: fee, totalAmount: Number(placed.totalAmount) + fee } : {}), ...data } });
+      if (o2.post !== false) await ledgerService.recordOrderCompletion(placed.id);
+      return prisma.order.findUniqueOrThrow({ where: { id: placed.id } });
+    };
+    const rk = await mkSeller({ verificationStatus: 'approved' });
+
+    // Paid from the wallet, Rs 1,050 of dishes and tax plus a Rs 100 delivery fee: the kitchen's share of the dishes is Rs 850.
+    const w = await delivered(rk, {}, { deliveryFee: 100 });
+    const b0 = await avail(rk.id);
+    await adminOrderService.processRefund(w.id, rAdmin.id, 525);
+    const wAfter = await prisma.order.findUniqueOrThrow({ where: { id: w.id } });
+    ok('a refund of half the dishes after delivery takes half the kitchen\'s share of them (Rs 425 of Rs 850)', near(b0 - (await avail(rk.id)), 425), `${b0} -> ${await avail(rk.id)}`);
+    ok('the order stays delivered and paid', wAfter.orderStatus === 'delivered' && wAfter.paymentStatus === 'paid');
+    ok('the books take it back in proportion and still balance: Rs 425 of earnings, Rs 75 of commission, Rs 25 of GST',
+      (await balanced(w.id)) && near(await net(w.id, 'seller_earning'), 425) && near(await net(w.id, 'platform_commission'), 75) && near(await net(w.id, 'gst_payable'), 25) && (await reversals(w.id)).length === 4,
+      JSON.stringify((await reversals(w.id)).map((e) => [e.transactionType, e.entryType, Number(e.amount)])));
+    ok('the delivery fee is not refundable: more than what is left of the dishes and tax is refused', (await code(adminOrderService.processRefund(w.id, rAdmin.id, 600))) === 'DELIVERY_FEE_NOT_REFUNDABLE');
+    await adminOrderService.processRefund(w.id, rAdmin.id);
+    const refundedW = (await prisma.refund.findMany({ where: { orderId: w.id } })).reduce((s2, r) => s2 + Number(r.amount), 0);
+    ok('a full refund after delivery gives back the dishes and tax (Rs 1,050), not the Rs 100 delivery fee', near(refundedW, 1050), `${refundedW}`);
+    ok('the kitchen loses its whole share of the dishes, and the books balance with no GST left on the order',
+      near(b0 - (await avail(rk.id)), 850) && (await balanced(w.id)) && near(await net(w.id, 'gst_payable'), 0) && near(await net(w.id, 'seller_earning'), 0));
+
+    // A bank transfer Nuray received: the refund waits for an admin to send it.
+    const t = await delivered(rk, { paymentMethod: 'bank' });
+    const t0 = await avail(rk.id);
+    await adminOrderService.processRefund(t.id, rAdmin.id, 210);
+    const tRefund = await prisma.refund.findFirstOrThrow({ where: { orderId: t.id, status: 'pending' } });
+    ok('a refund waiting to be sent already holds back the kitchen\'s share (Rs 170), so it is not paid out meanwhile', near(t0 - (await avail(rk.id)), 170));
+    ok('but the books only change once the money is sent', (await reversals(t.id)).length === 0);
+    await completeRefund(tRefund.id, rAdmin.id, `TX-R-${uniq()}`);
+    ok('sent: the reversal is in the books, and they balance', (await reversals(t.id)).length > 0 && (await balanced(t.id)) && near(await net(t.id, 'seller_earning'), 680));
+    await adminOrderService.processRefund(t.id, rAdmin.id, 105);
+    const t2 = await prisma.refund.findFirstOrThrow({ where: { orderId: t.id, status: 'pending' } });
+    await dismissRefund(t2.id, rAdmin.id, 'customer withdrew it');
+    ok('a dismissed refund gives the kitchen its share back', near(t0 - (await avail(rk.id)), 170));
+
+    // Cash the kitchen took itself: it holds the money, so a refund Nuray sends raises what it owes by the kitchen's share.
+    const c = await delivered(rk, { paymentMethod: 'cod', paymentCollectedBy: 'seller' });
+    const c0 = await avail(rk.id);
+    await adminOrderService.processRefund(c.id, rAdmin.id, 525);
+    ok('on cash the kitchen collected, a refund after delivery adds the kitchen\'s share (Rs 425) to what it owes', near(c0 - (await avail(rk.id)), 425));
+
+    // A refund before the books were posted for the order: posting includes it.
+    const u = await delivered(rk, {}, { post: false });
+    await adminOrderService.processRefund(u.id, rAdmin.id, 210);
+    ok('(nothing is posted before the order is)', (await prisma.ledgerEntry.count({ where: { orderId: u.id } })) === 0);
+    await ledgerService.recordOrderCompletion(u.id);
+    ok('posting the order later includes the refund already paid, and balances', (await balanced(u.id)) && near(await net(u.id, 'seller_earning'), 680) && (await reversals(u.id)).length > 0);
+
+    // A refund paid this month on an order delivered last month counts this month: last month's GST and invoice never change.
+    const pk = new Date(Date.now() + 5 * 3600e3);
+    const lastMonthAt = new Date(Date.UTC(pk.getUTCFullYear(), pk.getUTCMonth() - 1, 15, 7));
+    const lastMonth = new Date(lastMonthAt.getTime() + 5 * 3600e3).toISOString().slice(0, 7);
+    const thisMonth = pk.toISOString().slice(0, 7);
+    const mk = await mkSeller({ verificationStatus: 'approved' });
+    const m = await delivered(mk, { deliveredAt: lastMonthAt, paidAt: lastMonthAt });
+    const gstLast = async () => (await fin.gstByMonth()).find((x: any) => x.month === lastMonth)?.gst ?? 0;
+    const g0 = await gstLast();
+    const inv0 = await inv.getInvoice(mk.id, lastMonth);
+    await adminOrderService.processRefund(m.id, rAdmin.id, 525);
+    const detail = await fin.gstMonthDetail(thisMonth);
+    ok("last month's GST and the kitchen's invoice for it do not change", near(await gstLast(), g0) && JSON.stringify(await inv.getInvoice(mk.id, lastMonth)) === JSON.stringify(inv0));
+    ok('this month shows the GST given back with the refund, as its own line', detail.lines.some((l: any) => l.orderNumber === `${m.orderNumber} (refund)` && near(l.gst, -25)), JSON.stringify(detail.lines.filter((l: any) => l.orderNumber.startsWith(m.orderNumber))));
+    ok("Nuray's own monthly account counts the refund this month", ((await require('../src/services/accounts.service').nurayAccountByMonth()) as any[]).some((x) => x.month === thisMonth));
+    const rkAnalytics: any = await sellerService.getSellerAnalytics(rk.id, '30d');
+    ok("the kitchen's analytics count the same earnings as its balance after these refunds", near(rkAnalytics.revenue.total, (await computeBalanceFor(rk.id)).totalEarnings), `${rkAnalytics.revenue.total} vs ${(await computeBalanceFor(rk.id)).totalEarnings}`);
+    ok('the books check finds every one of these orders balanced', !(await bc.findBooksIssues()).some((i: any) => i.key === 'ledger_unbalanced' && i.items.some((s2: string) => [w, t, c, u, m].some((o3) => s2.includes(o3.orderNumber)))));
   }
 
   console.log(`\n${pass} passed, ${fail} failed`);
