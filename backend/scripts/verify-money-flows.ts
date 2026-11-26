@@ -2317,6 +2317,8 @@ async function main() {
     ok('nor by a way it has no account for', (await code(sellerService.requestPayout(fk.id, { amount: bal, payoutMethod: 'bank_transfer', accountNumber: 'PK36SCBL0000001123456702' }))) === 'PAYOUT_ACCOUNT_NOT_ON_FILE');
     const req: any = await sellerService.requestPayout(fk.id, { amount: bal, payoutMethod: 'jazzcash', accountNumber: '0300-9998877' });
     const reqRow = await prisma.sellerPayout.findFirst({ where: { sellerId: fk.id, status: 'pending' } });
+    ok('while that payout waits, another request is refused, so a large payout cannot be split to skip the second approval',
+      (await code(sellerService.requestPayout(fk.id, { amount: 1000, payoutMethod: 'jazzcash', accountNumber: '03009998877' }))) === 'PAYOUT_ALREADY_WAITING');
     ok('to its saved account it can, and the payout records that account', !!req && (reqRow?.accountDetails as any)?.accountNumber === '03009998877' && (reqRow?.accountDetails as any)?.accountTitle === 'New Title', JSON.stringify(reqRow?.accountDetails));
 
     await prisma.systemSetting.upsert({ where: { key: 'largePayoutAmount' }, create: { key: 'largePayoutAmount', value: 1000 as any }, update: { value: 1000 as any } });
