@@ -96,6 +96,8 @@ export default async function privacy() {
   // The pool lists the 100 oldest open jobs and other suites leave theirs in it: make this one the oldest so it is listed.
   await prisma.delivery.update({ where: { id: first.deliveryId }, data: { createdAt: new Date(Math.floor(Math.random() * 1e9)) } });
   const rider = await makeRider();
+  // A rider is offered only jobs in their area: this one serves the kitchen's community.
+  await prisma.rider.update({ where: { id: rider.riderId }, data: { communityId: community.id } });
   const pool = await rider.as('GET', '/riders/deliveries/available');
   const listed = (pool.body.data ?? []).find((d: any) => d.orderId === first.orderId);
   const job = listed ?? {};

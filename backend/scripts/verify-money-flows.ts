@@ -1774,6 +1774,14 @@ async function main() {
     const pool: any[] = await rSvc.getAvailableDeliveries(rdB.user.id);
     const pj = pool.find((d) => d.id === j4.id);
     ok("the open pool never shows the customer's phone or exact spot", !!pj && pj.customer === null && pj.dropoffDetails === null);
+    // A rider on duty in another city, with room and no cash, is still not sent across the country.
+    const khiUser = await mkUser('rider');
+    const khi = await prisma.rider.create({ data: { userId: khiUser.id, city: 'Karachi', verificationStatus: 'approved', status: 'active', isAvailable: true } as any });
+    await dispatchDelivery(j4.id);
+    ok('a free rider in another city is not given a Lahore job', (await prisma.delivery.findUnique({ where: { id: j4.id } }))!.riderId === null);
+    ok("nor sees it among the open jobs", !(await rSvc.getAvailableDeliveries(khiUser.id)).some((d: any) => d.id === j4.id));
+    ok('nor can take it', (await code(rSvc.claimDelivery(khiUser.id, j4.id))) === 'OUTSIDE_RIDER_AREA');
+    await prisma.rider.update({ where: { id: khi.id }, data: { isAvailable: false } });
     await prisma.rider.update({ where: { id: rdB.rider.id }, data: { isAvailable: true } });
     await dispatchDelivery(j4.id);
     ok('when a rider goes on duty the waiting job is assigned', (await prisma.delivery.findUnique({ where: { id: j4.id } }))!.riderId === rdB.rider.id);

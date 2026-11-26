@@ -11,6 +11,8 @@ jest.mock('../src/config/database', () => ({
     delivery: { findMany: jest.fn() },
   },
 }));
+// Where a job is: unknown here, so no rider is held back by area (tested in dispatch-area.test.ts).
+jest.mock('../src/services/rider-area.service', () => ({ jobAreas: async () => new Map() }));
 jest.mock('../src/services/delivery-pricing.service', () => ({
   getPlatformDeliveryPricing: jest.fn(async () => ({ perKm: 20, includedKm: 3, maxKm: 20, fallbackBaseFee: 150, communities: new Map() })),
 }));

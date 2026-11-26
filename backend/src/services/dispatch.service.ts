@@ -12,7 +12,8 @@ import { getPlatformDeliveryPricing } from './delivery-pricing.service';
 import { cashToCollect, dropoffAreaOf, endsOf, routeMatch } from '../utils/riderJobs';
 import { cashAtDoor, isCashAtDoor } from '../utils/paymentCustody';
 import { ACTIVE_DELIVERY_STATUSES, BEFORE_PICKUP_STATUSES } from '../utils/deliveryStatus';
-import { chooseRider, DispatchCandidate, JobEnds, MAX_ACTIVE_JOBS } from '../utils/dispatch';
+import { chooseRider, DispatchCandidate, inRiderArea, JobEnds, MAX_ACTIVE_JOBS } from '../utils/dispatch';
+import { jobAreas } from './rider-area.service';
 import { ON_DUTY_RIDER } from '../utils/riderDuty';
 import { notificationText } from '../utils/notificationText';
 import { reopenDeliveryData } from './delivery-lifecycle.service';
@@ -83,11 +84,14 @@ export async function dispatchDelivery(deliveryId: string, opts: { announced?: b
 
   const riders = await prisma.rider.findMany({
     where: { ...ON_DUTY_RIDER, id: { notIn: job.releasedRiderIds } },
-    select: { id: true, userId: true, communityId: true, cashLimit: true, cashHeld: true },
+    select: { id: true, userId: true, communityId: true, city: true, cashLimit: true, cashHeld: true },
   });
-  if (riders.length === 0) return { assigned: false, reason: 'no_riders' };
+  // Only riders in the job's area: a rider in another city is never sent across the country.
+  const area = (await jobAreas([job.orderId])).get(job.orderId);
+  const local = area ? riders.filter((r) => inRiderArea(r, area)) : riders;
+  if (local.length === 0) return { assigned: false, reason: riders.length ? 'no_rider_in_area' : 'no_riders' };
 
-  const riderIds = riders.map((r) => r.id);
+  const riderIds = local.map((r) => r.id);
   const startOfDay = new Date();
   startOfDay.setHours(0, 0, 0, 0);
   const [activeJobs, doneToday] = await Promise.all([
@@ -96,9 +100,9 @@ export async function dispatchDelivery(deliveryId: string, opts: { announced?: b
   ]);
 
   // A rider holding cash past the deposit deadline takes no cash order: as if their cash limit were reached.
-  const overdue = await ridersWithOverdueCash(riders.map((r) => r.id));
+  const overdue = await ridersWithOverdueCash(local.map((r) => r.id));
   const candidates: DispatchCandidate[] = [];
-  for (const r of riders) {
+  for (const r of local) {
     const mine = activeJobs.filter((d) => d.riderId === r.id);
     candidates.push({
       id: r.id,
@@ -117,11 +121,11 @@ export async function dispatchDelivery(deliveryId: string, opts: { announced?: b
     candidates
   );
   if (!choice) {
-    logger.debug({ deliveryId, candidates: riders.length }, 'Delivery left in the open pool: no rider can take it');
+    logger.debug({ deliveryId, candidates: local.length }, 'Delivery left in the open pool: no rider can take it');
     return { assigned: false, reason: 'no_eligible_rider' };
   }
 
-  const rider = riders.find((r) => r.id === choice.riderId)!;
+  const rider = local.find((r) => r.id === choice.riderId)!;
   const e = endsOf(job);
   const { maxKm } = await getPlatformDeliveryPricing();
   const corridor = calculateDeliveryFeeCorridor(e.pickupLat, e.pickupLng, e.deliveryLat, e.deliveryLng, maxKm);
@@ -143,7 +147,7 @@ export async function dispatchDelivery(deliveryId: string, opts: { announced?: b
   });
   if (!done) return { assigned: false, reason: 'lost_race' };
 
-  logger.info({ deliveryId, orderId: job.orderId, riderId: rider.id, reason: choice.reason, candidates: riders.length, bonus: done.bonus }, 'Delivery auto-assigned');
+  logger.info({ deliveryId, orderId: job.orderId, riderId: rider.id, reason: choice.reason, candidates: local.length, bonus: done.bonus }, 'Delivery auto-assigned');
   await announceAssignment(job, rider.userId, corridor.standardFee + done.bonus, opts.announced !== false);
   return { assigned: true, riderId: rider.id, reason: choice.reason };
 }

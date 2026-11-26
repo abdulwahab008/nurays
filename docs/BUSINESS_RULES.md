@@ -160,11 +160,13 @@ When a kitchen accepts an order, the job is assigned at once, with no accept ste
 1. a rider already carrying exactly one job whose drop-off is in the same area (within 2.5 km, or the same community when coordinates are missing) and whose pickup is within 4 km (or the same community): one trip serves both. The route bonus (below) still needs the stricter 1.5 km / 2.5 km match;
 2. a rider who serves the community the food is picked up in;
 3. a rider who serves the drop-off community;
-4. any rider with room.
+4. any other rider in the job's area with room.
+
+**Area** (`inRiderArea`, `services/rider-area.service.ts`): a rider only gets, sees in the open pool, or can claim (409 `OUTSIDE_RIDER_AREA`) jobs in their area: picked up or delivered in the community they serve, or with the kitchen in their city (`Rider.city`, the kitchen's community city, else the customer's city). A job whose city is not known is not held back. A city with no rider of its own leaves its jobs in the pool until one is added.
 
 Within a step, fewer active jobs first, then fewer deliveries today. Never chosen: a rider who is off duty, has two jobs, would pass their cash limit, or handed this job back. A rider who already has one job still gets new ones (up to two). Fee, bonus and `assignmentMode = 'auto'` are set on assignment; the rider gets a push and an in-app notification, and a pop-up with a chime on their screen (`delivery:offered`, `RiderNewJobNotification`). A job left in the open pool pops up a lighter alert only for riders who are on duty and have a free slot.
 
-If nobody can take it, the job stays in the open pool (any rider may still claim it) and is tried again every minute, when a rider finishes a job, goes on duty, hands a job back, or an admin changes a rider's community. `AUTO_ASSIGN_ENABLED=false` turns assignment off (riders claim from the pool only).
+If nobody can take it, the job stays in the open pool (any rider in its area may still claim it) and is tried again every minute, when a rider finishes a job, goes on duty, hands a job back, or an admin changes a rider's community. `AUTO_ASSIGN_ENABLED=false` turns assignment off (riders claim from the pool only).
 
 ### Limits
 
