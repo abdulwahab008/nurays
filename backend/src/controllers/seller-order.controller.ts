@@ -1,6 +1,9 @@
 import { Request, Response } from 'express';
 import sellerOrderService from '../services/seller-order.service';
 import { AppError } from '../middleware/errorHandler';
+import { currentSellerId } from '../middleware/auth.middleware';
+import prisma from '../config/database';
+import { orderMoney } from '../services/seller-balance.service';
 
 export const getSellerOrders = async (req: Request, res: Response) => {
   if (!req.user) {
@@ -37,6 +40,13 @@ export const getSellerOrderDetails = async (req: Request, res: Response) => {
     success: true,
     data: order,
   });
+};
+
+/** Where this order's money is: earned, cash handed in, in which payout, sent, received. */
+export const getSellerOrderMoney = async (req: Request, res: Response) => {
+  const money = await orderMoney(prisma, await currentSellerId(req), String(req.params.id));
+  if (!money) throw new AppError('Order not found', 404, 'ORDER_NOT_FOUND');
+  res.status(200).json({ success: true, data: money });
 };
 
 export const updateOrderItemStatus = async (req: Request, res: Response) => {

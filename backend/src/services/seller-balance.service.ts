@@ -329,3 +329,97 @@ export async function computeSellerBalance(client: Client, sellerId: string): Pr
     available: roundMoney(platformOwesSeller - sellerOwesPlatform - paidOut - pendingPayout + paidToNuray),
   };
 }
+
+/**
+ * When the rider's deposits reached this order's cash (deposits cover a rider's cash orders oldest first,
+ * as in ordersWithCashHandedIn), or null while the rider still holds it.
+ */
+async function cashHandedInAt(client: Client, orderId: string): Promise<Date | null> {
+  const mine = await client.riderLedgerEntry.findFirst({ where: { orderId, type: 'cod_collected' }, select: { riderId: true } });
+  if (!mine) return null;
+  const [collected, deposits] = await Promise.all([
+    client.riderLedgerEntry.findMany({
+      where: { riderId: mine.riderId, type: 'cod_collected' },
+      select: { orderId: true, amount: true },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    }),
+    client.riderLedgerEntry.findMany({
+      where: { riderId: mine.riderId, type: 'cash_deposit' },
+      select: { amount: true, createdAt: true },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    }),
+  ]);
+  let needed = 0;
+  for (const entry of collected) {
+    needed += Math.abs(Number(entry.amount));
+    if (entry.orderId === orderId) break;
+  }
+  let deposited = 0;
+  for (const d of deposits) {
+    deposited += Math.abs(Number(d.amount));
+    if (deposited + 0.005 >= needed) return d.createdAt;
+  }
+  return null;
+}
+
+export interface OrderMoney {
+  kind: LineKind;
+  orderTotal: number;
+  kitchenShare: number;
+  /** What the order adds to (positive) or takes from (negative) what Nuray owes the kitchen. */
+  effect: number;
+  deliveredAt: Date | null;
+  /** Rider cash orders only: when the rider handed the cash in (null while they still hold it). */
+  cashHandedInAt: Date | null;
+  /** The payout this order's money went into, once there is one. */
+  payout: {
+    id: string;
+    amount: number;
+    status: string;
+    createdAt: Date;
+    sentAt: Date | null;
+    reference: string | null;
+    confirmation: string | null;
+    confirmedAt: Date | null;
+  } | null;
+}
+
+/**
+ * Where one order's money is now, for the kitchen. A payout pays the whole balance at the time it is made, so an
+ * order's money is in the first payout made after it became payable: delivered, and for rider cash, handed in.
+ * Returns null when the order is not this kitchen's.
+ */
+export async function orderMoney(client: Client, sellerId: string, orderId: string): Promise<OrderMoney | null> {
+  // ponytail: reads the kitchen's whole balance (about 0.36 s at 20,000 orders, PERF-1) to get one order's line.
+  const { lines } = await sellerBalanceLines(client, sellerId);
+  const line = lines.find((l) => l.orderId === orderId);
+  if (!line) return null;
+
+  const handedIn = line.kind === 'rider_cash' ? await cashHandedInAt(client, orderId) : null;
+  const payableAt = line.effect === 0 ? null : (handedIn ?? line.deliveredAt ?? line.placedAt);
+  const payout = payableAt
+    ? await client.sellerPayout.findFirst({
+        where: { sellerId, status: { in: ['pending', 'processing', 'completed'] }, createdAt: { gte: payableAt } },
+        orderBy: { createdAt: 'asc' },
+      })
+    : null;
+
+  return {
+    kind: line.kind,
+    orderTotal: line.orderTotal,
+    kitchenShare: line.kitchenShare,
+    effect: line.effect,
+    deliveredAt: line.deliveredAt,
+    cashHandedInAt: line.kind === 'rider_cash' ? (handedIn ?? line.deliveredAt) : null,
+    payout: payout && {
+      id: payout.id,
+      amount: Number(payout.netAmount),
+      status: payout.status,
+      createdAt: payout.createdAt,
+      sentAt: payout.status === 'completed' ? payout.processedAt : null,
+      reference: payout.status === 'completed' ? payout.transactionId : null,
+      confirmation: payout.kitchenConfirmation,
+      confirmedAt: payout.kitchenConfirmedAt,
+    },
+  };
+}

@@ -2084,6 +2084,57 @@ async function main() {
   ok("after every flow above, each rider's stored cash held equals their ledger", drifted.length === 0, drifted.map((r) => r.id).join(','));
 
 
+  // ---- Each order's money, for the kitchen (Money 4b) ----
+  {
+    const { orderMoney } = require('../src/services/seller-balance.service');
+    const adminSvc = require('../src/services/admin.service').default;
+    const log = require('../src/services/payout-log.service');
+    const tCust = await mkUser();
+    const tk = await mkSeller({ verificationStatus: 'approved' });
+    const tprod = await mkProduct(tk.id, 50, 1000);
+    const delivered = async (data: any) => {
+      const o: any = (await order(tCust.id, [{ productId: tprod.id, quantity: 1 }], { paymentMethod: 'cod' })).order;
+      await prisma.order.update({ where: { id: o.id }, data: { orderStatus: 'delivered', deliveredAt: new Date(), paymentStatus: 'paid', paidAt: new Date(), ...data } });
+      return o;
+    };
+    const payout = (data: any = {}) => prisma.sellerPayout.create({ data: { sellerId: tk.id, amount: 1, commissionDeducted: 0, netAmount: 1, payoutMethod: 'bank_transfer', periodStart: new Date(), periodEnd: new Date(), ...data } });
+
+    const before = await payout({ createdAt: new Date(Date.now() - 3600e3) });
+    const on: any = await delivered({ paymentMethod: 'wallet', paymentCollectedBy: 'platform' });
+    const m0 = await orderMoney(prisma, tk.id, on.id);
+    ok("a delivered online order shows what the kitchen earns and that it goes into the next payout (not one made before it was delivered)",
+      m0?.kind === 'online' && m0.kitchenShare > 0 && m0.effect === m0.kitchenShare && m0.payout === null, JSON.stringify(m0));
+    ok("another kitchen cannot see it", (await orderMoney(prisma, (await mkSeller()).id, on.id)) === null);
+    const next = await payout({ netAmount: m0.kitchenShare - 1, amount: m0.kitchenShare - 1 }); // the balance less the earlier pending one
+    ok('once a payout is made, the order shows that payout, not sent yet', (await orderMoney(prisma, tk.id, on.id))?.payout?.id === next.id && (await orderMoney(prisma, tk.id, on.id))?.payout?.sentAt === null);
+    await adminSvc.completePayout(next.id, 'TX-TIMELINE');
+    await log.confirmPayout(tk.id, tk.userId, next.id, 'received');
+    const m1 = await orderMoney(prisma, tk.id, on.id);
+    ok('then when it was sent, with the reference, and that the kitchen confirmed it arrived',
+      !!m1?.payout?.sentAt && m1.payout.reference === 'TX-TIMELINE' && m1.payout.confirmation === 'received' && !!m1.payout.confirmedAt, JSON.stringify(m1?.payout));
+
+    const tru = await mkUser('rider');
+    const trd = await prisma.rider.create({ data: { userId: tru.id, city: 'Lahore', verificationStatus: 'approved', status: 'active' } as any });
+    const rc: any = await delivered({ paymentCollectedBy: 'rider' });
+    await prisma.riderLedgerEntry.create({ data: { riderId: trd.id, type: 'cod_collected', amount: -Number(rc.totalAmount), orderId: rc.id } as any });
+    const later = await payout({ netAmount: 50, amount: 50 });
+    const r0 = await orderMoney(prisma, tk.id, rc.id);
+    ok('a rider cash order shows the rider still has the cash, and is in no payout yet, even one made since', r0?.kind === 'rider_cash_waiting' && r0.effect === 0 && r0.payout === null, JSON.stringify(r0));
+    const part = await prisma.riderLedgerEntry.create({ data: { riderId: trd.id, type: 'cash_deposit', amount: Number(rc.totalAmount) - 1, createdAt: new Date(Date.now() + 1000) } as any });
+    ok('part of the cash handed in is not enough', (await orderMoney(prisma, tk.id, rc.id))?.kind === 'rider_cash_waiting');
+    const rest = await prisma.riderLedgerEntry.create({ data: { riderId: trd.id, type: 'cash_deposit', amount: 1, createdAt: new Date(Date.now() + 2000) } as any });
+    const r1 = await orderMoney(prisma, tk.id, rc.id);
+    ok('once the deposits reach it, it shows when the cash was handed in, and goes into the payout after that',
+      r1?.kind === 'rider_cash' && r1.cashHandedInAt?.getTime() === rest.createdAt.getTime() && r1.payout === null && part.createdAt < rest.createdAt, JSON.stringify(r1));
+    ok('(the payout made while the rider held it is not that payout)', later.createdAt < rest.createdAt);
+
+    const kc: any = await delivered({ paymentCollectedBy: 'seller' });
+    const k0 = await orderMoney(prisma, tk.id, kc.id);
+    ok("an order the kitchen collected itself shows Nuray's share coming off the next payout", k0?.kind === 'kitchen_collected' && k0.effect < 0 && Math.abs(k0.orderTotal - k0.kitchenShare + k0.effect) < 0.01 && k0.payout === null, JSON.stringify(k0));
+    await adminSvc.failPayout(before.id, 'test');
+    await adminSvc.failPayout(later.id, 'test');
+  }
+
   // ---- The nightly books check (Money 6) ----
   {
     const bc = require('../src/services/books-check.service');

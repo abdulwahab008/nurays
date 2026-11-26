@@ -2,6 +2,7 @@ import { Router } from 'express';
 import {
   getSellerOrders,
   getSellerOrderDetails,
+  getSellerOrderMoney,
   updateOrderItemStatus,
   cancelOrderItem,
   acceptOrder,
@@ -40,6 +41,7 @@ router.get('/orders', validateQuery(getSellerOrdersQuerySchema), getSellerOrders
 
 // Get seller order details
 router.get('/orders/:id', getSellerOrderDetails);
+router.get('/orders/:id/money', getSellerOrderMoney);
 
 // Whole order lifecycle actions (Section 7 & 10)
 router.post('/orders/:id/accept', validate(acceptOrderSchema), acceptOrder);
