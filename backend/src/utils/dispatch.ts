@@ -104,3 +104,21 @@ export function chooseRider(job: DispatchJob, candidates: DispatchCandidate[]): 
   );
   return { riderId: ranked[0].c.id, reason: ranked[0].reason };
 }
+
+/** Where a job is, for matching it to riders: the kitchen's and the customer's communities, and the kitchen's city. */
+export interface JobArea {
+  pickupCommunityId: string | null;
+  dropoffCommunityId: string | null;
+  city: string | null;
+}
+
+/**
+ * Whether a job is in a rider's area: it is picked up or delivered in the community they serve, or the kitchen is in
+ * their city. A job whose city is not known is not held back. Without this, a rider on duty in Karachi was given a
+ * Lahore order whenever no Lahore rider was free.
+ */
+export function inRiderArea(rider: { communityId: string | null; city: string | null }, job: JobArea): boolean {
+  if (rider.communityId && (rider.communityId === job.pickupCommunityId || rider.communityId === job.dropoffCommunityId)) return true;
+  if (!job.city) return true;
+  return !!rider.city && rider.city.trim().toLowerCase() === job.city.trim().toLowerCase();
+}

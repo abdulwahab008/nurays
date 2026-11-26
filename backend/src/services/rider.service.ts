@@ -9,6 +9,8 @@ import { dispatchSoon, postDeliverySoon } from './dispatch.service';
 import { haversineKm, calculateDeliveryFeeCorridor } from '../utils/deliveryFee';
 import { getPlatformDeliveryPricing } from './delivery-pricing.service';
 import { endsOf, cashToCollect, PAYMENT_INCLUDE, routeMatch } from '../utils/riderJobs';
+import { inRiderArea } from '../utils/dispatch';
+import { jobAreas } from './rider-area.service';
 import { finiteOrNull } from '../utils/numbers';
 import { isCashAtDoor } from '../utils/paymentCustody';
 import { jobScore } from '../utils/ranking';
@@ -372,7 +374,7 @@ export class RiderService {
       include: PAYMENT_INCLUDE,
     });
 
-    const deliveries = await prisma.delivery.findMany({
+    const pool = await prisma.delivery.findMany({
       // Only jobs for orders still going somewhere.
       where: { riderId: null, status: 'pending', order: { orderStatus: { notIn: ['cancelled', 'refunded', 'delivered', 'completed'] } } },
       include: POOL_INCLUDE,
@@ -380,6 +382,9 @@ export class RiderService {
       // The oldest open jobs; a pool deeper than this is an operations problem, not a list.
       take: 100,
     });
+    // Only jobs in the rider's own area (utils/dispatch.ts inRiderArea), as automatic dispatch offers them.
+    const areas = await jobAreas(pool.map((d) => d.orderId));
+    const deliveries = pool.filter((d) => { const a = areas.get(d.orderId); return !a || inRiderArea(rider, a); });
 
     // With exactly one active job, jobs along the same route earn a bonus.
     const activeOne = activeDeliveries.length === 1 ? activeDeliveries[0] : null;
@@ -472,6 +477,10 @@ export class RiderService {
     const delivery = await prisma.delivery.findUnique({ where: { id: deliveryId } });
     if (!delivery) {
       throw new AppError('Delivery not found', 404, 'DELIVERY_NOT_FOUND');
+    }
+    const area = (await jobAreas([delivery.orderId])).get(delivery.orderId);
+    if (area && !inRiderArea(rider, area)) {
+      throw new AppError(`This job is in ${area.city ?? 'another area'}, outside the area you deliver in.`, 409, 'OUTSIDE_RIDER_AREA');
     }
 
     // The rider's pay for this job: the standard fee, fixed now so the job's price can't change under them.
