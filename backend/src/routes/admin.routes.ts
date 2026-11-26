@@ -18,6 +18,7 @@ import {
   getNurayAccount,
   getBooksCheck,
   postBooksCheck,
+  postStatementMatch,
   recordKitchenPayment,
   completePayout,
   failPayout,
@@ -74,6 +75,7 @@ import {
   updateSellerStatusSchema,
   completePayoutSchema,
   paymentToNuraySchema,
+  statementMatchSchema,
   failPayoutSchema,
   updateSettingsSchema,
   approveRejectRiderSchema,
@@ -208,6 +210,7 @@ router.get('/finance/accounts/:type/:id', getAccountStatement);
 router.get('/finance/nuray', getNurayAccount);
 router.get('/finance/books-check', getBooksCheck);
 router.post('/finance/books-check', postBooksCheck);
+router.post('/finance/statement-match', validate(statementMatchSchema), postStatementMatch);
 router.get('/sellers/:id/owing', getKitchenOwing);
 router.post('/sellers/:id/payments-to-nuray', validate(paymentToNuraySchema), recordKitchenPayment);
 router.post('/payouts/:id/complete', validate(completePayoutSchema), completePayout);

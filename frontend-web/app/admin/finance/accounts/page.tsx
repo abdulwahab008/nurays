@@ -141,6 +141,9 @@ export default function AdminAccountsPage() {
             </div>
 
             <BooksCheckPanel check={books} running={checking} onRun={() => void runCheck()} />
+            <Link href="/admin/finance/statement" className="inline-flex min-h-11 items-center text-sm font-semibold text-brand-ink hover:underline">
+              Match a bank or wallet statement →
+            </Link>
 
             <div role="tablist" aria-label="Accounts" className="flex gap-2 border-b border-line">
               {tabs.map((t) => (

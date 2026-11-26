@@ -35,6 +35,11 @@ export const paymentToNuraySchema = z.object({
   reference: z.string().trim().min(1, 'Enter the transaction or receipt reference').max(100),
 });
 
+export const statementMatchSchema = z.object({
+  account: z.enum(['bank_transfer', 'jazzcash', 'easypaisa']),
+  csv: z.string().min(1, 'Choose a statement file').max(900_000, 'The statement is too large: export a month at a time'),
+});
+
 export const failPayoutSchema = z.object({
   reason: z.string().min(1, 'A reason is required').max(1000),
 });
