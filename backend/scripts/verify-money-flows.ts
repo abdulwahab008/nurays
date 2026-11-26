@@ -2310,6 +2310,43 @@ async function main() {
     await prisma.systemSetting.delete({ where: { key: 'largePayoutAmount' } });
   }
 
+  // ---- Monthly commission invoices for kitchens (Money 8) ----
+  {
+    const inv = require('../src/services/commission-invoice.service');
+    const iCust = await mkUser();
+    const ik = await mkSeller({ verificationStatus: 'approved' });
+    const iprod = await mkProduct(ik.id, 50, 1000);
+    const deliveredOn = async (at: Date, data: any = {}) => {
+      const o: any = (await order(iCust.id, [{ productId: iprod.id, quantity: 1 }], { paymentMethod: 'cod' })).order;
+      await prisma.order.update({ where: { id: o.id }, data: { orderStatus: 'delivered', deliveredAt: at, paymentMethod: 'wallet', paymentCollectedBy: 'platform', paymentStatus: 'paid', paidAt: at, ...data } });
+      await ledgerService.recordOrderCompletion(o.id);
+      return o;
+    };
+    const pk = new Date(Date.now() + 5 * 3600e3);
+    const lastMonth = new Date(Date.UTC(pk.getUTCFullYear(), pk.getUTCMonth() - 1, 15, 7));
+    const lastMonthKey = new Date(lastMonth.getTime() + 5 * 3600e3).toISOString().slice(0, 7);
+    // The last minutes of last month in Pakistan are still last month, though in UTC they are the day before.
+    const lastNight = new Date(Date.UTC(pk.getUTCFullYear(), pk.getUTCMonth(), 1) - 5 * 3600e3 - 10 * 60e3);
+    const a1 = await deliveredOn(lastMonth);
+    const a2 = await deliveredOn(lastNight, { paymentCollectedBy: 'seller', paymentMethod: 'cod' });
+    await deliveredOn(new Date());
+    const commissionOf = async (orderId: string) => Number((await prisma.ledgerEntry.findFirst({ where: { orderId, transactionType: 'platform_commission' } }))!.amount);
+    const expected = Math.round(((await commissionOf(a1.id)) + (await commissionOf(a2.id))) * 100) / 100;
+
+    const list = await inv.listInvoices(ik.id);
+    ok("a kitchen gets an invoice for last month (in Pakistan time) and none for this month yet", list.length === 1 && list[0].month === lastMonthKey && list[0].orders === 2, JSON.stringify(list));
+    ok('it adds up the commission on that month\'s orders, whoever collected the money', Math.abs(list[0].commission - expected) < 0.01 && list[0].total === list[0].commission, `${list[0]?.commission} vs ${expected}`);
+    const one = await inv.getInvoice(ik.id, lastMonthKey);
+    ok('the invoice lists each order, is numbered for the month and kitchen, and is dated the first of the next month',
+      one.lines.length === 2 && one.lines.map((l: any) => l.orderNumber).sort().join() === [a1.orderNumber, a2.orderNumber].sort().join() &&
+        one.number === `NUR-${lastMonthKey.replace('-', '')}-${ik.id.replace(/-/g, '').slice(0, 8).toUpperCase()}` && one.issuedOn.slice(8) === '01' && one.to.name === ik.businessName,
+      JSON.stringify({ n: one.number, d: one.issuedOn }));
+    ok('the same invoice every time it is opened', JSON.stringify(await inv.getInvoice(ik.id, lastMonthKey)) === JSON.stringify(one));
+    ok("this month's invoice is not shown before the month ends", (await code(inv.getInvoice(ik.id, new Date(pk).toISOString().slice(0, 7)))) === 'INVOICE_NOT_FOUND');
+    ok("another kitchen has no such invoice", (await code(inv.getInvoice((await mkSeller()).id, lastMonthKey))) === 'INVOICE_NOT_FOUND');
+    ok('a month that is not a month is refused', (await code(inv.getInvoice(ik.id, '2026-13'))) === 'VALIDATION_ERROR');
+  }
+
   console.log(`\n${pass} passed, ${fail} failed`);
   await prisma.$disconnect();
   process.exit(fail ? 1 : 0);

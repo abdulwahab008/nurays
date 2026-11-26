@@ -3,7 +3,7 @@ import { AppError } from '../middleware/errorHandler';
 import { toCsv } from '../utils/csv';
 
 /** An order counts in the month it was delivered, in Pakistan time (stored times are UTC). */
-const DELIVERED_PKT = `(COALESCE(o.delivered_at, o.paid_at, o.created_at) AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Karachi'`;
+export const DELIVERED_PKT = `(COALESCE(o.delivered_at, o.paid_at, o.created_at) AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Karachi'`;
 
 const round = (n: number) => Math.round(n * 100) / 100;
 
