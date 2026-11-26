@@ -195,7 +195,10 @@ export function matchLines(lines: StatementLine[], records: NurayRecord[]): Omit
   for (const line of lines) {
     const text = norm(line.description);
     // A reference only counts when it is long enough not to turn up by chance.
-    const byRef = [...free].find((r) => r.reference && norm(r.reference).length >= 4 && text.includes(norm(r.reference)));
+    // Of several records whose reference is on the line, the one for this amount, then the most specific reference.
+    const byRef = [...free]
+      .filter((r) => r.reference && norm(r.reference).length >= 4 && text.includes(norm(r.reference)))
+      .sort((a, b) => Number(Math.abs(b.amount - line.amount) < 0.01) - Number(Math.abs(a.amount - line.amount) < 0.01) || norm(b.reference!).length - norm(a.reference!).length)[0];
     if (!byRef) { left.push(line); continue; }
     free.delete(byRef);
     if (Math.abs(byRef.amount - line.amount) < 0.01) matched.push({ line, record: byRef, by: 'reference' });

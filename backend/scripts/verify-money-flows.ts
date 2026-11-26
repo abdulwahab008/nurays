@@ -2238,7 +2238,8 @@ async function main() {
     const matchedTo = (id: string) => m.matched.find((x: any) => x.record.id === id);
     ok('a payout is matched to its statement line by the transfer reference', matchedTo(byRef.id)?.by === 'reference', JSON.stringify(m.matched.map((x: any) => [x.record.label, x.by])));
     ok('one with no reference by the same amount a day apart', matchedTo(byAmount.id)?.by === 'amount_and_date');
-    ok("a kitchen's payment to Nuray, a manual refund and a rider's pay are matched too", matchedTo(paidIn.id)?.by === 'reference' && matchedTo(refund.id)?.by === 'reference' && matchedTo(riderPay.id)?.by === 'reference');
+    ok("a kitchen's payment to Nuray, a manual refund and a rider's pay are matched too", matchedTo(paidIn.id)?.by === 'reference' && matchedTo(refund.id)?.by === 'reference' && matchedTo(riderPay.id)?.by === 'reference',
+      JSON.stringify([matchedTo(paidIn.id)?.by, matchedTo(refund.id)?.by, matchedTo(riderPay.id)?.by, m.unmatchedLines.map((l: any) => l.description), m.amountDiffers.map((x: any) => x.record.label)]));
     ok('a line whose reference matches a payout for a different amount is shown as such', m.amountDiffers.some((x: any) => x.record.id === wrongAmount.id && x.line.amount === -3000));
     ok("a line Nuray has no record of is listed", m.unmatchedLines.some((l: any) => l.amount === 7777.77));
     ok('and a sent payout missing from the statement', m.unmatchedRecords.some((r: any) => r.id === missing.id));
