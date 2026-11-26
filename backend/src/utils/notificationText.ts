@@ -413,6 +413,10 @@ const CATALOGUE = {
     title: 'Rider cash overdue',
     message: `${p.count} rider${p.count === 1 ? ' has' : 's have'} held customer cash (${p.total} in hand) for more than ${p.hours} hours.`,
   })),
+  'admin.booksCheck': englishOnly<{ count: number }>((p) => ({
+    title: "Last night's books check found problems",
+    message: `${p.count} thing${p.count === 1 ? '' : 's'} in Nuray's books need${p.count === 1 ? 's' : ''} looking at. Open Accounts to see what.`,
+  })),
   'admin.payoutNotReceived': englishOnly<{ kitchen: string; amount: string; reference: string }>((p) => ({
     title: 'A kitchen says a payout did not arrive',
     message: `${p.kitchen} has not received ${p.amount} (reference ${p.reference}). Check the transfer with the bank or wallet.`,

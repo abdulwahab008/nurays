@@ -2083,6 +2083,52 @@ async function main() {
     GROUP BY r.id HAVING r.cash_held <> -COALESCE(SUM(e.amount) FILTER (WHERE e.type IN ('cod_collected', 'cash_deposit')), 0)`;
   ok("after every flow above, each rider's stored cash held equals their ledger", drifted.length === 0, drifted.map((r) => r.id).join(','));
 
+
+  // ---- The nightly books check (Money 6) ----
+  {
+    const bc = require('../src/services/books-check.service');
+    const keys = (issues: Array<{ key: string }>) => issues.map((i) => i.key);
+    const has = (issues: Array<{ key: string; items: string[] }>, key: string, text: string) => !!issues.find((i) => i.key === key && i.items.some((t) => t.includes(text)));
+    const base = await bc.findBooksIssues();
+    ok('after every flow above, the books check finds every order balanced and posted, rider cash matching, and every sent payout logged once',
+      !keys(base).some((k: string) => ['ledger_unbalanced', 'ledger_missing', 'rider_cash_mismatch', 'payout_reference_reused', 'payout_unlogged'].includes(k)), JSON.stringify(base));
+
+    const bk = await mkSeller();
+    const tag = uniq();
+    const pay = (data: any) => prisma.sellerPayout.create({ data: { sellerId: bk.id, amount: 500, commissionDeducted: 0, netAmount: 500, payoutMethod: 'bank_transfer', periodStart: new Date(), periodEnd: new Date(), ...data } });
+    await pay({ status: 'completed', transactionId: `TX-DUP-${tag}`, processedAt: new Date() });
+    await pay({ status: 'completed', transactionId: `TX-DUP-${tag}`, processedAt: new Date() });
+    await pay({ status: 'pending', createdAt: new Date(Date.now() - 3 * 24 * 3600e3) });
+    const bru = await mkUser('rider');
+    const brd = await prisma.rider.create({ data: { userId: bru.id, city: 'Lahore', verificationStatus: 'approved', status: 'active', isAvailable: true } as any });
+    await prisma.riderCashDeposit.create({ data: { riderId: brd.id, amount: 300, keptAsPay: 0, method: 'jazzcash', transactionRef: `JC-${tag}`, receiptUrl: `private:x/proofs/${bru.id}/r.webp`, createdAt: new Date(Date.now() - 2 * 24 * 3600e3) } as any });
+    await prisma.$executeRaw`UPDATE riders SET cash_held = cash_held + 5 WHERE id = ${brd.id}`;
+    const posted = await prisma.ledgerEntry.findFirst({ where: { orderId: { not: null } } });
+    const postedNo = (await prisma.order.findUnique({ where: { id: posted!.orderId! } }))!.orderNumber;
+    await prisma.ledgerEntry.create({ data: { orderId: posted!.orderId, transactionType: 'adjustment', accountType: 'asset', entryType: 'debit', amount: 1, description: 'books check test' } });
+
+    const found = await bc.findBooksIssues();
+    ok('it finds an order whose debits and credits differ', has(found, 'ledger_unbalanced', `#${postedNo}`), JSON.stringify(found));
+    ok("it finds a rider whose stored cash doesn't match the ledger", has(found, 'rider_cash_mismatch', 'shows Rs 5'));
+    ok('it finds one transfer reference used on two sent payouts', has(found, 'payout_reference_reused', `TX-DUP-${tag}: 2 payouts`));
+    ok('and sent payouts with no log entry', has(found, 'payout_unlogged', bk.businessName));
+    ok('a payout not sent after two days', has(found, 'payout_waiting', bk.businessName));
+    ok('a rider deposit nobody checked for a day', has(found, 'deposit_waiting', `JC-${tag}`));
+    await prisma.$executeRaw`UPDATE riders SET cash_held = cash_held - 5 WHERE id = ${brd.id}`;
+
+    const day = new Date().toISOString().slice(0, 10);
+    const at = (hh: string) => new Date(`${day}T${hh}:00:00+05:00`);
+    const admin = await mkUser('admin');
+    ok('the nightly check waits for 03:00 Pakistan time', (await bc.runNightlyBooksCheck(at('02'))) === null);
+    const night = await bc.runNightlyBooksCheck(at('04'));
+    ok('from 03:00 it runs, keeps the result, and tells every admin', night?.trigger === 'nightly' && night.issues.length > 0 &&
+      (await prisma.booksCheck.count({ where: { trigger: 'nightly', ranAt: at('04') } })) === 1 &&
+      (await prisma.notification.count({ where: { userId: admin.id, dedupeKey: `books-check:${day}:${admin.id}` } })) === 1);
+    ok('only once that day', (await bc.runNightlyBooksCheck(at('05'))) === null);
+    const manual = await bc.runBooksCheck('manual', at('06'));
+    ok('an admin can run it any time; the latest result is what the Accounts screen shows', manual.trigger === 'manual' && JSON.stringify(keys((await bc.latestBooksCheck())!.issues)) === JSON.stringify(keys(manual.issues)) && (await bc.latestBooksCheck())!.trigger === 'manual');
+  }
+
   console.log(`\n${pass} passed, ${fail} failed`);
   await prisma.$disconnect();
   process.exit(fail ? 1 : 0);
