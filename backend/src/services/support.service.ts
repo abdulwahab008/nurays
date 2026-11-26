@@ -7,6 +7,7 @@ import { notify } from './notify.service';
 import { thrown } from '../utils/thrown';
 import { realPhoneOrNull } from '../utils/otp';
 import { notificationText } from '../utils/notificationText';
+import { notifyAdmins } from './rider-deposit.service';
 
 const STATUS_LABEL: Record<string, string> = {
   open: 'Open',
@@ -30,20 +31,24 @@ export class SupportService {
       priority?: string;
     }
   ) {
-    // Verify order belongs to user if provided
+    // An order can be named by whoever had a part in it: its customer, its kitchen, or the rider who delivered it.
     if (data.orderId) {
       const order = await prisma.order.findUnique({
         where: { id: data.orderId },
+        select: { customerId: true, items: { select: { seller: { select: { userId: true } } } }, delivery: { select: { rider: { select: { userId: true } } } } },
       });
 
       if (!order) {
         throw new AppError('Order not found', 404, 'ORDER_NOT_FOUND');
       }
 
-      if (order.customerId !== userId) {
+      const involved = order.customerId === userId || order.items.some((i) => i.seller.userId === userId) || order.delivery?.rider?.userId === userId;
+      if (!involved) {
         throw new AppError('Access denied', 403, 'ACCESS_DENIED');
       }
     }
+    // A question about money (a payout, a charge, an invoice) goes to the top of the queue and alerts the admins.
+    const money = data.category === 'money';
 
     // Ticket numbers are random, not count+1: two tickets created at once read the
     // same count (and a deleted ticket would make the count reuse a number), so the
@@ -61,7 +66,7 @@ export class SupportService {
             category: data.category,
             subject: data.subject,
             description: data.description,
-            priority: data.priority || 'medium',
+            priority: money ? 'high' : data.priority || 'medium',
             status: 'open',
           },
         });
@@ -69,6 +74,10 @@ export class SupportService {
       } catch (err) {
         if (thrown(err).code !== 'P2002' || attempt >= 5) throw err;
       }
+    }
+
+    if (money) {
+      await notifyAdmins(notificationText('admin.moneyDispute', { ticket: ticket.ticketNumber, subject: ticket.subject }), `money-dispute:${ticket.id}`, `/admin/support?ticket=${ticket.id}`);
     }
 
     return {
@@ -236,7 +245,7 @@ export class SupportService {
   }
 
   /** List all tickets (admin). status may be one status or a comma list ("open,in_progress"); sort "oldest" puts the longest-waiting first. */
-  async adminGetTickets(filters: { status?: string; priority?: string; assignedTo?: string; search?: string; sort?: string; page?: number; limit?: number }) {
+  async adminGetTickets(filters: { status?: string; category?: string; priority?: string; assignedTo?: string; search?: string; sort?: string; page?: number; limit?: number }) {
     const { page, limit, skip } = pageArgs(filters.page, filters.limit);
 
     const where: Prisma.SupportTicketWhereInput = {};
@@ -244,6 +253,7 @@ export class SupportService {
     if (statuses.length === 1) where.status = statuses[0];
     else if (statuses.length > 1) where.status = { in: statuses };
     if (filters.priority) where.priority = filters.priority;
+    if (filters.category) where.category = filters.category;
     if (filters.assignedTo === 'unassigned') where.assignedTo = null;
     else if (filters.assignedTo) where.assignedTo = filters.assignedTo;
     const search = filters.search?.trim().slice(0, 100);

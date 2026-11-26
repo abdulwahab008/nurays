@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { LoadError } from '@/components/ui/LoadError';
+import Link from 'next/link';
 import { useToast } from '@/components/ui/toast';
 import { apiClient } from '@/lib/api-client';
 import { formatPrice } from '@/lib/utils';
@@ -128,7 +129,15 @@ export function PayoutStatement({ basePath, payoutId, onClose }: { basePath: str
               )}
             </dl>
 
-            <div className="mt-5 flex justify-end">
+            <div className="mt-5 flex flex-wrap items-center justify-end gap-3">
+              {basePath === '/sellers/me/payouts' && (
+                <Link
+                  href={`/support?category=money&subject=${encodeURIComponent(t('questionSubject', { amount: formatPrice(statement.payout.amount), from: statement.payout.periodStart, to: statement.payout.periodEnd }))}`}
+                  className="inline-flex min-h-11 items-center text-sm font-semibold text-brand-ink hover:underline"
+                >
+                  {t('questionThis')}
+                </Link>
+              )}
               <Button onClick={download} disabled={downloading} data-testid="statement-download">{t('downloadCsv')}</Button>
             </div>
           </>

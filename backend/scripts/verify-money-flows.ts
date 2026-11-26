@@ -2250,6 +2250,33 @@ async function main() {
     ok("a JazzCash statement matches a rider's JazzCash deposit, and expects the JazzCash payout", jc.matched.some((x: any) => x.record.id === jcDeposit.id) && jc.unmatchedRecords.some((r: any) => r.id === jcPayout.id));
   }
 
+  // ---- Questions about money, inside the app (Money 9) ----
+  {
+    const support = require('../src/services/support.service').default;
+    const dCust = await mkUser();
+    const dk = await mkSeller({ verificationStatus: 'approved' });
+    const other = await mkSeller({ verificationStatus: 'approved' });
+    const dprod = await mkProduct(dk.id, 20, 1000);
+    const o: any = (await order(dCust.id, [{ productId: dprod.id, quantity: 1 }], { paymentMethod: 'cod' })).order;
+    const dru = await mkUser('rider');
+    const drd = await prisma.rider.create({ data: { userId: dru.id, city: 'Lahore', verificationStatus: 'approved', status: 'active' } as any });
+    await prisma.delivery.create({ data: { orderId: o.id, riderId: drd.id, pickupAddress: 'Kitchen', deliveryAddress: 'Home', status: 'delivered' } });
+    const admin = await mkUser('admin');
+    const ask = (userId: string, extra: any = {}) => support.createTicket(userId, { category: 'money', subject: `Money on order #${o.orderNumber}`, description: 'The commission on this order looks too high.', orderId: o.id, ...extra });
+
+    const t1 = await ask(dk.userId);
+    const row = await prisma.supportTicket.findUnique({ where: { ticketNumber: t1.ticketNumber } });
+    ok("a kitchen can question the money on its own order: high priority, linked to the order, and the admins are told",
+      row?.priority === 'high' && row.orderId === o.id && row.category === 'money' &&
+        (await prisma.notification.count({ where: { userId: admin.id, dedupeKey: `money-dispute:${row.id}:${admin.id}` } })) === 1, JSON.stringify({ p: row?.priority }));
+    ok("whatever priority was sent", (await prisma.supportTicket.findUnique({ where: { ticketNumber: (await ask(dk.userId, { priority: 'low' })).ticketNumber } }))?.priority === 'high');
+    ok('the rider who delivered it can too', (await code(ask(dru.id))) === 'OK');
+    ok('and its customer, as before', (await code(ask(dCust.id, { category: 'order' }))) === 'OK');
+    ok("another kitchen cannot name it", (await code(ask(other.userId))) === 'ACCESS_DENIED');
+    const queue = await support.adminGetTickets({ category: 'money', status: 'open', limit: 100 });
+    ok('admins can list just the money questions', queue.tickets.length >= 3 && queue.tickets.every((t: any) => t.category === 'money'));
+  }
+
   console.log(`\n${pass} passed, ${fail} failed`);
   await prisma.$disconnect();
   process.exit(fail ? 1 : 0);

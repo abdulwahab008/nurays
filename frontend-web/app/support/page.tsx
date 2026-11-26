@@ -17,7 +17,7 @@ import { useT } from '@/lib/i18n';
 import { accountMessages } from '@/lib/i18n/messages/account';
 import { useShallow } from 'zustand/react/shallow';
 
-const CATEGORIES = ['general', 'order', 'payment', 'delivery', 'quality', 'refund'] as const;
+const CATEGORIES = ['general', 'order', 'payment', 'delivery', 'quality', 'refund', 'money'] as const;
 type Category = (typeof CATEGORIES)[number];
 /** A problem with one order needs to say which order, so support can look at it. */
 const NEEDS_ORDER: Category[] = ['order', 'payment', 'delivery', 'quality', 'refund'];
@@ -106,16 +106,18 @@ export default function SupportPage() {
       .catch(() => setRecentOrders([]));
   }, [isAuthenticated, router]);
 
-  // Opened from an order ("Get help with this order"): the form starts on that order.
+  // Opened from an order ("Get help with this order") or a payout ("Question this"): the form starts on it.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const orderId = params.get('orderId');
     const category = params.get('category') as Category | null;
+    const subject = params.get('subject');
     if (!orderId && !category) return;
     setFormData((prev) => ({
       ...prev,
       orderId: orderId ?? prev.orderId,
       category: category && CATEGORIES.includes(category) ? category : orderId ? 'order' : prev.category,
+      subject: subject?.slice(0, 200) ?? prev.subject,
     }));
     setActiveTab('contact');
   }, []);

@@ -58,6 +58,7 @@ const CATEGORY_LABEL: Record<string, string> = {
   account: 'Account',
   product_quality: 'Food quality',
   other: 'Other',
+  money: 'Money question',
 };
 const PRIORITY_LABEL: Record<string, string> = { urgent: 'Urgent', high: 'High priority', medium: 'Medium priority', low: 'Low priority' };
 const words = (map: Record<string, string>, v: string) => map[v] ?? v.replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase());
@@ -89,6 +90,7 @@ function AdminSupportContent() {
   const [sending, setSending] = useState(false);
   const [internal, setInternal] = useState(false);
   const [priority, setPriority] = useState('');
+  const [category, setCategory] = useState('');
   const [searchApplied, setSearchApplied] = useState('');
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -99,7 +101,7 @@ function AdminSupportContent() {
       setLoading(true);
       const status = filter === 'waiting' ? 'open,in_progress' : filter === 'all' ? undefined : filter;
       const res = await apiClient.get('/admin/support/tickets', {
-        params: { status, priority: priority || undefined, search: searchApplied || undefined, sort: 'oldest', page, limit: 20 },
+        params: { status, category: category || undefined, priority: priority || undefined, search: searchApplied || undefined, sort: 'oldest', page, limit: 20 },
       });
       setTickets(res.data.data?.tickets ?? []);
       setTotalPages(res.data.data?.pagination?.totalPages || 1);
@@ -112,7 +114,7 @@ function AdminSupportContent() {
     } finally {
       setLoading(false);
     }
-  }, [filter, priority, searchApplied, page]);
+  }, [filter, category, priority, searchApplied, page]);
 
   // Who may open this page is decided by app/admin/layout.tsx.
   useEffect(() => {
@@ -292,6 +294,19 @@ function AdminSupportContent() {
                 <option value="high">High</option>
                 <option value="medium">Medium</option>
                 <option value="low">Low</option>
+              </select>
+              <select
+                value={category}
+                onChange={(e) => {
+                  setCategory(e.target.value);
+                  setPage(1);
+                }}
+                className="min-h-11 rounded-xl border border-line-strong bg-surface px-3 text-sm text-ink"
+                data-testid="ticket-category"
+                aria-label="Kind of ticket"
+              >
+                <option value="">Any kind</option>
+                <option value="money">Money questions (kitchens and riders)</option>
               </select>
               <div className="sm:ms-auto" data-testid="ticket-search">
                 <SearchForm
