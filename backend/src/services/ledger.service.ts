@@ -83,10 +83,9 @@ export class LedgerService {
       const platformFee = breakdown.length
         ? liveBreakdown.filter((r) => r.provider !== 'self').reduce((sum, r) => sum + r.fee, 0)
         : platformDeliveryFee(Number(order.deliveryFee), order.deliveryFeeBreakdown); // legacy order: no split
-      // A delivery fee the seller collected themselves (COD at their door, a transfer into
-      // their account) is already in their hands, so there's nothing payable.
-      const selfDeliveryShares =
-        collectedBy === 'seller' ? [] : liveBreakdown.filter((r) => r.provider === 'self');
+      // A self-delivering seller's fee is theirs. When they collected the payment themselves it is kept from it, like
+      // their earnings; either way it is credited, or the customer payment (which includes it) would not balance.
+      const selfDeliveryShares = liveBreakdown.filter((r) => r.provider === 'self');
 
       const entries: Prisma.LedgerEntryCreateManyInput[] = [
         // 1. Customer Payment (Asset / Receivable debited)
@@ -168,7 +167,10 @@ export class LedgerService {
           entryType: 'credit',
           amount: share.fee,
           currency: 'PKR',
-          description: `Self-delivery fee payable to seller for Order #${order.orderNumber}`,
+          description:
+            collectedBy === 'seller'
+              ? `Self-delivery fee for Order #${order.orderNumber}, kept from the payment the seller collected`
+              : `Self-delivery fee payable to seller for Order #${order.orderNumber}`,
           sellerId: share.sellerId,
         });
       }

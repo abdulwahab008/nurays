@@ -126,7 +126,7 @@ Code: `utils/deliveryEarnings.ts`, `utils/paymentCustody.ts`, `ledger.service.ts
 | Delivered by | Fee goes to |
 |---|---|
 | Nuray rider | Nuray (ledger entry `delivery_fee`, revenue), **paid by the kitchen**: a `seller_delivery_charge` ledger entry takes it off what Nuray owes the kitchen, and the seller balance subtracts it from that order's earnings (`sellerPaidDeliveryFor`). The customer pays no delivery fee. The rider is paid separately by the rider rules in section 4, out of Nuray's pocket; the two numbers are not tied together. |
-| The kitchen | The kitchen, no commission. If the kitchen collected the money itself (COD at its door, or a transfer into its account) it already holds it. If Nuray collected the money (wallet, Safepay), the fee is posted as a payable to the kitchen (`seller_delivery_fee`). |
+| The kitchen | The kitchen, no commission. It is posted to the kitchen as `seller_delivery_fee`: a payable when Nuray collected the money (wallet, Safepay), and kept from the payment when the kitchen collected it itself (COD at its door, or a transfer into its account). |
 
 If a kitchen's items on an order are all cancelled, a delivery fee the customer paid (self-delivery) is refunded with the items (section 6); a kitchen-paid fee is simply not charged. Orders from before this rule have no `paidBy` and keep the old behaviour (the customer paid the fee).
 
