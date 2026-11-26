@@ -17,6 +17,7 @@
  * paid Nuray.
  */
 import prisma from '../config/database';
+import { logPayoutEvent } from './payout-log.service';
 import { AppError } from '../middleware/errorHandler';
 import { recordAudit } from '../middleware/audit';
 import { roundMoney } from '../utils/pricing';
@@ -175,6 +176,7 @@ export async function recordPaymentToNuray(input: { sellerId: string; amount: nu
         processedAt: new Date(),
       },
     });
+    await logPayoutEvent(tx, { payoutId: created.id, event: 'payment_received', actorType: 'admin', actorId: input.adminId, reference: input.reference, note: `Rs ${amount} paid by the kitchen to Nuray` });
     const state = await refreshOwing(tx, input.sellerId);
     return { created, state };
   });

@@ -27,7 +27,7 @@ function setup(opts: { passwordHash?: string | null; seller?: Record<string, unk
   const passwordHash = opts.passwordHash === undefined ? hash : opts.passwordHash;
   const seller = { id: 'seller-1', userId: 'owner-1', createdAt: new Date('2026-01-01T00:00:00Z'), jazzcashNumber: '03001234567', jazzcashAccountTitle: 'Zainab', easypaisaNumber: null, easypaisaAccountTitle: null, bankAccountName: null, bankAccountNumber: null, bankName: null, ...opts.seller };
   const created: any[] = [];
-  const tx = { $queryRaw: jest.fn(async () => []), sellerPayout: { findFirst: jest.fn(async () => null), create: jest.fn(async ({ data }: any) => { created.push(data); return { id: 'payout-1', status: 'pending', ...data }; }) } };
+  const tx = { $queryRaw: jest.fn(async () => []), sellerPayout: { findFirst: jest.fn(async () => null), create: jest.fn(async ({ data }: any) => { created.push(data); return { id: 'payout-1', status: 'pending', ...data }; }) }, payoutEvent: { create: jest.fn(async () => ({})) } };
   Object.assign(db, {
     seller: { findUnique: jest.fn(async () => seller), update: jest.fn(async ({ data }: any) => ({ ...seller, ...data, freeDeliveryAreas: [], deliveryModes: ['delivery'], mealCategories: [], allowedPostalCodes: [] })) },
     user: { findUnique: jest.fn(async () => ({ id: 'owner-1', passwordHash })) },

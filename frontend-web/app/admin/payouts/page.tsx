@@ -28,7 +28,20 @@ interface Payout {
   periodStart?: string;
   periodEnd?: string;
   automatic?: boolean;
+  kitchenConfirmation?: 'received' | 'not_received' | null;
+  events?: Array<{ event: string; actorType: string; reference: string | null; note: string | null; at: string }>;
 }
+
+/** What each step in a payout's log means, for staff. */
+const EVENT_LABEL: Record<string, string> = {
+  created: 'Created',
+  sent: 'Sent',
+  failed: 'Failed',
+  received: 'Confirmed it arrived',
+  not_received: 'Reported it did not arrive',
+  payment_received: 'Payment from the kitchen recorded',
+};
+const ACTOR_LABEL: Record<string, string> = { system: 'by the daily run', admin: 'by staff', kitchen: 'by the kitchen' };
 
 /** GET /admin/kitchens-owing */
 interface OwingKitchen {
@@ -248,7 +261,9 @@ export default function AdminPayoutsPage() {
                       <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${statusColor(payout.status)}`}>
                         {statusWord(payout.status)}
                       </span>
-                      {payout.automatic && <span className="rounded-full px-2 py-0.5 text-xs font-medium bg-raised text-muted">Weekly</span>}
+                      {payout.automatic && <span className="rounded-full px-2 py-0.5 text-xs font-medium bg-raised text-muted">Automatic</span>}
+                      {payout.kitchenConfirmation === 'received' && <span className="rounded-full px-2 py-0.5 text-xs font-medium bg-brand-50 text-brand-ink">Kitchen confirmed it arrived</span>}
+                      {payout.kitchenConfirmation === 'not_received' && <span className="rounded-full px-2 py-0.5 text-xs font-medium bg-red-50 text-red-700">Kitchen says it did not arrive</span>}
                       {payout.payoutMethod === 'paid_to_nuray' && <span className="rounded-full px-2 py-0.5 text-xs font-medium bg-raised text-muted">Kitchen paid Nuray</span>}
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
@@ -267,6 +282,21 @@ export default function AdminPayoutsPage() {
                         <div className="md:col-span-2"><span className="text-muted">Failure reason:</span> <span className="font-medium text-red-700">{payout.failedReason}</span></div>
                       )}
                     </div>
+                    {payout.events && payout.events.length > 0 && (
+                      <details className="mt-3 text-sm" data-testid="payout-log">
+                        <summary className="cursor-pointer min-h-11 inline-flex items-center font-semibold text-brand-ink">Payout log ({payout.events.length})</summary>
+                        <ol className="mt-1 space-y-1.5 border-s-2 border-line ps-3">
+                          {payout.events.map((e, i) => (
+                            <li key={`${e.event}-${i}`}>
+                              <span className={`font-medium ${e.event === 'failed' || e.event === 'not_received' ? 'text-red-700' : 'text-ink'}`}>{EVENT_LABEL[e.event] ?? e.event}</span>
+                              <span className="text-muted"> {ACTOR_LABEL[e.actorType] ?? ''} · {formatDate(e.at)}</span>
+                              {e.reference && <span className="text-muted"> · ref {e.reference}</span>}
+                              {e.note && <span className="block text-xs text-muted">{e.note}</span>}
+                            </li>
+                          ))}
+                        </ol>
+                      </details>
+                    )}
                   </div>
 
                   {payout.payoutMethod !== 'paid_to_nuray' && (

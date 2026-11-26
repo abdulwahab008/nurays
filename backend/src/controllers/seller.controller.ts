@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { confirmPayout } from '../services/payout-log.service';
 import { getPayoutStatement as getStatement } from '../services/weekly-payout.service';
 import { sendStatement } from './payout-statement';
 import { qstr } from '../utils/query';
@@ -163,3 +164,11 @@ export const getPublicSellerById = async (req: Request, res: Response) => {
 };
 
 
+
+/** The kitchen answers whether a sent payout reached its account: `received`, or `not-received` with a note (alerts the admins). */
+export const confirmPayoutReceipt = async (req: Request, res: Response) => {
+  const sellerId = await currentSellerId(req);
+  const answer = req.path.endsWith('/not-received') ? 'not_received' : 'received';
+  const result = await confirmPayout(sellerId, req.user!.userId, String(req.params.id), answer, typeof req.body?.note === 'string' ? req.body.note : undefined);
+  res.status(200).json({ success: true, data: result });
+};
