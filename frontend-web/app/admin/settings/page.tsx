@@ -36,6 +36,7 @@ export default function AdminSettingsPage() {
         supportPhone: s.supportPhone ?? '',
         commissionRate: String(s.commissionRate ?? 15),
         minPayoutAmount: String(s.minPayoutAmount ?? 1000),
+        largePayoutAmount: String(s.largePayoutAmount ?? 100000),
         deliveryPerKm: String(s.deliveryPerKm ?? 20),
         deliveryIncludedKm: String(s.deliveryIncludedKm ?? 3),
         deliveryMaxKm: String(s.deliveryMaxKm ?? 20),
@@ -184,6 +185,21 @@ export default function AdminSettingsPage() {
                   onChange={(e) => setFormData({ ...formData, minPayoutAmount: e.target.value })}
                   className="nuray-input w-full"
                 />
+              </div>
+              <div>
+                <label htmlFor="largePayoutAmount" className="block text-sm font-medium text-ink mb-2">
+                  Large payout (Rs)
+                </label>
+                <input
+                  id="largePayoutAmount"
+                  type="number"
+                  min="1000"
+                  value={formData.largePayoutAmount}
+                  onChange={(e) => setFormData({ ...formData, largePayoutAmount: e.target.value })}
+                  aria-describedby="largePayoutAmount-hint"
+                  className="nuray-input w-full"
+                />
+                <p id="largePayoutAmount-hint" className="mt-1 text-xs text-muted">A payout of this much or more is approved by a second admin before another admin sends it.</p>
               </div>
               <div className="sm:col-span-2">
                 <label htmlFor="payoutHolidays" className="block text-sm font-medium text-ink mb-2">

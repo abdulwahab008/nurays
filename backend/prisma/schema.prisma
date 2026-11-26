@@ -179,6 +179,8 @@ model Seller {
   // Since when the kitchen has owed Nuray (commission on cash it collected beyond what its online earnings cover);
   // null while it does not. Fourteen days on, its new cash orders pause until it pays (kitchen-owing.service.ts).
   owesSince                 DateTime? @map("owes_since")
+  /// When a payout account number last changed: payouts wait PAYOUT_ACCOUNT_HOLD_HOURS after it (weekly-payout.service.ts).
+  payoutAccountChangedAt    DateTime? @map("payout_account_changed_at")
   lowStockThreshold         Int       @default(10) @map("low_stock_threshold") // Default threshold for low stock alerts
   enableStockAlerts         Boolean   @default(true) @map("enable_stock_alerts") // Enable/disable stock alert notifications
   freeDeliveryAreas         Json?     @map("free_delivery_areas") // Areas/cities where this seller offers free delivery, e.g. ["Askari", "DHA"]
@@ -988,7 +990,7 @@ model PaymentAttempt {
 model PayoutEvent {
   id        String   @id @default(uuid())
   payoutId  String   @map("payout_id")
-  /// created | sent | failed | received | not_received | payment_received
+  /// created | approved | sent | failed | received | not_received | payment_received
   event     String
   /// system | admin | kitchen
   actorType String   @map("actor_type")

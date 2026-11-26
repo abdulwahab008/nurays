@@ -8,11 +8,11 @@ import { notify } from './notify.service';
 /**
  * The payout log: every step of every kitchen payout, appended and never changed (a database trigger refuses updates
  * and deletes). Created (by the daily run or the kitchen's request), sent (with the bank or wallet reference, by
- * which admin), failed (and why), a payment the kitchen made to Nuray, and the kitchen's own answer once the money is
+ * which admin), approved by a second admin (a large payout), failed (and why), a payment the kitchen made to Nuray, and the kitchen's own answer once the money is
  * sent: received, or not received (which alerts the admins).
  */
 
-export type PayoutEventType = 'created' | 'sent' | 'failed' | 'received' | 'not_received' | 'payment_received';
+export type PayoutEventType = 'created' | 'approved' | 'sent' | 'failed' | 'received' | 'not_received' | 'payment_received';
 export type ActorType = 'system' | 'admin' | 'kitchen';
 
 type Db = typeof prisma | Prisma.TransactionClient;
@@ -28,10 +28,10 @@ export function logPayoutEvent(
 
 export async function payoutEvents(payoutIds: string[]) {
   const rows = await prisma.payoutEvent.findMany({ where: { payoutId: { in: payoutIds } }, orderBy: { createdAt: 'asc' } });
-  const byPayout = new Map<string, Array<{ event: string; actorType: string; reference: string | null; note: string | null; at: Date }>>();
+  const byPayout = new Map<string, Array<{ event: string; actorType: string; actorId: string | null; reference: string | null; note: string | null; at: Date }>>();
   for (const r of rows) {
     if (!byPayout.has(r.payoutId)) byPayout.set(r.payoutId, []);
-    byPayout.get(r.payoutId)!.push({ event: r.event, actorType: r.actorType, reference: r.reference, note: r.note, at: r.createdAt });
+    byPayout.get(r.payoutId)!.push({ event: r.event, actorType: r.actorType, actorId: r.actorId, reference: r.reference, note: r.note, at: r.createdAt });
   }
   return byPayout;
 }

@@ -9,7 +9,7 @@ import { useLocale, useT } from '@/lib/i18n';
 import { kitchenEarningsMessages } from '@/lib/i18n/messages/kitchen-earnings';
 
 export interface PayoutEvent {
-  event: 'created' | 'sent' | 'failed' | 'received' | 'not_received' | 'payment_received';
+  event: 'created' | 'approved' | 'sent' | 'failed' | 'received' | 'not_received' | 'payment_received';
   actorType: 'system' | 'admin' | 'kitchen';
   reference: string | null;
   note: string | null;

@@ -58,7 +58,13 @@ export default async function payoutAccounts() {
   const legacy = await me.as('PATCH', '/sellers/me', { storeNotice: 'Open again', bankAccountNumber: 'PK00BANK000000' });
   ok('an account saved before the numbers were checked does not block saving anything else (200)', legacy.status === 200 && (await stored()).bankAccountNumber === 'PK00BANK000000', said(legacy));
 
-  // 4. payout requests
+  // 4. payout requests: a changed account waits 48 hours, and a request pays only the account saved
+  const held = await me.as('POST', '/sellers/me/payouts', { amount: 1500, payoutMethod: 'bank_transfer', accountNumber: IBAN, currentPassword: PASSWORD });
+  ok('right after a payout account changes, a payout request is refused with 409 PAYOUT_ACCOUNT_ON_HOLD', held.status === 409 && held.code === 'PAYOUT_ACCOUNT_ON_HOLD', said(held));
+  // An account saved long ago, so its hold is over.
+  await prisma.seller.update({ where: { id: kitchen.sellerId }, data: { jazzcashNumber: '03339998887', payoutAccountChangedAt: null } });
+  const elsewhere = await me.as('POST', '/sellers/me/payouts', { amount: 1500, payoutMethod: 'jazzcash', accountNumber: '0300-7654321', currentPassword: PASSWORD });
+  ok('a payout to an account the kitchen has not saved is refused with 400 PAYOUT_ACCOUNT_NOT_ON_FILE', elsewhere.status === 400 && elsewhere.code === 'PAYOUT_ACCOUNT_NOT_ON_FILE', said(elsewhere));
   const request = (extra: Record<string, unknown> = {}) => me.as('POST', '/sellers/me/payouts', { amount: 1500, payoutMethod: 'jazzcash', accountNumber: '0333-9998887', ...extra });
   const payoutsBefore = await prisma.sellerPayout.count({ where: { sellerId: kitchen.sellerId } });
   const noPassword = await request();
@@ -75,6 +81,7 @@ export default async function payoutAccounts() {
   await prisma.user.update({ where: { id: me.id }, data: { passwordHash: null } });
   const phoneOnly = await me.as('PATCH', '/sellers/me', { easypaisaNumber: '0345-1234567' });
   ok('an account with no password is not asked for one (200)', phoneOnly.status === 200 && (await stored()).easypaisaNumber === '03451234567', said(phoneOnly));
+  await prisma.seller.update({ where: { id: kitchen.sellerId }, data: { payoutAccountChangedAt: null } });
   const phoneOnlyPayout = await request();
   ok('nor for a payout request (it reaches the balance check)', phoneOnlyPayout.status === 400 && phoneOnlyPayout.code === 'INSUFFICIENT_BALANCE', said(phoneOnlyPayout));
 

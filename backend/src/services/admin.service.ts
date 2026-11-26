@@ -761,6 +761,7 @@ export class AdminService {
     ]);
 
     const events = await payoutEvents(payouts.map((p) => p.id));
+    const large = Number(await this.getSettingValue<number>('largePayoutAmount'));
     return {
       payouts: payouts.map((p) => ({
         id: p.id,
@@ -779,6 +780,10 @@ export class AdminService {
         periodStart: p.periodStart.toISOString().slice(0, 10),
         periodEnd: p.periodEnd.toISOString().slice(0, 10),
         automatic: (p.accountDetails as { automatic?: unknown } | null)?.automatic === true,
+        // A large payout waiting to be sent: who approved it, if anyone (the admin who sends it must be someone else).
+        secondApproval: p.status === 'pending' && Number(p.netAmount) >= large
+          ? { approvedBy: (events.get(p.id) ?? []).find((e) => e.event === 'approved')?.actorId ?? null }
+          : null,
       })),
       pagination: {
         page,
@@ -799,6 +804,11 @@ export class AdminService {
     }
     if (payout.status !== 'pending') {
       throw new AppError(`Payout is already ${payout.status}`, 400, 'PAYOUT_NOT_PENDING');
+    }
+    if (Number(payout.netAmount) >= Number(await this.getSettingValue<number>('largePayoutAmount'))) {
+      const approval = await prisma.payoutEvent.findFirst({ where: { payoutId, event: 'approved' } });
+      if (!approval) throw new AppError('A payout this large needs a second admin to approve it before it is sent.', 409, 'SECOND_APPROVAL_REQUIRED');
+      if (!adminId || approval.actorId === adminId) throw new AppError('Another admin must send this payout: you approved it.', 409, 'SECOND_APPROVAL_REQUIRED');
     }
 
     // Conditional on still being pending: a concurrent fail (or second complete) must not also
@@ -834,6 +844,22 @@ export class AdminService {
     });
 
     return { payoutId, status: 'completed' };
+  }
+
+  /** A second admin approves a large payout; a different admin then sends it. */
+  async approvePayout(payoutId: string, adminId: string) {
+    const payout = await prisma.sellerPayout.findUnique({ where: { id: payoutId }, include: { seller: { select: { businessName: true } } } });
+    if (!payout) throw new AppError('Payout not found', 404, 'PAYOUT_NOT_FOUND');
+    if (payout.status !== 'pending') throw new AppError(`Payout is already ${payout.status}`, 400, 'PAYOUT_NOT_PENDING');
+    if (Number(payout.netAmount) < Number(await this.getSettingValue<number>('largePayoutAmount'))) {
+      throw new AppError('This payout does not need a second approval.', 400, 'APPROVAL_NOT_NEEDED');
+    }
+    await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM seller_payouts WHERE id = ${payoutId} FOR UPDATE`;
+      if (await tx.payoutEvent.count({ where: { payoutId, event: 'approved' } })) throw new AppError('This payout is already approved.', 409, 'ALREADY_APPROVED');
+      await logPayoutEvent(tx, { payoutId, event: 'approved', actorType: 'admin', actorId: adminId, note: `Rs ${Number(payout.netAmount).toFixed(2)} to ${payout.seller.businessName} approved` });
+    });
+    return { payoutId, approvedBy: adminId };
   }
 
   /**
@@ -878,6 +904,8 @@ export class AdminService {
     supportPhone: '+92-300-1234567',
     commissionRate: 15,
     minPayoutAmount: 1000,
+    // A payout of at least this much is approved by a second admin before it can be marked sent.
+    largePayoutAmount: 100000,
     // Every working day each kitchen's balance becomes a payout by itself (weekly-payout.service.ts); the name is older.
     weeklyPayouts: true,
     // Days with no payout run besides weekends (public holidays), as YYYY-MM-DD.

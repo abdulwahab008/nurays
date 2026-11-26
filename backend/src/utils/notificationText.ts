@@ -230,6 +230,10 @@ const CATALOGUE = {
     (p) => ({ title: 'Payout sent', message: `We sent your payout of ${p.amount}${p.transactionId ? ` (transaction ${p.transactionId})` : ''}.` }),
     (p) => ({ title: 'پے آؤٹ بھیج دیا گیا', message: `ہم نے آپ کا ${p.amount} کا پے آؤٹ بھیج دیا ہے${p.transactionId ? ` (ٹرانزیکشن ${p.transactionId})` : ''}۔` })
   ),
+  'payout.accountChanged': entry<{ hours: number }>(
+    (p) => ({ title: 'Your payout account was changed', message: `Your payouts will go to the new account after ${p.hours} hours. If you did not make this change, contact Nuray now.` }),
+    (p) => ({ title: 'آپ کا پے آؤٹ اکاؤنٹ تبدیل کر دیا گیا', message: `${p.hours} گھنٹے بعد آپ کے پے آؤٹ نئے اکاؤنٹ میں جائیں گے۔ اگر یہ تبدیلی آپ نے نہیں کی تو ابھی Nuray سے رابطہ کریں۔` })
+  ),
   'payout.failed': entry<{ amount: string; reason: string }>(
     (p) => ({
       title: "Your payout didn't go through",
@@ -416,6 +420,14 @@ const CATALOGUE = {
   'admin.booksCheck': englishOnly<{ count: number }>((p) => ({
     title: "Last night's books check found problems",
     message: `${p.count} thing${p.count === 1 ? '' : 's'} in Nuray's books need${p.count === 1 ? 's' : ''} looking at. Open Accounts to see what.`,
+  })),
+  'admin.payoutAccountChanged': englishOnly<{ kitchen: string; hours: number }>((p) => ({
+    title: 'A kitchen changed its payout account',
+    message: `${p.kitchen} changed where it is paid. Its payouts wait ${p.hours} hours; check with the kitchen if this looks wrong.`,
+  })),
+  'admin.largePayout': englishOnly<{ kitchen: string; amount: string }>((p) => ({
+    title: 'A large payout needs a second admin',
+    message: `${p.amount} to ${p.kitchen} must be approved by a second admin before it is sent.`,
   })),
   'admin.payoutNotReceived': englishOnly<{ kitchen: string; amount: string; reference: string }>((p) => ({
     title: 'A kitchen says a payout did not arrive',

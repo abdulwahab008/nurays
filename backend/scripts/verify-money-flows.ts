@@ -211,7 +211,7 @@ async function main() {
   const po: any = (await order(cust.id, [{ productId: prod.id, quantity: 1 }], { paymentMethod: 'cod' })).order;
   await prisma.order.update({ where: { id: po.id }, data: { orderStatus: 'delivered', paymentMethod: 'wallet', paymentCollectedBy: 'platform', paymentStatus: 'paid', paidAt: new Date() } });
   const earned = Number((await prisma.orderItem.findFirst({ where: { orderId: po.id } }))!.sellerPayout);
-  const reqs = await Promise.all([1, 2, 3].map(() => (require('../src/services/seller.service').default).requestPayout(sp.id, { amount: earned, payoutMethod: 'bank_transfer', accountNumber: '1' }).then(() => 'OK', (e: any) => e.code)));
+  const reqs = await Promise.all([1, 2, 3].map(() => (require('../src/services/seller.service').default).requestPayout(sp.id, { amount: earned, payoutMethod: 'bank_transfer', accountNumber: 'PK36SCBL0000001123456702' }).then(() => 'OK', (e: any) => e.code)));
   ok('concurrent payout requests cannot exceed earnings', reqs.filter((r) => r === 'OK').length === 1, `${reqs} earned=${earned}`);
   const payoutReq = await prisma.sellerPayout.findFirst({ where: { sellerId: sp.id, status: 'pending' } });
   await adminOrderService.processRefund(po.id, admin.id);
@@ -308,7 +308,7 @@ async function main() {
   const platItem = await prisma.orderItem.findFirst({ where: { orderId: pdo.id } });
   const selfGoods = Number(selfItem!.sellerPayout), platGoods = Number(platItem!.sellerPayout);
 
-  const payReq = (sid: string, amount: number) => sellerService.requestPayout(sid, { amount, payoutMethod: 'bank_transfer', accountNumber: '1' }).then(() => 'OK', (e: any) => e.code);
+  const payReq = (sid: string, amount: number) => sellerService.requestPayout(sid, { amount, payoutMethod: 'bank_transfer', accountNumber: 'PK36SCBL0000001123456702' }).then(() => 'OK', (e: any) => e.code);
   ok('self-delivering seller cannot withdraw more than goods + their delivery fee', (await payReq(selfS.id, selfGoods + 100 + 0.5)) === 'INSUFFICIENT_BALANCE');
   ok('self-delivering seller can withdraw goods + their delivery fee', (await payReq(selfS.id, selfGoods + 100)) === 'OK', `goods=${selfGoods}`);
   // The kitchen pays Nuray's Rs 150 delivery fee out of its earnings; the customer paid no delivery fee.
@@ -1129,7 +1129,7 @@ async function main() {
   const poO: any = (await order(rc2.id, [{ productId: poProd.id, quantity: 1 }], { paymentMethod: 'cod' })).order;
   await prisma.order.update({ where: { id: poO.id }, data: { orderStatus: 'delivered', paymentMethod: 'wallet', paymentCollectedBy: 'platform', paymentStatus: 'paid', paidAt: new Date() } });
   const poGoods = Number((await prisma.orderItem.findFirst({ where: { orderId: poO.id } }))!.sellerPayout);
-  await sellerService.requestPayout(poSeller.id, { amount: poGoods, payoutMethod: 'bank_transfer', accountNumber: '1' });
+  await sellerService.requestPayout(poSeller.id, { amount: poGoods, payoutMethod: 'bank_transfer', accountNumber: 'PK36SCBL0000001123456702' });
   const payoutRow = await prisma.sellerPayout.findFirst({ where: { sellerId: poSeller.id } });
   const { default: adminService } = require('../src/services/admin.service');
   const both = await Promise.all([adminService.completePayout(payoutRow!.id, 'T1').then(() => 'OK', (e: any) => e.code), adminService.failPayout(payoutRow!.id, 'bounced').then(() => 'OK', (e: any) => e.code)]);
@@ -2248,6 +2248,66 @@ async function main() {
     ok('a bank statement does not expect a JazzCash payout or a JazzCash deposit', ![...m.unmatchedRecords, ...m.matched.map((x: any) => x.record)].some((r: any) => r.id === jcPayout.id || r.id === jcDeposit.id));
     const jc = await sm.matchStatement(`Date,Description,Amount\n${today},Cash in JC-${tag},444.44\n`, 'jazzcash');
     ok("a JazzCash statement matches a rider's JazzCash deposit, and expects the JazzCash payout", jc.matched.some((x: any) => x.record.id === jcDeposit.id) && jc.unmatchedRecords.some((r: any) => r.id === jcPayout.id));
+  }
+
+  // ---- Guarding payouts against fraud (Money 7) ----
+  {
+    const weekly = require('../src/services/weekly-payout.service');
+    const adminSvc = require('../src/services/admin.service').default;
+    const fCust = await mkUser();
+    const fk = await mkSeller({ verificationStatus: 'approved', jazzcashNumber: '03001112233', bankAccountNumber: null });
+    const fprod = await mkProduct(fk.id, 50, 3000);
+    const earnOnline = async () => {
+      const o: any = (await order(fCust.id, [{ productId: fprod.id, quantity: 1 }], { paymentMethod: 'cod' })).order;
+      await prisma.order.update({ where: { id: o.id }, data: { orderStatus: 'delivered', deliveredAt: new Date(), paymentMethod: 'wallet', paymentCollectedBy: 'platform', paymentStatus: 'paid', paidAt: new Date() } });
+    };
+    await earnOnline();
+    const admin = await mkUser('admin');
+
+    await sellerService.updateSellerProfile(fk.userId, { jazzcashNumber: '03009998877' });
+    const moved = await prisma.seller.findUnique({ where: { id: fk.id } });
+    ok("changing the payout account number starts a hold, and the kitchen and the admins are told",
+      !!moved?.payoutAccountChangedAt && weekly.payoutHoldUntil(moved.payoutAccountChangedAt) !== null &&
+        (await prisma.notification.count({ where: { userId: fk.userId, dedupeKey: { startsWith: `payout-account:${fk.id}:` } } })) === 1 &&
+        (await prisma.notification.count({ where: { userId: admin.id, dedupeKey: { startsWith: `payout-account:${fk.id}:` } } })) === 1);
+    await sellerService.updateSellerProfile(fk.userId, { jazzcashAccountTitle: 'New Title' });
+    ok('changing only the account title does not restart it', (await prisma.seller.findUnique({ where: { id: fk.id } }))!.payoutAccountChangedAt!.getTime() === moved!.payoutAccountChangedAt!.getTime());
+    const bal = (await computeBalanceFor(fk.id)).available;
+    ok("during the hold the kitchen can't withdraw", (await code(sellerService.requestPayout(fk.id, { amount: bal, payoutMethod: 'jazzcash', accountNumber: '03009998877' }))) === 'PAYOUT_ACCOUNT_ON_HOLD');
+    ok('and the profile says until when', !!(await sellerService.getSellerProfile(fk.userId)).payoutsHeldUntil);
+
+    const nextMonday = (() => { const d = new Date(); const pk = new Date(d.getTime() + 5 * 3600e3); const add = ((8 - pk.getUTCDay()) % 7) || 7; return new Date(Date.UTC(pk.getUTCFullYear(), pk.getUTCMonth(), pk.getUTCDate() + add + 14, 2, 0)); })();
+    await prisma.seller.update({ where: { id: fk.id }, data: { payoutAccountChangedAt: new Date(nextMonday.getTime() - 3600e3) } });
+    const held = await weekly.runDailyPayouts(nextMonday);
+    ok('nor does the daily run pay it', held.ran && held.skipped.account_hold >= 1 && !held.created.some((c: any) => c.sellerId === fk.id));
+    await prisma.seller.update({ where: { id: fk.id }, data: { payoutAccountChangedAt: new Date(nextMonday.getTime() - (weekly.PAYOUT_ACCOUNT_HOLD_HOURS + 1) * 3600e3) } });
+    ok(`after ${48} hours it does`, (await weekly.runDailyPayouts(new Date(nextMonday.getTime() + 3600e3))).created.some((c: any) => c.sellerId === fk.id));
+    const daily = await prisma.sellerPayout.findFirst({ where: { sellerId: fk.id }, orderBy: { createdAt: 'desc' } });
+    await adminSvc.failPayout(daily!.id, 'test');
+
+    await prisma.seller.update({ where: { id: fk.id }, data: { payoutAccountChangedAt: null } });
+    ok('a kitchen cannot send a payout to an account it has not saved', (await code(sellerService.requestPayout(fk.id, { amount: bal, payoutMethod: 'jazzcash', accountNumber: '03004445566' }))) === 'PAYOUT_ACCOUNT_NOT_ON_FILE');
+    ok('nor by a way it has no account for', (await code(sellerService.requestPayout(fk.id, { amount: bal, payoutMethod: 'bank_transfer', accountNumber: 'PK36SCBL0000001123456702' }))) === 'PAYOUT_ACCOUNT_NOT_ON_FILE');
+    const req: any = await sellerService.requestPayout(fk.id, { amount: bal, payoutMethod: 'jazzcash', accountNumber: '0300-9998877' });
+    const reqRow = await prisma.sellerPayout.findFirst({ where: { sellerId: fk.id, status: 'pending' } });
+    ok('to its saved account it can, and the payout records that account', !!req && (reqRow?.accountDetails as any)?.accountNumber === '03009998877' && (reqRow?.accountDetails as any)?.accountTitle === 'New Title', JSON.stringify(reqRow?.accountDetails));
+
+    await prisma.systemSetting.upsert({ where: { key: 'largePayoutAmount' }, create: { key: 'largePayoutAmount', value: 1000 as any }, update: { value: 1000 as any } });
+    const admin2 = await mkUser('admin');
+    const listed = (await adminSvc.getPayouts({ status: 'pending', limit: 100 })).payouts.find((p: any) => p.id === reqRow!.id);
+    ok('a large payout is listed as needing a second admin', listed?.secondApproval?.approvedBy === null, JSON.stringify(listed?.secondApproval));
+    ok('it cannot be sent before a second admin approves it', (await code(adminSvc.completePayout(reqRow!.id, 'TX-BIG', admin.id))) === 'SECOND_APPROVAL_REQUIRED');
+    await adminSvc.approvePayout(reqRow!.id, admin.id);
+    ok('once approved, the admin who approved it cannot also send it', (await code(adminSvc.completePayout(reqRow!.id, 'TX-BIG', admin.id))) === 'SECOND_APPROVAL_REQUIRED');
+    ok('nor approve it twice', (await code(adminSvc.approvePayout(reqRow!.id, admin2.id))) === 'ALREADY_APPROVED');
+    await adminSvc.completePayout(reqRow!.id, 'TX-BIG', admin2.id);
+    const trail = (await prisma.payoutEvent.findMany({ where: { payoutId: reqRow!.id }, orderBy: { createdAt: 'asc' } })).map((e) => `${e.event}:${e.actorId === admin.id ? 'A' : e.actorId === admin2.id ? 'B' : e.actorType}`);
+    ok('another admin sends it, and the log shows both', JSON.stringify(trail) === JSON.stringify(['created:kitchen', 'approved:A', 'sent:B']), JSON.stringify(trail));
+    await prisma.systemSetting.update({ where: { key: 'largePayoutAmount' }, data: { value: 100000 as any } });
+    await earnOnline();
+    const small: any = await sellerService.requestPayout(fk.id, { amount: (await computeBalanceFor(fk.id)).available, payoutMethod: 'jazzcash', accountNumber: '03009998877' });
+    ok('a payout under the limit needs no second approval', (await code(adminSvc.approvePayout(small.payoutId, admin.id))) === 'APPROVAL_NOT_NEEDED' && (await code(adminSvc.completePayout(small.payoutId, 'TX-SMALL', admin.id))) === 'OK');
+    await prisma.systemSetting.delete({ where: { key: 'largePayoutAmount' } });
   }
 
   // ---- Monthly commission invoices for kitchens (Money 8) ----
