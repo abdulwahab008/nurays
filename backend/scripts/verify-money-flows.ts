@@ -2167,6 +2167,7 @@ async function main() {
     const postedNo = (await prisma.order.findUnique({ where: { id: posted!.orderId! } }))!.orderNumber;
     await prisma.ledgerEntry.create({ data: { orderId: posted!.orderId, transactionType: 'adjustment', accountType: 'asset', entryType: 'debit', amount: 1, description: 'books check test' } });
 
+    await prisma.riderLedgerEntry.create({ data: { riderId: brd.id, type: 'delivery_fee', amount: 20598, note: 'books check test: a fee from before the distance cap' } as any });
     const found = await bc.findBooksIssues();
     ok('it finds an order whose debits and credits differ', has(found, 'ledger_unbalanced', `#${postedNo}`), JSON.stringify(found));
     ok("it finds a rider whose stored cash doesn't match the ledger", has(found, 'rider_cash_mismatch', 'shows Rs 5'));
@@ -2174,6 +2175,7 @@ async function main() {
     ok('and sent payouts with no log entry', has(found, 'payout_unlogged', bk.businessName));
     ok('a payout not sent after two days', has(found, 'payout_waiting', bk.businessName));
     ok('a rider deposit nobody checked for a day', has(found, 'deposit_waiting', `JC-${tag}`));
+    ok('a rider fee above the most a delivery can pay', has(found, 'rider_fee_over_cap', 'Rs 20,598'), JSON.stringify(found.find((i: any) => i.key === 'rider_fee_over_cap')));
     await prisma.$executeRaw`UPDATE riders SET cash_held = cash_held - 5 WHERE id = ${brd.id}`;
 
     const day = new Date().toISOString().slice(0, 10);

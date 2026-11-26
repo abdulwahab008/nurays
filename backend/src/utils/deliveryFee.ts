@@ -441,6 +441,9 @@ export interface DeliveryFeeCorridor {
  * Km beyond maxKm (how far Nuray riders deliver, PlatformDeliveryPricing.maxKm) are not paid: a job
  * only gets that long through a wrong pin, which must not price it at thousands of rupees.
  */
+/** The most a rider's standard fee can be: the highest city base plus the distance part at the farthest delivery. */
+export const maxStandardRiderFee = (maxKm: number) => Math.max(120, platformDefaultFee('Lahore') + Math.round(maxKm * 20));
+
 export function calculateDeliveryFeeCorridor(
   pickupLat: number | null,
   pickupLng: number | null,

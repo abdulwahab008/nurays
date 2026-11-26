@@ -1,6 +1,8 @@
 import type { Prisma } from '@prisma/client';
 import prisma from '../config/database';
 import { notificationText } from '../utils/notificationText';
+import { maxStandardRiderFee } from '../utils/deliveryFee';
+import { getPlatformDeliveryPricing } from './delivery-pricing.service';
 import { pktDate } from '../utils/payoutWeek';
 import { CASH_DUE_HOURS, notifyAdmins, ridersWithOverdueCash } from './rider-deposit.service';
 
@@ -31,7 +33,9 @@ export async function findBooksIssues(now: Date = new Date()): Promise<BooksIssu
   const payoutBefore = new Date(now.getTime() - PAYOUT_WAIT_DAYS * 24 * HOUR_MS);
   const depositBefore = new Date(now.getTime() - DEPOSIT_WAIT_HOURS * HOUR_MS);
 
-  const [unbalanced, unposted, cashDrift, duplicateRefs, unlogged, waitingPayouts, waitingDeposits, holding] = await Promise.all([
+  // A rider's fee is capped by the farthest delivery distance (calculateDeliveryFeeCorridor); one above that was paid in error.
+  const feeCap = maxStandardRiderFee((await getPlatformDeliveryPricing()).maxKm);
+  const [unbalanced, unposted, cashDrift, duplicateRefs, unlogged, waitingPayouts, waitingDeposits, holding, overpaid] = await Promise.all([
     prisma.$queryRaw<Array<{ order_number: string; debit: unknown; credit: unknown }>>`
       SELECT o.order_number, x.debit, x.credit FROM (
         SELECT order_id,
@@ -70,6 +74,10 @@ export async function findBooksIssues(now: Date = new Date()): Promise<BooksIssu
     prisma.$queryRaw<Array<{ id: string; name: string | null; cash_held: unknown }>>`
       SELECT r.id, p.full_name AS name, r.cash_held FROM riders r LEFT JOIN user_profiles p ON p.user_id = r.user_id
       WHERE r.cash_held > 0`,
+    prisma.$queryRaw<Array<{ name: string | null; order_number: string | null; amount: unknown }>>`
+      SELECT p.full_name AS name, o.order_number, e.amount FROM rider_ledger_entries e
+      JOIN riders r ON r.id = e.rider_id LEFT JOIN user_profiles p ON p.user_id = r.user_id LEFT JOIN orders o ON o.id = e.order_id
+      WHERE e.type = 'delivery_fee' AND e.amount > ${feeCap} ORDER BY e.created_at`,
   ]);
   const overdue = await ridersWithOverdueCash(holding.map((r) => r.id), now);
 
@@ -81,6 +89,7 @@ export async function findBooksIssues(now: Date = new Date()): Promise<BooksIssu
     ...issue('payout_unlogged', 'Payouts marked sent with no log entry for it', unlogged.map((r) => `${r.business_name}: ${rs(r.net_amount)}`)),
     ...issue('payout_waiting', `Kitchen payouts not sent after ${PAYOUT_WAIT_DAYS} days`, waitingPayouts.map((r) => `${r.business_name}: ${rs(r.net_amount)} since ${pktDate(r.created_at)}`)),
     ...issue('deposit_waiting', `Rider deposits not checked after ${DEPOSIT_WAIT_HOURS} hours`, waitingDeposits.map((r) => `${r.name ?? 'Rider'}: ${rs(r.amount)}, ref ${r.transaction_ref}`)),
+    ...issue('rider_fee_over_cap', `Rider fees above the most a delivery can pay (${rs(feeCap)})`, overpaid.map((r) => `${r.name ?? 'Rider'}: ${rs(r.amount)}${r.order_number ? ` on #${r.order_number}` : ''}`)),
     ...issue('cash_overdue', `Riders holding customer cash for more than ${CASH_DUE_HOURS} hours`, holding.filter((r) => overdue.has(r.id)).map((r) => `${r.name ?? 'Rider'}: ${rs(r.cash_held)}`)),
   ];
 }
