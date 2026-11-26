@@ -34,6 +34,9 @@ import {
   createRiderAdjustment,
   updateRiderCashLimit,
   updateRiderCommunity,
+  getRiderDeposits,
+  postApproveDeposit,
+  postRejectDeposit,
 } from '../controllers/admin-rider.controller';
 import {
   getUsers,
@@ -74,6 +77,7 @@ import {
   approveRejectRiderSchema,
   riderCashMovementSchema,
   riderSettlementSchema,
+  rejectDepositSchema,
   riderAdjustmentSchema,
   riderCashLimitSchema,
   riderCommunitySchema,
@@ -148,6 +152,9 @@ router.post('/riders/:id/reject', validate(approveRejectRiderSchema), approveRej
 router.get('/riders/money', getRidersMoney);
 router.get('/riders/:id/money', getRiderMoney);
 router.post('/riders/:id/settlements', validate(riderSettlementSchema), createRiderSettlement);
+router.get('/rider-deposits', getRiderDeposits);
+router.post('/rider-deposits/:id/approve', postApproveDeposit);
+router.post('/rider-deposits/:id/reject', validate(rejectDepositSchema), postRejectDeposit);
 router.post('/riders/:id/payouts', validate(riderCashMovementSchema), createRiderPayout);
 router.post('/riders/:id/adjustments', validate(riderAdjustmentSchema), createRiderAdjustment);
 router.patch('/riders/:id/cash-limit', validate(riderCashLimitSchema), updateRiderCashLimit);

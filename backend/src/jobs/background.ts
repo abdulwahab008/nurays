@@ -5,6 +5,7 @@ import { pruneRefreshTokens } from '../services/session.service';
 import { runDailyPayouts } from '../services/weekly-payout.service';
 import { refreshAllOwing } from '../services/kitchen-owing.service';
 import { logOpsSnapshot } from '../services/ops-snapshot.service';
+import { remindOverdueCash } from '../services/rider-deposit.service';
 import { sweepStaleOrders, purgeExpiredSecrets } from '../services/order-maintenance.service';
 import { purgeOldAuditLogs } from '../services/audit-retention.service';
 import { expireAbandonedAttempts } from '../services/online-payment.service';
@@ -53,6 +54,8 @@ export function startBackgroundWork() {
   // Delivered, paid orders whose ledger posting failed after the delivery was saved.
   scheduleJob('ledger-catch-up', 15 * 60 * 1000, () => ledgerService.postMissedCompletions());
   scheduleJob('ops-snapshot', 5 * 60 * 1000, () => logOpsSnapshot());
+  // Riders holding customer cash past the deposit deadline: a daily reminder, and the admins told.
+  scheduleJob('cash-overdue', 60 * 60 * 1000, () => remindOverdueCash());
   // Trending and rating scores the listings sort by (recent orders fade over days, so this
   // keeps them current even when nobody orders).
   scheduleJob('ranking-scores', 15 * 60 * 1000, () => recomputeRankings());

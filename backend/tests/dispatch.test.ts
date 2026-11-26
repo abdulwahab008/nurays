@@ -11,6 +11,8 @@ jest.mock('../src/config/database', () => ({
     $transaction: jest.fn(),
   },
 }));
+const mockOverdue = new Set<string>();
+jest.mock('../src/services/rider-deposit.service', () => ({ CASH_DUE_HOURS: 24, ridersWithOverdueCash: jest.fn(async () => mockOverdue) }));
 jest.mock('../src/services/delivery-pricing.service', () => ({
   getPlatformDeliveryPricing: jest.fn(async () => ({ perKm: 20, includedKm: 3, maxKm: 20, fallbackBaseFee: 150, communities: new Map() })),
 }));

@@ -1947,6 +1947,58 @@ async function main() {
     await prisma.systemSetting.delete({ where: { key: 'weeklyPayouts' } });
   }
 
+  // ---- Riders deposit their cash themselves, with the receipt (Money 4) ----
+  {
+    const dep = require('../src/services/rider-deposit.service');
+    const { riderMoney: money } = require('../src/services/rider-ledger.service');
+    await prisma.systemSetting.upsert({
+      where: { key: 'nurayDepositAccounts' },
+      create: { key: 'nurayDepositAccounts', value: { bankName: '', bankAccountTitle: '', bankAccountNumber: '', jazzcashTitle: 'Nuray', jazzcashNumber: '03001112223', easypaisaTitle: '', easypaisaNumber: '' } as any },
+      update: { value: { bankName: '', bankAccountTitle: '', bankAccountNumber: '', jazzcashTitle: 'Nuray', jazzcashNumber: '03001112223', easypaisaTitle: '', easypaisaNumber: '' } as any },
+    });
+    const ru = await mkUser('rider');
+    const rd = await prisma.rider.create({ data: { userId: ru.id, city: 'Lahore', verificationStatus: 'approved', status: 'active', isAvailable: true } as any });
+    // Collected Rs 700 on a cash order (and earned Rs 124 for it) two days ago, Rs 500 just now.
+    const twoDaysAgo = new Date(Date.now() - 48 * 3600e3);
+    await prisma.riderLedgerEntry.createMany({ data: [
+      { riderId: rd.id, type: 'cod_collected', amount: -700, createdAt: twoDaysAgo },
+      { riderId: rd.id, type: 'delivery_fee', amount: 124, createdAt: twoDaysAgo },
+      { riderId: rd.id, type: 'cod_collected', amount: -500 },
+    ] as any });
+    ok('cash held longer than the deadline stops new cash orders for that rider', (await dep.ridersWithOverdueCash([rd.id])).has(rd.id));
+    const sum0 = await dep.depositSummary(ru.id);
+    ok('the rider is told to deposit the cash less the pay they keep (1,200 held, 124 kept, 1,076 to deposit)', sum0.cashHeld === 1200 && sum0.keepAsPay === 124 && sum0.toDeposit === 1076, JSON.stringify({ held: sum0.cashHeld, keep: sum0.keepAsPay, dep: sum0.toDeposit }));
+    const receipt = `private:x/proofs/${ru.id}/receipt-${uniq()}.webp`;
+    ok("a deposit needs the rider's own receipt", (await code(dep.submitDeposit(ru.id, { amount: 576, keptAsPay: 124, method: 'jazzcash', transactionRef: 'TX12345', receiptUrl: `private:x/proofs/${cust.id}/r.webp` }))) === 'INVALID_PROOF_URL');
+    ok('nor to an account Nuray has not set up', (await code(dep.submitDeposit(ru.id, { amount: 576, keptAsPay: 124, method: 'bank_transfer', transactionRef: 'TX12345', receiptUrl: receipt }))) === 'METHOD_UNAVAILABLE');
+    ok('nor more than the cash the rider holds', (await code(dep.submitDeposit(ru.id, { amount: 1200, keptAsPay: 124, method: 'jazzcash', transactionRef: 'TX12345', receiptUrl: receipt }))) === 'DEPOSIT_EXCEEDS_CASH');
+    const first = await dep.submitDeposit(ru.id, { amount: 576, keptAsPay: 124, method: 'jazzcash', transactionRef: 'TX-OLD-700', receiptUrl: receipt });
+    ok('the same transaction ID cannot be submitted twice', (await code(dep.submitDeposit(ru.id, { amount: 100, method: 'jazzcash', transactionRef: 'TX-OLD-700', receiptUrl: receipt }))) === 'DUPLICATE_REFERENCE');
+    ok('a deposit waiting for approval lifts the block (a slow review never blocks a rider who paid) but posts nothing yet',
+      !(await dep.ridersWithOverdueCash([rd.id])).has(rd.id) && (await money(prisma, rd.id)).cashHeld === 1200);
+    const admin = await mkUser('admin');
+    await dep.approveDeposit(first.id, admin.id);
+    const m1 = await money(prisma, rd.id);
+    ok('approving posts the cash handed in and the pay kept: the rider holds the newer Rs 500 and is owed nothing', m1.cashHeld === 500 && m1.unpaid === 0 && m1.paidOut === 124, JSON.stringify(m1));
+    ok('an approved deposit cannot be approved again', (await code(dep.approveDeposit(first.id, admin.id))) === 'DEPOSIT_NOT_PENDING');
+    const second = await dep.submitDeposit(ru.id, { amount: 500, method: 'jazzcash', transactionRef: 'TX-NEW-500', receiptUrl: receipt });
+    await dep.rejectDeposit(second.id, admin.id, 'No such transaction in the JazzCash statement');
+    ok('a rejected deposit posts nothing and the rider is told why', (await money(prisma, rd.id)).cashHeld === 500 &&
+      (await prisma.notification.count({ where: { userId: ru.id, dedupeKey: `deposit:${second.id}:rejected` } })) === 1);
+    ok('the newer cash is not overdue yet', !(await dep.ridersWithOverdueCash([rd.id])).has(rd.id));
+    // A rider Nuray owes more than the cash they hold keeps it all as pay, with nothing to transfer.
+    const ku = await mkUser('rider');
+    const kr = await prisma.rider.create({ data: { userId: ku.id, city: 'Lahore', verificationStatus: 'approved', status: 'active' } as any });
+    await prisma.riderLedgerEntry.createMany({ data: [{ riderId: kr.id, type: 'cod_collected', amount: -300 }, { riderId: kr.id, type: 'delivery_fee', amount: 500 }] as any });
+    const ks = await dep.depositSummary(ku.id);
+    ok('a rider owed more than they hold has nothing to deposit and keeps the cash as pay', ks.toDeposit === 0 && ks.keepAsPay === 300, JSON.stringify({ dep: ks.toDeposit, keep: ks.keepAsPay }));
+    ok('and cannot keep more than they hold', (await code(dep.keepCashAsPay(ku.id, 301))) === 'DEPOSIT_EXCEEDS_CASH');
+    await dep.keepCashAsPay(ku.id, 300);
+    const km = await money(prisma, kr.id);
+    ok('keeping it posts at once: no cash left, still owed the rest', km.cashHeld === 0 && km.balance === 200 && km.paidOut === 300, JSON.stringify(km));
+    await prisma.systemSetting.delete({ where: { key: 'nurayDepositAccounts' } });
+  }
+
   // ---- Netting and the cash pause (Money 3) ----
   {
     const owing = require('../src/services/kitchen-owing.service');

@@ -13,6 +13,8 @@ const mockPrisma: any = {
 };
 
 jest.mock('../src/config/database', () => ({ __esModule: true, default: mockPrisma }));
+const mockOverdue = new Set<string>();
+jest.mock('../src/services/rider-deposit.service', () => ({ CASH_DUE_HOURS: 24, ridersWithOverdueCash: jest.fn(async () => mockOverdue) }));
 jest.mock('../src/services/delivery-pricing.service', () => ({
   getPlatformDeliveryPricing: jest.fn(async () => ({ perKm: 20, includedKm: 3, maxKm: 20, fallbackBaseFee: 150, communities: new Map() })),
 }));
@@ -209,6 +211,21 @@ describe('claimDelivery and the cash limit', () => {
     ]);
     mockPrisma.order.findFirst.mockResolvedValue({ id: 'o1', paymentMethod: 'cod', paymentStatus: 'pending', totalAmount: 3000 });
     await expect(riderService.claimDelivery('user-1', 'd1')).rejects.toMatchObject({ code: 'CASH_LIMIT_REACHED' });
+  });
+
+  it('refuses a cash order while the rider holds cash past the deposit deadline, even under the limit', async () => {
+    mockOverdue.add(approvedRider.id);
+    mockPrisma.order.findFirst.mockResolvedValue({ id: 'o1', paymentMethod: 'cod', paymentStatus: 'pending', totalAmount: 100 });
+    await expect(riderService.claimDelivery('user-1', 'd1')).rejects.toMatchObject({ code: 'CASH_OVERDUE', statusCode: 409 });
+    mockOverdue.clear();
+  });
+
+  it('still gives an overdue rider prepaid orders', async () => {
+    mockOverdue.add(approvedRider.id);
+    mockPrisma.order.findFirst.mockResolvedValue({ id: 'o1', paymentMethod: 'safepay', paymentStatus: 'paid', totalAmount: 3000 });
+    await riderService.claimDelivery('user-1', 'd1');
+    expect(mockPrisma.delivery.updateMany).toHaveBeenCalled();
+    mockOverdue.clear();
   });
 
   it('still lets the rider take a prepaid order', async () => {

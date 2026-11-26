@@ -11,6 +11,7 @@ import { LEDGER_LABELS, riderService, RiderEarnings, RiderLedgerEntry } from '@/
 import { formatPrice, formatDate, formatTime } from '@/lib/utils';
 import { useT } from '@/lib/i18n';
 import { riderMessages, riderKeyFor } from '@/lib/i18n/messages/rider';
+import { CashDepositCard } from '@/components/riders/CashDepositCard';
 import { useShallow } from 'zustand/react/shallow';
 
 interface HistoryRow {
@@ -138,6 +139,7 @@ export default function RiderEarningsPage() {
                   </div>
                 </div>
               </section>
+              <CashDepositCard onChanged={load} />
             </div>
 
             <aside className="space-y-7 lg:pt-1 lg:col-start-2 lg:row-start-1 lg:row-span-2">

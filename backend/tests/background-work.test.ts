@@ -10,7 +10,7 @@ import { startBackgroundWork } from '../src/jobs/background';
 it('schedules every timed job and starts the queue workers', () => {
   startBackgroundWork();
   expect(scheduled.sort()).toEqual([
-    'audit-retention', 'dispatch-waiting', 'expire-payment-attempts', 'hub-expiry', 'kitchen-owing', 'ledger-catch-up',
+    'audit-retention', 'cash-overdue', 'dispatch-waiting', 'expire-payment-attempts', 'hub-expiry', 'kitchen-owing', 'ledger-catch-up',
     'ops-snapshot', 'prune-refresh-tokens', 'purge-expired-secrets', 'ranking-scores', 'scheduled-deliveries',
     'stale-orders', 'stock-alerts', 'daily-payouts',
   ].sort());

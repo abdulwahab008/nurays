@@ -46,6 +46,17 @@ export const updateSettingsSchema = z.object({
   commissionRate: z.number().min(0).max(100).optional(),
   minPayoutAmount: z.number().min(0).max(10_000_000).optional(),
   weeklyPayouts: z.boolean().optional(),
+  nurayDepositAccounts: z
+    .object({
+      bankName: z.string().trim().max(100),
+      bankAccountTitle: z.string().trim().max(100),
+      bankAccountNumber: z.string().trim().max(40),
+      jazzcashTitle: z.string().trim().max(100),
+      jazzcashNumber: z.string().trim().max(20),
+      easypaisaTitle: z.string().trim().max(100),
+      easypaisaNumber: z.string().trim().max(20),
+    })
+    .optional(),
   payoutHolidays: z
     .array(z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'A holiday is a date as YYYY-MM-DD').refine((d) => { const at = new Date(`${d}T00:00:00Z`); return !Number.isNaN(at.getTime()) && at.toISOString().startsWith(d); }, 'Not a real date'))
     .max(100)
@@ -145,3 +156,5 @@ export const createStaffSchema = z.object({
 });
 export const staffRoleSchema = z.object({ role: z.enum(['admin', 'support']) });
 export const staffPasswordSchema = z.object({ password: z.string().min(12, 'Use at least 12 characters').max(200) });
+
+export const rejectDepositSchema = z.object({ reason: z.string().trim().min(3, 'Say why the deposit is rejected').max(300) });

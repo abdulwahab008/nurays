@@ -6,6 +6,7 @@ import socketManager from '../config/socket';
 import realtimeOrderService from './realtime-order.service';
 import { notify } from './notify.service';
 import { cashLimitOf } from './rider-ledger.service';
+import { ridersWithOverdueCash } from './rider-deposit.service';
 import { calculateDeliveryFeeCorridor } from '../utils/deliveryFee';
 import { getPlatformDeliveryPricing } from './delivery-pricing.service';
 import { cashToCollect, dropoffAreaOf, endsOf, routeMatch } from '../utils/riderJobs';
@@ -94,6 +95,8 @@ export async function dispatchDelivery(deliveryId: string, opts: { announced?: b
     prisma.delivery.groupBy({ by: ['riderId'], where: { riderId: { in: riderIds }, status: 'delivered', deliveryTime: { gte: startOfDay } }, _count: { _all: true } }),
   ]);
 
+  // A rider holding cash past the deposit deadline takes no cash order: as if their cash limit were reached.
+  const overdue = await ridersWithOverdueCash(riders.map((r) => r.id));
   const candidates: DispatchCandidate[] = [];
   for (const r of riders) {
     const mine = activeJobs.filter((d) => d.riderId === r.id);
@@ -103,7 +106,7 @@ export async function dispatchDelivery(deliveryId: string, opts: { announced?: b
       active: mine.map(endsWithCommunities),
       cashHeld: Number(r.cashHeld),
       cashToCollect: cashToCollect(mine),
-      cashLimit: cashLimitOf(r),
+      cashLimit: overdue.has(r.id) ? 0 : cashLimitOf(r),
       deliveriesToday: doneToday.find((d) => d.riderId === r.id)?._count._all ?? 0,
     });
   }

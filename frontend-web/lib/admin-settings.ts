@@ -20,9 +20,18 @@ export interface SettingsForm {
   deliveryFallbackFee: string;
   /** Payout holidays, one YYYY-MM-DD date per line (or separated by commas). */
   payoutHolidays: string;
+  /** Nuray's accounts riders deposit cash into (empty = not offered). */
+  depositBankName: string;
+  depositBankTitle: string;
+  depositBankNumber: string;
+  depositJazzcashTitle: string;
+  depositJazzcashNumber: string;
+  depositEasypaisaTitle: string;
+  depositEasypaisaNumber: string;
 }
 
-type NumberKey = Exclude<keyof SettingsForm, 'platformName' | 'supportEmail' | 'supportPhone' | 'payoutHolidays'>;
+type DepositKey = `deposit${string}` & keyof SettingsForm;
+type NumberKey = Exclude<keyof SettingsForm, 'platformName' | 'supportEmail' | 'supportPhone' | 'payoutHolidays' | DepositKey>;
 
 /** The box, what a person calls it, and the lowest and highest value the API accepts. */
 const NUMBERS: ReadonlyArray<readonly [NumberKey, string, number, number]> = [
@@ -41,11 +50,11 @@ const TEXTS: ReadonlyArray<readonly [keyof SettingsForm, string]> = [
 ];
 
 export type SettingsCheck =
-  | { ok: true; body: Record<keyof SettingsForm, string | number | string[]> }
+  | { ok: true; body: Record<string, string | number | string[] | Record<string, string>> }
   | { ok: false; field: keyof SettingsForm; message: string };
 
 export function checkSettingsForm(form: SettingsForm): SettingsCheck {
-  const body: Record<string, string | number | string[]> = {};
+  const body: Record<string, string | number | string[] | Record<string, string>> = {};
   for (const [key, label] of TEXTS) {
     const value = form[key].trim();
     if (!value) return { ok: false, field: key, message: `${label} can't be empty.` };
@@ -70,5 +79,22 @@ export function checkSettingsForm(form: SettingsForm): SettingsCheck {
     if (!real) return { ok: false, field: 'payoutHolidays', message: `Payout holidays: "${day}" is not a date as YYYY-MM-DD.` };
   }
   body.payoutHolidays = [...new Set(holidays)].sort();
-  return { ok: true, body: body as Record<keyof SettingsForm, string | number | string[]> };
+  const digits = (v: string) => v.replace(/[\s-]/g, '');
+  for (const [key, label] of [['depositJazzcashNumber', 'JazzCash'], ['depositEasypaisaNumber', 'EasyPaisa']] as const) {
+    const n = digits(form[key]);
+    if (n && !/^03\d{9}$/.test(n)) return { ok: false, field: key, message: `The ${label} number must be a mobile number like 03001234567.` };
+  }
+  if (form.depositBankNumber.trim() && !form.depositBankTitle.trim()) {
+    return { ok: false, field: 'depositBankTitle', message: 'Add the bank account title, so riders can check they are paying Nuray.' };
+  }
+  body.nurayDepositAccounts = {
+    bankName: form.depositBankName.trim(),
+    bankAccountTitle: form.depositBankTitle.trim(),
+    bankAccountNumber: form.depositBankNumber.trim(),
+    jazzcashTitle: form.depositJazzcashTitle.trim(),
+    jazzcashNumber: digits(form.depositJazzcashNumber),
+    easypaisaTitle: form.depositEasypaisaTitle.trim(),
+    easypaisaNumber: digits(form.depositEasypaisaNumber),
+  };
+  return { ok: true, body };
 }

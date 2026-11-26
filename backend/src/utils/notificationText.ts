@@ -359,6 +359,14 @@ const CATALOGUE = {
     (p) => ({ title: 'Job taken back', message: `Order #${p.orderNumber} is no longer yours: it was given back to other riders. Don't pick it up.` }),
     (p) => ({ title: 'جاب واپس لے لی گئی', message: `آرڈر ${no(p.orderNumber)} اب آپ کا نہیں رہا: یہ دوسرے رائیڈرز کو دے دیا گیا ہے۔ اسے نہ اٹھائیں۔` })
   ),
+  'rider.depositRejected': entry<{ amount: string; reason: string }>(
+    (p) => ({ title: 'Deposit not accepted', message: `Your deposit of ${p.amount} was not accepted: ${p.reason}. The cash still counts as with you; please check and submit it again.` }),
+    (p) => ({ title: 'جمع شدہ رقم قبول نہیں ہوئی', message: `آپ کی ${p.amount} کی جمع شدہ رقم قبول نہیں ہوئی: ${p.reason}۔ یہ نقدی ابھی آپ کے پاس شمار ہوتی ہے؛ براہِ کرم چیک کر کے دوبارہ جمع کرائیں۔` })
+  ),
+  'rider.cashOverdue': entry<{ hours: number }>(
+    (p) => ({ title: 'Deposit your cash', message: `You have held customer cash for more than ${p.hours} hours. Deposit it to Nuray's account and submit the receipt; until then you get no new cash orders.` }),
+    (p) => ({ title: 'اپنی نقدی جمع کرائیں', message: `آپ کے پاس کسٹمر کی نقدی ${p.hours} گھنٹے سے زیادہ ہے۔ اسے Nuray کے اکاؤنٹ میں جمع کرا کے رسید جمع کرائیں؛ تب تک آپ کو نئے نقد آرڈر نہیں ملیں گے۔` })
+  ),
   'rider.settlement': entry<{ cashHandedIn: number; keptAsPay: number; cashHeld: number }>(
     (p) => {
       const parts = [
@@ -396,6 +404,14 @@ const CATALOGUE = {
   'admin.kitchenPaused': englishOnly<{ kitchen: string; owed: string }>((p) => ({
     title: `${p.kitchen} owes Nuray ${p.owed}`,
     message: 'Its cash and direct-transfer orders are paused until it pays or its online orders cover the amount.',
+  })),
+  'admin.depositSubmitted': englishOnly<{ amount: string }>((p) => ({
+    title: 'Rider deposit to check',
+    message: `A rider deposited ${p.amount} and sent the receipt. Check it arrived, then approve it.`,
+  })),
+  'admin.cashOverdue': englishOnly<{ count: number; total: string; hours: number }>((p) => ({
+    title: 'Rider cash overdue',
+    message: `${p.count} rider${p.count === 1 ? ' has' : 's have'} held customer cash (${p.total} in hand) for more than ${p.hours} hours.`,
   })),
   'admin.dailyPayouts': englishOnly<{ count: number; total: string }>((p) => ({
     title: "Today's kitchen payouts to send",

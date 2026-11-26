@@ -875,6 +875,8 @@ export class AdminService {
     weeklyPayouts: true,
     // Days with no payout run besides weekends (public holidays), as YYYY-MM-DD.
     payoutHolidays: [] as string[],
+    // The accounts riders (and kitchens) deposit cash into; an empty number is not offered.
+    nurayDepositAccounts: { bankName: '', bankAccountTitle: '', bankAccountNumber: '', jazzcashTitle: '', jazzcashNumber: '', easypaisaTitle: '', easypaisaNumber: '' },
     // Nuray rider delivery to other communities (see delivery-pricing.service.ts).
     ...DELIVERY_SETTING_DEFAULTS,
   };

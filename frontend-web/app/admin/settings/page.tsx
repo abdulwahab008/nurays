@@ -41,6 +41,13 @@ export default function AdminSettingsPage() {
         deliveryMaxKm: String(s.deliveryMaxKm ?? 20),
         deliveryFallbackFee: String(s.deliveryFallbackFee ?? 150),
         payoutHolidays: Array.isArray(s.payoutHolidays) ? s.payoutHolidays.join('\n') : '',
+        depositBankName: s.nurayDepositAccounts?.bankName ?? '',
+        depositBankTitle: s.nurayDepositAccounts?.bankAccountTitle ?? '',
+        depositBankNumber: s.nurayDepositAccounts?.bankAccountNumber ?? '',
+        depositJazzcashTitle: s.nurayDepositAccounts?.jazzcashTitle ?? '',
+        depositJazzcashNumber: s.nurayDepositAccounts?.jazzcashNumber ?? '',
+        depositEasypaisaTitle: s.nurayDepositAccounts?.easypaisaTitle ?? '',
+        depositEasypaisaNumber: s.nurayDepositAccounts?.easypaisaNumber ?? '',
       });
     } catch (error) {
       setLoadError(error);
@@ -195,6 +202,45 @@ export default function AdminSettingsPage() {
                   Kitchens are paid every working day, Monday to Friday, for their orders up to the day before. List public holidays here,
                   one date per line (YYYY-MM-DD): no payouts are made that day, and the next working day covers it.
                 </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Nuray's accounts for rider deposits */}
+          <div data-testid="deposit-accounts">
+            <h2 className="text-base font-semibold text-ink mb-1">Nuray&apos;s accounts for deposits</h2>
+            <p className="text-sm text-muted mb-4">
+              Riders deposit the customer cash they collect into these accounts and send the receipt, which you check under Cash deposits.
+              Leave a number empty to not offer that method.
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label htmlFor="depositJazzcashNumber" className="block text-sm font-medium text-ink mb-2">JazzCash number</label>
+                <input id="depositJazzcashNumber" value={formData.depositJazzcashNumber} onChange={(e) => setFormData({ ...formData, depositJazzcashNumber: e.target.value })} className="nuray-input w-full" dir="ltr" />
+              </div>
+              <div>
+                <label htmlFor="depositJazzcashTitle" className="block text-sm font-medium text-ink mb-2">JazzCash account title</label>
+                <input id="depositJazzcashTitle" value={formData.depositJazzcashTitle} onChange={(e) => setFormData({ ...formData, depositJazzcashTitle: e.target.value })} className="nuray-input w-full" dir="ltr" />
+              </div>
+              <div>
+                <label htmlFor="depositEasypaisaNumber" className="block text-sm font-medium text-ink mb-2">EasyPaisa number</label>
+                <input id="depositEasypaisaNumber" value={formData.depositEasypaisaNumber} onChange={(e) => setFormData({ ...formData, depositEasypaisaNumber: e.target.value })} className="nuray-input w-full" dir="ltr" />
+              </div>
+              <div>
+                <label htmlFor="depositEasypaisaTitle" className="block text-sm font-medium text-ink mb-2">EasyPaisa account title</label>
+                <input id="depositEasypaisaTitle" value={formData.depositEasypaisaTitle} onChange={(e) => setFormData({ ...formData, depositEasypaisaTitle: e.target.value })} className="nuray-input w-full" dir="ltr" />
+              </div>
+              <div>
+                <label htmlFor="depositBankName" className="block text-sm font-medium text-ink mb-2">Bank name</label>
+                <input id="depositBankName" value={formData.depositBankName} onChange={(e) => setFormData({ ...formData, depositBankName: e.target.value })} className="nuray-input w-full" dir="ltr" />
+              </div>
+              <div>
+                <label htmlFor="depositBankTitle" className="block text-sm font-medium text-ink mb-2">Bank account title</label>
+                <input id="depositBankTitle" value={formData.depositBankTitle} onChange={(e) => setFormData({ ...formData, depositBankTitle: e.target.value })} className="nuray-input w-full" dir="ltr" />
+              </div>
+              <div>
+                <label htmlFor="depositBankNumber" className="block text-sm font-medium text-ink mb-2">Bank account number or IBAN</label>
+                <input id="depositBankNumber" value={formData.depositBankNumber} onChange={(e) => setFormData({ ...formData, depositBankNumber: e.target.value })} className="nuray-input w-full" dir="ltr" />
               </div>
             </div>
           </div>
