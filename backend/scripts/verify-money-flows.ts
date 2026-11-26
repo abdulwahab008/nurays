@@ -2180,6 +2180,74 @@ async function main() {
     ok('an admin can run it any time; the latest result is what the Accounts screen shows', manual.trigger === 'manual' && JSON.stringify(keys((await bc.latestBooksCheck())!.issues)) === JSON.stringify(keys(manual.issues)) && (await bc.latestBooksCheck())!.trigger === 'manual');
   }
 
+  // ---- Matching a Nuray account statement (Money 5) ----
+  {
+    const sm = require('../src/services/statement-match.service');
+    const bankCsv = [
+      'Habib Bank Limited,Account Statement',
+      'Account,0123-4567890-01',
+      '',
+      'Transaction Date,Narration,Cheque/Ref No,Withdrawal,Deposit,Balance',
+      ',Balance brought forward,,,,"10,000.00"',
+      '05-Nov-2026,"IBFT to Kitchen, HBL",TX-1,"1,500.00",,"8,500.00"',
+      '06/11/2026,Deposit,,,250.50,"8,750.50"',
+      ',Total,,"1,500.00",250.50,',
+    ].join('\r\n');
+    const read = sm.readStatement(bankCsv);
+    ok('a bank CSV export is read whatever its columns are called: preamble, header, dates in day-month order, money out negative, totals skipped',
+      read.length === 2 && read[0].date === '2026-11-05' && read[0].amount === -1500 && read[0].description === 'IBFT to Kitchen, HBL · TX-1' && read[1].date === '2026-11-06' && read[1].amount === 250.5, JSON.stringify(read));
+    const signedCsv = 'Date,Description,Amount\n2026-11-07,Transfer in,"1,000"\n2026-11-08,Transfer out,(300.00)\n';
+    ok('so is one with a single signed amount column', JSON.stringify(sm.readStatement(signedCsv).map((l: any) => l.amount)) === '[1000,-300]');
+    ok('a file with no date and amount columns is refused with a reason', (await code(sm.matchStatement('Name,Phone\nAli,0300\n', 'bank_transfer'))) === 'STATEMENT_UNREADABLE');
+    ok('a day that does not exist is not a date', sm.parseDate('31/02/2026') === null && sm.parseDate('5 Nov 2026') === '2026-11-05');
+
+    const tag = uniq();
+    const sk = await mkSeller({ businessName: `Statement Kitchen ${tag}` });
+    const now = new Date();
+    const today = new Date(now.getTime() + 5 * 3600e3).toISOString().slice(0, 10);
+    const yesterday = new Date(now.getTime() + 5 * 3600e3 - 24 * 3600e3).toISOString().slice(0, 10);
+    const mkPayout = (net: number, data: any) => prisma.sellerPayout.create({ data: { sellerId: sk.id, amount: net, commissionDeducted: 0, netAmount: net, payoutMethod: 'bank_transfer', periodStart: now, periodEnd: now, status: 'completed', processedAt: now, ...data } });
+    const byRef = await mkPayout(1234.56, { transactionId: `TX-STM-${tag}` });
+    const byAmount = await mkPayout(2345.67, { transactionId: null });
+    const wrongAmount = await mkPayout(3456.78, { transactionId: `TX-WRONG-${tag}` });
+    const missing = await mkPayout(4567.89, { transactionId: `TX-MISSING-${tag}` });
+    const jcPayout = await mkPayout(5678.91, { payoutMethod: 'jazzcash', transactionId: `TX-JC-${tag}` });
+    const paidIn = await mkPayout(-987.65, { payoutMethod: 'paid_to_nuray', transactionId: `R-IN-${tag}` });
+    const anOrder = await prisma.order.findFirst({ select: { id: true } });
+    const refund = await prisma.refund.create({ data: { orderId: anOrder!.id, amount: 111.11, method: 'manual', status: 'completed', reference: `RF-${tag}`, processedAt: now } });
+    const sru = await mkUser('rider');
+    const srd = await prisma.rider.create({ data: { userId: sru.id, city: 'Lahore', verificationStatus: 'approved', status: 'active' } as any });
+    const riderPay = await prisma.riderLedgerEntry.create({ data: { riderId: srd.id, type: 'payout', amount: -222.22, reference: `RP-${tag}` } as any });
+    const keptAt = new Date();
+    const kept = await prisma.riderLedgerEntry.create({ data: { riderId: srd.id, type: 'payout', amount: -333.33, createdAt: keptAt } as any });
+    await prisma.riderLedgerEntry.create({ data: { riderId: srd.id, type: 'cash_deposit', amount: 333.33, createdAt: keptAt } as any });
+    await prisma.riderLedgerEntry.create({ data: { riderId: srd.id, type: 'cod_collected', amount: -333.33 } as any }); // keeps cash held at zero
+    const jcDeposit = await prisma.riderCashDeposit.create({ data: { riderId: srd.id, amount: 444.44, keptAsPay: 0, method: 'jazzcash', transactionRef: `JC-${tag}`, receiptUrl: `private:x/proofs/${sru.id}/r.webp` } as any });
+
+    const csv = [
+      'Date,Description,Debit,Credit',
+      `${today},IBFT TX-STM-${tag},1234.56,`,
+      `${yesterday},IBFT to Statement Kitchen,2345.67,`,
+      `${today},IBFT TX-WRONG-${tag},3000.00,`,
+      `${today},Funds received R-IN-${tag},,987.65`,
+      `${today},Refund RF-${tag},111.11,`,
+      `${today},Rider pay RP-${tag},222.22,`,
+      `${today},Unknown transfer,,7777.77`,
+    ].join('\n');
+    const m = await sm.matchStatement(csv, 'bank_transfer');
+    const matchedTo = (id: string) => m.matched.find((x: any) => x.record.id === id);
+    ok('a payout is matched to its statement line by the transfer reference', matchedTo(byRef.id)?.by === 'reference', JSON.stringify(m.matched.map((x: any) => [x.record.label, x.by])));
+    ok('one with no reference by the same amount a day apart', matchedTo(byAmount.id)?.by === 'amount_and_date');
+    ok("a kitchen's payment to Nuray, a manual refund and a rider's pay are matched too", matchedTo(paidIn.id)?.by === 'reference' && matchedTo(refund.id)?.by === 'reference' && matchedTo(riderPay.id)?.by === 'reference');
+    ok('a line whose reference matches a payout for a different amount is shown as such', m.amountDiffers.some((x: any) => x.record.id === wrongAmount.id && x.line.amount === -3000));
+    ok("a line Nuray has no record of is listed", m.unmatchedLines.some((l: any) => l.amount === 7777.77));
+    ok('and a sent payout missing from the statement', m.unmatchedRecords.some((r: any) => r.id === missing.id));
+    ok("pay a rider kept from cash moved no money, so it is not expected on the statement", !m.unmatchedRecords.some((r: any) => r.id === kept.id) && !m.matched.some((x: any) => x.record.id === kept.id));
+    ok('a bank statement does not expect a JazzCash payout or a JazzCash deposit', ![...m.unmatchedRecords, ...m.matched.map((x: any) => x.record)].some((r: any) => r.id === jcPayout.id || r.id === jcDeposit.id));
+    const jc = await sm.matchStatement(`Date,Description,Amount\n${today},Cash in JC-${tag},444.44\n`, 'jazzcash');
+    ok("a JazzCash statement matches a rider's JazzCash deposit, and expects the JazzCash payout", jc.matched.some((x: any) => x.record.id === jcDeposit.id) && jc.unmatchedRecords.some((r: any) => r.id === jcPayout.id));
+  }
+
   console.log(`\n${pass} passed, ${fail} failed`);
   await prisma.$disconnect();
   process.exit(fail ? 1 : 0);

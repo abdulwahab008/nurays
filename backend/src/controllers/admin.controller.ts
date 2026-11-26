@@ -5,6 +5,7 @@ import { getPayoutStatement as getStatement } from '../services/weekly-payout.se
 import { sendStatement } from './payout-statement';
 import { gstByMonth, gstMonthCsv, gstMonthDetail } from '../services/finance-report.service';
 import { latestBooksCheck, runBooksCheck } from '../services/books-check.service';
+import { matchStatement } from '../services/statement-match.service';
 import { kitchenStatement, listAccounts, nurayAccountByMonth, riderStatement, statementCsv } from '../services/accounts.service';
 import { qstr } from '../utils/query';
 import adminService from '../services/admin.service';
@@ -300,4 +301,9 @@ export const getBooksCheck = async (_req: Request, res: Response) => {
 /** Runs the books check now. */
 export const postBooksCheck = async (_req: Request, res: Response) => {
   res.status(200).json({ success: true, data: await runBooksCheck('manual') });
+};
+
+/** Matches an uploaded account statement (CSV) against Nuray's payouts, refunds and deposits. */
+export const postStatementMatch = async (req: Request, res: Response) => {
+  res.status(200).json({ success: true, data: await matchStatement(req.body.csv, req.body.account) });
 };
