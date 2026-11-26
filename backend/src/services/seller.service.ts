@@ -1097,6 +1097,11 @@ export class SellerService {
       // seller, but doesn't block the KEY SHARE lock every new order item / cart item
       // takes on its seller row, so the kitchen keeps taking orders meanwhile.
       await tx.$queryRaw`SELECT id FROM sellers WHERE id = ${sellerId} FOR NO KEY UPDATE`;
+      // One payout waiting at a time, as the daily run already keeps: several requests just under the large-payout
+      // limit would otherwise each skip the second admin's approval.
+      if (await tx.sellerPayout.count({ where: { sellerId, status: { in: ['pending', 'processing'] } } })) {
+        throw new AppError('A payout is already on its way to you. You can ask for another once it has been sent.', 409, 'PAYOUT_ALREADY_WAITING');
+      }
 
       // From who actually holds each order's money (seller-balance.service.ts): money the
       // platform collected, minus what the seller owes on money they collected themselves
