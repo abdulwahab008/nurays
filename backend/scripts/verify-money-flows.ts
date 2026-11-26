@@ -2217,8 +2217,9 @@ async function main() {
     const refund = await prisma.refund.create({ data: { orderId: anOrder!.id, amount: 111.11, method: 'manual', status: 'completed', reference: `RF-${tag}`, processedAt: now } });
     const sru = await mkUser('rider');
     const srd = await prisma.rider.create({ data: { userId: sru.id, city: 'Lahore', verificationStatus: 'approved', status: 'active' } as any });
-    const riderPay = await prisma.riderLedgerEntry.create({ data: { riderId: srd.id, type: 'payout', amount: -222.22, reference: `RP-${tag}` } as any });
     const keptAt = new Date();
+    // A real transfer in the same millisecond as pay kept from cash is still a transfer.
+    const riderPay = await prisma.riderLedgerEntry.create({ data: { riderId: srd.id, type: 'payout', amount: -222.22, reference: `RP-${tag}`, createdAt: keptAt } as any });
     const kept = await prisma.riderLedgerEntry.create({ data: { riderId: srd.id, type: 'payout', amount: -333.33, createdAt: keptAt } as any });
     await prisma.riderLedgerEntry.create({ data: { riderId: srd.id, type: 'cash_deposit', amount: 333.33, createdAt: keptAt } as any });
     await prisma.riderLedgerEntry.create({ data: { riderId: srd.id, type: 'cod_collected', amount: -333.33 } as any }); // keeps cash held at zero

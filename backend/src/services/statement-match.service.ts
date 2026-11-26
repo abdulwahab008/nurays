@@ -150,12 +150,12 @@ async function nurayRecords(from: string, to: string, account: Account): Promise
       FROM rider_cash_deposits d JOIN riders r ON r.id = d.rider_id LEFT JOIN user_profiles p ON p.user_id = r.user_id
       WHERE d.status IN ('pending', 'approved') AND d.method = ${account}
         AND d.created_at >= ${start}::timestamptz AT TIME ZONE 'UTC' AND d.created_at < ${end}::timestamptz AT TIME ZONE 'UTC'`,
-    // Pay a rider kept from their cash moved no money: it is posted with a cash deposit at the same moment.
+    // Pay a rider kept from their cash moved no money: it is posted with a cash deposit of the same amount at the same moment.
     prisma.$queryRaw<Array<{ id: string; amount: number; reference: string | null; created_at: Date; name: string | null }>>`
       SELECT e.id, -e.amount::float AS amount, e.reference, e.created_at, p.full_name AS name
       FROM rider_ledger_entries e JOIN riders r ON r.id = e.rider_id LEFT JOIN user_profiles p ON p.user_id = r.user_id
       WHERE e.type = 'payout' AND e.created_at >= ${start}::timestamptz AT TIME ZONE 'UTC' AND e.created_at < ${end}::timestamptz AT TIME ZONE 'UTC'
-        AND NOT EXISTS (SELECT 1 FROM rider_ledger_entries d WHERE d.rider_id = e.rider_id AND d.type = 'cash_deposit' AND d.created_at = e.created_at)`,
+        AND NOT EXISTS (SELECT 1 FROM rider_ledger_entries d WHERE d.rider_id = e.rider_id AND d.type = 'cash_deposit' AND d.created_at = e.created_at AND d.amount = -e.amount)`,
   ]);
 
   return [
