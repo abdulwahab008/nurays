@@ -94,7 +94,7 @@ export function PhoneTabBar() {
       <nav
         aria-label={navLabel}
         className={cn(
-          'fixed inset-x-0 bottom-0 z-40 grid border-t border-line bg-surface/95 pb-(--safe-bottom) backdrop-blur-md md:hidden',
+          'fixed inset-x-0 bottom-0 z-40 grid border-t border-line bg-surface/95 pb-(--safe-bottom) backdrop-blur-md md:hidden print:hidden',
           GRID_COLS[tabs.length],
         )}
         data-testid={TEST_IDS[role]}

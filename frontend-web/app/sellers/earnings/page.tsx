@@ -22,6 +22,7 @@ import { PayoutTrail, type PayoutEvent } from '@/components/payouts/PayoutTrail'
 import { sendAskingForPassword } from '@/lib/send-asking-for-password';
 import { useShallow } from 'zustand/react/shallow';
 import { PayoutStatement } from '@/components/payouts/PayoutStatement';
+import { KitchenInvoices } from '@/components/sellers/KitchenInvoices';
 import { shortDay } from '@/components/sellers/order-timing';
 
 const sidebarItems = SELLER_SIDEBAR_ITEMS;
@@ -482,6 +483,7 @@ export default function SellerEarningsPage() {
                 </ul>
               )}
             </section>
+            <KitchenInvoices />
           </div>
         ) : loadError ? (
           <LoadError error={loadError} onRetry={loadEarnings} title={t('loadFailed')} />

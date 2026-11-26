@@ -7,6 +7,7 @@ import sellerService from '../services/seller.service';
 import * as publicSellerService from '../services/public-seller.service';
 import { AppError } from '../middleware/errorHandler';
 import { currentSellerId } from '../middleware/auth.middleware';
+import { getInvoice, listInvoices } from '../services/commission-invoice.service';
 
 export const getCurrentSeller = async (req: Request, res: Response) => {
   if (!req.user) {
@@ -125,6 +126,15 @@ export const getPayoutStatement = async (req: Request, res: Response) => {
   const sellerId = await currentSellerId(req);
   const statement = await getStatement(String(req.params.id), { sellerId });
   sendStatement(res, statement, req.query.format);
+};
+
+/** The kitchen's monthly commission invoices from Nuray. */
+export const getInvoices = async (req: Request, res: Response) => {
+  res.status(200).json({ success: true, data: await listInvoices(await currentSellerId(req)) });
+};
+
+export const getInvoiceForMonth = async (req: Request, res: Response) => {
+  res.status(200).json({ success: true, data: await getInvoice(await currentSellerId(req), String(req.params.month)) });
 };
 
 export const toggleStoreLive = async (req: Request, res: Response) => {
