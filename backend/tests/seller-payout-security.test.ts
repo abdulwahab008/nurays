@@ -10,6 +10,10 @@ jest.mock('../src/config/database', () => ({ __esModule: true, default: db }));
 jest.mock('../src/config/socket', () => ({ __esModule: true, default: {} }));
 jest.mock('../src/middleware/audit', () => ({ recordAudit: jest.fn(() => Promise.resolve()) }));
 jest.mock('../src/services/admin.service', () => ({ __esModule: true, default: { getSettingValue: jest.fn(async () => 100) } }));
+const mockNotify = jest.fn();
+const mockNotifyAdmins = jest.fn();
+jest.mock('../src/services/notify.service', () => ({ notify: (...a: unknown[]) => mockNotify(...a) }));
+jest.mock('../src/services/rider-deposit.service', () => ({ notifyAdmins: (...a: unknown[]) => mockNotifyAdmins(...a) }));
 jest.mock('../src/services/seller-balance.service', () => ({ computeSellerBalance: jest.fn(async () => ({ available: 5000 })) }));
 
 import sellerService from '../src/services/seller.service';
@@ -67,7 +71,20 @@ describe('saving the payout accounts', () => {
   it('saves the change in one form with the right password, and never stores the password', async () => {
     setup();
     await sellerService.updateSellerProfile('owner-1', { jazzcashNumber: '+92 333 9998887', bankAccountNumber: 'pk36 scbl 0000 0011 2345 6702', currentPassword: PASSWORD }, { ip: '203.0.113.7' });
-    expect(saved()).toEqual({ jazzcashNumber: '03339998887', bankAccountNumber: IBAN });
+    expect(saved()).toEqual({ jazzcashNumber: '03339998887', bankAccountNumber: IBAN, payoutAccountChangedAt: expect.any(Date) });
+  });
+
+  it('a new account number holds payouts, and the kitchen and the admins are told; clearing one does not', async () => {
+    setup({ passwordHash: null });
+    mockNotify.mockClear();
+    mockNotifyAdmins.mockClear();
+    await sellerService.updateSellerProfile('owner-1', { jazzcashNumber: '03339998887' });
+    expect(saved()).toMatchObject({ payoutAccountChangedAt: expect.any(Date) });
+    expect(mockNotify).toHaveBeenCalledWith(expect.objectContaining({ userId: 'owner-1', channels: ['push', 'email'] }));
+    expect(mockNotifyAdmins).toHaveBeenCalledTimes(1);
+    setup({ passwordHash: null });
+    await sellerService.updateSellerProfile('owner-1', { jazzcashNumber: null });
+    expect(saved()).toEqual({ jazzcashNumber: null });
   });
 
   it('asks again to clear an account, and to change the name customers see beside it', async () => {
@@ -81,7 +98,7 @@ describe('saving the payout accounts', () => {
   it('does not ask an account that signs in without a password (a phone code, Google), which has none to give', async () => {
     setup({ passwordHash: null });
     await sellerService.updateSellerProfile('owner-1', { easypaisaNumber: '0345-1234567' });
-    expect(saved()).toEqual({ easypaisaNumber: '03451234567' });
+    expect(saved()).toEqual({ easypaisaNumber: '03451234567', payoutAccountChangedAt: expect.any(Date) });
   });
 
   it('says what is wrong with a number before asking for the password, and saves nothing', async () => {
@@ -97,7 +114,7 @@ describe('saving the payout accounts', () => {
 });
 
 describe('requesting a payout', () => {
-  const request = { amount: 1500, payoutMethod: 'jazzcash', accountNumber: '03339998887' };
+  const request = { amount: 1500, payoutMethod: 'jazzcash', accountNumber: '0300-1234567' };
 
   it('asks for the password first, and records nothing', async () => {
     const { created } = setup();
@@ -118,13 +135,21 @@ describe('requesting a payout', () => {
     expect(out).toMatchObject({ payoutId: 'payout-1', status: 'pending' });
     expect(created).toHaveLength(1);
     expect(JSON.stringify(created[0])).not.toContain(PASSWORD);
-    expect(created[0]).toMatchObject({ amount: 1500, payoutMethod: 'jazzcash', accountDetails: { accountNumber: '03339998887' } });
+    expect(created[0]).toMatchObject({ amount: 1500, payoutMethod: 'jazzcash', accountDetails: { payoutMethod: 'jazzcash', accountNumber: '03001234567', accountTitle: 'Zainab' } });
   });
 
   it('does not ask an account that signs in without a password', async () => {
     const { created } = setup({ passwordHash: null });
     await sellerService.requestPayout('seller-1', request);
     expect(created).toHaveLength(1);
+  });
+
+  it('refuses an account other than the saved one, and one changed in the last two days', async () => {
+    setup({ passwordHash: null });
+    await expect(sellerService.requestPayout('seller-1', { ...request, accountNumber: '03339998887' })).rejects.toMatchObject({ code: 'PAYOUT_ACCOUNT_NOT_ON_FILE' });
+    setup({ passwordHash: null, seller: { payoutAccountChangedAt: new Date(Date.now() - 3600e3) } });
+    await expect(sellerService.requestPayout('seller-1', request)).rejects.toMatchObject({ code: 'PAYOUT_ACCOUNT_ON_HOLD' });
+    expect(db.$transaction).not.toHaveBeenCalled();
   });
 
   it('still refuses an amount under the minimum first, without asking for the password', async () => {

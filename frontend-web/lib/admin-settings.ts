@@ -14,6 +14,8 @@ export interface SettingsForm {
   supportPhone: string;
   commissionRate: string;
   minPayoutAmount: string;
+  /** A payout of at least this needs a second admin's approval before it is sent. */
+  largePayoutAmount: string;
   deliveryPerKm: string;
   deliveryIncludedKm: string;
   deliveryMaxKm: string;
@@ -37,6 +39,7 @@ type NumberKey = Exclude<keyof SettingsForm, 'platformName' | 'supportEmail' | '
 const NUMBERS: ReadonlyArray<readonly [NumberKey, string, number, number]> = [
   ['commissionRate', 'Commission rate', 0, 100],
   ['minPayoutAmount', 'Minimum payout amount', 0, 10_000_000],
+  ['largePayoutAmount', 'Large payout (second approval)', 1000, 100_000_000],
   ['deliveryPerKm', 'Per km to another community', 0, 1000],
   ['deliveryIncludedKm', 'Km included in the base fee', 0, 100],
   ['deliveryMaxKm', 'Farthest a Nuray rider delivers', 1, 200],

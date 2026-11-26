@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { bankAccountIsWrong, normalizeBankAccount, normalizeWalletNumber, payoutDestinationIsWrong, walletNumberIsWrong } from '../../lib/payout-account.ts';
+import { bankAccountIsWrong, normalizeBankAccount, normalizeWalletNumber, walletNumberIsWrong } from '../../lib/payout-account.ts';
 
 // The same cases the API's own tests use (backend/tests/payout-account.test.ts): the form and the server must agree on what a number is.
 const IBAN = 'PK36SCBL0000001123456702';
@@ -43,14 +43,4 @@ test('a blank number means none, and is not wrong in a form that can leave it em
   assert.equal(walletNumberIsWrong('0300-1234567'), false);
   assert.equal(bankAccountIsWrong('PK36SCBL0000001123456703'), true);
   assert.equal(bankAccountIsWrong(IBAN), false);
-});
-
-test('a payout request needs an account that suits the way the money is sent, and a blank one does not', () => {
-  assert.equal(payoutDestinationIsWrong('jazzcash', '+92 300 1234567'), false);
-  assert.equal(payoutDestinationIsWrong('easypaisa', '0345-1234567'), false);
-  assert.equal(payoutDestinationIsWrong('bank_transfer', IBAN), false);
-  assert.equal(payoutDestinationIsWrong('bank_transfer', '03001234567'), false);
-  assert.equal(payoutDestinationIsWrong('jazzcash', IBAN), true);
-  assert.equal(payoutDestinationIsWrong('bank_transfer', '1'), true);
-  assert.equal(payoutDestinationIsWrong('jazzcash', ''), true);
 });

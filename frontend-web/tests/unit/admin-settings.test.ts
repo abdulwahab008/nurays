@@ -8,6 +8,7 @@ const GOOD: SettingsForm = {
   supportPhone: '+92 300 1234567',
   commissionRate: '15',
   minPayoutAmount: '1000',
+  largePayoutAmount: '100000',
   deliveryPerKm: '20',
   deliveryIncludedKm: '3',
   deliveryMaxKm: '20',
@@ -39,7 +40,7 @@ test('a form that is right is sent with every number as a number, text trimmed',
 });
 
 test('a box left empty is refused by name, never sent as 0', () => {
-  for (const key of ['commissionRate', 'minPayoutAmount', 'deliveryPerKm', 'deliveryIncludedKm', 'deliveryMaxKm', 'deliveryFallbackFee'] as const) {
+  for (const key of ['commissionRate', 'minPayoutAmount', 'largePayoutAmount', 'deliveryPerKm', 'deliveryIncludedKm', 'deliveryMaxKm', 'deliveryFallbackFee'] as const) {
     for (const blank of ['', '   ']) {
       const result = refused({ [key]: blank });
       assert.equal(result?.field, key);
@@ -55,6 +56,7 @@ test('a number outside what the API accepts is refused with the range', () => {
   assert.equal(refused({ commissionRate: '-1' })?.field, 'commissionRate');
   assert.equal(refused({ deliveryMaxKm: '0' })?.message, 'Farthest a Nuray rider delivers must be a number from 1 to 200.');
   assert.equal(refused({ minPayoutAmount: '10000001' })?.field, 'minPayoutAmount');
+  assert.equal(refused({ largePayoutAmount: '999' })?.field, 'largePayoutAmount');
   assert.equal(refused({ deliveryFallbackFee: '5001' })?.field, 'deliveryFallbackFee');
 });
 
