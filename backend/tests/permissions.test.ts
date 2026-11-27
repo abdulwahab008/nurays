@@ -36,7 +36,7 @@ describe('a support person', () => {
     }
   });
   it('cannot approve, suspend, change orders or places, or read settings, analytics and the audit log', () => {
-    for (const [m, p] of [['POST', '/sellers/s1/approve'], ['POST', '/riders/r1/reject'], ['POST', '/products/p1/moderate'], ['POST', '/users/u1/status'], ['POST', '/orders/o1/cancel'], ['PATCH', '/orders/o1/status'], ['POST', '/communities'], ['PATCH', '/settings'], ['GET', '/settings'], ['GET', '/analytics'], ['GET', '/audit-logs'], ['GET', '/staff']]) {
+    for (const [m, p] of [['POST', '/sellers/s1/approve'], ['POST', '/riders/r1/reject'], ['POST', '/products/p1/moderate'], ['POST', '/users/u1/status'], ['POST', '/orders/o1/cancel'], ['PATCH', '/orders/o1/status'], ['POST', '/communities'], ['PATCH', '/settings'], ['GET', '/settings'], ['GET', '/analytics'], ['GET', '/audit-logs'], ['GET', '/staff'], ['GET', '/refunds'], ['GET', '/refunds/']]) {
       expect(allowed('support', m, p)).toBe(false);
     }
   });
