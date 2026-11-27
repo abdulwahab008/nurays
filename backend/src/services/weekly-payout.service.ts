@@ -297,13 +297,20 @@ export async function getPayoutStatement(payoutId: string, opts: { sellerId?: st
   if (!payout || (opts.sellerId && payout.sellerId !== opts.sellerId)) {
     throw new AppError('Payout not found', 404, 'PAYOUT_NOT_FOUND');
   }
-  const from = payout.periodStart.toISOString().slice(0, 10);
-  const to = payout.periodEnd.toISOString().slice(0, 10);
+  // The period runs from the kitchen's previous payout to this one, by the moment each was made, so every order lands
+  // in exactly the statement of the payout that paid it (a date range drifts: a "withdraw now" made at noon, or a
+  // daily run that pays today's early orders with yesterday's).
+  const previous = await prisma.sellerPayout.findFirst({
+    where: { sellerId: payout.sellerId, status: { not: 'failed' }, amount: { gt: 0 }, createdAt: { lt: payout.createdAt } },
+    orderBy: { createdAt: 'desc' },
+    select: { createdAt: true },
+  });
+  const from = previous ? pktDate(previous.createdAt) : payout.periodStart.toISOString().slice(0, 10);
+  const to = pktDate(payout.createdAt);
   const { lines } = await sellerBalanceLines(prisma, payout.sellerId);
   const inPeriod = lines
-    .map((l) => ({ ...l, day: pktDate(l.deliveredAt ?? l.placedAt) }))
-    // In its period, and before the payout was made (a "withdraw now" covers today, but not an order delivered after it).
-    .filter((l) => l.day >= from && l.day <= to && (l.deliveredAt ?? l.placedAt) <= payout.createdAt && (l.effect !== 0 || l.kind === 'rider_cash_waiting'))
+    .map((l) => ({ ...l, at: l.deliveredAt ?? l.placedAt, day: pktDate(l.deliveredAt ?? l.placedAt) }))
+    .filter((l) => (!previous || l.at > previous.createdAt) && l.at <= payout.createdAt && (l.effect !== 0 || l.kind === 'rider_cash_waiting'))
     .sort((a, b) => a.day.localeCompare(b.day) || a.orderNumber.localeCompare(b.orderNumber));
 
   const sum = (kind: BalanceLine['kind'], field: 'effect' | 'kitchenShare' = 'effect') => roundMoney(inPeriod.filter((l) => l.kind === kind).reduce((s, l) => s + l[field], 0));

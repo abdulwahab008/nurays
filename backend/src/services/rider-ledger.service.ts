@@ -99,9 +99,10 @@ function nonNegativeAmount(amount: unknown): number {
 export async function recordSettlement(
   riderId: string,
   adminId: string,
-  input: { cashHandedIn?: number; keptAsPay?: number; reference?: string; note?: string }
+  input: { cashHandedIn?: number; keptAsPay?: number; reference?: string; note?: string },
+  alsoInTx?: (tx: Prisma.TransactionClient) => Promise<void>
 ) {
-  const result = await recordSettlementEntries(riderId, adminId, input);
+  const result = await recordSettlementEntries(riderId, adminId, input, alsoInTx);
   await notifyRider(riderId, notificationText('rider.settlement', { cashHandedIn: result.cashHandedIn, keptAsPay: result.keptAsPay, cashHeld: result.cashHeld }));
   return result;
 }
@@ -115,7 +116,8 @@ async function notifyRider(riderId: string, text: NotificationText) {
 async function recordSettlementEntries(
   riderId: string,
   adminId: string,
-  input: { cashHandedIn?: number; keptAsPay?: number; reference?: string; note?: string }
+  input: { cashHandedIn?: number; keptAsPay?: number; reference?: string; note?: string },
+  alsoInTx?: (tx: Prisma.TransactionClient) => Promise<void>
 ) {
   const handedIn = nonNegativeAmount(input.cashHandedIn);
   const kept = nonNegativeAmount(input.keptAsPay);
@@ -125,6 +127,7 @@ async function recordSettlementEntries(
 
   return prisma.$transaction(async (tx) => {
     await lockRider(tx, riderId);
+    if (alsoInTx) await alsoInTx(tx);
     const { cashHeld, unpaid } = await riderMoney(tx, riderId);
     if (handedIn + kept > cashHeld + 0.009) {
       throw new AppError(`The rider holds Rs ${cashHeld.toLocaleString()} in cash; you can't settle more than that.`, 400, 'DEPOSIT_EXCEEDS_CASH');

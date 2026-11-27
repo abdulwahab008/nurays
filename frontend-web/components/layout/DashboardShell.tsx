@@ -11,6 +11,7 @@ export interface SubItem {
   href: string;
   icon?: string;
   badge?: number;
+  needs?: string;
 }
 
 export interface SidebarItem {
@@ -83,7 +84,7 @@ export const ADMIN_SIDEBAR_ITEMS: SidebarItem[] = [
     subItems: [
       { name: 'All orders', href: '/admin/orders' },
       { name: 'Transfers to check', href: '/admin/orders?paymentStatus=disputed' },
-      { name: 'Refunds', href: '/admin/refunds' },
+      { name: 'Refunds', href: '/admin/refunds', needs: 'read.finance' },
     ],
   },
   {
@@ -135,7 +136,7 @@ export const ADMIN_SIDEBAR_ITEMS: SidebarItem[] = [
 /** The admin menu limited to what this staff member may open. */
 export function adminSidebarFor(permissions: string[] | undefined): SidebarItem[] {
   const has = (needs?: string) => !needs || (permissions ?? []).includes(needs);
-  return ADMIN_SIDEBAR_ITEMS.filter((i) => has(i.needs));
+  return ADMIN_SIDEBAR_ITEMS.filter((i) => has(i.needs)).map((i) => (i.subItems ? { ...i, subItems: i.subItems.filter((s) => has(s.needs)) } : i));
 }
 
 export const HUB_MANAGER_SIDEBAR_ITEMS: SidebarItem[] = [

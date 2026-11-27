@@ -149,8 +149,13 @@ export async function submitDeposit(
     if (kept > Math.max(0, money.unpaid - pending.kept) + 0.009) {
       throw new AppError(`You can keep at most Rs ${roundMoney(Math.max(0, money.unpaid - pending.kept)).toLocaleString('en-PK')} as pay.`, 400, 'PAYOUT_EXCEEDS_BALANCE');
     }
-    // The same transaction ID twice is almost always a double tap or a re-used receipt.
-    const reused = await tx.riderCashDeposit.count({ where: { transactionRef: ref, method: input.method, status: { not: 'rejected' } } });
+    // The same transaction ID twice is almost always a double tap or a re-used receipt. "AB 123" and "ab-123" are the
+    // same ID; the lock on that ID stops two riders submitting it at the same moment.
+    const key = ref.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`deposit-ref:${input.method}:${key}`}))`;
+    const [{ reused }] = await tx.$queryRaw<Array<{ reused: number }>>`
+      SELECT COUNT(*)::int AS reused FROM rider_cash_deposits
+      WHERE method = ${input.method} AND status <> 'rejected' AND regexp_replace(upper(transaction_ref), '[^A-Z0-9]', '', 'g') = ${key}`;
     if (reused > 0) throw new AppError('This transaction ID has already been submitted', 409, 'DUPLICATE_REFERENCE');
     return tx.riderCashDeposit.create({ data: { riderId: rider.id, amount, keptAsPay: kept, method: input.method, transactionRef: ref, receiptUrl: input.receiptUrl } });
   });
@@ -210,23 +215,25 @@ export async function listDeposits(status: string | undefined, page = 1, limit =
  * pay kept from the cash), which also releases the kitchens' share of those cash orders for the next payout.
  */
 export async function approveDeposit(depositId: string, adminId: string) {
-  const claimed = await prisma.riderCashDeposit.updateMany({ where: { id: depositId, status: 'pending' }, data: { status: 'approved', reviewedBy: adminId, reviewedAt: new Date() } });
-  if (claimed.count === 0) throw new AppError('This deposit is not waiting for approval', 409, 'DEPOSIT_NOT_PENDING');
-  const d = (await prisma.riderCashDeposit.findUnique({ where: { id: depositId } }))!;
-  try {
-    const result = await recordSettlement(d.riderId, adminId, {
+  const d = await prisma.riderCashDeposit.findUnique({ where: { id: depositId } });
+  if (!d || d.status !== 'pending') throw new AppError('This deposit is not waiting for approval', 409, 'DEPOSIT_NOT_PENDING');
+  // The status change and the ledger entries commit together, so a crash can't leave an approved deposit unposted.
+  const result = await recordSettlement(
+    d.riderId,
+    adminId,
+    {
       cashHandedIn: Number(d.amount),
       keptAsPay: Number(d.keptAsPay),
       reference: d.transactionRef,
       note: `Deposited by ${d.method === 'bank_transfer' ? 'bank transfer' : d.method === 'jazzcash' ? 'JazzCash' : 'EasyPaisa'} (deposit ${d.id})`,
-    });
-    void recordAudit({ userId: adminId, action: 'rider_deposit:APPROVED', entityType: 'rider_cash_deposit', entityId: d.id, data: { riderId: d.riderId, amount: Number(d.amount), keptAsPay: Number(d.keptAsPay), transactionRef: d.transactionRef }, responseStatus: 200 });
-    return { id: d.id, status: 'approved', cashHeld: result.cashHeld };
-  } catch (err) {
-    // Nothing was posted: put it back for another look.
-    await prisma.riderCashDeposit.update({ where: { id: depositId }, data: { status: 'pending', reviewedBy: null, reviewedAt: null } });
-    throw err;
-  }
+    },
+    async (tx) => {
+      const claimed = await tx.riderCashDeposit.updateMany({ where: { id: depositId, status: 'pending' }, data: { status: 'approved', reviewedBy: adminId, reviewedAt: new Date() } });
+      if (claimed.count === 0) throw new AppError('This deposit is not waiting for approval', 409, 'DEPOSIT_NOT_PENDING');
+    }
+  );
+  void recordAudit({ userId: adminId, action: 'rider_deposit:APPROVED', entityType: 'rider_cash_deposit', entityId: d.id, data: { riderId: d.riderId, amount: Number(d.amount), keptAsPay: Number(d.keptAsPay), transactionRef: d.transactionRef }, responseStatus: 200 });
+  return { id: d.id, status: 'approved', cashHeld: result.cashHeld };
 }
 
 /** The money did not arrive (or the receipt is wrong): nothing is posted and the rider is told why. */

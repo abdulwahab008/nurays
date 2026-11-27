@@ -244,7 +244,7 @@ Staff are users with `user_type = 'admin'` and a `staff_role` (database CHECK ke
 |---|---|---|
 | `super_admin` | exactly one (partial unique index `users_one_super_admin`) | everything, and only this role adds, changes, suspends or removes staff, edits settings or corrects a rider balance by hand |
 | `admin` | any | day to day operations: approvals, orders, people, refunds, payouts, settling with riders, places, promo codes, complaints, reads the audit log |
-| `support` | any | the customer support person: looks things up, handles complaints (reply, internal notes, resolve) and decides on reported reviews (hide, keep, show again). Cannot move money, approve anyone, change orders, or see applicants' ID documents, settings, analytics or the audit log |
+| `support` | any | the customer support person: looks things up, handles complaints (reply, internal notes, resolve) and decides on reported reviews (hide, keep, show again). Cannot move money, approve anyone, change orders, or see applicants' ID documents, the refund queue (customers' payment details), settings, analytics or the audit log |
 
 Enforcement is on the server, table driven (`utils/permissions.ts`, `middleware/staff.ts`): every `/admin` request is
 matched to a permission; a write no rule names needs `ops.write`, a read no rule names needs `read.core`, so a route

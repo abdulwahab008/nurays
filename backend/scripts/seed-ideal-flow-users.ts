@@ -25,8 +25,8 @@ async function account(passwordHash: string, a: { email: string; phone: string; 
   });
   await prisma.userProfile.upsert({
     where: { userId: user.id },
-    update: { fullName: a.name, city: a.city ?? 'Karachi' },
-    create: { userId: user.id, fullName: a.name, city: a.city ?? 'Karachi' },
+    update: { fullName: a.name, city: a.city ?? 'Lahore' },
+    create: { userId: user.id, fullName: a.name, city: a.city ?? 'Lahore' },
   });
   return user;
 }
@@ -51,7 +51,7 @@ async function main() {
   assertDemoSeedAllowed();
   const passwordHash = await bcrypt.hash(PASSWORD, 10);
   await seedCommunities();
-  const community = await prisma.community.findUnique({ where: { slug: 'gulshan-e-iqbal' } });
+  const community = await prisma.community.findUnique({ where: { slug: 'dha-phase-6' } });
 
   const category = await prisma.category.upsert({
     where: { slug: 'ready-to-cook' },
@@ -74,9 +74,9 @@ async function main() {
     await prisma.user.update({ where: { id: admin.id }, data: { staffRole: 'super_admin' } });
   }
 
-  // An approved kitchen in Gulshan-e-Iqbal with three dishes customers can order. Its name is its owner's, so it is not
-  // mistaken for the e2e seed's "Saima's Craft Kitchen" in the same area. The pin is in Block 13, Gulshan-e-Iqbal, Karachi:
-  // riders collect from it and delivery distances are measured from it.
+  // An approved kitchen in DHA Phase 6, Lahore (a launch area, so the demo customer gets delivery) with three dishes
+  // customers can order. Its name is its owner's, so it is not mistaken for the e2e seed's "Saima's Craft Kitchen".
+  // Riders collect from its pin and delivery distances are measured from it.
   const sellerUser = await account(passwordHash, { email: 'seller@nuray.test', phone: '+923009990888', userType: 'seller', name: 'Saima Baig' });
   const kitchen = {
     businessName: "Saima Baig's Kitchen",
@@ -87,9 +87,9 @@ async function main() {
     minPrepTimeMinutes: 20,
     communityId: community?.id,
     primaryCommunityName: community?.name,
-    latitude: 24.9215,
-    longitude: 67.0935,
-    pickupAddress: 'House 18, Block 13-D, Gulshan-e-Iqbal, Karachi',
+    latitude: 31.4672,
+    longitude: 74.4318,
+    pickupAddress: 'House 18, Street 4, Sector C, DHA Phase 6, Lahore',
   };
   const seller = await prisma.seller.upsert({
     where: { userId: sellerUser.id },
@@ -129,9 +129,9 @@ async function main() {
   const riderUser = await account(passwordHash, { email: 'rider@nuray.test', phone: '+923007770888', userType: 'rider', name: 'Imran Ali' });
   const existingRider = await prisma.rider.findUnique({ where: { userId: riderUser.id }, select: { cashLimit: true } });
   const rider = {
-    city: 'Karachi',
+    city: 'Lahore',
     vehicleType: 'motorcycle',
-    vehicleNumber: 'KHI-8921',
+    vehicleNumber: 'LEC-8921',
     licenseNumber: 'LIC-PK-2026',
     status: 'active',
     verificationStatus: 'approved',
@@ -141,20 +141,23 @@ async function main() {
   await prisma.rider.upsert({ where: { userId: riderUser.id }, update: rider, create: { userId: riderUser.id, ...rider } });
 
   const customerUser = await account(passwordHash, { email: 'customer@nuray.test', phone: '+923001230888', userType: 'customer', name: 'Ayesha Khan' });
-  const hasAddress = await prisma.userAddress.findFirst({ where: { userId: customerUser.id } });
-  if (!hasAddress) {
-    await prisma.userAddress.create({
+  // A home in the kitchen's area, as the default. Older demo data had a default in Karachi, outside the launch areas.
+  const home =
+    (await prisma.userAddress.findFirst({ where: { userId: customerUser.id, city: 'Lahore' } })) ??
+    (await prisma.userAddress.create({
       data: {
         userId: customerUser.id,
         label: 'Home',
-        addressLine1: 'House 42, Street 8, Block 4',
-        area: 'Gulshan-e-Iqbal',
-        city: 'Karachi',
-        latitude: 24.9207,
-        longitude: 67.0882,
-        isDefault: true,
+        addressLine1: 'House 42, Street 8, Sector C',
+        area: 'DHA Phase 6',
+        city: 'Lahore',
+        latitude: 31.463,
+        longitude: 74.4275,
       },
-    });
+    }));
+  if (!(await prisma.userAddress.findFirst({ where: { userId: customerUser.id, city: 'Lahore', isDefault: true } }))) {
+    await prisma.userAddress.updateMany({ where: { userId: customerUser.id }, data: { isDefault: false } });
+    await prisma.userAddress.update({ where: { id: home.id }, data: { isDefault: true } });
   }
 
   console.log(`Demo accounts ready (password ${PASSWORD}): customer@nuray.test, seller@nuray.test, seller.pending@nuray.test,`);

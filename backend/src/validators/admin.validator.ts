@@ -49,8 +49,9 @@ export const updateSettingsSchema = z.object({
   supportEmail: z.string().email().optional(),
   supportPhone: z.string().min(1).optional(),
   commissionRate: z.number().min(0).max(100).optional(),
-  minPayoutAmount: z.number().min(0).max(10_000_000).optional(),
-  largePayoutAmount: z.number().min(1000).max(100_000_000).optional(),
+  minPayoutAmount: z.number().min(0).max(100_000).optional(),
+  // Capped so the second-approval rule for large payouts can't be switched off by setting it out of reach.
+  largePayoutAmount: z.number().min(1000).max(1_000_000).optional(),
   weeklyPayouts: z.boolean().optional(),
   nurayDepositAccounts: z
     .object({

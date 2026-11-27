@@ -426,7 +426,9 @@ export default function SellerEarningsPage() {
                       <>
                         <span className="min-w-0 flex-1">
                           <span className="block text-sm font-semibold text-ink">
-                            {payout.processedAt
+                            {payout.processedAt && payout.status === 'failed'
+                              ? t('failedOn', { date: shortDay(payout.processedAt, locale) })
+                              : payout.processedAt
                               ? t('processed', { date: shortDay(payout.processedAt, locale) })
                               : t('requested', { date: shortDay(payout.requestedAt, locale) })}
                           </span>

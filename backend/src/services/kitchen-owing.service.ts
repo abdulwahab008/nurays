@@ -156,6 +156,13 @@ export async function recordPaymentToNuray(input: { sellerId: string; amount: nu
     await tx.$queryRaw`SELECT id FROM sellers WHERE id = ${input.sellerId} FOR NO KEY UPDATE`;
     const seller = await tx.seller.findUnique({ where: { id: input.sellerId }, select: { id: true } });
     if (!seller) throw new AppError('Seller not found', 404, 'SELLER_NOT_FOUND');
+    // One transfer can't settle two debts: the same reference ("AB 123" or "ab-123") is refused, for any kitchen.
+    const key = input.reference.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`paid-to-nuray-ref:${key}`}))`;
+    const [{ reused }] = await tx.$queryRaw<Array<{ reused: number }>>`
+      SELECT COUNT(*)::int AS reused FROM seller_payouts
+      WHERE payout_method = 'paid_to_nuray' AND regexp_replace(upper(transaction_id), '[^A-Z0-9]', '', 'g') = ${key}`;
+    if (reused > 0) throw new AppError('A payment with this reference is already recorded', 409, 'DUPLICATE_REFERENCE');
     const balance = await computeSellerBalance(tx, input.sellerId);
     const owed = balance.available < 0 ? roundMoney(-balance.available) : 0;
     if (amount > owed + 0.005) {

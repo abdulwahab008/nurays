@@ -65,6 +65,8 @@ const RULES: Rule[] = [
   { method: 'GET', path: /^\/rider-deposits$/, permission: 'read.finance' },
   { method: 'WRITE', path: /^\/orders\/[^/]+\/(refund|confirm-payment)$/, permission: 'money.write' },
   { method: 'WRITE', path: /^\/refunds\/[^/]+\/(complete|dismiss)$/, permission: 'money.write' },
+  // The refund queue shows where each customer is paid back (wallet, card, bank details): finance staff only.
+  { method: 'GET', path: /^\/refunds$/, permission: 'read.finance' },
   { method: 'WRITE', path: /^\/payouts\/[^/]+\/(approve|complete|fail)$/, permission: 'money.write' },
   { method: 'WRITE', path: /^\/sellers\/[^/]+\/payments-to-nuray$/, permission: 'money.write' },
   { method: 'WRITE', path: /^\/support\/tickets\/[^/]+\/reply$/, permission: 'support.handle' },
