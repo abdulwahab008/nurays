@@ -103,6 +103,8 @@ export const ADMIN_SIDEBAR_ITEMS: SidebarItem[] = [
     name: 'Riders',
     href: '/admin/riders',
     icon: 'delivery',
+    // Both tabs are money or applications; support staff find a rider under People.
+    needs: 'read.finance',
     subItems: [
       { name: 'Riders & cash', href: '/admin/riders' },
       { name: 'Applications', href: '/admin/riders?tab=applications' },

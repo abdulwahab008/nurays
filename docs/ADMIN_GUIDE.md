@@ -6,7 +6,7 @@ Sign in at `/admin/login`. The menu on the left is the list of screens below, in
 
 ## Roles
 
-There is one **super admin** (full access). The super admin adds the other staff at `/admin/staff`: an **admin** (runs operations and money) or a **customer support** person (resolves complaints, decides on reported reviews and looks things up; no money, no approvals, no settings, no audit log). Support staff start at Approvals and see only complaints, failed deliveries and reported reviews there. Details and the exact permissions: `SECURITY_AND_COMPLIANCE.md`, "Staff roles".
+There is one **super admin** (full access). The super admin adds the other staff at `/admin/staff`: an **admin** (runs operations and money) or a **customer support** person (resolves complaints, decides on reported reviews and looks things up; no money, no approvals, no settings, no audit log). Support staff start at Approvals and see only complaints, failed deliveries and reported reviews there. The Riders menu (cash and applications) is not shown to them; they find a rider under People. Details and the exact permissions: `SECURITY_AND_COMPLIANCE.md`, "Staff roles".
 
 ### Staff: `/admin/staff` (super admin only)
 
