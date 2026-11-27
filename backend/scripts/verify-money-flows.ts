@@ -1396,13 +1396,17 @@ async function main() {
   // ---- catalog listing: community tiers, paging, computed filters (all in the database) ----
   const mkCommunity = (name: string, lat: number, lng: number, neighbours: string[] = []) =>
     prisma.community.create({ data: { name, slug: 'c-' + uniq(), centerLatitude: lat, centerLongitude: lng, neighborCommunityIds: neighbours } as any });
-  const farC = await mkCommunity('Far', 25.5, 68.0);
+  // Far: about 16 km from Home, past the 10 km filter below but inside the 20 km a Nuray rider delivers, so its
+  // dishes are listed (a kitchen that cannot deliver to the area is not).
+  const farC = await mkCommunity('Far', 24.91, 67.27);
   const nearC = await mkCommunity('Near', 24.95, 67.15);
   const homeC = await mkCommunity('Home', 24.91, 67.11, [nearC.id]);
   const cat = await prisma.category.create({ data: { name: 'Cat ' + uniq(), slug: 'cat-' + uniq() } });
   const kHome = await mkSeller({ communityId: homeC.id, latitude: 24.91, longitude: 67.11, scheduleMode: '24_7' });
   const kNear = await mkSeller({ communityId: nearC.id, latitude: 24.95, longitude: 67.15, scheduleMode: '24_7' });
-  const kFar = await mkSeller({ communityId: farC.id, latitude: 25.5, longitude: 68.0, scheduleMode: '24_7' });
+  const kFar = await mkSeller({ communityId: farC.id, latitude: 24.91, longitude: 67.27, scheduleMode: '24_7' });
+  // Delivery pricing caches the communities for a minute; without this the result depended on how fast the run was.
+  require('../src/services/delivery-pricing.service').invalidateDeliveryPricing();
   const kClosed = await mkSeller({ latitude: 24.912, longitude: 67.112, scheduleMode: '24_7', availabilityOverride: 'closed' });
   const catProduct = (sellerId: string, rating: number, extra: any = {}) => prisma.product.create({ data: { sellerId, categoryId: cat.id, name: 'Dish ' + uniq(), slug: 'd-' + uniq(), price: 100, unit: 'pc', stockQuantity: 5, stockType: 'direct', approvalStatus: 'approved', isActive: true, images: { create: { imageUrl: '/uploads/products/check-dish.webp', isPrimary: true } }, ratingAverage: rating, totalReviews: 10, ...extra } as any });
   for (const r of [3, 5, 4, 3, 5, 4, 3]) await catProduct(kHome.id, r);
