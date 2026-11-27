@@ -72,15 +72,15 @@ async function runIdealFlow() {
       {
         label: 'Home',
         addressLine1: 'House 42, Street 8, Block 4',
-        area: 'DHA Phase 5',
-        city: 'Karachi',
+        area: 'DHA Phase 6',
+        city: 'Lahore',
         isDefault: true,
       },
       { headers: { Authorization: `Bearer ${customerJwt}` } }
     );
     addressId = createAddr.data.data.id;
   }
-  console.log(`1.2 Delivery address verified: ${addressId} (DHA Phase 5, Karachi)`);
+  console.log(`1.2 Delivery address verified: ${addressId} (DHA Phase 6, Lahore)`);
 
   const sampleProduct = await prisma.product.findFirst({
     where: { slug: 'saima-zafrani-chicken-biryani', isActive: true },

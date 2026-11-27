@@ -23,8 +23,11 @@ async function main() {
   // --- communities & community kitchens ---
   await seedCommunities();
   await seedCommunityKitchens();
-  const gulshan = await prisma.community.findUnique({
+  // The test kitchen and customer are in Gulshan-e-Iqbal, so the tests need it switched on (seedCommunities leaves
+  // an area's switch as an admin set it).
+  const gulshan = await prisma.community.update({
     where: { slug: 'gulshan-e-iqbal' },
+    data: { isActive: true },
   });
 
   // --- category ---
