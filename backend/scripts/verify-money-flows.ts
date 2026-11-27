@@ -1942,6 +1942,9 @@ async function main() {
         Math.abs(st.totals.period - wkEarn.goods) < 0.01 && Math.abs(st.totals.earlierAndAdjustments) < 0.01 && st.payout.transactionId === 'TX-WEEKLY',
       JSON.stringify(st.totals));
     ok("another kitchen cannot read it", (await code(weekly.getPayoutStatement(wkPayout.id, { sellerId: wallet.id }))) === 'PAYOUT_NOT_FOUND');
+    const tueSt = await weekly.getPayoutStatement(tue!.id, { sellerId: wk.id });
+    ok("the next payout's statement lists only what it paid, not the order the first one already paid",
+      tueSt.lines.length === 1 && tueSt.lines[0].orderNumber === more.order.orderNumber && Math.abs(tueSt.totals.earlierAndAdjustments) < 0.01, JSON.stringify(tueSt.lines.map((l: any) => l.orderNumber)));
     const csv: string = weekly.statementCsv(st);
     ok('the statement downloads as a spreadsheet with the order on it', csv.includes(wkEarn.order.orderNumber) && csv.includes('Earlier balance and adjustments') && csv.split('\n')[0].startsWith('Kitchen,'));
     ok('a cell that would be a spreadsheet formula is written as text', weekly.statementCsv({ ...st, kitchen: { ...st.kitchen, businessName: '=HYPERLINK("x")' } }).includes(`"'=HYPERLINK(""x"")"`));
@@ -2005,9 +2008,15 @@ async function main() {
     ok('nor more than the cash the rider holds', (await code(dep.submitDeposit(ru.id, { amount: 1200, keptAsPay: 124, method: 'jazzcash', transactionRef: 'TX12345', receiptUrl: receipt }))) === 'DEPOSIT_EXCEEDS_CASH');
     const first = await dep.submitDeposit(ru.id, { amount: 576, keptAsPay: 124, method: 'jazzcash', transactionRef: 'TX-OLD-700', receiptUrl: receipt });
     ok('the same transaction ID cannot be submitted twice', (await code(dep.submitDeposit(ru.id, { amount: 100, method: 'jazzcash', transactionRef: 'TX-OLD-700', receiptUrl: receipt }))) === 'DUPLICATE_REFERENCE');
+    ok('nor the same ID written with other spacing or case', (await code(dep.submitDeposit(ru.id, { amount: 100, method: 'jazzcash', transactionRef: 'tx old 700', receiptUrl: receipt }))) === 'DUPLICATE_REFERENCE');
     ok('a deposit waiting for approval lifts the block (a slow review never blocks a rider who paid) but posts nothing yet',
       !(await dep.ridersWithOverdueCash([rd.id])).has(rd.id) && (await money(prisma, rd.id)).cashHeld === 1200);
     const admin = await mkUser('admin');
+    const ledgerBefore = await prisma.riderLedgerEntry.count({ where: { riderId: rd.id } });
+    await prisma.riderCashDeposit.update({ where: { id: first.id }, data: { amount: 5000 } });
+    ok('an approval that cannot post leaves the deposit waiting, with nothing half done', (await code(dep.approveDeposit(first.id, admin.id))) === 'DEPOSIT_EXCEEDS_CASH' &&
+      (await prisma.riderCashDeposit.findUnique({ where: { id: first.id } }))!.status === 'pending' && (await prisma.riderLedgerEntry.count({ where: { riderId: rd.id } })) === ledgerBefore);
+    await prisma.riderCashDeposit.update({ where: { id: first.id }, data: { amount: 576 } });
     await dep.approveDeposit(first.id, admin.id);
     const m1 = await money(prisma, rd.id);
     ok('approving posts the cash handed in and the pay kept: the rider holds the newer Rs 500 and is owed nothing', m1.cashHeld === 500 && m1.unpaid === 0 && m1.paidOut === 124, JSON.stringify(m1));
@@ -2078,6 +2087,7 @@ async function main() {
     ok('part of it leaves the rest owed', Math.abs(part.owed - (owed - half)) < 0.01 && part.owesSince instanceof Date, JSON.stringify(part));
     ok("a kitchen's payment to Nuray is in the payout log with the admin who recorded it and the reference",
       (await prisma.payoutEvent.count({ where: { event: 'payment_received', actorType: 'admin', actorId: admin.id, reference: 'R-PART', payout: { sellerId: pk.id } } })) === 1);
+    ok('the same payment reference cannot be recorded twice, whatever its spacing or case', (await code(owing.recordPaymentToNuray({ sellerId: pk.id, amount: 1, reference: 'r part', adminId: admin.id }))) === 'DUPLICATE_REFERENCE');
     const rest = await owing.recordPaymentToNuray({ sellerId: pk.id, amount: Math.round((owed - half) * 100) / 100, reference: 'R-REST', adminId: admin.id });
     const b2 = await computeBalanceFor(pk.id);
     ok('paying the rest clears it: nothing owed, cash open, and the balance is zero', rest.owed === 0 && rest.owesSince === null && Math.abs(b2.available) < 0.01 && Math.abs(b2.paidToNuray - owed) < 0.01 && b2.paidOut === 0, JSON.stringify(b2));
