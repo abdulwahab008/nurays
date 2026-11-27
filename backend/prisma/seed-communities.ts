@@ -17,7 +17,6 @@ export async function seedCommunities() {
       radiusKm: 4.5,
       deliveryBaseFee: 50,
       crossCommunityBaseFee: 120,
-      isActive: true,
     },
     create: {
       name: 'Gulshan-e-Iqbal',
@@ -44,7 +43,6 @@ export async function seedCommunities() {
       radiusKm: 5.0,
       deliveryBaseFee: 70,
       crossCommunityBaseFee: 140,
-      isActive: true,
     },
     create: {
       name: 'DHA Karachi (Phase 5 & 6)',
@@ -71,7 +69,6 @@ export async function seedCommunities() {
       radiusKm: 4.0,
       deliveryBaseFee: 60,
       crossCommunityBaseFee: 130,
-      isActive: true,
     },
     create: {
       name: 'Clifton',
@@ -98,7 +95,6 @@ export async function seedCommunities() {
       radiusKm: 3.5,
       deliveryBaseFee: 50,
       crossCommunityBaseFee: 110,
-      isActive: true,
     },
     create: {
       name: 'PECHS',
@@ -125,7 +121,6 @@ export async function seedCommunities() {
       radiusKm: 4.0,
       deliveryBaseFee: 50,
       crossCommunityBaseFee: 120,
-      isActive: true,
     },
     create: {
       name: 'North Nazimabad',
@@ -152,7 +147,6 @@ export async function seedCommunities() {
       radiusKm: 4.5,
       deliveryBaseFee: 60,
       crossCommunityBaseFee: 130,
-      isActive: true,
     },
     create: {
       name: 'Askari 4 & Malir Cantt',
@@ -179,7 +173,6 @@ export async function seedCommunities() {
       radiusKm: 6.0,
       deliveryBaseFee: 80,
       crossCommunityBaseFee: 180,
-      isActive: true,
     },
     create: {
       name: 'Bahria Town Karachi',
@@ -207,7 +200,6 @@ export async function seedCommunities() {
       radiusKm: 3.5,
       deliveryBaseFee: 50,
       crossCommunityBaseFee: 120,
-      isActive: true,
     },
     create: {
       name: 'Askari 11',
@@ -234,7 +226,6 @@ export async function seedCommunities() {
       radiusKm: 3.0,
       deliveryBaseFee: 50,
       crossCommunityBaseFee: 120,
-      isActive: true,
     },
     create: {
       name: 'Askari 10',
@@ -261,7 +252,6 @@ export async function seedCommunities() {
       radiusKm: 4.5,
       deliveryBaseFee: 60,
       crossCommunityBaseFee: 150,
-      isActive: true,
     },
     create: {
       name: 'DHA Phase 6',
@@ -288,7 +278,6 @@ export async function seedCommunities() {
       radiusKm: 4.0,
       deliveryBaseFee: 60,
       crossCommunityBaseFee: 150,
-      isActive: true,
     },
     create: {
       name: 'DHA Phase 5',
@@ -315,7 +304,6 @@ export async function seedCommunities() {
       radiusKm: 3.5,
       deliveryBaseFee: 60,
       crossCommunityBaseFee: 150,
-      isActive: true,
     },
     create: {
       name: 'DHA 9 Town',
