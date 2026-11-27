@@ -27,6 +27,13 @@ test('the API and its realtime origin may be reached, a relative API path adds n
   assert.equal(connectSources({ apiUrl: '/api/v1' }), connectSources({}));
 });
 
+test("images and voice notes may come from the API's own origin (local storage serves them from /media)", () => {
+  const v = cspValue({ apiUrl: 'http://localhost:3001/api/v1' }, 'n');
+  assert.ok(v.includes("img-src 'self' data: blob: https: http://localhost:3001"));
+  assert.ok(v.includes("media-src 'self' data: blob: https: http://localhost:3001"));
+  assert.ok(cspValue({ apiUrl: '/api/v1' }, 'n').includes("img-src 'self' data: blob: https:;"), 'a relative API path adds nothing');
+});
+
 test('reports go to the collector, and the site cannot be framed', () => {
   const v = cspValue({}, 'n');
   assert.ok(v.includes('report-uri /api/csp-report'));
