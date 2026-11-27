@@ -162,6 +162,8 @@ export const riderMessages = defineMessages({
     pinLockedHelp: 'Too many wrong codes, so this handover is locked. Contact Nuray support and they will complete it with you.',
     pinLockedSupport: 'Open support',
     cashLimitTitle: 'Cash limit reached.',
+    cashOverdueTitle: 'Cash overdue.',
+    cashOverdueBody: 'You have held cash for more than 24 hours. Deposit it to take cash orders again; prepaid orders are still open to you.',
     cashLimitedHeading: 'Needs cash handed in',
     youHandedBack: 'You handed this back',
     cashLimitBody:
@@ -194,6 +196,7 @@ export const riderMessages = defineMessages({
     limitReached: 'Limit reached',
     nearLimit: 'Near limit',
     withinLimit: 'Within limit',
+    cashOverdue: 'Cash overdue',
     limitSuffix: '/ {limit} limit',
     cashExplain:
       "Cash you collected at the door and haven't handed in yet. At the limit, cash orders stop being offered to you until you hand cash in at a hub.",
@@ -526,6 +529,8 @@ export const riderMessages = defineMessages({
     pinLockedHelp: 'بہت زیادہ غلط کوڈ درج ہوئے، اس لیے یہ ہینڈ اوور لاک ہو گیا ہے۔ نورائے سپورٹ سے رابطہ کریں، وہ آپ کے ساتھ اسے مکمل کریں گے۔',
     pinLockedSupport: 'سپورٹ کھولیں',
     cashLimitTitle: 'کیش کی حد پوری۔',
+    cashOverdueTitle: 'کیش جمع کرانے میں تاخیر۔',
+    cashOverdueBody: 'آپ کے پاس 24 گھنٹے سے زیادہ سے کیش ہے۔ دوبارہ کیش آرڈر لینے کے لیے اسے جمع کروائیں؛ پہلے سے ادا شدہ آرڈرز آپ اب بھی لے سکتے ہیں۔',
     cashLimitedHeading: 'پہلے کیش جمع کروائیں',
     youHandedBack: 'یہ آپ نے واپس کیا تھا',
     cashLimitBody:
@@ -556,6 +561,7 @@ export const riderMessages = defineMessages({
     limitReached: 'حد پوری',
     nearLimit: 'حد کے قریب',
     withinLimit: 'حد کے اندر',
+    cashOverdue: 'جمع کرانے میں تاخیر',
     limitSuffix: '/ {limit} حد',
     cashExplain:
       'دروازے پر لیا گیا کیش جو ابھی جمع نہیں کروایا۔ حد پوری ہونے پر آپ کو کیش آرڈرز ملنا بند ہو جائیں گے، جب تک آپ ہب پر کیش جمع نہ کروائیں۔',

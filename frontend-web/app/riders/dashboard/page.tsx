@@ -539,6 +539,7 @@ export default function RiderDashboardPage() {
 
   const cashInHand = profile?.cashInHand ?? 0;
   const floatingLimit = profile?.floatingLimit ?? 10000;
+  const cashOverdue = profile?.cashOverdue === true;
   // Cash orders past the rider's limit are listed but are not jobs they can take.
   const takeable = available.filter((d) => !d.exceedsCashLimit);
   const cashBlocked = available.length > 0 && takeable.length === 0;
@@ -632,7 +633,11 @@ export default function RiderDashboardPage() {
           <div className="mt-auto">
             {d.exceedsCashLimit ? (
               <p className="rounded-xl bg-accent-soft text-accent-soft-ink p-3 text-sm" data-testid="cash-limit-blocked">
-                <strong>{t('cashLimitTitle')}</strong> {t('cashLimitBody', { limit: formatPrice(floatingLimit) })}
+                {cashOverdue ? (
+                  <><strong>{t('cashOverdueTitle')}</strong> {t('cashOverdueBody')}</>
+                ) : (
+                  <><strong>{t('cashLimitTitle')}</strong> {t('cashLimitBody', { limit: formatPrice(floatingLimit) })}</>
+                )}
               </p>
             ) : (
               <Button onClick={() => handleClaim(d.id)} disabled={busyId === d.id} className="w-full min-h-11">
@@ -779,7 +784,7 @@ export default function RiderDashboardPage() {
                       <div data-testid="no-active-cash-limit">
                         <p className="text-[15px] font-semibold text-ink">{t('cashBlockedTitle')}</p>
                         <p className="mt-1 text-sm text-muted leading-relaxed">
-                          {t('cashBlockedBody', { held: formatPrice(cashInHand), limit: formatPrice(floatingLimit) })}
+                          {cashOverdue ? t('cashOverdueBody') : t('cashBlockedBody', { held: formatPrice(cashInHand), limit: formatPrice(floatingLimit) })}
                         </p>
                         <Link href="/riders/earnings" className="mt-2 inline-flex min-h-11 items-center text-sm font-semibold text-brand-ink hover:underline">
                           {t('earningsLink')}
@@ -1164,8 +1169,8 @@ export default function RiderDashboardPage() {
               <section id="cash" data-testid="rider-cash-card" className="pt-6 border-t border-line">
                 <div className="flex items-baseline justify-between gap-3">
                   <h3 className="text-sm font-semibold text-ink">{t('cashInHand')}</h3>
-                  <span className={`text-xs font-medium ${cashPercent >= 100 ? 'text-red-700' : cashPercent > 80 ? 'text-accent-soft-ink' : 'text-muted'}`}>
-                    {cashPercent >= 100 ? t('limitReached') : cashPercent > 80 ? t('nearLimit') : t('withinLimit')}
+                  <span className={`text-xs font-medium ${cashOverdue || cashPercent >= 100 ? 'text-red-700' : cashPercent > 80 ? 'text-accent-soft-ink' : 'text-muted'}`}>
+                    {cashOverdue ? t('cashOverdue') : cashPercent >= 100 ? t('limitReached') : cashPercent > 80 ? t('nearLimit') : t('withinLimit')}
                   </span>
                 </div>
                 <p className="mt-1.5">
