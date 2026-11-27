@@ -391,6 +391,8 @@ export class RiderService {
     // Cash in hand plus cash still to collect on jobs already taken, against the limit.
     const cashCommitted = Number(rider.cashHeld) + cashToCollect(activeDeliveries);
     const cashLimit = cashLimitOf(rider);
+    // Cash held past the deadline: no cash job is takeable (claimDelivery refuses it with CASH_OVERDUE).
+    const cashOverdue = (await ridersWithOverdueCash([rider.id])).has(rider.id);
     const { maxKm } = await getPlatformDeliveryPricing();
 
     let here = position ?? null;
@@ -410,7 +412,7 @@ export class RiderService {
         isRouteMatch: !!match,
         batchBonus: match?.bonus ?? 0,
         corridorDistanceKm: match?.corridorDistanceKm,
-        exceedsCashLimit: cashOrder && cashCommitted + Number(d.order.totalAmount) > cashLimit,
+        exceedsCashLimit: cashOrder && (cashOverdue || cashCommitted + Number(d.order.totalAmount) > cashLimit),
       }, maxKm);
       const pickupDistanceKm =
         here && job.pickupLatitude != null && job.pickupLongitude != null
@@ -753,7 +755,7 @@ export class RiderService {
       include: { profile: true },
     });
 
-    const { cashHeld, balance } = await riderMoney(prisma, rider.id);
+    const [{ cashHeld, balance }, overdue] = await Promise.all([riderMoney(prisma, rider.id), ridersWithOverdueCash([rider.id])]);
 
     return {
       id: rider.id,
@@ -769,6 +771,7 @@ export class RiderService {
       isAvailable: rider.isAvailable,
       cashInHand: cashHeld,
       floatingLimit: cashLimitOf(rider),
+      cashOverdue: overdue.has(rider.id),
       balance,
     };
   }

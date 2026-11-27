@@ -13,6 +13,8 @@ jest.mock('../src/config/database', () => ({
 }));
 // Where a job is: unknown here, so no rider is held back by area (tested in dispatch-area.test.ts).
 jest.mock('../src/services/rider-area.service', () => ({ jobAreas: async () => new Map() }));
+const overdueRiders = new Set<string>();
+jest.mock('../src/services/rider-deposit.service', () => ({ ...jest.requireActual('../src/services/rider-deposit.service'), ridersWithOverdueCash: async () => overdueRiders }));
 jest.mock('../src/services/delivery-pricing.service', () => ({
   getPlatformDeliveryPricing: jest.fn(async () => ({ perKm: 20, includedKm: 3, maxKm: 20, fallbackBaseFee: 150, communities: new Map() })),
 }));
@@ -177,6 +179,16 @@ describe('the open pool (getAvailableDeliveries)', () => {
     const cash = (id: string) => ({ ...job(id, 'pending', 1), riderId: null, releasedRiderIds: [], order: { ...job(id, 'pending', 1).order, paymentStatus: 'pending' } });
     findDeliveries.mockImplementation(async (args: any) => (args.where.riderId === null ? [cash('cash-500'), open('prepaid', 1)] : []));
     const list = await riderService.getAvailableDeliveries('user-1');
+    expect(list.find((d) => d.id === 'cash-500')?.exceedsCashLimit).toBe(true);
+    expect(list.find((d) => d.id === 'prepaid')?.exceedsCashLimit).toBe(false);
+  });
+
+  it('marks every cash job untakeable while the rider holds cash past the deadline, however little', async () => {
+    overdueRiders.add('rider-1');
+    const cash = (id: string) => ({ ...job(id, 'pending', 1), riderId: null, releasedRiderIds: [], order: { ...job(id, 'pending', 1).order, paymentStatus: 'pending' } });
+    findDeliveries.mockImplementation(async (args: any) => (args.where.riderId === null ? [cash('cash-500'), open('prepaid', 1)] : []));
+    const list = await riderService.getAvailableDeliveries('user-1');
+    overdueRiders.clear();
     expect(list.find((d) => d.id === 'cash-500')?.exceedsCashLimit).toBe(true);
     expect(list.find((d) => d.id === 'prepaid')?.exceedsCashLimit).toBe(false);
   });

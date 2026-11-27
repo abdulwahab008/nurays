@@ -76,6 +76,8 @@ export interface RiderProfile {
   cashInHand: number;
   /** The most cash this rider may carry before cash orders stop being offered. */
   floatingLimit: number;
+  /** Cash held past the deposit deadline: no cash orders until it is deposited. */
+  cashOverdue?: boolean;
   /** What the platform owes the rider (negative: what the rider owes). */
   balance: number;
 }
