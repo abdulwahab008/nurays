@@ -294,6 +294,19 @@ async function main() {
   const homeOrder = (items: any[], pm: string) =>
     orderService.createOrder(dc.id, { items, deliveryType: 'home_delivery', deliveryAddressId: addr.id, paymentMethod: pm } as any) as Promise<any>;
 
+  // A transfer into the kitchen's account sends no rider until it is confirmed: the food can't be handed over before.
+  {
+    const riderSvc = require('../src/services/rider.service').default;
+    const platUser = (await prisma.seller.findUnique({ where: { id: platS.id } }))!.userId;
+    const tro = await homeOrder([{ productId: sp2.id, quantity: 1 }], 'bank');
+    await prisma.order.update({ where: { id: tro.id }, data: { orderStatus: 'preparing' } });
+    await riderSvc.ensureDeliveryForOrder(tro.id);
+    ok('an accepted transfer order gets no rider job before the transfer is confirmed', (await prisma.delivery.count({ where: { orderId: tro.id } })) === 0);
+    await orderService.submitManualPayment(tro.id, dc.id, { referenceNumber: 'TID-' + uniq() });
+    await orderService.confirmManualPayment(tro.id, platUser, true);
+    ok('confirming the transfer posts the rider job', (await prisma.delivery.count({ where: { orderId: tro.id } })) === 1);
+  }
+
   // Online (wallet) money is held by the platform, which owes each seller their share.
   const sdo = await homeOrder([{ productId: sp1.id, quantity: 1 }], 'wallet');
   const pdo = await homeOrder([{ productId: sp2.id, quantity: 1 }], 'wallet');

@@ -12,7 +12,7 @@ import { endsOf, cashToCollect, PAYMENT_INCLUDE, routeMatch } from '../utils/rid
 import { inRiderArea } from '../utils/dispatch';
 import { jobAreas } from './rider-area.service';
 import { finiteOrNull } from '../utils/numbers';
-import { isCashAtDoor } from '../utils/paymentCustody';
+import { isCashAtDoor, SELLER_DIRECT_METHODS } from '../utils/paymentCustody';
 import { jobScore } from '../utils/ranking';
 import { newHandoverCode, verifyHandoverCode } from './handover.service';
 import { realPhoneOrNull } from '../utils/otp';
@@ -239,6 +239,9 @@ export class RiderService {
     });
     if (!order || order.deliveryType !== 'home_delivery') return;
     if (ORDER_CLOSED_FOR_DELIVERY.includes(order.orderStatus)) return;
+    // A transfer to the kitchen not confirmed yet: no rider is sent to wait for food that can't be handed over.
+    // Confirming it posts the job (order-payment.service).
+    if (SELLER_DIRECT_METHODS.includes(order.paymentMethod) && order.paymentStatus !== 'paid') return;
     // Booked for a later window: no rider is sent before the kitchen starts on it. createDueDeliveries posts the job then.
     if (startsLater(order, order.items[0]?.seller?.preOrderLeadMinutes)) return;
 

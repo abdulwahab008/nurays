@@ -4,6 +4,7 @@ import realtimeOrderService from './realtime-order.service';
 import { isStoredFile, isPrivateRef, storedFileOwner } from '../storage';
 import { SELLER_DIRECT_METHODS } from '../utils/paymentCustody';
 import ledgerService from './ledger.service';
+import riderService from './rider.service';
 import { notify } from './notify.service';
 import { logger } from '../utils/logger';
 import { notificationText } from '../utils/notificationText';
@@ -19,6 +20,14 @@ async function payeeSellerUserId(orderId: string): Promise<string | null> {
 }
 
 /** Payment by bank transfer: the customer submits the transfer, the kitchen (or an admin) confirms it. */
+/** The rider job a transfer order waited for (rider.service ensureDeliveryForOrder), once the kitchen has accepted it. */
+async function postRiderJobOnceAccepted(orderId: string, orderStatus: string) {
+  if (!['confirmed', 'preparing', 'ready'].includes(orderStatus)) return;
+  await riderService
+    .ensureDeliveryForOrder(orderId, orderStatus === 'ready' ? 0 : undefined)
+    .catch((err) => logger.error({ err, orderId }, 'Could not post the rider job after the payment was confirmed'));
+}
+
 export class OrderPayments {
   /**
    * Get seller account details for manual online payment (Bank, JazzCash, EasyPaisa)
@@ -298,6 +307,7 @@ export class OrderPayments {
         logger.error({ err, orderId }, 'Ledger posting failed')
       );
     }
+    if (confirmed) await postRiderJobOnceAccepted(orderId, updated.orderStatus);
 
     await realtimeOrderService.emitOrderStatusUpdate(orderId, order.orderStatus, sellerUserId);
     if (updated.customerId) {
@@ -370,6 +380,7 @@ export class OrderPayments {
     if (['delivered', 'completed'].includes(order.orderStatus)) {
       await ledgerService.recordOrderCompletion(orderId).catch((err) => logger.error({ err, orderId }, 'Ledger posting failed'));
     }
+    await postRiderJobOnceAccepted(orderId, order.orderStatus);
     await realtimeOrderService.emitOrderStatusUpdate(orderId, order.orderStatus, adminId);
     const settled = await prisma.order.findUnique({ where: { id: orderId }, select: { orderNumber: true, customerId: true } });
     if (settled?.customerId) {
