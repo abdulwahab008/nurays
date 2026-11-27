@@ -6,10 +6,12 @@
  * riders per community). A new job goes, in this order, to:
  *  1. a rider already carrying one job whose drop-off is in the same area (same community, or
  *     within 2.5 km) and whose pickup is not far from this one: one trip serves both;
- *  2. a rider who serves the community the food is picked up in;
- *  3. a rider who serves the community it is delivered to;
- *  4. any other rider with room.
- * Within a step, riders with fewer jobs first, then whoever has delivered least today, so work is shared.
+ *  2. otherwise the rider nearest the kitchen, by where their phone last was (only a recent position
+ *     counts), a rider with no job before one already carrying one;
+ *  3. riders whose position is not known come after every rider whose position is, and among them:
+ *     a rider who serves the kitchen's community, then one who serves the customer's, then anyone,
+ *     fewer jobs first within each.
+ * Ties go to whoever has delivered least today, so work is shared.
  * A rider is never offered a job if they are off duty, already have two, would pass their cash limit,
  * or already handed this job back (the caller leaves those out).
  */
@@ -20,6 +22,8 @@ export const MAX_ACTIVE_JOBS = 2;
 export const SAME_AREA_DROPOFF_KM = 2.5;
 /** Pickups this close can be collected on one trip. */
 export const BATCH_PICKUP_KM = 4;
+/** A rider's position older than this is not used: they may have moved anywhere since. */
+export const RIDER_POSITION_FRESH_MS = 10 * 60_000;
 
 export interface Point {
   lat: number | null;
@@ -41,6 +45,8 @@ export interface DispatchJob extends JobEnds {
 export interface DispatchCandidate {
   id: string;
   communityId: string | null;
+  /** Where the rider is now, or null when no recent position is known (the caller drops stale ones). */
+  position: Point | null;
   active: JobEnds[];
   cashHeld: number;
   cashToCollect: number;
@@ -67,7 +73,7 @@ export function canShareTrip(carried: JobEnds, job: JobEnds): boolean {
   return carried.pickupCommunityId != null && carried.pickupCommunityId === job.pickupCommunityId;
 }
 
-export type DispatchReason = 'shares_a_trip' | 'serves_pickup_community' | 'serves_dropoff_community' | 'available';
+export type DispatchReason = 'shares_a_trip' | 'nearest' | 'serves_pickup_community' | 'serves_dropoff_community' | 'available';
 
 export interface DispatchChoice {
   riderId: string;
@@ -76,29 +82,38 @@ export interface DispatchChoice {
 
 /** The rider this job should go to, or null when nobody can take it right now. */
 export function chooseRider(job: DispatchJob, candidates: DispatchCandidate[]): DispatchChoice | null {
-  const ranked: Array<{ c: DispatchCandidate; tier: number; reason: DispatchReason }> = [];
+  const ranked: Array<{ c: DispatchCandidate; tier: number; km: number | null; reason: DispatchReason }> = [];
   for (const c of candidates) {
     if (c.active.length >= MAX_ACTIVE_JOBS) continue;
     if (job.cashToTake > 0 && c.cashHeld + c.cashToCollect + job.cashToTake > c.cashLimit) continue;
+    const km = c.position ? gapKm(c.position, job.pickup) : null;
     let tier = 4;
     let reason: DispatchReason = 'available';
-    if (c.active.length === 1 && canShareTrip(c.active[0], job)) {
-      tier = 1;
-      reason = 'shares_a_trip';
-    } else if (c.communityId && c.communityId === job.pickupCommunityId) {
+    if (c.communityId && c.communityId === job.pickupCommunityId) {
       tier = 2;
       reason = 'serves_pickup_community';
     } else if (c.communityId && c.communityId === job.dropoffCommunityId) {
       tier = 3;
       reason = 'serves_dropoff_community';
     }
-    ranked.push({ c, tier, reason });
+    if (km != null) reason = 'nearest';
+    if (c.active.length === 1 && canShareTrip(c.active[0], job)) {
+      tier = 1;
+      reason = 'shares_a_trip';
+    }
+    ranked.push({ c, tier, km, reason });
   }
   if (ranked.length === 0) return null;
+  const shares = (r: { tier: number }) => (r.tier === 1 ? 0 : 1);
+  const unknown = (r: { km: number | null }) => (r.km == null ? 1 : 0);
   ranked.sort(
     (a, b) =>
-      a.tier - b.tier ||
-      a.c.active.length - b.c.active.length ||
+      shares(a) - shares(b) ||
+      unknown(a) - unknown(b) ||
+      // Both positions known: a free rider before a busy one, then the nearer. Neither known: the old community steps.
+      (a.km != null && b.km != null
+        ? a.c.active.length - b.c.active.length || a.km - b.km
+        : a.tier - b.tier || a.c.active.length - b.c.active.length) ||
       a.c.deliveriesToday - b.c.deliveriesToday ||
       a.c.id.localeCompare(b.c.id)
   );

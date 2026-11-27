@@ -46,6 +46,7 @@ const job: DispatchJob = {
 const rider = (id: string, over: Partial<DispatchCandidate> = {}): DispatchCandidate => ({
   id,
   communityId: null,
+  position: null,
   active: [],
   cashHeld: 0,
   cashToCollect: 0,
@@ -122,6 +123,44 @@ describe('chooseRider', () => {
     const b = rider('b', { communityId: 'askari', deliveriesToday: 9 });
     const c = rider('c', { communityId: 'askari', deliveriesToday: 2 });
     expect(chooseRider(job, [a, b, c])?.riderId).toBe('c');
+  });
+
+  describe("by where the riders are (job's kitchen at 24.86, 67.0)", () => {
+    const near = pt(24.861, 67.001); // ~0.15 km from the kitchen
+    const mid = pt(24.88, 67.02); // ~3 km
+    const far = pt(24.95, 67.1); // ~14 km
+
+    it('the rider nearest the kitchen gets it, over the community rider and over fewer deliveries today', () => {
+      const choice = chooseRider(job, [
+        rider('community', { communityId: 'askari', position: far }),
+        rider('busyDay', { position: near, deliveriesToday: 12 }),
+        rider('mid', { position: mid }),
+      ]);
+      expect(choice).toEqual({ riderId: 'busyDay', reason: 'nearest' });
+    });
+
+    it('a rider whose position is known comes before one whose is not, whatever their community', () => {
+      expect(chooseRider(job, [rider('unknown', { communityId: 'askari' }), rider('far', { position: far })])?.riderId).toBe('far');
+    });
+
+    it('sharing a trip still comes first, however near another rider is', () => {
+      const choice = chooseRider(job, [rider('right-here', { position: near }), rider('onTheWay', { active: [carrying()], position: far })]);
+      expect(choice).toEqual({ riderId: 'onTheWay', reason: 'shares_a_trip' });
+    });
+
+    it('a free rider before a nearer one already carrying a job elsewhere', () => {
+      const elsewhere = carrying({ dropoff: pt(25.3, 67.6), pickup: pt(25.3, 67.6), dropoffCommunityId: 'x', pickupCommunityId: 'x' });
+      expect(chooseRider(job, [rider('busyNear', { position: near, active: [elsewhere] }), rider('freeMid', { position: mid })])?.riderId).toBe('freeMid');
+    });
+
+    it('limits still apply to the nearest rider', () => {
+      expect(chooseRider(job, [rider('nearFull', { position: near, cashHeld: 9_500 }), rider('mid', { position: mid })])?.riderId).toBe('mid');
+    });
+
+    it('a kitchen with no pin falls back to the community steps', () => {
+      const noPin = { ...job, pickup: none };
+      expect(chooseRider(noPin, [rider('near', { position: near }), rider('community', { communityId: 'askari' })])).toEqual({ riderId: 'community', reason: 'serves_pickup_community' });
+    });
   });
 
   it('nobody available means no choice (the job stays in the pool)', () => {

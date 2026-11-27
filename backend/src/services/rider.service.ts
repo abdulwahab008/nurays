@@ -7,6 +7,7 @@ import realtimeOrderService from './realtime-order.service';
 import ledgerService from './ledger.service';
 import { dispatchSoon, postDeliverySoon } from './dispatch.service';
 import { haversineKm, calculateDeliveryFeeCorridor } from '../utils/deliveryFee';
+import { PAKISTAN_BOUNDS } from '../utils/geo';
 import { getPlatformDeliveryPricing } from './delivery-pricing.service';
 import { endsOf, cashToCollect, PAYMENT_INCLUDE, routeMatch } from '../utils/riderJobs';
 import { inRiderArea } from '../utils/dispatch';
@@ -104,6 +105,24 @@ export const MAX_JOB_HISTORY = 200;
 const GEOFENCE_KM = 0.15; // 150 m
 // A phone reporting every second is stored (and passed on to the customer) at most this often.
 const LOCATION_MIN_INTERVAL_MS = 3_000;
+/** How often an on-duty rider's position is written to their row (dispatch only needs it to the minute or so). */
+const RIDER_POSITION_MIN_INTERVAL_MS = 20_000;
+
+const inPakistan = (lat: number, lng: number) =>
+  lat >= PAKISTAN_BOUNDS.minLat && lat <= PAKISTAN_BOUNDS.maxLat && lng >= PAKISTAN_BOUNDS.minLng && lng <= PAKISTAN_BOUNDS.maxLng;
+
+/**
+ * Keep where an on-duty rider is, for dispatch to find the rider nearest a kitchen. Never for a rider off duty, and
+ * never a position outside Pakistan (a bad fix, not a trip).
+ */
+async function rememberRiderPosition(rider: { id: string; isAvailable: boolean; lastLocationAt: Date | null }, lat: number, lng: number, now = new Date()) {
+  if (!rider.isAvailable || !inPakistan(lat, lng)) return;
+  if (rider.lastLocationAt && now.getTime() - rider.lastLocationAt.getTime() < RIDER_POSITION_MIN_INTERVAL_MS) return;
+  await prisma.rider.updateMany({
+    where: { id: rider.id, isAvailable: true },
+    data: { lastLatitude: lat, lastLongitude: lng, lastLocationAt: now },
+  });
+}
 
 function mapsUrl(lat: number | null, lng: number | null, place: string | null | undefined): string {
   const destination = lat != null && lng != null ? `${lat},${lng}` : encodeURIComponent(place ?? '');
@@ -376,6 +395,8 @@ export class RiderService {
       },
       include: PAYMENT_INCLUDE,
     });
+
+    if (position) await rememberRiderPosition(rider, position.lat, position.lng);
 
     const pool = await prisma.delivery.findMany({
       // Only jobs for orders still going somewhere.
@@ -883,7 +904,8 @@ export class RiderService {
     const newStatus = isAvailable !== undefined ? isAvailable : !rider.isAvailable;
     const updated = await prisma.rider.update({
       where: { id: rider.id },
-      data: { isAvailable: newStatus },
+      // Off duty, the rider's position is no longer kept.
+      data: newStatus ? { isAvailable: true } : { isAvailable: false, lastLatitude: null, lastLongitude: null, lastLocationAt: null },
     });
     // Pool announcements reach the riders who are on duty: this rider's open connections follow the switch.
     void socketManager.syncRiderDuty(userId);
@@ -925,6 +947,7 @@ export class RiderService {
         where: { id: deliveryId },
         data: { riderLatitude: latitude, riderLongitude: longitude, riderLocationAt: now },
       });
+      await rememberRiderPosition(rider, latitude, longitude, now);
     }
 
     let autoTriggeredStatus: string | null = null;
