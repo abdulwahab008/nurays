@@ -29,6 +29,15 @@ export function connectSources(origins: CspOrigins): string {
   return Array.from(out).join(' ');
 }
 
+/** The API's own origin, which serves uploaded images from /media when storage is local (http on a developer's machine). */
+function apiOrigin(apiUrl: string | undefined): string {
+  try {
+    return apiUrl ? ` ${new URL(apiUrl).origin}` : '';
+  } catch {
+    return '';
+  }
+}
+
 /**
  * The policy for one page. `dev` adds 'unsafe-eval', which React needs in development only. Styles keep
  * 'unsafe-inline': the components set style attributes, which a nonce cannot cover, and a style cannot run code.
@@ -39,9 +48,9 @@ export function cspValue(origins: CspOrigins, nonce: string, dev = false): strin
     `script-src 'self' 'nonce-${nonce}' 'strict-dynamic' https://accounts.google.com${dev ? " 'unsafe-eval'" : ''}`,
     "style-src 'self' 'unsafe-inline' https://accounts.google.com",
     "font-src 'self' data:",
-    "img-src 'self' data: blob: https:",
+    `img-src 'self' data: blob: https:${apiOrigin(origins.apiUrl)}`,
     // Chat voice notes come from the storage service's signed links; audio cannot run code.
-    "media-src 'self' data: blob: https:",
+    `media-src 'self' data: blob: https:${apiOrigin(origins.apiUrl)}`,
     // The push service worker (/sw.js): its own directive, so it does not fall back to script-src and 'strict-dynamic'.
     "worker-src 'self'",
     `connect-src ${connectSources(origins)}`,
