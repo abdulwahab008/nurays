@@ -155,6 +155,8 @@ A rider with exactly one active job who claims a second one whose pickup is with
 
 Code: `utils/dispatch.ts` (rules), `services/dispatch.service.ts` (applies them). Nuray's riders are its own, each serving one community (admin: Riders, rider page, "Community served", `Rider.communityId`; usually 1 to 2 riders per community).
 
+An order paid by transfer into the kitchen's account (JazzCash, EasyPaisa, bank) gets no rider job until the transfer is confirmed (by the kitchen or an admin): the food can't be handed over before, so no rider is sent to wait for it. Confirming it posts the job if the kitchen has already accepted the order.
+
 When a kitchen accepts an order, the job is assigned at once, with no accept step, to the first match of:
 
 1. a rider already carrying exactly one job whose drop-off is in the same area (within 2.5 km, or the same community when coordinates are missing) and whose pickup is within 4 km (or the same community): one trip serves both. The route bonus (below) still needs the stricter 1.5 km / 2.5 km match;
