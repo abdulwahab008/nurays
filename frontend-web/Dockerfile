@@ -76,7 +76,9 @@ ENV NODE_ENV=production \
     CSP_ENFORCE=${CSP_ENFORCE}
 
 # Debian security fixes the upstream Node image has not picked up yet (the CI image scan
-# fails on fixable high and critical issues). Nothing new is installed.
+# fails on fixable high and critical issues). Nothing new is installed. CI passes the day as
+# SECURITY_UPDATES_DATE so a cached layer is rebuilt daily instead of keeping old packages.
+ARG SECURITY_UPDATES_DATE
 RUN apt-get update \
  && DEBIAN_FRONTEND=noninteractive apt-get -y upgrade \
  && rm -rf /var/lib/apt/lists/*
