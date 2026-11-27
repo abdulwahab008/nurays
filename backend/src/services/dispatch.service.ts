@@ -12,7 +12,7 @@ import { getPlatformDeliveryPricing } from './delivery-pricing.service';
 import { cashToCollect, dropoffAreaOf, endsOf, routeMatch } from '../utils/riderJobs';
 import { cashAtDoor, isCashAtDoor } from '../utils/paymentCustody';
 import { ACTIVE_DELIVERY_STATUSES, BEFORE_PICKUP_STATUSES } from '../utils/deliveryStatus';
-import { chooseRider, DispatchCandidate, inRiderArea, JobEnds, MAX_ACTIVE_JOBS } from '../utils/dispatch';
+import { chooseRider, DispatchCandidate, inRiderArea, JobEnds, MAX_ACTIVE_JOBS, RIDER_POSITION_FRESH_MS } from '../utils/dispatch';
 import { jobAreas } from './rider-area.service';
 import { ON_DUTY_RIDER } from '../utils/riderDuty';
 import { notificationText } from '../utils/notificationText';
@@ -84,7 +84,7 @@ export async function dispatchDelivery(deliveryId: string, opts: { announced?: b
 
   const riders = await prisma.rider.findMany({
     where: { ...ON_DUTY_RIDER, id: { notIn: job.releasedRiderIds } },
-    select: { id: true, userId: true, communityId: true, city: true, cashLimit: true, cashHeld: true },
+    select: { id: true, userId: true, communityId: true, city: true, cashLimit: true, cashHeld: true, lastLatitude: true, lastLongitude: true, lastLocationAt: true },
   });
   // Only riders in the job's area: a rider in another city is never sent across the country.
   const area = (await jobAreas([job.orderId])).get(job.orderId);
@@ -102,11 +102,14 @@ export async function dispatchDelivery(deliveryId: string, opts: { announced?: b
   // A rider holding cash past the deposit deadline takes no cash order: as if their cash limit were reached.
   const overdue = await ridersWithOverdueCash(local.map((r) => r.id));
   const candidates: DispatchCandidate[] = [];
+  const freshSince = Date.now() - RIDER_POSITION_FRESH_MS;
   for (const r of local) {
+    const fresh = r.lastLocationAt && r.lastLocationAt.getTime() >= freshSince && r.lastLatitude != null && r.lastLongitude != null;
     const mine = activeJobs.filter((d) => d.riderId === r.id);
     candidates.push({
       id: r.id,
       communityId: r.communityId,
+      position: fresh ? { lat: Number(r.lastLatitude), lng: Number(r.lastLongitude) } : null,
       active: mine.map(endsWithCommunities),
       cashHeld: Number(r.cashHeld),
       cashToCollect: cashToCollect(mine),
